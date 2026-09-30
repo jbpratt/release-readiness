@@ -8,13 +8,22 @@ export default defineConfig({
 		emptyOutDir: true,
 		rollupOptions: {
 			output: {
-				manualChunks: {
-					react: ["react", "react-dom", "react-router-dom"],
-					patternfly: [
-						"@patternfly/react-core",
-						"@patternfly/react-table",
-						"@patternfly/react-icons",
-					],
+				manualChunks(id) {
+					if (
+						id.includes("node_modules/react/") ||
+						id.includes("node_modules/react-dom/") ||
+						id.includes("node_modules/react-router-dom/") ||
+						id.includes("node_modules/react-router/")
+					) {
+						return "react";
+					}
+					if (
+						id.includes("node_modules/@patternfly/react-core/") ||
+						id.includes("node_modules/@patternfly/react-table/") ||
+						id.includes("node_modules/@patternfly/react-icons/")
+					) {
+						return "patternfly";
+					}
 				},
 			},
 		},
