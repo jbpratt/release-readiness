@@ -3,13 +3,18 @@
   "packageRules": [
     {
       "description": "Automerge non-major updates",
-      "matchUpdateTypes": ["minor", "patch"],
+      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest", "lockFileMaintenance"],
       "automerge": true
     },
     {
       "description": "Disable indirect Go dependency updates",
       "matchDepTypes": ["indirect"],
       "enabled": false
+    },
+    {
+      "description": "Group vite and @vitejs/plugin-react updates",
+      "groupName": "vite",
+      "matchPackageNames": ["vite", "@vitejs/plugin-react"]
     }
   ]
 }
