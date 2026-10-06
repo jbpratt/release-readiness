@@ -57,6 +57,8 @@ go build -o release-readiness ./cmd/release-readiness/
 cd web && npm install && npm run build
 ```
 
+End-to-end tests: `dev/e2e.sh` runs the Playwright suite against fixture data (`--live` for a real Konflux cluster); see CLAUDE.md.
+
 ### CLI flags
 
 | Flag | Env var | Default | Description |

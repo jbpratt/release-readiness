@@ -20,6 +20,8 @@ go test ./internal/jira/                         # Run tests for a single packag
 cd web && npm install                            # Install dependencies
 cd web && npm run dev                            # Vite dev server (proxies /api to :8088)
 cd web && npm run build                          # Production build (output: web/dist/)
+cd web && npm run lint                           # Biome lint (src/ only)
+dev/e2e.sh                                       # Playwright e2e against fixtures (see below)
 ```
 
 ### Container
@@ -41,6 +43,22 @@ cd web && npm run dev
 ```
 
 The Vite dev server proxies `/api` requests to `localhost:8088` (the Go backend).
+
+### End-to-end (Playwright)
+
+`dev/e2e.sh` builds the SPA and binary, starts a fixture stub (`dev/e2e/stub`, serving `dev/e2e/fixtures`) and the backend on free ports with a scratch SQLite DB under `/tmp`, waits for data, then runs `web/e2e/*.spec.ts` in Chromium. It tears everything down on exit.
+
+```bash
+(cd web && npm ci && npx playwright install chromium) # one-time setup
+dev/e2e.sh                                       # fixture mode: full assertions on fixture data (CI runs this)
+dev/e2e.sh --live                                # live Konflux: smoke checks only, local only
+dev/e2e.sh --keep --no-tests                     # leave stub + backend running to poke at
+dev/e2e.sh -g "snapshots"                        # extra args pass through to playwright test
+```
+
+- Live mode reads `KONFLUX_KUBECONFIG` (default `~/.kube/configs/art.yaml`), `KONFLUX_CONTEXT` (default: the kubeconfig's current-context) and `KONFLUX_NAMESPACE` (default `art-quay-tenant`). JIRA uses the fixture stub unless `JIRA_TOKEN` (and optionally `JIRA_URL`) is set.
+- Artifacts land in `web/e2e-artifacts/<run timestamp>/` (gitignored): `test-results/` holds a full-page screenshot per page plus a screenshot and trace per test, and `report/` holds the HTML report (`npx playwright show-report web/e2e-artifacts/<run>/report`). CI uploads the directory as the `e2e-artifacts` artifact.
+- QA convention: run `dev/e2e.sh` for any UI- or API-visible change, and cite on the bead the Playwright pass-count line (e.g. `3 passed`) and the screenshot paths.
 
 ## Architecture
 

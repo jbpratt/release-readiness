@@ -4,3 +4,4 @@ web/dist/
 web/e2e-artifacts/
 web/test-results/
 web/playwright-report/
+web/tsconfig.tsbuildinfo

@@ -1,0 +1,28 @@
+import { expect, test } from "@playwright/test";
+import { checkAndScreenshot } from "./screenshot";
+
+const isFixtureMode = process.env.E2E_MODE !== "live";
+
+test.afterEach(({ page }, testInfo) => checkAndScreenshot(page, testInfo, "release-detail"));
+
+test("fixture: shows release name, latest snapshot, components, and issues", async ({ page }) => {
+	test.skip(!isFixtureMode, "fixture-only assertions");
+	await page.goto("/releases/quay-v3.99.0");
+
+	await expect(page.getByRole("heading", { name: "Quay v3.99.0", level: 1 })).toBeVisible();
+	// def456 is the newest ingested snapshot; ghi789 is newer but never ingested.
+	await expect(page.getByText("quay-v3-99-snapshot-def456")).toBeVisible();
+	await expect(page.getByText("Components (2)")).toBeVisible();
+	await expect(
+		page.locator("table").first().locator("tbody tr td:first-child"),
+	).toHaveText(["quay", "quay-builder"]);
+	await expect(page.getByText("Linked Issues (2)")).toBeVisible();
+	await expect(page.getByRole("link", { name: /^PROJQUAY-910[12]$/ })).toHaveCount(2);
+});
+
+test("live: first release opens with a heading", async ({ page }) => {
+	test.skip(isFixtureMode, "live-only smoke check");
+	await page.goto("/");
+	await page.locator(".pf-v6-c-card").first().click();
+	await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+});

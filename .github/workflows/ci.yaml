@@ -49,6 +49,37 @@ jobs:
       - name: Build
         run: npx vite build
 
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+        working-directory: web
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: web
+
+      - name: Playwright (fixture mode)
+        run: dev/e2e.sh
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: e2e-artifacts
+          path: web/e2e-artifacts
+
   image:
     runs-on: ubuntu-latest
     steps:

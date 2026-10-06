@@ -92,8 +92,8 @@ if [[ "$LIVE" -eq 1 ]]; then
     echo "e2e: --live requested but kubeconfig not found at $KUBECONFIG_PATH" >&2
     exit 1
   fi
-  KONFLUX_CONTEXT_ARG="kflux-ocp-p01"
-  KONFLUX_NAMESPACE_ARG="art-quay-tenant"
+  KONFLUX_CONTEXT_ARG="${KONFLUX_CONTEXT:-}"
+  KONFLUX_NAMESPACE_ARG="${KONFLUX_NAMESPACE:-art-quay-tenant}"
 else
   sed "s/__STUB_PORT__/$STUB_PORT/" "$REPO_ROOT/dev/e2e/kubeconfig.yaml" >"$TMP_DIR/kubeconfig.yaml"
   KUBECONFIG_PATH="$TMP_DIR/kubeconfig.yaml"
