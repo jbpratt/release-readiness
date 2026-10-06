@@ -45,11 +45,13 @@ The Vite dev server proxies `/api` requests to `localhost:8088` (the Go backend)
 ## Architecture
 
 ### Backend (`internal/`)
-- **`cmd/release-readiness/main.go`** — CLI entry point. Runs background sync loops for S3 and JIRA.
+- **`cmd/release-readiness/main.go`** — CLI entry point. Runs background sync loops for S3, JIRA, and Konflux.
 - **`internal/server/`** — HTTP server using Go stdlib `net/http`. Routes registered in `routes.go`, API handlers in `handlers_api.go`. The React SPA is served from embedded `web/dist/` via `go:embed` with SPA fallback routing.
 - **`internal/db/`** — SQLite data layer (pure-Go driver `modernc.org/sqlite`, no CGO). Schema migrations in `migrations.go`. WAL mode enabled.
 - **`internal/s3/`** — AWS SDK v2 client for fetching snapshot data from S3/Garage object storage.
 - **`internal/jira/`** — JIRA REST API client. Discovers active releases, syncs issues by fixVersion.
+- **`internal/kube/`** — Minimal read-only Kubernetes REST client (stdlib `net/http` + `yaml.v3`, no `client-go`): `LoadKubeconfig` (bearer token or service-account token file only; `exec`/auth-provider/client-cert is a startup error) and a paginated `Client.List`.
+- **`internal/konflux/`** — Konflux Snapshot ingestion. Lists `snapshots.appstudio.redhat.com` through `internal/kube`, read-only (list only). Flags: `-konflux-kubeconfig` (env `KONFLUX_KUBECONFIG`, empty = disabled), `-konflux-context` (env `KONFLUX_CONTEXT`, empty = current-context), `-konflux-namespace` (env `KONFLUX_NAMESPACE`, empty = context namespace), `-konflux-poll-interval` (default `5m`). Persists into the existing `snapshots`/`snapshot_components`/`components` tables via `db.CreateSnapshotWithComponents`, shared with the S3 sync; snapshots whose `AppStudioTestSucceeded` condition is absent or `Unknown` are skipped.
 - **`internal/model/`** — Shared data types used across packages.
 - **`internal/ctrf/`** — CTRF (Common Test Report Format) JSON types.
 

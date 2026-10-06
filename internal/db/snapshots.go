@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/quay/release-readiness/internal/db/sqlc"
@@ -25,6 +26,25 @@ func (d *DB) CreateSnapshot(ctx context.Context, application, name string, tests
 		TestsPassed: testsPassed,
 		CreatedAt:   createdAt.UTC(),
 	}, nil
+}
+
+// CreateSnapshotWithComponents inserts snap and its components, ensuring each
+// component exists in the components table. Run it inside InTx for atomicity.
+func (d *DB) CreateSnapshotWithComponents(ctx context.Context, snap model.Snapshot, testsPassed bool, createdAt time.Time) (*model.SnapshotRecord, error) {
+	record, err := d.CreateSnapshot(ctx, snap.Application, snap.Snapshot, testsPassed, createdAt)
+	if err != nil {
+		return nil, fmt.Errorf("create snapshot: %w", err)
+	}
+
+	for _, comp := range snap.Components {
+		if _, err := d.EnsureComponent(ctx, comp.Name); err != nil {
+			return nil, fmt.Errorf("ensure component %s: %w", comp.Name, err)
+		}
+		if err := d.CreateSnapshotComponent(ctx, record.ID, comp.Name, comp.GitRevision, comp.ContainerImage, comp.GitURL); err != nil {
+			return nil, fmt.Errorf("create snapshot component %s: %w", comp.Name, err)
+		}
+	}
+	return record, nil
 }
 
 func (d *DB) SnapshotExistsByName(ctx context.Context, name string) (bool, error) {

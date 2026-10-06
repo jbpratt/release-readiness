@@ -1,11 +1,14 @@
 package konflux
 
 import (
+	"net/url"
+	"time"
+
 	"github.com/quay/release-readiness/internal/model"
 )
 
-// SnapshotSpec is the Konflux Snapshot spec as stored in S3.
-// This is the spec section of the Snapshot CR, not the full Kubernetes resource.
+// SnapshotSpec is the spec section of a Konflux Snapshot CR, as stored in S3
+// or returned by the Kubernetes API.
 type SnapshotSpec struct {
 	Application string `json:"application"`
 	Components  []struct {
@@ -20,9 +23,9 @@ type SnapshotSpec struct {
 	} `json:"components"`
 }
 
-// Convert transforms a SnapshotSpec into a model.Snapshot.
-// The name parameter is the snapshot directory name from S3 (since
-// the spec does not include the snapshot name).
+// Convert transforms a SnapshotSpec into a model.Snapshot. The spec does not
+// carry the snapshot name, so callers pass it: the S3 directory name or the
+// CR's metadata.name.
 func Convert(spec SnapshotSpec, name string) model.Snapshot {
 	snap := model.Snapshot{
 		Application: spec.Application,
@@ -39,4 +42,34 @@ func Convert(spec SnapshotSpec, name string) model.Snapshot {
 	}
 
 	return snap
+}
+
+// rawSnapshot is one appstudio.redhat.com/v1alpha1 Snapshot as returned by the Kubernetes API.
+type rawSnapshot struct {
+	Metadata struct {
+		Name              string    `json:"name"`
+		CreationTimestamp time.Time `json:"creationTimestamp"`
+	} `json:"metadata"`
+	Spec   SnapshotSpec `json:"spec"`
+	Status struct {
+		Conditions []struct {
+			Type   string `json:"type"`
+			Status string `json:"status"`
+		} `json:"conditions"`
+	} `json:"status"`
+}
+
+// testResult reports the AppStudioTestSucceeded condition. ok is false when
+// the condition is absent or Unknown: some applications never get one.
+func (r rawSnapshot) testResult() (passed, ok bool) {
+	for _, c := range r.Status.Conditions {
+		if c.Type == "AppStudioTestSucceeded" {
+			return c.Status == "True", c.Status == "True" || c.Status == "False"
+		}
+	}
+	return false, false
+}
+
+func snapshotsPath(namespace string) string {
+	return "/apis/appstudio.redhat.com/v1alpha1/namespaces/" + url.PathEscape(namespace) + "/snapshots"
 }

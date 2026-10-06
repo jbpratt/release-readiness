@@ -16,9 +16,7 @@ import (
 // Store is the subset of the database layer needed by the S3 syncer.
 type Store interface {
 	SnapshotExistsByName(ctx context.Context, name string) (bool, error)
-	CreateSnapshot(ctx context.Context, application, name string, testsPassed bool, createdAt time.Time) (*model.SnapshotRecord, error)
-	EnsureComponent(ctx context.Context, name string) (*model.Component, error)
-	CreateSnapshotComponent(ctx context.Context, snapshotID int64, component, gitSHA, imageURL, gitURL string) error
+	CreateSnapshotWithComponents(ctx context.Context, snap model.Snapshot, testsPassed bool, createdAt time.Time) (*model.SnapshotRecord, error)
 	CreateTestSuite(ctx context.Context, snapshotID int64, name, status, pipelineRun, toolName, toolVersion string, tests, passed, failed, skipped, pending, other, flaky int, startTime, stopTime, durationMs int64) (int64, error)
 	CreateTestCase(ctx context.Context, testSuiteID int64, name, status string, durationMs float64, message, trace, filePath, suite string, retries int, flaky bool) error
 	CreateVulnerabilityReport(ctx context.Context, snapshotID int64, component, arch string, total, critical, high, medium, low, unknown, fixable int) (int64, error)
@@ -135,25 +133,9 @@ func (s *Syncer) ingest(ctx context.Context, key string, snap *model.Snapshot) e
 		testsPassed = false
 	}
 
-	snapshotRecord, err := s.store.CreateSnapshot(
-		ctx,
-		snap.Application,
-		snap.Snapshot,
-		testsPassed,
-		time.Now().UTC(),
-	)
+	snapshotRecord, err := s.store.CreateSnapshotWithComponents(ctx, *snap, testsPassed, time.Now().UTC())
 	if err != nil {
-		return fmt.Errorf("create snapshot: %w", err)
-	}
-
-	for _, comp := range snap.Components {
-		if _, err := s.store.EnsureComponent(ctx, comp.Name); err != nil {
-			return fmt.Errorf("ensure component %s: %w", comp.Name, err)
-		}
-
-		if err := s.store.CreateSnapshotComponent(ctx, snapshotRecord.ID, comp.Name, comp.GitRevision, comp.ContainerImage, comp.GitURL); err != nil {
-			return fmt.Errorf("create snapshot component %s: %w", comp.Name, err)
-		}
+		return err
 	}
 
 	for _, sd := range suites {
