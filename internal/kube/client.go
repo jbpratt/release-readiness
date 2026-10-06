@@ -97,7 +97,7 @@ func (c *Client) getPage(ctx context.Context, path, cont string) (*listPage, err
 	if err != nil {
 		return nil, fmt.Errorf("list %s: %w", path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// The body is never included in errors: it can echo request details.
 	switch resp.StatusCode {
