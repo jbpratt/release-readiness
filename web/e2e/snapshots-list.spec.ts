@@ -5,12 +5,13 @@ const isFixtureMode = process.env.E2E_MODE !== "live";
 
 test.afterEach(({ page }, testInfo) => checkAndScreenshot(page, testInfo, "snapshots-list"));
 
-test("fixture: lists the two ingested snapshots only", async ({ page }) => {
+test("fixture: lists every ingested snapshot", async ({ page }) => {
 	test.skip(!isFixtureMode, "fixture-only assertions");
 	await page.goto("/releases/quay-v3.99.0/snapshots");
 
-	// ghi789 has AppStudioTestSucceeded=Unknown, so it is never ingested.
+	// ghi789 has no Konflux test result and is still ingested.
 	await expect(page.locator("tbody tr td:first-child")).toHaveText([
+		"quay-v3-99-snapshot-ghi789",
 		"quay-v3-99-snapshot-def456",
 		"quay-v3-99-snapshot-abc123",
 	]);
