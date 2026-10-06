@@ -13,7 +13,10 @@ Release readiness dashboard for Quay container registry. Tracks build snapshots,
 go build -o release-readiness ./cmd/release-readiness/  # Build binary
 go test ./...                                    # Run all tests
 go test ./internal/jira/                         # Run tests for a single package
+GOTOOLCHAIN=go1.27.1 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest run ./...  # Lint as CI does (needs web/dist)
 ```
+
+`go run pkg@version` ignores this module's `toolchain` line, so pin `GOTOOLCHAIN` to the `go.mod` toolchain; a golangci-lint built with an older Go fails with "can't load config".
 
 ### Frontend (web/)
 ```bash
