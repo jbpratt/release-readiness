@@ -19,32 +19,28 @@ const snapshotsJSON = `{
 	"items": [
 		{
 			"metadata": {"name": "existing-snap", "creationTimestamp": "2026-01-01T00:00:00Z"},
-			"spec": {"application": "app1", "components": []},
-			"status": {"conditions": [{"type": "AppStudioTestSucceeded", "status": "True"}]}
-		},
-		{
-			"metadata": {"name": "unknown-snap", "creationTimestamp": "2026-01-01T00:00:00Z"},
-			"spec": {"application": "app1", "components": []},
-			"status": {"conditions": [{"type": "AppStudioTestSucceeded", "status": "Unknown"}]}
-		},
-		{
-			"metadata": {"name": "no-result-snap", "creationTimestamp": "2026-01-01T00:00:00Z"},
 			"spec": {"application": "app1", "components": []}
 		},
 		{
-			"metadata": {"name": "passed-snap", "creationTimestamp": "2026-01-02T00:00:00Z"},
+			"metadata": {"name": "app1-snap-a", "creationTimestamp": "2026-01-01T00:00:00Z"},
+			"spec": {"application": "app1", "components": []}
+		},
+		{
+			"metadata": {"name": "app1-snap-b", "creationTimestamp": "2026-01-01T00:00:00Z"},
+			"spec": {"application": "app1", "components": []}
+		},
+		{
+			"metadata": {"name": "app2-comp-snap", "creationTimestamp": "2026-01-02T00:00:00Z"},
 			"spec": {
 				"application": "app2",
 				"components": [
 					{"name": "comp-a", "containerImage": "quay.io/a/a@sha256:aaa", "source": {"git": {"url": "https://github.com/a/a", "revision": "deadbeef"}}}
 				]
-			},
-			"status": {"conditions": [{"type": "AppStudioTestSucceeded", "status": "True"}]}
+			}
 		},
 		{
-			"metadata": {"name": "failed-snap", "creationTimestamp": "2026-01-02T00:00:00Z"},
-			"spec": {"application": "app2", "components": []},
-			"status": {"conditions": [{"type": "AppStudioTestSucceeded", "status": "False"}]}
+			"metadata": {"name": "app2-empty-snap", "creationTimestamp": "2026-01-02T00:00:00Z"},
+			"spec": {"application": "app2", "components": []}
 		}
 	]
 }`
@@ -92,10 +88,11 @@ func TestSyncOnce(t *testing.T) {
 		testsPassed bool
 	}{
 		{"existing-snap", true, false}, // pre-existing row is left untouched
-		{"unknown-snap", false, false},
-		{"no-result-snap", false, false},
-		{"passed-snap", true, true},
-		{"failed-snap", true, false},
+		// Konflux test status is not read, so every new snapshot is stored as not passed.
+		{"app1-snap-a", true, false},
+		{"app1-snap-b", true, false},
+		{"app2-comp-snap", true, false},
+		{"app2-empty-snap", true, false},
 	}
 	for _, tt := range tests {
 		exists, err := database.SnapshotExistsByName(ctx, tt.name)
@@ -118,15 +115,15 @@ func TestSyncOnce(t *testing.T) {
 		}
 	}
 
-	passed, err := database.GetSnapshotByName(ctx, "passed-snap")
+	withComps, err := database.GetSnapshotByName(ctx, "app2-comp-snap")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC); !passed.CreatedAt.Equal(want) {
-		t.Errorf("passed-snap: CreatedAt = %v, want %v", passed.CreatedAt, want)
+	if want := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC); !withComps.CreatedAt.Equal(want) {
+		t.Errorf("app2-comp-snap: CreatedAt = %v, want %v", withComps.CreatedAt, want)
 	}
-	if len(passed.Components) != 1 || passed.Components[0].Component != "comp-a" || passed.Components[0].GitSHA != "deadbeef" {
-		t.Errorf("passed-snap: Components = %+v, want one comp-a at deadbeef", passed.Components)
+	if len(withComps.Components) != 1 || withComps.Components[0].Component != "comp-a" || withComps.Components[0].GitSHA != "deadbeef" {
+		t.Errorf("app2-comp-snap: Components = %+v, want one comp-a at deadbeef", withComps.Components)
 	}
 
 	components, err := database.ListComponents(ctx)
@@ -155,13 +152,11 @@ func TestSyncOnce_LatestByCreationTime(t *testing.T) {
 		"items": [
 			{
 				"metadata": {"name": "app-a-snap", "creationTimestamp": "2026-10-06T00:00:00Z"},
-				"spec": {"application": "app", "components": []},
-				"status": {"conditions": [{"type": "AppStudioTestSucceeded", "status": "True"}]}
+				"spec": {"application": "app", "components": []}
 			},
 			{
 				"metadata": {"name": "app-z-snap", "creationTimestamp": "2026-09-01T00:00:00Z"},
-				"spec": {"application": "app", "components": []},
-				"status": {"conditions": [{"type": "AppStudioTestSucceeded", "status": "True"}]}
+				"spec": {"application": "app", "components": []}
 			}
 		]
 	}`

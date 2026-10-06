@@ -50,7 +50,8 @@ func (s *Syncer) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// syncOnce lists all Snapshots and ingests the new ones that have a test result.
+// syncOnce lists all Snapshots and ingests the new ones. Konflux test status
+// is not read: tests run in Prow, so tests_passed stays false.
 func (s *Syncer) syncOnce(ctx context.Context) {
 	snapshots, err := s.listSnapshots(ctx)
 	if err != nil {
@@ -62,7 +63,7 @@ func (s *Syncer) syncOnce(ctx context.Context) {
 		return snapshots[i].Metadata.CreationTimestamp.Before(snapshots[j].Metadata.CreationTimestamp)
 	})
 
-	var inserted, skippedExisting, skippedNoResult int
+	var inserted, skippedExisting int
 	for _, raw := range snapshots {
 		if ctx.Err() != nil {
 			return
@@ -78,15 +79,9 @@ func (s *Syncer) syncOnce(ctx context.Context) {
 			continue
 		}
 
-		testsPassed, ok := raw.testResult()
-		if !ok {
-			skippedNoResult++
-			continue
-		}
-
 		snap := Convert(raw.Spec, raw.Metadata.Name)
 		if err := s.withTx(ctx, func(txStore Store) error {
-			_, err := txStore.CreateSnapshotWithComponents(ctx, snap, testsPassed, raw.Metadata.CreationTimestamp)
+			_, err := txStore.CreateSnapshotWithComponents(ctx, snap, false, raw.Metadata.CreationTimestamp)
 			return err
 		}); err != nil {
 			s.logger.Error("ingest snapshot", "snapshot", raw.Metadata.Name, "error", err)
@@ -99,7 +94,6 @@ func (s *Syncer) syncOnce(ctx context.Context) {
 		"listed", len(snapshots),
 		"inserted", inserted,
 		"skipped_existing", skippedExisting,
-		"skipped_no_result", skippedNoResult,
 	)
 }
 
