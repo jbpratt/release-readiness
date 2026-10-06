@@ -50,24 +50,7 @@ type rawSnapshot struct {
 		Name              string    `json:"name"`
 		CreationTimestamp time.Time `json:"creationTimestamp"`
 	} `json:"metadata"`
-	Spec   SnapshotSpec `json:"spec"`
-	Status struct {
-		Conditions []struct {
-			Type   string `json:"type"`
-			Status string `json:"status"`
-		} `json:"conditions"`
-	} `json:"status"`
-}
-
-// testResult reports the AppStudioTestSucceeded condition. ok is false when
-// the condition is absent or Unknown: some applications never get one.
-func (r rawSnapshot) testResult() (passed, ok bool) {
-	for _, c := range r.Status.Conditions {
-		if c.Type == "AppStudioTestSucceeded" {
-			return c.Status == "True", c.Status == "True" || c.Status == "False"
-		}
-	}
-	return false, false
+	Spec SnapshotSpec `json:"spec"`
 }
 
 func snapshotsPath(namespace string) string {
