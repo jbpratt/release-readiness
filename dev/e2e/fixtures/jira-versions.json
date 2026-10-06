@@ -1,0 +1,9 @@
+[
+  {
+    "name": "quay-v3.99.0",
+    "description": "Quay 3.99.0 e2e fixture release",
+    "releaseDate": "2026-12-01",
+    "released": false,
+    "archived": false
+  }
+]

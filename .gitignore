@@ -1,3 +1,6 @@
 *.db*
 web/node_modules/
 web/dist/
+web/e2e-artifacts/
+web/test-results/
+web/playwright-report/

@@ -1,0 +1,31 @@
+{
+  "maxResults": 100,
+  "issues": [
+    {
+      "key": "PROJQUAY-9101",
+      "fields": {
+        "summary": "Fix flaky Konflux snapshot ingestion test",
+        "status": { "name": "Open" },
+        "priority": { "name": "Major" },
+        "labels": ["bug"],
+        "assignee": { "displayName": "Jane Doe" },
+        "issuetype": { "name": "Bug" },
+        "resolution": null,
+        "updated": "2026-09-01T10:00:00.000-0400"
+      }
+    },
+    {
+      "key": "PROJQUAY-9102",
+      "fields": {
+        "summary": "Add release readiness dashboard e2e harness",
+        "status": { "name": "Done" },
+        "priority": { "name": "Minor" },
+        "labels": [],
+        "assignee": null,
+        "issuetype": { "name": "Story" },
+        "resolution": { "name": "Done" },
+        "updated": "2026-09-15T12:00:00.000-0400"
+      }
+    }
+  ]
+}

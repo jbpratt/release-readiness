@@ -1,0 +1,105 @@
+{
+  "metadata": {
+    "continue": ""
+  },
+  "items": [
+    {
+      "metadata": {
+        "name": "quay-v3-99-snapshot-abc123",
+        "creationTimestamp": "2026-09-01T08:00:00Z"
+      },
+      "spec": {
+        "application": "quay-v3-99",
+        "components": [
+          {
+            "name": "quay",
+            "containerImage": "quay.io/projectquay/quay@sha256:1111111111111111111111111111111111111111111111111111111111aaaa",
+            "source": {
+              "git": {
+                "url": "https://github.com/quay/quay",
+                "revision": "abc1230000000000000000000000000000000000"
+              }
+            }
+          },
+          {
+            "name": "quay-builder",
+            "containerImage": "quay.io/projectquay/quay-builder@sha256:2222222222222222222222222222222222222222222222222222222222bbbb",
+            "source": {
+              "git": {
+                "url": "https://github.com/quay/quay-builder",
+                "revision": "def4560000000000000000000000000000000000"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          { "type": "AppStudioTestSucceeded", "status": "True" }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "name": "quay-v3-99-snapshot-def456",
+        "creationTimestamp": "2026-09-02T08:00:00Z"
+      },
+      "spec": {
+        "application": "quay-v3-99",
+        "components": [
+          {
+            "name": "quay",
+            "containerImage": "quay.io/projectquay/quay@sha256:3333333333333333333333333333333333333333333333333333333333cccc",
+            "source": {
+              "git": {
+                "url": "https://github.com/quay/quay",
+                "revision": "7890abc000000000000000000000000000000000"
+              }
+            }
+          },
+          {
+            "name": "quay-builder",
+            "containerImage": "quay.io/projectquay/quay-builder@sha256:4444444444444444444444444444444444444444444444444444444444dddd",
+            "source": {
+              "git": {
+                "url": "https://github.com/quay/quay-builder",
+                "revision": "1230def000000000000000000000000000000000"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          { "type": "AppStudioTestSucceeded", "status": "True" }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "name": "quay-v3-99-snapshot-ghi789",
+        "creationTimestamp": "2026-09-03T08:00:00Z"
+      },
+      "spec": {
+        "application": "quay-v3-99",
+        "components": [
+          {
+            "name": "quay",
+            "containerImage": "quay.io/projectquay/quay@sha256:5555555555555555555555555555555555555555555555555555555555eeee",
+            "source": {
+              "git": {
+                "url": "https://github.com/quay/quay",
+                "revision": "456ghi0000000000000000000000000000000000"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          { "type": "AppStudioTestSucceeded", "status": "Unknown" }
+        ]
+      }
+    }
+  ]
+}

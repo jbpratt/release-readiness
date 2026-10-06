@@ -1,0 +1,16 @@
+{
+  "maxResults": 100,
+  "issues": [
+    {
+      "key": "PROJQUAY-9001",
+      "fields": {
+        "summary": "Release Quay v3.99.0",
+        "status": { "name": "In Progress" },
+        "fixVersions": [],
+        "duedate": "2026-12-01",
+        "components": [{ "name": "-area/release" }],
+        "assignee": { "displayName": "Jane Doe" }
+      }
+    }
+  ]
+}
