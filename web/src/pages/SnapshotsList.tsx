@@ -39,7 +39,7 @@ export default function SnapshotsList() {
 			if (!release?.s3_application) return;
 			setLoading(true);
 			setError(null);
-			listSnapshots(release.s3_application, PAGE_SIZE + 1, (p - 1) * PAGE_SIZE)
+			listSnapshots(release.name, PAGE_SIZE + 1, (p - 1) * PAGE_SIZE)
 				.then((data) => {
 					const rows = data ?? [];
 					if (rows.length > PAGE_SIZE) {
@@ -57,7 +57,7 @@ export default function SnapshotsList() {
 				})
 				.finally(() => setLoading(false));
 		},
-		[release?.s3_application],
+		[release?.s3_application, release?.name],
 	);
 
 	useEffect(() => {

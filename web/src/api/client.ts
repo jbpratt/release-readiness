@@ -23,12 +23,12 @@ export function getConfig(): Promise<DashboardConfig> {
 }
 
 export function listSnapshots(
-	application?: string,
+	release?: string,
 	limit = 50,
 	offset = 0,
 ): Promise<SnapshotRecord[]> {
 	const params = new URLSearchParams();
-	if (application) params.set("application", application);
+	if (release) params.set("release", release);
 	params.set("limit", String(limit));
 	params.set("offset", String(offset));
 	return fetchJSON(`${BASE}/snapshots?${params}`);

@@ -7,6 +7,7 @@ package dbsqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const createSnapshot = `-- name: CreateSnapshot :execlastid
@@ -391,21 +392,33 @@ func (q *Queries) ListSnapshotComponents(ctx context.Context, snapshotID int64) 
 	return items, nil
 }
 
-const listSnapshotsByApplication = `-- name: ListSnapshotsByApplication :many
+const listSnapshotsByApplications = `-- name: ListSnapshotsByApplications :many
 SELECT id, application, name, tests_passed, created_at
 FROM snapshots
-WHERE application = ?
+WHERE application IN (/*SLICE:applications*/?)
 ORDER BY id DESC LIMIT ? OFFSET ?
 `
 
-type ListSnapshotsByApplicationParams struct {
-	Application string
-	Limit       int64
-	Offset      int64
+type ListSnapshotsByApplicationsParams struct {
+	Applications []string
+	Limit        int64
+	Offset       int64
 }
 
-func (q *Queries) ListSnapshotsByApplication(ctx context.Context, arg ListSnapshotsByApplicationParams) ([]Snapshot, error) {
-	rows, err := q.db.QueryContext(ctx, listSnapshotsByApplication, arg.Application, arg.Limit, arg.Offset)
+func (q *Queries) ListSnapshotsByApplications(ctx context.Context, arg ListSnapshotsByApplicationsParams) ([]Snapshot, error) {
+	query := listSnapshotsByApplications
+	var queryParams []interface{}
+	if len(arg.Applications) > 0 {
+		for _, v := range arg.Applications {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:applications*/?", strings.Repeat(",?", len(arg.Applications))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:applications*/?", "NULL", 1)
+	}
+	queryParams = append(queryParams, arg.Limit)
+	queryParams = append(queryParams, arg.Offset)
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}

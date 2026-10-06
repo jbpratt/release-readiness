@@ -24,10 +24,10 @@ SELECT id, application, name, tests_passed, created_at
 FROM snapshots
 ORDER BY id DESC LIMIT ? OFFSET ?;
 
--- name: ListSnapshotsByApplication :many
+-- name: ListSnapshotsByApplications :many
 SELECT id, application, name, tests_passed, created_at
 FROM snapshots
-WHERE application = ?
+WHERE application IN (sqlc.slice('applications'))
 ORDER BY id DESC LIMIT ? OFFSET ?;
 
 -- name: LatestSnapshotPerApplication :many
