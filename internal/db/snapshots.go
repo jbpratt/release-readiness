@@ -148,14 +148,14 @@ func (d *DB) listSnapshotComponents(ctx context.Context, snapshotID int64) ([]mo
 	return components, nil
 }
 
-func (d *DB) ListSnapshots(ctx context.Context, application string, limit, offset int) ([]model.SnapshotRecord, error) {
+func (d *DB) ListSnapshots(ctx context.Context, applications []string, limit, offset int) ([]model.SnapshotRecord, error) {
 	var rows []dbsqlc.Snapshot
 	var err error
-	if application != "" {
-		rows, err = d.queries().ListSnapshotsByApplication(ctx, dbsqlc.ListSnapshotsByApplicationParams{
-			Application: application,
-			Limit:       int64(limit),
-			Offset:      int64(offset),
+	if len(applications) > 0 {
+		rows, err = d.queries().ListSnapshotsByApplications(ctx, dbsqlc.ListSnapshotsByApplicationsParams{
+			Applications: applications,
+			Limit:        int64(limit),
+			Offset:       int64(offset),
 		})
 	} else {
 		rows, err = d.queries().ListAllSnapshots(ctx, dbsqlc.ListAllSnapshotsParams{

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -267,5 +268,134 @@ func TestGetReleaseReadiness(t *testing.T) {
 	}
 	if readiness.Signal != "green" {
 		t.Errorf("signal: got %q, want green", readiness.Signal)
+	}
+}
+
+func TestReleaseApplications(t *testing.T) {
+	tests := []struct {
+		s3App string
+		want  []string
+	}{
+		{"", nil},
+		{"quay-v3-16", []string{"quay-v3-16", "quay-3-16", "fbc-quay-3-16"}},
+		{"omr-v2-0", []string{"omr-v2-0", "omr-2-0", "fbc-omr-2-0"}},
+		{"foo-vault-v1-2", []string{"foo-vault-v1-2", "foo-vault-1-2", "fbc-foo-vault-1-2"}},
+		{"quay", []string{"quay"}},
+		{"-v3-16", []string{"-v3-16"}},
+		{"quay-v", []string{"quay-v"}},
+	}
+	for _, tt := range tests {
+		if got := releaseApplications(tt.s3App); !slices.Equal(got, tt.want) {
+			t.Errorf("releaseApplications(%q) = %q, want %q", tt.s3App, got, tt.want)
+		}
+	}
+}
+
+func TestReleaseJoinsKonfluxApplications(t *testing.T) {
+	srv := setupTestServer(t)
+	ctx := t.Context()
+
+	dueDate := time.Now().Add(10 * 24 * time.Hour)
+	if err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{
+		Name:          "3.16.3",
+		S3Application: "quay-v3-16",
+		DueDate:       &dueDate,
+	}); err != nil {
+		t.Fatalf("upsert release: %v", err)
+	}
+
+	now := time.Now()
+	for _, s := range []struct {
+		app, name string
+		passed    bool
+		age       time.Duration
+	}{
+		{"quay-v3-16", "s3-snap", true, 3 * time.Hour},
+		{"quay-3-16", "konflux-snap", true, 2 * time.Hour},
+		// Newest, but fbc must not be picked as the release snapshot.
+		{"fbc-quay-3-16", "fbc-snap", false, time.Hour},
+		{"quay-3-17", "other-release-snap", true, 0},
+	} {
+		snap, err := srv.db.CreateSnapshot(ctx, s.app, s.name, s.passed, now.Add(-s.age))
+		if err != nil {
+			t.Fatalf("create snapshot %s: %v", s.name, err)
+		}
+		status := "passed"
+		if !s.passed {
+			status = "failed"
+		}
+		if _, err := srv.db.CreateTestSuite(ctx, snap.ID, "e2e", status, "", "", "", 1, 0, 0, 0, 0, 0, 0, 0, 0, 0); err != nil {
+			t.Fatalf("create test suite %s: %v", s.name, err)
+		}
+	}
+
+	get := func(path string, v any) {
+		t.Helper()
+		w := httptest.NewRecorder()
+		srv.http.Handler.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET %s: got %d, body: %s", path, w.Code, w.Body.String())
+		}
+		if err := json.NewDecoder(w.Body).Decode(v); err != nil {
+			t.Fatalf("GET %s: decode: %v", path, err)
+		}
+	}
+
+	var snap model.SnapshotRecord
+	get("/api/v1/releases/3.16.3/snapshot", &snap)
+	if snap.Name != "konflux-snap" {
+		t.Errorf("release snapshot: got %q, want konflux-snap", snap.Name)
+	}
+
+	// The fbc snapshot's failing tests count toward readiness.
+	var readiness model.ReadinessResponse
+	get("/api/v1/releases/3.16.3/readiness", &readiness)
+	if readiness.Message != "Integration tests failing" {
+		t.Errorf("readiness: got %q, want Integration tests failing", readiness.Message)
+	}
+
+	var overviews []model.ReleaseOverview
+	get("/api/v1/releases/overview", &overviews)
+	if len(overviews) != 1 || overviews[0].Snapshot == nil {
+		t.Fatalf("overview: got %+v, want one release with a snapshot", overviews)
+	}
+	if overviews[0].Snapshot.Name != "konflux-snap" {
+		t.Errorf("overview snapshot: got %q, want konflux-snap", overviews[0].Snapshot.Name)
+	}
+	if overviews[0].Readiness != readiness {
+		t.Errorf("overview readiness: got %+v, want %+v", overviews[0].Readiness, readiness)
+	}
+
+	var list []model.SnapshotRecord
+	get("/api/v1/snapshots?release=3.16.3", &list)
+	var names []string
+	for _, s := range list {
+		names = append(names, s.Name)
+	}
+	if want := []string{"fbc-snap", "konflux-snap", "s3-snap"}; !slices.Equal(names, want) {
+		t.Errorf("snapshots for release: got %q, want %q", names, want)
+	}
+
+	// An empty application filter lists everything, as before ?release= existed.
+	list = nil
+	get("/api/v1/snapshots?application=", &list)
+	if len(list) != 4 {
+		t.Errorf("snapshots with empty application: got %d, want 4", len(list))
+	}
+
+	// Without the early return, an empty S3 application would list every snapshot.
+	if err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{Name: "3.99.0"}); err != nil {
+		t.Fatalf("upsert release: %v", err)
+	}
+	list = nil
+	get("/api/v1/snapshots?release=3.99.0", &list)
+	if list == nil || len(list) != 0 {
+		t.Errorf("snapshots for release without application: got %+v, want []", list)
+	}
+
+	w := httptest.NewRecorder()
+	srv.http.Handler.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/snapshots?release=9.9.9", nil))
+	if w.Code != http.StatusNotFound {
+		t.Errorf("unknown release: got %d, want 404", w.Code)
 	}
 }

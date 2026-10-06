@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -39,7 +40,20 @@ func (s *Server) handleListSnapshots(w http.ResponseWriter, r *http.Request) {
 	if limit <= 0 {
 		limit = 50
 	}
-	snapshots, err := s.db.ListSnapshots(r.Context(), q.Get("application"), limit, offset)
+	apps := slices.DeleteFunc(q["application"], func(a string) bool { return a == "" })
+	if version := q.Get("release"); version != "" {
+		release, err := s.db.GetReleaseVersion(r.Context(), version)
+		if err != nil {
+			writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
+			return
+		}
+		apps = releaseApplications(release.S3Application)
+		if len(apps) == 0 {
+			writeJSON(w, http.StatusOK, []model.SnapshotRecord{})
+			return
+		}
+	}
+	snapshots, err := s.db.ListSnapshots(r.Context(), apps, limit, offset)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -73,31 +87,24 @@ func (s *Server) handleGetReleaseSnapshot(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Get the latest snapshot for this release's S3 application
 	apps, err := s.db.LatestSnapshotPerApplication(ctx)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 
-	for _, app := range apps {
-		if app.Application == release.S3Application {
-			if app.LatestSnapshot == nil {
-				writeError(w, http.StatusNotFound, fmt.Errorf("no snapshots found for %s", release.S3Application))
-				return
-			}
-			// Get full snapshot with components and test results
-			snap, err := s.db.GetSnapshotByName(ctx, app.LatestSnapshot.Name)
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, snap)
-			return
-		}
+	latest, _, _ := releaseSnapshot(latestByApplication(apps), release.S3Application)
+	if latest == nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("no snapshots found for release %q", version))
+		return
 	}
-
-	writeError(w, http.StatusNotFound, fmt.Errorf("no snapshots found for application %s", release.S3Application))
+	// Get full snapshot with components and test results
+	snap, err := s.db.GetSnapshotByName(ctx, latest.Name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, snap)
 }
 
 func (s *Server) handleListReleaseIssues(w http.ResponseWriter, r *http.Request) {
@@ -141,13 +148,7 @@ func (s *Server) handleGetReleaseReadiness(w http.ResponseWriter, r *http.Reques
 	if release.S3Application != "" {
 		apps, err := s.db.LatestSnapshotPerApplication(ctx)
 		if err == nil {
-			for _, app := range apps {
-				if app.Application == release.S3Application && app.LatestSnapshot != nil {
-					testsPassed = app.LatestSnapshot.TestsPassed
-					hasTests = app.LatestSnapshot.HasTests
-					break
-				}
-			}
+			_, testsPassed, hasTests = releaseSnapshot(latestByApplication(apps), release.S3Application)
 		}
 	}
 
@@ -170,12 +171,7 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	snapshotMap := make(map[string]*model.SnapshotRecord, len(apps))
-	for i := range apps {
-		if apps[i].LatestSnapshot != nil {
-			snapshotMap[apps[i].Application] = apps[i].LatestSnapshot
-		}
-	}
+	snapshotMap := latestByApplication(apps)
 
 	fixVersions := make([]string, len(releases))
 	for i, rel := range releases {
@@ -191,18 +187,13 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 	for i, rel := range releases {
 		summary := issueSummaries[rel.Name]
 		var snap *model.SnapshotRecord
-		testsPassed := false
-		hasTests := false
-		if rel.S3Application != "" {
-			if s := snapshotMap[rel.S3Application]; s != nil {
-				// Return snapshot metadata only (no components/test_results)
-				snapCopy := *s
-				snapCopy.Components = nil
-				snapCopy.TestSuites = nil
-				snap = &snapCopy
-				testsPassed = s.TestsPassed
-				hasTests = s.HasTests
-			}
+		latest, testsPassed, hasTests := releaseSnapshot(snapshotMap, rel.S3Application)
+		if latest != nil {
+			// Return snapshot metadata only (no components/test_results)
+			snapCopy := *latest
+			snapCopy.Components = nil
+			snapCopy.TestSuites = nil
+			snap = &snapCopy
 		}
 
 		overviews[i] = model.ReleaseOverview{
@@ -214,6 +205,52 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, overviews)
+}
+
+// releaseApplications returns the snapshot application names that belong to
+// the release whose S3 application is s3App: the S3 name, the Konflux name
+// (quay-v3-16 -> quay-3-16) and the Konflux fbc- name.
+func releaseApplications(s3App string) []string {
+	if s3App == "" {
+		return nil
+	}
+	i := strings.LastIndex(s3App, "-v")
+	if i <= 0 || i+2 == len(s3App) {
+		return []string{s3App}
+	}
+	konflux := s3App[:i] + "-" + s3App[i+2:]
+	return []string{s3App, konflux, "fbc-" + konflux}
+}
+
+func latestByApplication(apps []model.ApplicationSummary) map[string]*model.SnapshotRecord {
+	m := make(map[string]*model.SnapshotRecord, len(apps))
+	for _, app := range apps {
+		if app.LatestSnapshot != nil {
+			m[app.Application] = app.LatestSnapshot
+		}
+	}
+	return m
+}
+
+// releaseSnapshot summarizes the latest snapshots of a release's applications.
+// snap is the newest non-fbc one, since fbc is the catalog rather than the
+// product image set; tests pass only if every latest snapshot with tests passed.
+func releaseSnapshot(latest map[string]*model.SnapshotRecord, s3App string) (snap *model.SnapshotRecord, testsPassed, hasTests bool) {
+	testsPassed = true
+	for _, app := range releaseApplications(s3App) {
+		s := latest[app]
+		if s == nil {
+			continue
+		}
+		if s.HasTests {
+			hasTests = true
+			testsPassed = testsPassed && s.TestsPassed
+		}
+		if !strings.HasPrefix(app, "fbc-") && (snap == nil || s.CreatedAt.After(snap.CreatedAt)) {
+			snap = s
+		}
+	}
+	return snap, testsPassed && hasTests, hasTests
 }
 
 // computeReadiness derives a readiness signal from release metadata,
