@@ -68,6 +68,18 @@ done
 
 mkdir -p "$ARTIFACTS_DIR"
 
+# npm rewrites node_modules/.package-lock.json on every install, so this also
+# catches a missing node_modules.
+if [[ "$REPO_ROOT/web/package-lock.json" -nt "$REPO_ROOT/web/node_modules/.package-lock.json" ]]; then
+  echo "e2e: installing web dependencies..."
+  npm --prefix "$REPO_ROOT/web" ci
+fi
+
+if [[ "$NO_TESTS" -eq 0 ]]; then
+  echo "e2e: ensuring Playwright Chromium is installed..."
+  (cd "$REPO_ROOT/web" && npx playwright install chromium)
+fi
+
 echo "e2e: building web..."
 npm --prefix "$REPO_ROOT/web" run build
 

@@ -48,8 +48,9 @@ The Vite dev server proxies `/api` requests to `localhost:8088` (the Go backend)
 
 `dev/e2e.sh` builds the SPA and binary, starts a fixture stub (`dev/e2e/stub`, serving `dev/e2e/fixtures`) and the backend on free ports with a scratch SQLite DB under `/tmp`, waits for data, then runs `web/e2e/*.spec.ts` in Chromium. It tears everything down on exit.
 
+Prerequisites: Go (version in `go.mod`), Node 22+ (CI uses 24), `jq`, `curl`. The script runs `npm ci` in `web/` when `node_modules` is missing or older than `package-lock.json`, and installs Playwright's Chromium itself (browser only, not its system libraries).
+
 ```bash
-(cd web && npm ci && npx playwright install chromium) # one-time setup
 dev/e2e.sh                                       # fixture mode: full assertions on fixture data (CI runs this)
 dev/e2e.sh --live                                # live Konflux: smoke checks only, local only
 dev/e2e.sh --keep --no-tests                     # leave stub + backend running to poke at
