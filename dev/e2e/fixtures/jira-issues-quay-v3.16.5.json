@@ -1,0 +1,44 @@
+{
+  "maxResults": 100,
+  "issues": [
+    {
+      "key": "PROJQUAY-9161",
+      "fields": {
+        "summary": "Garbage collection skips expired manifests in nested repositories",
+        "status": { "name": "Closed" },
+        "priority": { "name": "Major" },
+        "labels": [],
+        "assignee": { "displayName": "Fixture Engineer A" },
+        "issuetype": { "name": "Bug" },
+        "resolution": { "name": "Done" },
+        "updated": "2026-09-10T09:30:00.000-0400"
+      }
+    },
+    {
+      "key": "PROJQUAY-9162",
+      "fields": {
+        "summary": "CVE-2026-99991 golang.org/x/net: header parsing panic",
+        "status": { "name": "Verified" },
+        "priority": { "name": "Critical" },
+        "labels": ["cve", "security"],
+        "assignee": { "displayName": "Fixture Engineer B" },
+        "issuetype": { "name": "Vulnerability" },
+        "resolution": { "name": "Done" },
+        "updated": "2026-09-12T14:00:00.000-0400"
+      }
+    },
+    {
+      "key": "PROJQUAY-9163",
+      "fields": {
+        "summary": "Bump base image to the latest RHEL 9 errata",
+        "status": { "name": "Closed" },
+        "priority": { "name": "Minor" },
+        "labels": [],
+        "assignee": null,
+        "issuetype": { "name": "Task" },
+        "resolution": { "name": "Done" },
+        "updated": "2026-09-08T11:15:00.000-0400"
+      }
+    }
+  ]
+}

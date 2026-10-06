@@ -1,0 +1,57 @@
+{
+  "maxResults": 100,
+  "issues": [
+    {
+      "key": "PROJQUAY-9171",
+      "fields": {
+        "summary": "Mirror worker retries forever on registry 401",
+        "status": { "name": "In Progress" },
+        "priority": { "name": "Blocker" },
+        "labels": ["mirroring"],
+        "assignee": { "displayName": "Fixture Engineer A" },
+        "issuetype": { "name": "Bug" },
+        "resolution": null,
+        "updated": "2026-10-01T10:00:00.000-0400"
+      }
+    },
+    {
+      "key": "PROJQUAY-9172",
+      "fields": {
+        "summary": "CVE-2026-99992 jinja2: sandbox escape via format strings",
+        "status": { "name": "ON_QA" },
+        "priority": { "name": "Critical" },
+        "labels": ["cve"],
+        "assignee": { "displayName": "Fixture Engineer B" },
+        "issuetype": { "name": "Vulnerability" },
+        "resolution": null,
+        "updated": "2026-10-02T16:45:00.000-0400"
+      }
+    },
+    {
+      "key": "PROJQUAY-9173",
+      "fields": {
+        "summary": "Operator reconciles Clair config on every resync",
+        "status": { "name": "Verified" },
+        "priority": { "name": "Major" },
+        "labels": ["operator"],
+        "assignee": { "displayName": "Fixture Engineer C" },
+        "issuetype": { "name": "Bug" },
+        "resolution": { "name": "Done" },
+        "updated": "2026-09-28T08:20:00.000-0400"
+      }
+    },
+    {
+      "key": "PROJQUAY-9174",
+      "fields": {
+        "summary": "Document storage proxy settings for disconnected installs",
+        "status": { "name": "New" },
+        "priority": { "name": "Normal" },
+        "labels": ["docs"],
+        "assignee": null,
+        "issuetype": { "name": "Task" },
+        "resolution": null,
+        "updated": "2026-09-30T13:05:00.000-0400"
+      }
+    }
+  ]
+}

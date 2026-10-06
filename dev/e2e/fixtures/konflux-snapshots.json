@@ -1,33 +1,40 @@
 {
-  "metadata": {
-    "continue": ""
-  },
   "items": [
     {
       "metadata": {
-        "name": "quay-v3-99-snapshot-abc123",
-        "creationTimestamp": "2026-09-01T08:00:00Z"
+        "creationTimestamp": "2026-10-05T23:40:55Z",
+        "name": "fbc-quay-3-16-20261005-225637-000-t9"
       },
       "spec": {
-        "application": "quay-v3-99",
+        "application": "fbc-quay-3-16",
         "components": [
           {
-            "name": "quay",
-            "containerImage": "quay.io/projectquay/quay@sha256:1111111111111111111111111111111111111111111111111111111111aaaa",
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:a495475f8b4550f1085288b4a02fbf0737291a25d2dd702ef0e1cb2b9fd618fd",
+            "name": "fbc-quay-3-16-container-security-operator",
             "source": {
               "git": {
-                "url": "https://github.com/quay/quay",
-                "revision": "abc1230000000000000000000000000000000000"
+                "revision": "5549d7af90d48f0b177262f9a01bdf24fc3a9a51",
+                "url": "https://github.com/openshift-priv/art-fbc"
               }
             }
           },
           {
-            "name": "quay-builder",
-            "containerImage": "quay.io/projectquay/quay-builder@sha256:2222222222222222222222222222222222222222222222222222222222bbbb",
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:ab277cf2274e670e42a26f64ddca15aec790cd6350b4044bd32a941b6ab145de",
+            "name": "fbc-quay-3-16-quay-bridge-operator",
             "source": {
               "git": {
-                "url": "https://github.com/quay/quay-builder",
-                "revision": "def4560000000000000000000000000000000000"
+                "revision": "9b949e12e316d99ca4a451cf6c32eb76b35d20cf",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:999391151aa5e64933da7371e45193cc47ff128d641e6ea5ffd541b041ebf5b4",
+            "name": "fbc-quay-3-16-quay-operator",
+            "source": {
+              "git": {
+                "revision": "5168a1f1b5fd1ce246a75fc63b604eb87380f05b",
+                "url": "https://github.com/openshift-priv/art-fbc"
               }
             }
           }
@@ -35,35 +42,48 @@
       },
       "status": {
         "conditions": [
-          { "type": "AppStudioTestSucceeded", "status": "True" }
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
         ]
       }
     },
     {
       "metadata": {
-        "name": "quay-v3-99-snapshot-def456",
-        "creationTimestamp": "2026-09-02T08:00:00Z"
+        "creationTimestamp": "2026-10-05T23:33:32Z",
+        "name": "fbc-quay-3-16-20261005-230231-000"
       },
       "spec": {
-        "application": "quay-v3-99",
+        "application": "fbc-quay-3-16",
         "components": [
           {
-            "name": "quay",
-            "containerImage": "quay.io/projectquay/quay@sha256:3333333333333333333333333333333333333333333333333333333333cccc",
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:a495475f8b4550f1085288b4a02fbf0737291a25d2dd702ef0e1cb2b9fd618fd",
+            "name": "fbc-quay-3-16-container-security-operator",
             "source": {
               "git": {
-                "url": "https://github.com/quay/quay",
-                "revision": "7890abc000000000000000000000000000000000"
+                "revision": "5549d7af90d48f0b177262f9a01bdf24fc3a9a51",
+                "url": "https://github.com/openshift-priv/art-fbc"
               }
             }
           },
           {
-            "name": "quay-builder",
-            "containerImage": "quay.io/projectquay/quay-builder@sha256:4444444444444444444444444444444444444444444444444444444444dddd",
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:289a1a7a9dab9ac37e4972a911f8a4fefac92fedc47aff86e5bebf1128f63779",
+            "name": "fbc-quay-3-16-quay-bridge-operator",
             "source": {
               "git": {
-                "url": "https://github.com/quay/quay-builder",
-                "revision": "1230def000000000000000000000000000000000"
+                "revision": "3f8da572b6b015c04f0fa56dc0e8716f470d499c",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:999391151aa5e64933da7371e45193cc47ff128d641e6ea5ffd541b041ebf5b4",
+            "name": "fbc-quay-3-16-quay-operator",
+            "source": {
+              "git": {
+                "revision": "5168a1f1b5fd1ce246a75fc63b604eb87380f05b",
+                "url": "https://github.com/openshift-priv/art-fbc"
               }
             }
           }
@@ -71,25 +91,48 @@
       },
       "status": {
         "conditions": [
-          { "type": "AppStudioTestSucceeded", "status": "True" }
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
         ]
       }
     },
     {
       "metadata": {
-        "name": "quay-v3-99-snapshot-ghi789",
-        "creationTimestamp": "2026-09-03T08:00:00Z"
+        "creationTimestamp": "2026-10-05T23:33:25Z",
+        "name": "fbc-quay-3-16-20261005-230155-000"
       },
       "spec": {
-        "application": "quay-v3-99",
+        "application": "fbc-quay-3-16",
         "components": [
           {
-            "name": "quay",
-            "containerImage": "quay.io/projectquay/quay@sha256:5555555555555555555555555555555555555555555555555555555555eeee",
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:664eec29ce58da5b7b76d499cd696ae1aa8431e39b9b19c046fbb68582fb16e1",
+            "name": "fbc-quay-3-16-container-security-operator",
             "source": {
               "git": {
-                "url": "https://github.com/quay/quay",
-                "revision": "456ghi0000000000000000000000000000000000"
+                "revision": "237070a38b84a1bb8d27ad3fb493574db9ec64f5",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:289a1a7a9dab9ac37e4972a911f8a4fefac92fedc47aff86e5bebf1128f63779",
+            "name": "fbc-quay-3-16-quay-bridge-operator",
+            "source": {
+              "git": {
+                "revision": "3f8da572b6b015c04f0fa56dc0e8716f470d499c",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:e541a9bda90a27a6ce848639772f2ecb1169cffd8e3cf41abb4fde0965206441",
+            "name": "fbc-quay-3-16-quay-operator",
+            "source": {
+              "git": {
+                "revision": "e68f435840cbb20425743622f885c322e74a0923",
+                "url": "https://github.com/openshift-priv/art-fbc"
               }
             }
           }
@@ -97,9 +140,1400 @@
       },
       "status": {
         "conditions": [
-          { "type": "AppStudioTestSucceeded", "status": "Unknown" }
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "creationTimestamp": "2026-10-06T16:16:30Z",
+        "name": "fbc-quay-3-17-20261006-153129-000"
+      },
+      "spec": {
+        "application": "fbc-quay-3-17",
+        "components": [
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:9ba7f9d8581ecc1b79686c52f0533f14213a721c13e15ac828a65b405cb56f7c",
+            "name": "fbc-quay-3-17-container-security-operator",
+            "source": {
+              "git": {
+                "revision": "4585d6b33550853cf302db9d57440d45365a5813",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:99bd2ca81e6e4f22a06530766697ad361ecadbd79a5b0c180012f12ff5554c0f",
+            "name": "fbc-quay-3-17-quay-bridge-operator",
+            "source": {
+              "git": {
+                "revision": "06292035f7dd8883e125a3fad83fb83778be36ad",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:0481145c7a172ff9c98448d7615e91f0d808917abf4777e410b8a208d00c3a9b",
+            "name": "fbc-quay-3-17-quay-operator",
+            "source": {
+              "git": {
+                "revision": "6dff76592b8f0f67bfa954f4a9e1547bc4297f4b",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "creationTimestamp": "2026-10-06T16:15:32Z",
+        "name": "fbc-quay-3-17-20261006-153300-000"
+      },
+      "spec": {
+        "application": "fbc-quay-3-17",
+        "components": [
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:9ba7f9d8581ecc1b79686c52f0533f14213a721c13e15ac828a65b405cb56f7c",
+            "name": "fbc-quay-3-17-container-security-operator",
+            "source": {
+              "git": {
+                "revision": "4585d6b33550853cf302db9d57440d45365a5813",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:6e44aabc3c86f5fb7255b66ef1258a50887419995fbd86435aaa25f2fcb5ef61",
+            "name": "fbc-quay-3-17-quay-bridge-operator",
+            "source": {
+              "git": {
+                "revision": "ed447c70dc87b9ace920cb7567b2274cfde0f62a",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:beddaba6805259468b42a3069a15b1bf9d55d23e3f70de6943f39b88dd9f297b",
+            "name": "fbc-quay-3-17-quay-operator",
+            "source": {
+              "git": {
+                "revision": "ba30775fc260e8d43f878167f34b2cda921c95d8",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "creationTimestamp": "2026-10-06T16:15:15Z",
+        "name": "fbc-quay-3-17-20261006-152425-000-tt"
+      },
+      "spec": {
+        "application": "fbc-quay-3-17",
+        "components": [
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:9ba7f9d8581ecc1b79686c52f0533f14213a721c13e15ac828a65b405cb56f7c",
+            "name": "fbc-quay-3-17-container-security-operator",
+            "source": {
+              "git": {
+                "revision": "4585d6b33550853cf302db9d57440d45365a5813",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:6e44aabc3c86f5fb7255b66ef1258a50887419995fbd86435aaa25f2fcb5ef61",
+            "name": "fbc-quay-3-17-quay-bridge-operator",
+            "source": {
+              "git": {
+                "revision": "ed447c70dc87b9ace920cb7567b2274cfde0f62a",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:088e00e1cce5ac5fc5b0532deef2071a0a530be2225b1033de9889ad9d208fe7",
+            "name": "fbc-quay-3-17-quay-operator",
+            "source": {
+              "git": {
+                "revision": "d1ecac74ac3b1194d1d0629a11fb745ef3dd9c72",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "creationTimestamp": "2026-10-06T17:53:11Z",
+        "name": "fbc-quay-3-18-20261006-174355-000"
+      },
+      "spec": {
+        "application": "fbc-quay-3-18",
+        "components": [
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:9b8b79b34ec8f0be9993ec580e7f943164ecca66aef22b3ab1a8b929b0b8df17",
+            "name": "fbc-quay-3-18-container-security-operator",
+            "source": {
+              "git": {
+                "revision": "5f0d2dc77a95d7584f8acc340eeb4c31ea5e0669",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:fc45c0b786fadb735076d59ef058cc312d33b55e3a42c8e3441c35a5332ce89b",
+            "name": "fbc-quay-3-18-quay-bridge-operator",
+            "source": {
+              "git": {
+                "revision": "a33fba44c1864239d2c2bcb339c4745bd27fa34a",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:9cd27bed9ccdf6746a7a92ecc29feca25a75720b7acfd8ab6c15ed509a830187",
+            "name": "fbc-quay-3-18-quay-operator",
+            "source": {
+              "git": {
+                "revision": "4d94940ceb8f846f61a56c2ba1905db65095ad3f",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "creationTimestamp": "2026-10-06T17:52:40Z",
+        "name": "fbc-quay-3-18-20261006-174342-000"
+      },
+      "spec": {
+        "application": "fbc-quay-3-18",
+        "components": [
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:9b8b79b34ec8f0be9993ec580e7f943164ecca66aef22b3ab1a8b929b0b8df17",
+            "name": "fbc-quay-3-18-container-security-operator",
+            "source": {
+              "git": {
+                "revision": "5f0d2dc77a95d7584f8acc340eeb4c31ea5e0669",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:fc45c0b786fadb735076d59ef058cc312d33b55e3a42c8e3441c35a5332ce89b",
+            "name": "fbc-quay-3-18-quay-bridge-operator",
+            "source": {
+              "git": {
+                "revision": "a33fba44c1864239d2c2bcb339c4745bd27fa34a",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:31e07d998f620c77b997d845046c5f621f05128399c7e3da5e0da87e5a70db13",
+            "name": "fbc-quay-3-18-quay-operator",
+            "source": {
+              "git": {
+                "revision": "12aaa19c433b6a6f923b86ea3e35429a7bc5904a",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "creationTimestamp": "2026-10-06T16:10:43Z",
+        "name": "fbc-quay-3-18-20261006-151706-000"
+      },
+      "spec": {
+        "application": "fbc-quay-3-18",
+        "components": [
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:9b8b79b34ec8f0be9993ec580e7f943164ecca66aef22b3ab1a8b929b0b8df17",
+            "name": "fbc-quay-3-18-container-security-operator",
+            "source": {
+              "git": {
+                "revision": "5f0d2dc77a95d7584f8acc340eeb4c31ea5e0669",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:90baf36774bc55aa382aac24d494638b6564d06632651419d668be1f3e59f58f",
+            "name": "fbc-quay-3-18-quay-bridge-operator",
+            "source": {
+              "git": {
+                "revision": "99e5b621759ba4061a1de75f9c6a5ecb9cfa9b7b",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:c082703f486f9beded99a14a84b8d511e8db157b21776e7cb5c58a03ad324ade",
+            "name": "fbc-quay-3-18-quay-operator",
+            "source": {
+              "git": {
+                "revision": "6f7d1c4c29f7b1ef5f38692f8bf329434317fc11",
+                "url": "https://github.com/openshift-priv/art-fbc"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "creationTimestamp": "2026-10-05T22:52:53Z",
+        "name": "quay-3-16-20261005-225017-000"
+      },
+      "spec": {
+        "application": "quay-3-16",
+        "components": [
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:b1be688aedba0beb22187aac3728451f9e5819efc420744bded664df8213aaf2",
+            "name": "container-security-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "ae6b7f5a65aee667c25cb0a684e1ec9dc6d51ea6",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:9c793b2ec1313a5f1359e28a95585e97374f4869639b5d2dca95dd952531370a",
+            "name": "quay-3-16-base-rhel9",
+            "source": {
+              "git": {
+                "revision": "d8ac896e2e7e4c5e09e63213e515e574b381f432",
+                "url": "https://github.com/openshift-priv/ocp-build-data"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:0874d8e0252a07d7fe6ae003d880a14099c0e25c2c03705739ae07a59dcff927",
+            "name": "quay-3-16-container-security-operator",
+            "source": {
+              "git": {
+                "revision": "6f3bb6f22374fe1ee93c80f31bf820cef1532336",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:7ce4e18c54c93de2741fafc7d3bcea43200d3fb0e7dd2d2d9a087f3b687f8124",
+            "name": "quay-3-16-quay-bridge-operator",
+            "source": {
+              "git": {
+                "revision": "3ea36edbc5915d8c687427445789a93f98ed2542",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:241be863c48d3924c2bae493767eb2ae10545704b0e624337bd9d287c885a205",
+            "name": "quay-3-16-quay-bridge-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "d0c43d776adf5eb94e7691793a8fefd5511f1591",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:65b293ae7b3802789c939a458b6e0656db588611c34abfeafe548f16679e7073",
+            "name": "quay-3-16-quay-builder",
+            "source": {
+              "git": {
+                "revision": "923ba64dcdadd6623c4aac24f0566c73f4bc017c",
+                "url": "https://github.com/openshift-priv/quay-quay-builder"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:5de97bb15be255dbba6773913a18768fd19a50163e8f4d136b2e6323f0683d29",
+            "name": "quay-3-16-quay-builder-qemu",
+            "source": {
+              "git": {
+                "revision": "fa1b76dd859f0d31b11b4b30dd4317cb4f4fc5a9",
+                "url": "https://github.com/openshift-priv/quay-quay-builder-qemu"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:270fac6c920b86cf73809bec7e788a23e2e3dec7bb092e61e2463aea8b752957",
+            "name": "quay-3-16-quay-clair",
+            "source": {
+              "git": {
+                "revision": "3877c09a6c592f174fe25aa2b37f4a72e8977f28",
+                "url": "https://github.com/openshift-priv/quay-clair"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:1971641935b3da5067a50b464d4bbfd35c097479291855d501a7395eb8cdfcc1",
+            "name": "quay-3-16-quay-operator",
+            "source": {
+              "git": {
+                "revision": "08fb83fd42a523b4fe3d98d6570fd8ac02670c84",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:1c0b083b97cf4c39c810f30237a04b6f733da858ab52ac7cd9a06be9c5cee574",
+            "name": "quay-3-16-quay-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "d4f6144d4664150281aeaa1ef07c9ddfc8efce9d",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:5bd4880bd37b862193cf1770f3c8412435e95ec602fd378bb59b770c1760b6e4",
+            "name": "quay-3-16-quay-quay",
+            "source": {
+              "git": {
+                "revision": "853ce8fd8880715f3379cde9c9e2c932b95a89b8",
+                "url": "https://github.com/openshift-priv/quay-quay"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "creationTimestamp": "2026-10-05T22:52:47Z",
+        "name": "quay-3-16-20261005-225014-000"
+      },
+      "spec": {
+        "application": "quay-3-16",
+        "components": [
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:b1be688aedba0beb22187aac3728451f9e5819efc420744bded664df8213aaf2",
+            "name": "container-security-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "ae6b7f5a65aee667c25cb0a684e1ec9dc6d51ea6",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:9c793b2ec1313a5f1359e28a95585e97374f4869639b5d2dca95dd952531370a",
+            "name": "quay-3-16-base-rhel9",
+            "source": {
+              "git": {
+                "revision": "d8ac896e2e7e4c5e09e63213e515e574b381f432",
+                "url": "https://github.com/openshift-priv/ocp-build-data"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:0874d8e0252a07d7fe6ae003d880a14099c0e25c2c03705739ae07a59dcff927",
+            "name": "quay-3-16-container-security-operator",
+            "source": {
+              "git": {
+                "revision": "6f3bb6f22374fe1ee93c80f31bf820cef1532336",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:7ce4e18c54c93de2741fafc7d3bcea43200d3fb0e7dd2d2d9a087f3b687f8124",
+            "name": "quay-3-16-quay-bridge-operator",
+            "source": {
+              "git": {
+                "revision": "3ea36edbc5915d8c687427445789a93f98ed2542",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:241be863c48d3924c2bae493767eb2ae10545704b0e624337bd9d287c885a205",
+            "name": "quay-3-16-quay-bridge-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "d0c43d776adf5eb94e7691793a8fefd5511f1591",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:65b293ae7b3802789c939a458b6e0656db588611c34abfeafe548f16679e7073",
+            "name": "quay-3-16-quay-builder",
+            "source": {
+              "git": {
+                "revision": "923ba64dcdadd6623c4aac24f0566c73f4bc017c",
+                "url": "https://github.com/openshift-priv/quay-quay-builder"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:5de97bb15be255dbba6773913a18768fd19a50163e8f4d136b2e6323f0683d29",
+            "name": "quay-3-16-quay-builder-qemu",
+            "source": {
+              "git": {
+                "revision": "fa1b76dd859f0d31b11b4b30dd4317cb4f4fc5a9",
+                "url": "https://github.com/openshift-priv/quay-quay-builder-qemu"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:270fac6c920b86cf73809bec7e788a23e2e3dec7bb092e61e2463aea8b752957",
+            "name": "quay-3-16-quay-clair",
+            "source": {
+              "git": {
+                "revision": "3877c09a6c592f174fe25aa2b37f4a72e8977f28",
+                "url": "https://github.com/openshift-priv/quay-clair"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:1971641935b3da5067a50b464d4bbfd35c097479291855d501a7395eb8cdfcc1",
+            "name": "quay-3-16-quay-operator",
+            "source": {
+              "git": {
+                "revision": "08fb83fd42a523b4fe3d98d6570fd8ac02670c84",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:5bd4880bd37b862193cf1770f3c8412435e95ec602fd378bb59b770c1760b6e4",
+            "name": "quay-3-16-quay-quay",
+            "source": {
+              "git": {
+                "revision": "853ce8fd8880715f3379cde9c9e2c932b95a89b8",
+                "url": "https://github.com/openshift-priv/quay-quay"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "creationTimestamp": "2026-10-05T22:52:31Z",
+        "name": "quay-3-16-20261005-225013-000"
+      },
+      "spec": {
+        "application": "quay-3-16",
+        "components": [
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:a76f5a4b294f01c2e54081001b56aa39c2e09c7a970bdcadae2e7acff53418ab",
+            "name": "container-security-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "e1e6d6b4ef4d87cdd735b4c4cbd32a7b0f366d17",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:9c793b2ec1313a5f1359e28a95585e97374f4869639b5d2dca95dd952531370a",
+            "name": "quay-3-16-base-rhel9",
+            "source": {
+              "git": {
+                "revision": "d8ac896e2e7e4c5e09e63213e515e574b381f432",
+                "url": "https://github.com/openshift-priv/ocp-build-data"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:0874d8e0252a07d7fe6ae003d880a14099c0e25c2c03705739ae07a59dcff927",
+            "name": "quay-3-16-container-security-operator",
+            "source": {
+              "git": {
+                "revision": "6f3bb6f22374fe1ee93c80f31bf820cef1532336",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:7ce4e18c54c93de2741fafc7d3bcea43200d3fb0e7dd2d2d9a087f3b687f8124",
+            "name": "quay-3-16-quay-bridge-operator",
+            "source": {
+              "git": {
+                "revision": "3ea36edbc5915d8c687427445789a93f98ed2542",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:241be863c48d3924c2bae493767eb2ae10545704b0e624337bd9d287c885a205",
+            "name": "quay-3-16-quay-bridge-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "d0c43d776adf5eb94e7691793a8fefd5511f1591",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:65b293ae7b3802789c939a458b6e0656db588611c34abfeafe548f16679e7073",
+            "name": "quay-3-16-quay-builder",
+            "source": {
+              "git": {
+                "revision": "923ba64dcdadd6623c4aac24f0566c73f4bc017c",
+                "url": "https://github.com/openshift-priv/quay-quay-builder"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:5de97bb15be255dbba6773913a18768fd19a50163e8f4d136b2e6323f0683d29",
+            "name": "quay-3-16-quay-builder-qemu",
+            "source": {
+              "git": {
+                "revision": "fa1b76dd859f0d31b11b4b30dd4317cb4f4fc5a9",
+                "url": "https://github.com/openshift-priv/quay-quay-builder-qemu"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:270fac6c920b86cf73809bec7e788a23e2e3dec7bb092e61e2463aea8b752957",
+            "name": "quay-3-16-quay-clair",
+            "source": {
+              "git": {
+                "revision": "3877c09a6c592f174fe25aa2b37f4a72e8977f28",
+                "url": "https://github.com/openshift-priv/quay-clair"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:1971641935b3da5067a50b464d4bbfd35c097479291855d501a7395eb8cdfcc1",
+            "name": "quay-3-16-quay-operator",
+            "source": {
+              "git": {
+                "revision": "08fb83fd42a523b4fe3d98d6570fd8ac02670c84",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:5bd4880bd37b862193cf1770f3c8412435e95ec602fd378bb59b770c1760b6e4",
+            "name": "quay-3-16-quay-quay",
+            "source": {
+              "git": {
+                "revision": "853ce8fd8880715f3379cde9c9e2c932b95a89b8",
+                "url": "https://github.com/openshift-priv/quay-quay"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "creationTimestamp": "2026-10-06T15:26:02Z",
+        "name": "quay-3-17-20261006-114618-000"
+      },
+      "spec": {
+        "application": "quay-3-17",
+        "components": [
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:11894d398339e77151e02d6551d72f2a2d8ee4b781b9299664947cbb6c58caf9",
+            "name": "quay-3-17-base-rhel9",
+            "source": {
+              "git": {
+                "revision": "9ba1546e104942cb37cc838f1f98f1455a54bfc2",
+                "url": "https://github.com/openshift-priv/ocp-build-data"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:0d88dadd8eeb8fa6f8d9c26e288a29f73dd34e48821b52d9f9cdf18aea180aab",
+            "name": "quay-3-17-container-security-operator",
+            "source": {
+              "git": {
+                "revision": "0db0617cc35440dcb062deeda32bc49d83594233",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:eed84e24bad95ba53a348c6947c083e6ee7900792a5b4f0b90c879735f1f8215",
+            "name": "quay-3-17-quay-bridge-operator",
+            "source": {
+              "git": {
+                "revision": "4951551e842ed0c0c07a430e35c3e891495dbc34",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:5a0237fdf16c26c06115ce071d8f2460f2c03d3657c1afc35f4221b8247328a5",
+            "name": "quay-3-17-quay-bridge-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "beb2a667e8c9d6348e70733339d82298d45a5c40",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:fd39b1542cf46a782addb588fe95dbea1dadb127ddd94971496a72240cbe1755",
+            "name": "quay-3-17-quay-builder",
+            "source": {
+              "git": {
+                "revision": "c4d8bc9644b83623418ee5efd98015cf12c317e8",
+                "url": "https://github.com/openshift-priv/quay-quay-builder"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:5367740a226fe7fa13bbc154066f84ae907d3affa479df820c2c198b068ef2d8",
+            "name": "quay-3-17-quay-builder-qemu",
+            "source": {
+              "git": {
+                "revision": "72963bb0d529f040871fbdfd7ea26816933adee4",
+                "url": "https://github.com/openshift-priv/quay-quay-builder-qemu"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:da60da674707e74aad96c1213a98025155870d53a19aa277fb45edeff38874d5",
+            "name": "quay-3-17-quay-clair",
+            "source": {
+              "git": {
+                "revision": "a3fab5eb79c9e48df7d14dbb263aba83f0b1856e",
+                "url": "https://github.com/openshift-priv/quay-clair"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:055bd3bd729a057209d20696c848c84a520e2938fb8f570c3d40e8bb229a6ccd",
+            "name": "quay-3-17-quay-container-security-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "9990bb6bde0e98a02c17c94740ec4cddba0f613a",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:d56f9f934a0086896ee3d9d6c705b115fd90397df67f4d086aa9b180bc033dbd",
+            "name": "quay-3-17-quay-operator",
+            "source": {
+              "git": {
+                "revision": "d7ec10a7ee0e3188f84c47bfc374213c5a44d17b",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:edfbfa71f81a3a78cbfad7f547d100951f3eeeb39e10f1ef586b21de85b97aac",
+            "name": "quay-3-17-quay-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "3bcd7ade1b78937dffd6af5100dc509f3ebe3c8a",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:0a89264f10c08ba5a04344470927c71951122fa1fa3b71b692b9059f68574b6f",
+            "name": "quay-3-17-quay-quay",
+            "source": {
+              "git": {
+                "revision": "d13b616c84753c2347bb63273f89e0f5b67e6247",
+                "url": "https://github.com/openshift-priv/quay-quay"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "creationTimestamp": "2026-10-06T10:34:09Z",
+        "name": "quay-3-17-20261006-095734-000-jx"
+      },
+      "spec": {
+        "application": "quay-3-17",
+        "components": [
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:11894d398339e77151e02d6551d72f2a2d8ee4b781b9299664947cbb6c58caf9",
+            "name": "quay-3-17-base-rhel9",
+            "source": {
+              "git": {
+                "revision": "9ba1546e104942cb37cc838f1f98f1455a54bfc2",
+                "url": "https://github.com/openshift-priv/ocp-build-data"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:0d88dadd8eeb8fa6f8d9c26e288a29f73dd34e48821b52d9f9cdf18aea180aab",
+            "name": "quay-3-17-container-security-operator",
+            "source": {
+              "git": {
+                "revision": "0db0617cc35440dcb062deeda32bc49d83594233",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:eed84e24bad95ba53a348c6947c083e6ee7900792a5b4f0b90c879735f1f8215",
+            "name": "quay-3-17-quay-bridge-operator",
+            "source": {
+              "git": {
+                "revision": "4951551e842ed0c0c07a430e35c3e891495dbc34",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:268a17845f54c26d2d55fa4bffea2f095f78cb40acfac553c811b2f70e254eba",
+            "name": "quay-3-17-quay-bridge-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "f6f9de0df06528ff1d15a187283bb530fc58c9f1",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:fd39b1542cf46a782addb588fe95dbea1dadb127ddd94971496a72240cbe1755",
+            "name": "quay-3-17-quay-builder",
+            "source": {
+              "git": {
+                "revision": "c4d8bc9644b83623418ee5efd98015cf12c317e8",
+                "url": "https://github.com/openshift-priv/quay-quay-builder"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:5367740a226fe7fa13bbc154066f84ae907d3affa479df820c2c198b068ef2d8",
+            "name": "quay-3-17-quay-builder-qemu",
+            "source": {
+              "git": {
+                "revision": "72963bb0d529f040871fbdfd7ea26816933adee4",
+                "url": "https://github.com/openshift-priv/quay-quay-builder-qemu"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:da60da674707e74aad96c1213a98025155870d53a19aa277fb45edeff38874d5",
+            "name": "quay-3-17-quay-clair",
+            "source": {
+              "git": {
+                "revision": "a3fab5eb79c9e48df7d14dbb263aba83f0b1856e",
+                "url": "https://github.com/openshift-priv/quay-clair"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:e3a2b1155412aff595bd0b7c790b2d5668360ad9e2fcf43b87751898eca14dec",
+            "name": "quay-3-17-quay-container-security-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "96ac84c503bc53188e7b35db05c4509bb84cba3d",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:de6a6d114d0245ccb95d093e49579c8a1b339c642df6a06f501ce0139cfceb18",
+            "name": "quay-3-17-quay-operator",
+            "source": {
+              "git": {
+                "revision": "f507e367caf19199bdc78a6bb7557d4ebe81dfea",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:5146ecb4b99a6808f5bd90f62bcb0fe6c141cc1399a9b487ff3bf43be39dee40",
+            "name": "quay-3-17-quay-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "712f60155bd77bac7692d63476439e33596f7fab",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:90e460a227298184df7a10d27a1b3df499bdbfa7968f192731cab99411891d39",
+            "name": "quay-3-17-quay-quay",
+            "source": {
+              "git": {
+                "revision": "ca3b077dda1b36f3e3c83acc6fed04851fb0ff58",
+                "url": "https://github.com/openshift-priv/quay-quay"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "creationTimestamp": "2026-10-06T10:30:14Z",
+        "name": "quay-3-17-20261006-095734-000-es"
+      },
+      "spec": {
+        "application": "quay-3-17",
+        "components": [
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:11894d398339e77151e02d6551d72f2a2d8ee4b781b9299664947cbb6c58caf9",
+            "name": "quay-3-17-base-rhel9",
+            "source": {
+              "git": {
+                "revision": "9ba1546e104942cb37cc838f1f98f1455a54bfc2",
+                "url": "https://github.com/openshift-priv/ocp-build-data"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:0d88dadd8eeb8fa6f8d9c26e288a29f73dd34e48821b52d9f9cdf18aea180aab",
+            "name": "quay-3-17-container-security-operator",
+            "source": {
+              "git": {
+                "revision": "0db0617cc35440dcb062deeda32bc49d83594233",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:eed84e24bad95ba53a348c6947c083e6ee7900792a5b4f0b90c879735f1f8215",
+            "name": "quay-3-17-quay-bridge-operator",
+            "source": {
+              "git": {
+                "revision": "4951551e842ed0c0c07a430e35c3e891495dbc34",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:268a17845f54c26d2d55fa4bffea2f095f78cb40acfac553c811b2f70e254eba",
+            "name": "quay-3-17-quay-bridge-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "f6f9de0df06528ff1d15a187283bb530fc58c9f1",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:fd39b1542cf46a782addb588fe95dbea1dadb127ddd94971496a72240cbe1755",
+            "name": "quay-3-17-quay-builder",
+            "source": {
+              "git": {
+                "revision": "c4d8bc9644b83623418ee5efd98015cf12c317e8",
+                "url": "https://github.com/openshift-priv/quay-quay-builder"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:5367740a226fe7fa13bbc154066f84ae907d3affa479df820c2c198b068ef2d8",
+            "name": "quay-3-17-quay-builder-qemu",
+            "source": {
+              "git": {
+                "revision": "72963bb0d529f040871fbdfd7ea26816933adee4",
+                "url": "https://github.com/openshift-priv/quay-quay-builder-qemu"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:da60da674707e74aad96c1213a98025155870d53a19aa277fb45edeff38874d5",
+            "name": "quay-3-17-quay-clair",
+            "source": {
+              "git": {
+                "revision": "a3fab5eb79c9e48df7d14dbb263aba83f0b1856e",
+                "url": "https://github.com/openshift-priv/quay-clair"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:e3a2b1155412aff595bd0b7c790b2d5668360ad9e2fcf43b87751898eca14dec",
+            "name": "quay-3-17-quay-container-security-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "96ac84c503bc53188e7b35db05c4509bb84cba3d",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:b9ac47f28b077114003d58881aa8734548058fba10505595459c9fee5fa9d59f",
+            "name": "quay-3-17-quay-operator",
+            "source": {
+              "git": {
+                "revision": "8ba9237edb7e8ad966c48dc42de05a9d992ef216",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:5146ecb4b99a6808f5bd90f62bcb0fe6c141cc1399a9b487ff3bf43be39dee40",
+            "name": "quay-3-17-quay-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "712f60155bd77bac7692d63476439e33596f7fab",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:90e460a227298184df7a10d27a1b3df499bdbfa7968f192731cab99411891d39",
+            "name": "quay-3-17-quay-quay",
+            "source": {
+              "git": {
+                "revision": "ca3b077dda1b36f3e3c83acc6fed04851fb0ff58",
+                "url": "https://github.com/openshift-priv/quay-quay"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "creationTimestamp": "2026-10-06T17:11:18Z",
+        "name": "fbc-ri-stage-quay-3-18-quay-operator-66vqv"
+      },
+      "spec": {
+        "application": "quay-3-18",
+        "components": [
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:ccae0d49a7795cf7e00a407441b4e404715b8fb21e575756d341467d59e12c04",
+            "name": "quay-3-18-quay-builder",
+            "source": {
+              "git": {
+                "revision": "d039e95bfb6c65fe2e527ed77b0063e98f8ddf16",
+                "url": "https://github.com/openshift-priv/quay-quay-builder"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:fb921ff5608a90658f2133d5e0885a41c498542e7ca363267db7d2c1810282ec",
+            "name": "quay-3-18-quay-builder-qemu",
+            "source": {
+              "git": {
+                "revision": "2567fa689876301c7784d9236377e7a46d7e355b",
+                "url": "https://github.com/openshift-priv/quay-quay-builder-qemu"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:4953b4a9a79ea732e585b04deab4d2595ae21a71f33c5dd6b0c1d360160e16d8",
+            "name": "quay-3-18-quay-clair",
+            "source": {
+              "git": {
+                "revision": "ee72f43bb6758a50ec5549efad3be985ceccbb8b",
+                "url": "https://github.com/openshift-priv/quay-clair"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:261469689b60b3c285fa9c3492ad83daf30b93d6b5a860845dc803af1075dbfb",
+            "name": "quay-3-18-quay-operator",
+            "source": {
+              "git": {
+                "revision": "1ef6eb6d89e11ba1a342924ae0c1b01aaefafb1d",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:b241d01c6f2171ead9cd1060dfd5cd0000c426eb62e475e00565c2796de881ba",
+            "name": "quay-3-18-quay-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "e3c5b860e8f7130267b66718275bd2ef798f6259",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:4db6193f032e733fb80f8b83c5a3a0c4e43cda6fdbd7c9cbf150b1ee93bbab3c",
+            "name": "quay-3-18-quay-quay",
+            "source": {
+              "git": {
+                "revision": "6b6e37acd15b2bd434ab9a9ec5ef4d7bf9291c70",
+                "url": "https://github.com/openshift-priv/quay-quay"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "creationTimestamp": "2026-10-06T17:10:27Z",
+        "name": "quay-3-18-20261006-170808-000"
+      },
+      "spec": {
+        "application": "quay-3-18",
+        "components": [
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:871ddc73178e49ff6e4ddc2f185d1aca534ef128a86f9eda92709ffd665db78c",
+            "name": "quay-3-18-base-rhel9",
+            "source": {
+              "git": {
+                "revision": "94880a884eb98164e1764e3e881916577bfd414a",
+                "url": "https://github.com/openshift-priv/ocp-build-data"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:211242328edf58ae768635be5ff7556debcb8523f17ed8520398cbfe69762d22",
+            "name": "quay-3-18-container-security-operator",
+            "source": {
+              "git": {
+                "revision": "c47a76b43a0d31462bdf3a4e4173e7982433884d",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:2afc2cbdc6567721d142ea894a4455c3daabe0032afb3f73af070e55b977c39c",
+            "name": "quay-3-18-container-security-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "5e1a486a2662c82789807f55b0690fc49facff73",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:e76bcdd3e22649d2bf33dd23179858efe6641d82eb07be3ecf24e44acacc3efd",
+            "name": "quay-3-18-quay-bridge-operator",
+            "source": {
+              "git": {
+                "revision": "a849c8babfe3cabbc759044add0001fd4e88bfbd",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:760f3cbe2008b4ee26fbcf0a9b13a94069157d2eeb7041f6d28c1879455f688b",
+            "name": "quay-3-18-quay-bridge-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "cc36f2675a799f0b25379ebdcaee980b427f8f83",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:ccae0d49a7795cf7e00a407441b4e404715b8fb21e575756d341467d59e12c04",
+            "name": "quay-3-18-quay-builder",
+            "source": {
+              "git": {
+                "revision": "d039e95bfb6c65fe2e527ed77b0063e98f8ddf16",
+                "url": "https://github.com/openshift-priv/quay-quay-builder"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:fb921ff5608a90658f2133d5e0885a41c498542e7ca363267db7d2c1810282ec",
+            "name": "quay-3-18-quay-builder-qemu",
+            "source": {
+              "git": {
+                "revision": "2567fa689876301c7784d9236377e7a46d7e355b",
+                "url": "https://github.com/openshift-priv/quay-quay-builder-qemu"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:4953b4a9a79ea732e585b04deab4d2595ae21a71f33c5dd6b0c1d360160e16d8",
+            "name": "quay-3-18-quay-clair",
+            "source": {
+              "git": {
+                "revision": "ee72f43bb6758a50ec5549efad3be985ceccbb8b",
+                "url": "https://github.com/openshift-priv/quay-clair"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:261469689b60b3c285fa9c3492ad83daf30b93d6b5a860845dc803af1075dbfb",
+            "name": "quay-3-18-quay-operator",
+            "source": {
+              "git": {
+                "revision": "1ef6eb6d89e11ba1a342924ae0c1b01aaefafb1d",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:b241d01c6f2171ead9cd1060dfd5cd0000c426eb62e475e00565c2796de881ba",
+            "name": "quay-3-18-quay-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "e3c5b860e8f7130267b66718275bd2ef798f6259",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:4db6193f032e733fb80f8b83c5a3a0c4e43cda6fdbd7c9cbf150b1ee93bbab3c",
+            "name": "quay-3-18-quay-quay",
+            "source": {
+              "git": {
+                "revision": "6b6e37acd15b2bd434ab9a9ec5ef4d7bf9291c70",
+                "url": "https://github.com/openshift-priv/quay-quay"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "creationTimestamp": "2026-10-06T17:06:28Z",
+        "name": "quay-3-18-20261006-165007-000"
+      },
+      "spec": {
+        "application": "quay-3-18",
+        "components": [
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:871ddc73178e49ff6e4ddc2f185d1aca534ef128a86f9eda92709ffd665db78c",
+            "name": "quay-3-18-base-rhel9",
+            "source": {
+              "git": {
+                "revision": "94880a884eb98164e1764e3e881916577bfd414a",
+                "url": "https://github.com/openshift-priv/ocp-build-data"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:211242328edf58ae768635be5ff7556debcb8523f17ed8520398cbfe69762d22",
+            "name": "quay-3-18-container-security-operator",
+            "source": {
+              "git": {
+                "revision": "c47a76b43a0d31462bdf3a4e4173e7982433884d",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:2afc2cbdc6567721d142ea894a4455c3daabe0032afb3f73af070e55b977c39c",
+            "name": "quay-3-18-container-security-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "5e1a486a2662c82789807f55b0690fc49facff73",
+                "url": "https://github.com/openshift-priv/quay-container-security-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:e76bcdd3e22649d2bf33dd23179858efe6641d82eb07be3ecf24e44acacc3efd",
+            "name": "quay-3-18-quay-bridge-operator",
+            "source": {
+              "git": {
+                "revision": "a849c8babfe3cabbc759044add0001fd4e88bfbd",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:760f3cbe2008b4ee26fbcf0a9b13a94069157d2eeb7041f6d28c1879455f688b",
+            "name": "quay-3-18-quay-bridge-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "cc36f2675a799f0b25379ebdcaee980b427f8f83",
+                "url": "https://github.com/openshift-priv/quay-quay-bridge-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:ccae0d49a7795cf7e00a407441b4e404715b8fb21e575756d341467d59e12c04",
+            "name": "quay-3-18-quay-builder",
+            "source": {
+              "git": {
+                "revision": "d039e95bfb6c65fe2e527ed77b0063e98f8ddf16",
+                "url": "https://github.com/openshift-priv/quay-quay-builder"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:fb921ff5608a90658f2133d5e0885a41c498542e7ca363267db7d2c1810282ec",
+            "name": "quay-3-18-quay-builder-qemu",
+            "source": {
+              "git": {
+                "revision": "2567fa689876301c7784d9236377e7a46d7e355b",
+                "url": "https://github.com/openshift-priv/quay-quay-builder-qemu"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:4953b4a9a79ea732e585b04deab4d2595ae21a71f33c5dd6b0c1d360160e16d8",
+            "name": "quay-3-18-quay-clair",
+            "source": {
+              "git": {
+                "revision": "ee72f43bb6758a50ec5549efad3be985ceccbb8b",
+                "url": "https://github.com/openshift-priv/quay-clair"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:261469689b60b3c285fa9c3492ad83daf30b93d6b5a860845dc803af1075dbfb",
+            "name": "quay-3-18-quay-operator",
+            "source": {
+              "git": {
+                "revision": "1ef6eb6d89e11ba1a342924ae0c1b01aaefafb1d",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:f39862754a5d32d9ec8505690d89d2c152ee4480af1473150998c583b59bd396",
+            "name": "quay-3-18-quay-operator-bundle",
+            "source": {
+              "git": {
+                "revision": "cb576204f6f04b9348e6e38bbb3c944b3fcb4c54",
+                "url": "https://github.com/openshift-priv/quay-quay-operator"
+              }
+            }
+          },
+          {
+            "containerImage": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:4db6193f032e733fb80f8b83c5a3a0c4e43cda6fdbd7c9cbf150b1ee93bbab3c",
+            "name": "quay-3-18-quay-quay",
+            "source": {
+              "git": {
+                "revision": "6b6e37acd15b2bd434ab9a9ec5ef4d7bf9291c70",
+                "url": "https://github.com/openshift-priv/quay-quay"
+              }
+            }
+          }
+        ]
+      },
+      "status": {
+        "conditions": [
+          {
+            "status": "True",
+            "type": "AppStudioTestSucceeded"
+          }
         ]
       }
     }
-  ]
+  ],
+  "metadata": {
+    "continue": ""
+  }
 }

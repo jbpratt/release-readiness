@@ -1,8 +1,22 @@
 [
   {
-    "name": "quay-v3.99.0",
-    "description": "Quay 3.99.0 e2e fixture release",
-    "releaseDate": "2026-12-01",
+    "name": "quay-v3.16.5",
+    "description": "Quay 3.16.5 z-stream",
+    "releaseDate": "2026-09-15",
+    "released": true,
+    "archived": false
+  },
+  {
+    "name": "quay-v3.17.6",
+    "description": "Quay 3.17.6 z-stream",
+    "releaseDate": "2030-01-15",
+    "released": false,
+    "archived": false
+  },
+  {
+    "name": "quay-v3.18.0",
+    "description": "Quay 3.18.0 GA",
+    "releaseDate": "2030-03-01",
     "released": false,
     "archived": false
   }

@@ -61,6 +61,7 @@ dev/e2e.sh -g "snapshots"                        # extra args pass through to pl
 ```
 
 - Live mode reads `KONFLUX_KUBECONFIG` (default `~/.kube/configs/art.yaml`), `KONFLUX_CONTEXT` (default: the kubeconfig's current-context) and `KONFLUX_NAMESPACE` (default `art-quay-tenant`). JIRA uses the fixture stub unless `JIRA_TOKEN` (and optionally `JIRA_URL`) is set.
+- `dev/e2e/record-fixtures.sh` re-records `konflux-snapshots.json` from live Konflux (same env vars as live mode, read-only), trimmed to the newest 3 snapshots of quay-3-16/17/18 and their fbc- apps. JIRA fixtures are hand-written and re-recorded (scrubbed) only when `JIRA_TOKEN` and `JIRA_EMAIL` are set; the stub serves issues from `jira-issues-<fixVersion>.json`. Update the fixture specs in `web/e2e/` after re-recording.
 - Artifacts land in `web/e2e-artifacts/<run timestamp>/` (gitignored): `test-results/` holds a full-page screenshot per page plus a screenshot and trace per test, and `report/` holds the HTML report (`npx playwright show-report web/e2e-artifacts/<run>/report`). CI uploads the directory as the `e2e-artifacts` artifact.
 - QA convention: run `dev/e2e.sh` for any UI- or API-visible change, and cite on the bead the Playwright pass-count line (e.g. `3 passed`) and the screenshot paths.
 

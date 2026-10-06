@@ -37,9 +37,10 @@ func serveFixture(fixturesDir, name string) http.HandlerFunc {
 	}
 }
 
-// handleSearchJQL dispatches JIRA's /rest/api/3/search/jql to one of two
-// fixtures based on the jql query: the release-discovery query (filters on
-// the "-area/release" component) or a per-version issue search.
+// handleSearchJQL dispatches JIRA's /rest/api/3/search/jql based on the jql
+// query: the release-discovery query (filters on the "-area/release"
+// component) or a per-version issue search, served from
+// jira-issues-<Target Version>.json.
 func handleSearchJQL(fixturesDir string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		jql := r.URL.Query().Get("jql")
@@ -47,7 +48,9 @@ func handleSearchJQL(fixturesDir string) http.HandlerFunc {
 			writeFixture(w, fixturesDir, "jira-release-search.json")
 			return
 		}
-		writeFixture(w, fixturesDir, "jira-issue-search.json")
+		_, version, _ := strings.Cut(jql, `"Target Version"="`)
+		version, _, _ = strings.Cut(version, `"`)
+		writeFixture(w, fixturesDir, "jira-issues-"+version+".json")
 	}
 }
 

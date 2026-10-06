@@ -133,6 +133,15 @@ BACKEND_PID=$!
 export E2E_BASE_URL="http://127.0.0.1:$BACKEND_PORT"
 export E2E_MODE
 
+# Fixture JIRA syncs one request per second, so wait for every fixture
+# release to have its issues rather than for the first release.
+RELEASES_FILTER='length'
+MIN_RELEASES=1
+if [[ "$LIVE" -eq 0 ]]; then
+  RELEASES_FILTER='map(select(.issue_summary.total > 0)) | length'
+  MIN_RELEASES="$(jq '.issues | length' "$REPO_ROOT/dev/e2e/fixtures/jira-release-search.json")"
+fi
+
 echo "e2e: waiting for readiness data..."
 READY=0
 for _ in $(seq 1 60); do
@@ -145,8 +154,8 @@ for _ in $(seq 1 60); do
     exit 1
   fi
   SNAPSHOTS_LEN="$(curl -fsS "$E2E_BASE_URL/api/v1/snapshots" 2>/dev/null | jq 'length' 2>/dev/null || echo 0)"
-  RELEASES_LEN="$(curl -fsS "$E2E_BASE_URL/api/v1/releases/overview" 2>/dev/null | jq 'length' 2>/dev/null || echo 0)"
-  if [[ "${SNAPSHOTS_LEN:-0}" -gt 0 && "${RELEASES_LEN:-0}" -gt 0 ]]; then
+  RELEASES_LEN="$(curl -fsS "$E2E_BASE_URL/api/v1/releases/overview" 2>/dev/null | jq "$RELEASES_FILTER" 2>/dev/null || echo 0)"
+  if [[ "${SNAPSHOTS_LEN:-0}" -gt 0 && "${RELEASES_LEN:-0}" -ge "$MIN_RELEASES" ]]; then
     READY=1
     break
   fi

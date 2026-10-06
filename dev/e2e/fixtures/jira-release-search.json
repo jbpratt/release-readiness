@@ -2,14 +2,36 @@
   "maxResults": 100,
   "issues": [
     {
-      "key": "PROJQUAY-9001",
+      "key": "PROJQUAY-9016",
       "fields": {
-        "summary": "Release Quay v3.99.0",
+        "summary": "Release Quay v3.16.5",
+        "status": { "name": "Verified" },
+        "fixVersions": [],
+        "duedate": "2026-09-15",
+        "components": [{ "name": "-area/release" }],
+        "assignee": { "displayName": "Fixture Release Lead" }
+      }
+    },
+    {
+      "key": "PROJQUAY-9017",
+      "fields": {
+        "summary": "Release Quay v3.17.6",
         "status": { "name": "In Progress" },
         "fixVersions": [],
-        "duedate": "2026-12-01",
+        "duedate": "2030-01-15",
         "components": [{ "name": "-area/release" }],
-        "assignee": { "displayName": "Jane Doe" }
+        "assignee": { "displayName": "Fixture Release Lead" }
+      }
+    },
+    {
+      "key": "PROJQUAY-9018",
+      "fields": {
+        "summary": "Release Quay v3.18.0",
+        "status": { "name": "New" },
+        "fixVersions": [],
+        "duedate": "2030-03-01",
+        "components": [{ "name": "-area/release" }],
+        "assignee": null
       }
     }
   ]

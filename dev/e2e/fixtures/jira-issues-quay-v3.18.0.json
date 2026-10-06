@@ -1,0 +1,57 @@
+{
+  "maxResults": 100,
+  "issues": [
+    {
+      "key": "PROJQUAY-9181",
+      "fields": {
+        "summary": "Org-level quota reporting in the new UI",
+        "status": { "name": "In Progress" },
+        "priority": { "name": "Major" },
+        "labels": ["ui"],
+        "assignee": { "displayName": "Fixture Engineer C" },
+        "issuetype": { "name": "Story" },
+        "resolution": null,
+        "updated": "2026-10-03T09:00:00.000-0400"
+      }
+    },
+    {
+      "key": "PROJQUAY-9182",
+      "fields": {
+        "summary": "Image pull fails when tag contains uppercase characters",
+        "status": { "name": "New" },
+        "priority": { "name": "Critical" },
+        "labels": [],
+        "assignee": null,
+        "issuetype": { "name": "Bug" },
+        "resolution": null,
+        "updated": "2026-10-04T15:30:00.000-0400"
+      }
+    },
+    {
+      "key": "PROJQUAY-9183",
+      "fields": {
+        "summary": "Sparse manifest list support",
+        "status": { "name": "Closed" },
+        "priority": { "name": "Normal" },
+        "labels": [],
+        "assignee": { "displayName": "Fixture Engineer A" },
+        "issuetype": { "name": "Epic" },
+        "resolution": { "name": "Done" },
+        "updated": "2026-09-25T12:00:00.000-0400"
+      }
+    },
+    {
+      "key": "PROJQUAY-9184",
+      "fields": {
+        "summary": "Drop Python 3.9 compatibility shims",
+        "status": { "name": "Code Review" },
+        "priority": { "name": "Minor" },
+        "labels": ["tech-debt"],
+        "assignee": { "displayName": "Fixture Engineer B" },
+        "issuetype": { "name": "Task" },
+        "resolution": null,
+        "updated": "2026-10-05T10:10:00.000-0400"
+      }
+    }
+  ]
+}
