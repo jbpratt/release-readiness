@@ -103,7 +103,10 @@ export default function KonfluxReleases() {
 	useEffect(() => {
 		if (filter === application) return;
 		const id = setTimeout(
-			() => setSearchParams(filter ? { application: filter } : {}),
+			() =>
+				setSearchParams(filter ? { application: filter } : {}, {
+					replace: true,
+				}),
 			300,
 		);
 		return () => clearTimeout(id);
