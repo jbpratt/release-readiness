@@ -73,8 +73,8 @@ func TestSyncOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Application != "quay-3-18" || !got.CreatedAt.Equal(created1) || got.TestsPassed {
-		t.Errorf("quay-3-18-abc = app %q created %v passed %v", got.Application, got.CreatedAt, got.TestsPassed)
+	if got.Application != "quay-3-18" || !got.CreatedAt.Equal(created1) {
+		t.Errorf("quay-3-18-abc = app %q created %v", got.Application, got.CreatedAt)
 	}
 	shas := map[string]string{}
 	for _, c := range got.Components {

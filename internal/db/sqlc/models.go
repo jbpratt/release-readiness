@@ -44,7 +44,6 @@ type Snapshot struct {
 	ID          int64
 	Application string
 	Name        string
-	TestsPassed int64
 	CreatedAt   string
 }
 
@@ -55,66 +54,4 @@ type SnapshotComponent struct {
 	GitSha     string
 	ImageUrl   string
 	GitUrl     string
-}
-
-type TestCase struct {
-	ID          int64
-	TestSuiteID int64
-	Name        string
-	Status      string
-	DurationMs  float64
-	Message     string
-	Trace       string
-	FilePath    string
-	Suite       string
-	Retries     int64
-	Flaky       int64
-}
-
-type TestSuite struct {
-	ID          int64
-	SnapshotID  int64
-	Name        string
-	Status      string
-	PipelineRun string
-	ToolName    string
-	ToolVersion string
-	Tests       int64
-	Passed      int64
-	Failed      int64
-	Skipped     int64
-	Pending     int64
-	Other       int64
-	Flaky       int64
-	StartTime   int64
-	StopTime    int64
-	DurationMs  int64
-	CreatedAt   string
-}
-
-type Vulnerability struct {
-	ID             int64
-	ReportID       int64
-	Name           string
-	Severity       string
-	PackageName    string
-	PackageVersion string
-	FixedInVersion string
-	Description    string
-	Link           string
-}
-
-type VulnerabilityReport struct {
-	ID         int64
-	SnapshotID int64
-	Component  string
-	Arch       string
-	Total      int64
-	Critical   int64
-	High       int64
-	Medium     int64
-	Low        int64
-	Unknown    int64
-	Fixable    int64
-	CreatedAt  string
 }

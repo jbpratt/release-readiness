@@ -9,51 +9,11 @@ CREATE TABLE IF NOT EXISTS snapshots (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     application  TEXT NOT NULL,
     name         TEXT NOT NULL UNIQUE,
-    tests_passed INTEGER NOT NULL DEFAULT 0,
     created_at   TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_snapshots_application ON snapshots(application);
 CREATE INDEX IF NOT EXISTS idx_snapshots_created ON snapshots(created_at DESC);
-
-CREATE TABLE IF NOT EXISTS test_suites (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id     INTEGER NOT NULL REFERENCES snapshots(id) ON DELETE CASCADE,
-    name            TEXT NOT NULL,
-    status          TEXT NOT NULL DEFAULT 'unknown',
-    pipeline_run    TEXT NOT NULL DEFAULT '',
-    tool_name       TEXT NOT NULL DEFAULT '',
-    tool_version    TEXT NOT NULL DEFAULT '',
-    tests           INTEGER NOT NULL DEFAULT 0,
-    passed          INTEGER NOT NULL DEFAULT 0,
-    failed          INTEGER NOT NULL DEFAULT 0,
-    skipped         INTEGER NOT NULL DEFAULT 0,
-    pending         INTEGER NOT NULL DEFAULT 0,
-    other           INTEGER NOT NULL DEFAULT 0,
-    flaky           INTEGER NOT NULL DEFAULT 0,
-    start_time      INTEGER NOT NULL DEFAULT 0,
-    stop_time       INTEGER NOT NULL DEFAULT 0,
-    duration_ms     INTEGER NOT NULL DEFAULT 0,
-    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_test_suites_snapshot ON test_suites(snapshot_id);
-
-CREATE TABLE IF NOT EXISTS test_cases (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    test_suite_id   INTEGER NOT NULL REFERENCES test_suites(id) ON DELETE CASCADE,
-    name            TEXT NOT NULL,
-    status          TEXT NOT NULL DEFAULT 'unknown',
-    duration_ms     REAL NOT NULL DEFAULT 0.0,
-    message         TEXT NOT NULL DEFAULT '',
-    trace           TEXT NOT NULL DEFAULT '',
-    file_path       TEXT NOT NULL DEFAULT '',
-    suite           TEXT NOT NULL DEFAULT '',
-    retries         INTEGER NOT NULL DEFAULT 0,
-    flaky           INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE INDEX IF NOT EXISTS idx_test_cases_suite ON test_cases(test_suite_id);
 
 CREATE TABLE IF NOT EXISTS snapshot_components (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,36 +44,6 @@ CREATE TABLE IF NOT EXISTS jira_issues (
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jira_issues_key_version ON jira_issues(key, fix_version);
 
-CREATE TABLE IF NOT EXISTS vulnerability_reports (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id     INTEGER NOT NULL REFERENCES snapshots(id) ON DELETE CASCADE,
-    component       TEXT NOT NULL,
-    arch            TEXT NOT NULL,
-    total           INTEGER NOT NULL DEFAULT 0,
-    critical        INTEGER NOT NULL DEFAULT 0,
-    high            INTEGER NOT NULL DEFAULT 0,
-    medium          INTEGER NOT NULL DEFAULT 0,
-    low             INTEGER NOT NULL DEFAULT 0,
-    unknown         INTEGER NOT NULL DEFAULT 0,
-    fixable         INTEGER NOT NULL DEFAULT 0,
-    created_at      TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_vuln_reports_snapshot ON vulnerability_reports(snapshot_id);
-
-CREATE TABLE IF NOT EXISTS vulnerabilities (
-    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
-    report_id           INTEGER NOT NULL REFERENCES vulnerability_reports(id) ON DELETE CASCADE,
-    name                TEXT NOT NULL,
-    severity            TEXT NOT NULL DEFAULT '',
-    package_name        TEXT NOT NULL DEFAULT '',
-    package_version     TEXT NOT NULL DEFAULT '',
-    fixed_in_version    TEXT NOT NULL DEFAULT '',
-    description         TEXT NOT NULL DEFAULT '',
-    link                TEXT NOT NULL DEFAULT ''
-);
-
-CREATE INDEX IF NOT EXISTS idx_vulns_report ON vulnerabilities(report_id);
 CREATE INDEX IF NOT EXISTS idx_jira_issues_fix_version ON jira_issues(fix_version);
 
 CREATE TABLE IF NOT EXISTS release_versions (

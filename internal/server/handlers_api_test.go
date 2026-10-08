@@ -51,7 +51,7 @@ func TestListSnapshots(t *testing.T) {
 	srv := setupTestServer(t)
 	ctx := t.Context()
 
-	_, err := srv.db.CreateSnapshot(ctx, "quay-v3-17", "quay-v3-17-20260213-000", true, time.Now())
+	_, err := srv.db.CreateSnapshot(ctx, "quay-v3-17", "quay-v3-17-20260213-000", time.Now())
 	if err != nil {
 		t.Fatalf("create snapshot: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestGetReleaseSnapshot(t *testing.T) {
 	ctx := t.Context()
 
 	// Create a snapshot for the S3 application
-	_, err := srv.db.CreateSnapshot(ctx, "quay-v3-16", "quay-v3-16-snap-1", true, time.Now())
+	_, err := srv.db.CreateSnapshot(ctx, "quay-v3-16", "quay-v3-16-snap-1", time.Now())
 	if err != nil {
 		t.Fatalf("create snapshot: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestReleasesOverview(t *testing.T) {
 		t.Fatalf("upsert release: %v", err)
 	}
 
-	_, err = srv.db.CreateSnapshot(ctx, "quay-v3-16", "quay-v3-16-snap-1", true, time.Now())
+	_, err = srv.db.CreateSnapshot(ctx, "quay-v3-16", "quay-v3-16-snap-1", time.Now())
 	if err != nil {
 		t.Fatalf("create snapshot: %v", err)
 	}
@@ -247,25 +247,31 @@ func TestGetReleaseReadiness(t *testing.T) {
 		t.Fatalf("upsert release: %v", err)
 	}
 
-	// Create a passing snapshot
-	_, err = srv.db.CreateSnapshot(ctx, "quay-v3-16", "quay-v3-16-snap-1", true, time.Now())
+	getReadiness := func() model.ReadinessResponse {
+		t.Helper()
+		req := httptest.NewRequest("GET", "/api/v1/releases/3.16.3/readiness", nil)
+		w := httptest.NewRecorder()
+		srv.http.Handler.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("get readiness: got %d, body: %s", w.Code, w.Body.String())
+		}
+		var readiness model.ReadinessResponse
+		if err := json.NewDecoder(w.Body).Decode(&readiness); err != nil {
+			t.Fatal(err)
+		}
+		return readiness
+	}
+
+	if got := getReadiness(); got.Signal != "yellow" || got.Message != "No build snapshots yet" {
+		t.Errorf("without snapshot: got %+v, want yellow/No build snapshots yet", got)
+	}
+
+	_, err = srv.db.CreateSnapshot(ctx, "quay-v3-16", "quay-v3-16-snap-1", time.Now())
 	if err != nil {
 		t.Fatalf("create snapshot: %v", err)
 	}
 
-	req := httptest.NewRequest("GET", "/api/v1/releases/3.16.3/readiness", nil)
-	w := httptest.NewRecorder()
-	srv.http.Handler.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("get readiness: got %d, body: %s", w.Code, w.Body.String())
-	}
-
-	var readiness model.ReadinessResponse
-	if err := json.NewDecoder(w.Body).Decode(&readiness); err != nil {
-		t.Fatal(err)
-	}
-	if readiness.Signal != "green" {
-		t.Errorf("signal: got %q, want green", readiness.Signal)
+	if got := getReadiness(); got.Signal != "green" || got.Message != "No open issues" {
+		t.Errorf("with snapshot: got %+v, want green/No open issues", got)
 	}
 }

@@ -13,7 +13,6 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getRelease, listSnapshots } from "../api/client";
 import type { SnapshotRecord } from "../api/types";
-import StatusLabel from "../components/StatusLabel";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { formatReleaseName } from "../utils/links";
 
@@ -121,7 +120,6 @@ export default function SnapshotsList() {
 								<Tr>
 									<Th>Snapshot</Th>
 									<Th>Application</Th>
-									<Th>Tests</Th>
 									<Th>Created</Th>
 								</Tr>
 							</Thead>
@@ -130,17 +128,6 @@ export default function SnapshotsList() {
 									<Tr key={s.id}>
 										<Td>{s.name}</Td>
 										<Td>{s.application}</Td>
-										<Td>
-											<StatusLabel
-												status={
-													!s.has_tests
-														? "not_configured"
-														: s.tests_passed
-															? "passed"
-															: "failed"
-												}
-											/>
-										</Td>
 										<Td>{new Date(s.created_at).toLocaleString()}</Td>
 									</Tr>
 								))}

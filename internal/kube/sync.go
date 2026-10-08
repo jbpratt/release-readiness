@@ -41,7 +41,7 @@ func NewClient(kubeconfig string) (dynamic.Interface, error) {
 // Store is the subset of the database layer needed by the Konflux syncer.
 type Store interface {
 	SnapshotExistsByName(ctx context.Context, name string) (bool, error)
-	CreateSnapshot(ctx context.Context, application, name string, testsPassed bool, createdAt time.Time) (*model.SnapshotRecord, error)
+	CreateSnapshot(ctx context.Context, application, name string, createdAt time.Time) (*model.SnapshotRecord, error)
 	EnsureComponent(ctx context.Context, name string) (*model.Component, error)
 	CreateSnapshotComponent(ctx context.Context, snapshotID int64, component, gitSHA, imageURL, gitURL string) error
 }
@@ -124,7 +124,7 @@ func (s *Syncer) sync(ctx context.Context, obj *unstructured.Unstructured) error
 	s.logger.Info("new snapshot", "snapshot", name, "application", snap.Application)
 
 	return s.withTx(ctx, func(tx Store) error {
-		rec, err := tx.CreateSnapshot(ctx, snap.Application, snap.Snapshot, false, obj.GetCreationTimestamp().UTC())
+		rec, err := tx.CreateSnapshot(ctx, snap.Application, snap.Snapshot, obj.GetCreationTimestamp().UTC())
 		if err != nil {
 			return fmt.Errorf("create snapshot: %w", err)
 		}
