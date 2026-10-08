@@ -20,9 +20,6 @@ import {
 	SelectList,
 	SelectOption,
 	Spinner,
-	Tab,
-	Tabs,
-	TabTitleText,
 	Title,
 } from "@patternfly/react-core";
 import {
@@ -42,9 +39,9 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
 	getRelease,
+	getReleaseComponents,
 	getReleaseIssueSummary,
 	getReleaseReadiness,
-	getReleaseSnapshot,
 	listReleaseIssues,
 } from "../api/client";
 import type {
@@ -52,8 +49,8 @@ import type {
 	IssueSummary,
 	JiraIssue,
 	ReadinessResponse,
+	ReleaseComponent,
 	ReleaseVersion,
-	SnapshotRecord,
 } from "../api/types";
 import GitShaLink from "../components/GitShaLink";
 import PriorityLabel from "../components/PriorityLabel";
@@ -74,9 +71,9 @@ export default function ReleaseDetail() {
 		version ? `release:${version}` : null,
 		() => getRelease(version!),
 	);
-	const { data: snapshot } = useCachedFetch(
-		version ? `snapshot:${version}` : null,
-		() => getReleaseSnapshot(version!),
+	const { data: releaseComponents } = useCachedFetch(
+		version ? `components:${version}` : null,
+		() => getReleaseComponents(version!),
 	);
 	const { data: issues } = useCachedFetch(
 		version ? `issues:${version}` : null,
@@ -91,9 +88,6 @@ export default function ReleaseDetail() {
 		() => getReleaseReadiness(version!),
 	);
 
-	const [activeSnapshotTab, setActiveSnapshotTab] = useState<string | number>(
-		"components",
-	);
 	if (loadingRelease && !release) {
 		return (
 			<PageSection>
@@ -120,6 +114,7 @@ export default function ReleaseDetail() {
 	}
 
 	const displayName = formatReleaseName(release.name);
+	const components = releaseComponents?.components ?? null;
 
 	return (
 		<>
@@ -141,7 +136,7 @@ export default function ReleaseDetail() {
 					<FlexItem>
 						<Title headingLevel="h1">{displayName}</Title>
 					</FlexItem>
-					{release.konflux_application && (
+					{components && components.length > 0 && (
 						<FlexItem>
 							<Link to={`/releases/${encodeURIComponent(version!)}/snapshots`}>
 								View all snapshots
@@ -154,93 +149,73 @@ export default function ReleaseDetail() {
 					release={release}
 					readiness={readinessSignal ?? null}
 					jiraBaseUrl={config?.jira_base_url}
-					snapshot={snapshot ?? null}
+					components={components}
 					issueSummary={issueSummary ?? null}
 				/>
 
-				{snapshot && (
+				{components && components.length > 0 && (
 					<Card isCompact style={{ marginBottom: "1rem" }}>
-						<CardTitle>Latest Snapshot</CardTitle>
+						<CardTitle>
+							Current component images ({components.length})
+						</CardTitle>
 						<CardBody>
-							<Flex
-								justifyContent={{ default: "justifyContentSpaceEvenly" }}
-								flexWrap={{ default: "nowrap" }}
-							>
-								<FlexItem style={{ textAlign: "center" }}>
-									<div className="rr-label">Snapshot</div>
-									<div>{snapshot.name}</div>
-								</FlexItem>
-								<FlexItem style={{ textAlign: "center" }}>
-									<div className="rr-label">Created</div>
-									<div>{new Date(snapshot.created_at).toLocaleString()}</div>
-								</FlexItem>
-							</Flex>
-
-							<Tabs
-								activeKey={activeSnapshotTab}
-								onSelect={(_e, key) => setActiveSnapshotTab(key)}
-								isFilled
-								style={{ marginTop: "1rem" }}
-							>
-								{snapshot.components && snapshot.components.length > 0 && (
-									<Tab
-										eventKey="components"
-										title={
-											<TabTitleText>
-												Components ({snapshot.components.length})
-											</TabTitleText>
-										}
-									>
-										<Table variant="compact">
-											<Thead>
-												<Tr>
-													<Th>Component</Th>
-													<Th>Git SHA</Th>
-													<Th>Image</Th>
-												</Tr>
-											</Thead>
-											<Tbody>
-												{snapshot.components.map((c) => {
-													const imgUrl = quayImageUrl(c.image_url);
-													const imgDisplay = c.image_url.includes("/")
-														? (c.image_url.split("/").pop()?.split("@")[0] ??
-															c.image_url)
-														: c.image_url;
-													return (
-														<Tr key={c.id}>
-															<Td>{c.component}</Td>
-															<Td>
-																<GitShaLink
-																	component={c.component}
-																	sha={c.git_sha}
-																	gitUrl={c.git_url}
-																/>
-															</Td>
-															<Td>
-																{imgUrl ? (
-																	<a
-																		href={imgUrl}
-																		target="_blank"
-																		rel="noopener noreferrer"
-																	>
-																		<code style={{ fontSize: "0.85em" }}>
-																			{imgDisplay}
-																		</code>
-																	</a>
-																) : (
-																	<code style={{ fontSize: "0.85em" }}>
-																		{c.image_url}
-																	</code>
-																)}
-															</Td>
-														</Tr>
-													);
-												})}
-											</Tbody>
-										</Table>
-									</Tab>
-								)}
-							</Tabs>
+							<Table variant="compact">
+								<Thead>
+									<Tr>
+										<Th>Component</Th>
+										<Th>Image</Th>
+										<Th>Git SHA</Th>
+										<Th>Application</Th>
+										<Th>Snapshot</Th>
+										<Th>Built</Th>
+									</Tr>
+								</Thead>
+								<Tbody>
+									{components.map((c) => {
+										const imgUrl = quayImageUrl(c.image);
+										const digest = c.image.split("@")[1];
+										const imgDisplay = digest
+											? digest.replace(/^(sha256:.{12}).*/, "$1")
+											: c.image;
+										return (
+											<Tr key={c.name}>
+												<Td>{c.name}</Td>
+												<Td>
+													{imgUrl ? (
+														<a
+															href={imgUrl}
+															target="_blank"
+															rel="noopener noreferrer"
+															title={c.image}
+														>
+															<code style={{ fontSize: "0.85em" }}>
+																{imgDisplay}
+															</code>
+														</a>
+													) : (
+														<code
+															style={{ fontSize: "0.85em" }}
+															title={c.image}
+														>
+															{imgDisplay}
+														</code>
+													)}
+												</Td>
+												<Td>
+													<GitShaLink
+														component={c.name}
+														sha={c.git_sha}
+														gitUrl={c.git_url}
+													/>
+												</Td>
+												<Td>{c.application}</Td>
+												<Td>{c.snapshot}</Td>
+												<Td>{new Date(c.created_at).toLocaleString()}</Td>
+											</Tr>
+										);
+									})}
+								</Tbody>
+							</Table>
 						</CardBody>
 					</Card>
 				)}
@@ -261,13 +236,13 @@ function ReleaseSignal({
 	release,
 	readiness,
 	jiraBaseUrl,
-	snapshot,
+	components,
 	issueSummary,
 }: {
 	release: ReleaseVersion;
 	readiness: ReadinessResponse | null;
 	jiraBaseUrl?: string;
-	snapshot: SnapshotRecord | null;
+	components: ReleaseComponent[] | null;
 	issueSummary: IssueSummary | null;
 }) {
 	const dueDate = release.due_date ? new Date(release.due_date) : null;
@@ -296,15 +271,16 @@ function ReleaseSignal({
 			)
 		: null;
 
-	const buildsReady =
-		snapshot !== null &&
-		snapshot.components !== undefined &&
-		snapshot.components.length > 0;
+	const buildsReady = components !== null && components.length > 0;
 	const bugsVerified =
 		issueSummary !== null && issueSummary.total > 0 && issueSummary.open === 0;
 
 	const progressItems = [
-		{ label: "Builds ready", done: buildsReady, warning: snapshot === null },
+		{
+			label: "Builds ready",
+			done: buildsReady,
+			warning: components !== null && !buildsReady,
+		},
 		...(issueSummary ? [{ label: "Bugs verified", done: bugsVerified }] : []),
 	];
 

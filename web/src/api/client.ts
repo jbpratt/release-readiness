@@ -4,6 +4,7 @@ import type {
 	JiraIssue,
 	KonfluxRelease,
 	ReadinessResponse,
+	ReleaseComponents,
 	ReleaseOverview,
 	ReleaseVersion,
 	SnapshotRecord,
@@ -21,18 +22,6 @@ export async function fetchJSON<T>(url: string): Promise<T> {
 
 export function getConfig(): Promise<DashboardConfig> {
 	return fetchJSON(`${BASE}/config`);
-}
-
-export function listSnapshots(
-	application?: string,
-	limit = 50,
-	offset = 0,
-): Promise<SnapshotRecord[]> {
-	const params = new URLSearchParams();
-	if (application) params.set("application", application);
-	params.set("limit", String(limit));
-	params.set("offset", String(offset));
-	return fetchJSON(`${BASE}/snapshots?${params}`);
 }
 
 export function listKonfluxReleases(
@@ -57,8 +46,25 @@ export function getRelease(version: string): Promise<ReleaseVersion> {
 	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}`);
 }
 
-export function getReleaseSnapshot(version: string): Promise<SnapshotRecord> {
-	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}/snapshot`);
+export function getReleaseComponents(
+	version: string,
+): Promise<ReleaseComponents> {
+	return fetchJSON(
+		`${BASE}/releases/${encodeURIComponent(version)}/components`,
+	);
+}
+
+export function listReleaseSnapshots(
+	version: string,
+	limit = 50,
+	offset = 0,
+): Promise<SnapshotRecord[]> {
+	const params = new URLSearchParams();
+	params.set("limit", String(limit));
+	params.set("offset", String(offset));
+	return fetchJSON(
+		`${BASE}/releases/${encodeURIComponent(version)}/snapshots?${params}`,
+	);
 }
 
 export function listReleaseIssues(

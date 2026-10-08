@@ -11,9 +11,8 @@ import {
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getRelease, listSnapshots } from "../api/client";
+import { listReleaseSnapshots } from "../api/client";
 import type { SnapshotRecord } from "../api/types";
-import { useCachedFetch } from "../hooks/useCachedFetch";
 import { formatReleaseName } from "../utils/links";
 
 const PAGE_SIZE = 50;
@@ -26,23 +25,14 @@ export default function SnapshotsList() {
 	const [page, setPage] = useState(1);
 	const [hasMore, setHasMore] = useState(false);
 
-	const { data: release } = useCachedFetch(
-		version ? `release:${version}` : null,
-		() => getRelease(version!),
-	);
-
 	const displayName = version ? formatReleaseName(version) : "";
 
 	const fetchPage = useCallback(
 		(p: number) => {
-			if (!release?.konflux_application) return;
+			if (!version) return;
 			setLoading(true);
 			setError(null);
-			listSnapshots(
-				release.konflux_application,
-				PAGE_SIZE + 1,
-				(p - 1) * PAGE_SIZE,
-			)
+			listReleaseSnapshots(version, PAGE_SIZE + 1, (p - 1) * PAGE_SIZE)
 				.then((data) => {
 					const rows = data ?? [];
 					if (rows.length > PAGE_SIZE) {
@@ -60,14 +50,12 @@ export default function SnapshotsList() {
 				})
 				.finally(() => setLoading(false));
 		},
-		[release?.konflux_application],
+		[version],
 	);
 
 	useEffect(() => {
-		if (release?.konflux_application) {
-			fetchPage(1);
-		}
-	}, [release?.konflux_application, fetchPage]);
+		fetchPage(1);
+	}, [fetchPage]);
 
 	const onSetPage = (_: unknown, p: number) => {
 		setPage(p);

@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const baseImagesApp = "quay-images-base"
+const BaseImagesApp = "quay-images-base"
 
 var quayApp = regexp.MustCompile(`^quay-\d+-\d+$`)
 
@@ -29,7 +29,7 @@ func Applications(konfluxApp string) []string {
 		return nil
 	}
 	if quayApp.MatchString(konfluxApp) {
-		return []string{konfluxApp, "fbc-" + konfluxApp, baseImagesApp}
+		return []string{konfluxApp, "fbc-" + konfluxApp, BaseImagesApp}
 	}
 	return []string{konfluxApp}
 }
@@ -43,7 +43,7 @@ func Select(konfluxApp string, rows []Component) []Component {
 		if !slices.Contains(apps, r.Application) {
 			continue
 		}
-		if r.Application == baseImagesApp && !strings.HasPrefix(r.Name, konfluxApp+"-") {
+		if r.Application == BaseImagesApp && !strings.HasPrefix(r.Name, konfluxApp+"-") {
 			continue
 		}
 		if cur, ok := newest[r.Name]; !ok || newer(r, cur) {

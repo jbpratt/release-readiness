@@ -1,14 +1,17 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strconv"
 	"time"
 
 	"github.com/quay/release-readiness/internal/model"
+	"github.com/quay/release-readiness/internal/releaseview"
 )
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
@@ -73,7 +76,7 @@ func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, release)
 }
 
-func (s *Server) handleGetReleaseSnapshot(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGetReleaseComponents(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	version := r.PathValue("version")
 	release, err := s.db.GetReleaseVersion(ctx, version)
@@ -81,37 +84,63 @@ func (s *Server) handleGetReleaseSnapshot(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
 		return
 	}
-
-	if release.KonfluxApplication == "" {
-		writeError(w, http.StatusNotFound, fmt.Errorf("no Konflux application mapped for release %q", version))
-		return
-	}
-
-	// Get the latest snapshot for this release's Konflux application
-	apps, err := s.db.LatestSnapshotPerApplication(ctx)
+	components, err := s.releaseComponents(ctx, release)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	writeJSON(w, http.StatusOK, components)
+}
 
-	for _, app := range apps {
-		if app.Application == release.KonfluxApplication {
-			if app.LatestSnapshot == nil {
-				writeError(w, http.StatusNotFound, fmt.Errorf("no snapshots found for %s", release.KonfluxApplication))
-				return
-			}
-			// Get full snapshot with components and test results
-			snap, err := s.db.GetSnapshotByName(ctx, app.LatestSnapshot.Name)
-			if err != nil {
-				writeError(w, http.StatusInternalServerError, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, snap)
-			return
+func (s *Server) handleListReleaseSnapshots(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	version := r.PathValue("version")
+	release, err := s.db.GetReleaseVersion(ctx, version)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
+		return
+	}
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	if limit <= 0 {
+		limit = 50
+	}
+	limit = min(limit, 200)
+	snapshots, err := s.db.ListReleaseSnapshots(ctx, release.KonfluxApplication, limit, offset)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, snapshots)
+}
+
+func (s *Server) releaseComponents(ctx context.Context, release *model.ReleaseVersion) (model.ReleaseComponents, error) {
+	candidates, err := s.db.ListComponentCandidates(ctx, releaseview.Applications(release.KonfluxApplication))
+	if err != nil {
+		return model.ReleaseComponents{}, err
+	}
+	return toReleaseComponents(release, candidates), nil
+}
+
+func toReleaseComponents(release *model.ReleaseVersion, candidates []releaseview.Component) model.ReleaseComponents {
+	selected := releaseview.Select(release.KonfluxApplication, candidates)
+	rc := model.ReleaseComponents{Release: release.Name, Components: make([]model.ReleaseComponent, len(selected))}
+	for i, c := range selected {
+		rc.Components[i] = model.ReleaseComponent{
+			Name:        c.Name,
+			Image:       c.Image,
+			GitSHA:      c.GitSHA,
+			GitURL:      c.GitURL,
+			Application: c.Application,
+			Snapshot:    c.Snapshot,
+			CreatedAt:   c.CreatedAt,
+		}
+		if rc.AsOf == nil || c.CreatedAt.After(*rc.AsOf) {
+			rc.AsOf = &c.CreatedAt
 		}
 	}
-
-	writeError(w, http.StatusNotFound, fmt.Errorf("no snapshots found for application %s", release.KonfluxApplication))
+	return rc
 }
 
 func (s *Server) handleListReleaseIssues(w http.ResponseWriter, r *http.Request) {
@@ -150,20 +179,13 @@ func (s *Server) handleGetReleaseReadiness(w http.ResponseWriter, r *http.Reques
 
 	issueSummary, _ := s.db.GetIssueSummary(ctx, version)
 
-	hasSnapshot := false
-	if release.KonfluxApplication != "" {
-		apps, err := s.db.LatestSnapshotPerApplication(ctx)
-		if err == nil {
-			for _, app := range apps {
-				if app.Application == release.KonfluxApplication && app.LatestSnapshot != nil {
-					hasSnapshot = true
-					break
-				}
-			}
-		}
+	components, err := s.releaseComponents(ctx, release)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
 	}
 
-	writeJSON(w, http.StatusOK, computeReadiness(release, issueSummary, hasSnapshot))
+	writeJSON(w, http.StatusOK, computeReadiness(release, issueSummary, len(components.Components) > 0))
 }
 
 func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) {
@@ -177,16 +199,15 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 		releases = []model.ReleaseVersion{}
 	}
 
-	apps, err := s.db.LatestSnapshotPerApplication(ctx)
+	var apps []string
+	for _, rel := range releases {
+		apps = append(apps, releaseview.Applications(rel.KonfluxApplication)...)
+	}
+	slices.Sort(apps)
+	candidates, err := s.db.ListComponentCandidates(ctx, slices.Compact(apps))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
-	}
-	snapshotMap := make(map[string]*model.SnapshotRecord, len(apps))
-	for i := range apps {
-		if apps[i].LatestSnapshot != nil {
-			snapshotMap[apps[i].Application] = apps[i].LatestSnapshot
-		}
 	}
 
 	fixVersions := make([]string, len(releases))
@@ -202,21 +223,13 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 	overviews := make([]model.ReleaseOverview, len(releases))
 	for i, rel := range releases {
 		summary := issueSummaries[rel.Name]
-		var snap *model.SnapshotRecord
-		if rel.KonfluxApplication != "" {
-			if s := snapshotMap[rel.KonfluxApplication]; s != nil {
-				// Return snapshot metadata only (no components)
-				snapCopy := *s
-				snapCopy.Components = nil
-				snap = &snapCopy
-			}
-		}
-
+		components := toReleaseComponents(&rel, candidates)
 		overviews[i] = model.ReleaseOverview{
-			Release:      rel,
-			IssueSummary: summary,
-			Readiness:    computeReadiness(&rel, summary, snap != nil),
-			Snapshot:     snap,
+			Release:        rel,
+			IssueSummary:   summary,
+			Readiness:      computeReadiness(&rel, summary, len(components.Components) > 0),
+			ComponentCount: len(components.Components),
+			LatestBuild:    components.AsOf,
 		}
 	}
 
