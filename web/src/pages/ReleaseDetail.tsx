@@ -51,7 +51,9 @@ import type {
 	ReleaseVersion,
 } from "../api/types";
 import PriorityLabel from "../components/PriorityLabel";
-import ReleaseSnapshots from "../components/ReleaseSnapshots";
+import ReleaseSnapshots, {
+	useLatestSnapshot,
+} from "../components/ReleaseSnapshots";
 import StatusLabel from "../components/StatusLabel";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import {
@@ -59,6 +61,7 @@ import {
 	useColumnManagement,
 } from "../hooks/useColumnManagement";
 import { useConfig } from "../hooks/useConfig";
+import { relative } from "../utils/format";
 import { formatReleaseName, jiraIssueUrl } from "../utils/links";
 
 export default function ReleaseDetail() {
@@ -81,6 +84,7 @@ export default function ReleaseDetail() {
 		version ? `readiness:${version}` : null,
 		() => getReleaseReadiness(version!),
 	);
+	const latest = useLatestSnapshot(version!, release);
 
 	if (loadingRelease && !release) {
 		return (
@@ -136,11 +140,13 @@ export default function ReleaseDetail() {
 					readiness={readinessSignal ?? null}
 					jiraBaseUrl={config?.jira_base_url}
 					issueSummary={issueSummary ?? null}
+					latest={latest}
 				/>
 
 				<ReleaseSnapshots
 					version={version!}
 					konfluxApp={release.konflux_application}
+					latest={latest}
 				/>
 
 				{(issues ?? []).length > 0 && (
@@ -160,11 +166,13 @@ function ReleaseSignal({
 	readiness,
 	jiraBaseUrl,
 	issueSummary,
+	latest,
 }: {
 	release: ReleaseVersion;
 	readiness: ReadinessResponse | null;
 	jiraBaseUrl?: string;
 	issueSummary: IssueSummary | null;
+	latest: ReturnType<typeof useLatestSnapshot>;
 }) {
 	const dueDate = release.due_date ? new Date(release.due_date) : null;
 	const releaseDate = release.release_date
@@ -192,14 +200,8 @@ function ReleaseSignal({
 			)
 		: null;
 
-	const bugsVerified =
-		issueSummary !== null && issueSummary.total > 0 && issueSummary.open === 0;
-
-	const progressItems = issueSummary
-		? [{ label: "Bugs verified", done: bugsVerified }]
-		: [];
-
-	const firstIncomplete = progressItems.findIndex((i) => !i.done);
+	const steps = pipelineSteps(release, latest, issueSummary);
+	const current = steps.findIndex((s) => s.variant !== "success");
 
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
@@ -252,25 +254,76 @@ function ReleaseSignal({
 						</FlexItem>
 					)}
 				</Flex>
-				{progressItems.length > 0 && (
-					<ProgressStepper isCenterAligned style={{ marginTop: "1.5rem" }}>
-						{progressItems.map((item, idx) => (
-							<ProgressStep
-								key={item.label}
-								variant={item.done ? "success" : "pending"}
-								isCurrent={idx === firstIncomplete}
-								id={`step-${idx}`}
-								titleId={`step-${idx}-title`}
-								aria-label={item.label}
-							>
-								{item.label}
-							</ProgressStep>
-						))}
-					</ProgressStepper>
-				)}
+				<ProgressStepper isCenterAligned style={{ marginTop: "1.5rem" }}>
+					{steps.map((step, idx) => (
+						<ProgressStep
+							key={step.label}
+							variant={step.variant}
+							isCurrent={idx === current}
+							description={step.description}
+							id={`step-${idx}`}
+							titleId={`step-${idx}-title`}
+							aria-label={step.label}
+						>
+							{step.label}
+						</ProgressStep>
+					))}
+				</ProgressStepper>
 			</CardBody>
 		</Card>
 	);
+}
+
+const step = (
+	label: string,
+	variant: "success" | "warning" | "pending",
+	description?: string,
+) => ({ label, variant, description });
+
+/** ART build -> snapshot -> bugs verified -> released, from the page's data. */
+function pipelineSteps(
+	release: ReleaseVersion,
+	latest: ReturnType<typeof useLatestSnapshot>,
+	issueSummary: IssueSummary | null,
+) {
+	const images = latest.detail.data?.components;
+	const noArt = images?.filter((c) => !c.art).length ?? 0;
+	const snapshot = latest.snapshot?.missing ? undefined : latest.snapshot;
+	const loadError = latest.error ?? latest.detail.error;
+	return [
+		loadError
+			? step("ART build", "warning", "Could not load snapshot")
+			: !images?.length
+				? step("ART build", "pending")
+				: noArt
+					? step(
+							"ART build",
+							"warning",
+							`${noArt} of ${images.length} images have no ART build record`,
+						)
+					: step("ART build", "success", `All ${images.length} images`),
+		latest.error
+			? step("Snapshot", "warning", "Could not load snapshot")
+			: latest.loading
+				? step("Snapshot", "pending")
+				: snapshot
+					? step("Snapshot", "success", relative(snapshot.created_at))
+					: step("Snapshot", "pending", "No Quay snapshot yet"),
+		!issueSummary
+			? step("Bugs verified", "pending")
+			: issueSummary.total === 0
+				? step("Bugs verified", "success", "No open issues to verify")
+				: issueSummary.open > 0
+					? step("Bugs verified", "warning", `${issueSummary.open} open`)
+					: step(
+							"Bugs verified",
+							"success",
+							`${issueSummary.verified} verified`,
+						),
+		release.released
+			? step("Released", "success")
+			: step("Released", "pending", "Not marked released in JIRA"),
+	];
 }
 
 const ISSUES_COLUMNS: ColumnDef[] = [
