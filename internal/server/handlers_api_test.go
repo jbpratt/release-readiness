@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/db"
 	"github.com/quay/release-readiness/internal/model"
 )
@@ -26,7 +27,7 @@ func setupTestServer(t *testing.T) *Server {
 		_ = database.Close()
 		_ = os.Remove(dbPath)
 	})
-	return New(database, ":0", "https://redhat.atlassian.net", "PROJQUAY", slog.Default())
+	return New(database, ":0", "https://redhat.atlassian.net", "PROJQUAY", "https://art.example", slog.Default())
 }
 
 func TestHealthEndpoint(t *testing.T) {
@@ -278,6 +279,46 @@ func TestGetReleaseSnapshot(t *testing.T) {
 		"no-such-snap", // never stored
 	} {
 		getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/"+name, http.StatusNotFound, nil)
+	}
+}
+
+func TestArtBuildLinks(t *testing.T) {
+	srv := setupTestServer(t)
+	seedReleaseView(t, srv)
+	// seedSnapshot pins each image to the digest "@<snapshot name>".
+	if err := srv.db.UpsertArtBuild(t.Context(), artbuild.Build{
+		Digest: "quay-3-18-b", State: artbuild.StateResolved, NVR: "clair-1", RecordID: "rec-1",
+		UpstreamRepo: "https://github.com/quay/clair", UpstreamSHA: "abc123", PipelineURL: "https://konflux/plr", CheckedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.db.UpsertArtBuild(t.Context(), artbuild.Build{Digest: "quay-3-18-a", State: artbuild.StateUnresolved, CheckedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	want := &model.ArtBuild{
+		BuildURL:     "https://art.example/build?nvr=clair-1&record_id=rec-1",
+		LogsURL:      "https://art.example/logs?nvr=clair-1&record_id=rec-1",
+		PipelineURL:  "https://konflux/plr",
+		UpstreamRepo: "https://github.com/quay/clair",
+		UpstreamSHA:  "abc123",
+	}
+
+	var snap model.ReleaseSnapshot
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/quay-3-18-b", http.StatusOK, &snap)
+	if len(snap.Components) != 1 || snap.Components[0].Art == nil || *snap.Components[0].Art != *want {
+		t.Errorf("snapshot art: got %+v, want %+v", snap.Components, want)
+	}
+
+	var rc model.ReleaseComponents
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/components", http.StatusOK, &rc)
+	for _, c := range rc.Components {
+		if c.Name == "quay-3-18-clair" {
+			if c.Art == nil || *c.Art != *want {
+				t.Errorf("%s art: got %+v, want %+v", c.Name, c.Art, want)
+			}
+		} else if c.Art != nil {
+			t.Errorf("%s art: got %+v, want null", c.Name, c.Art)
+		}
 	}
 }
 

@@ -80,6 +80,7 @@ type ReleaseComponent struct {
 	Application string    `json:"application"`
 	Snapshot    string    `json:"snapshot"`
 	CreatedAt   time.Time `json:"created_at"`
+	Art         *ArtBuild `json:"art"`
 }
 
 // ReleaseSnapshotPage is one newest-first page of a release's Snapshots.
@@ -103,10 +104,21 @@ type ReleaseSnapshot struct {
 
 // SnapshotImage is one component image exactly as a Snapshot records it.
 type SnapshotImage struct {
-	Name   string `json:"name"`
-	Image  string `json:"image"`
-	GitSHA string `json:"git_sha"`
-	GitURL string `json:"git_url"`
+	Name   string    `json:"name"`
+	Image  string    `json:"image"`
+	GitSHA string    `json:"git_sha"`
+	GitURL string    `json:"git_url"`
+	Art    *ArtBuild `json:"art"`
+}
+
+// ArtBuild links a component image to its ART build history record and the
+// upstream commit it was built from.
+type ArtBuild struct {
+	BuildURL     string `json:"build_url"`
+	LogsURL      string `json:"logs_url"`
+	PipelineURL  string `json:"pipeline_url"`
+	UpstreamRepo string `json:"upstream_repo"`
+	UpstreamSHA  string `json:"upstream_sha"`
 }
 
 // ReadinessResponse represents the computed readiness signal for a release.

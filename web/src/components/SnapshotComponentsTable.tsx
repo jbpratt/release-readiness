@@ -1,7 +1,56 @@
+import { Tooltip } from "@patternfly/react-core";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
-import type { SnapshotImage } from "../api/types";
-import { quayManifestUrl } from "../utils/links";
+import type { ArtBuild, SnapshotImage } from "../api/types";
+import { quayManifestUrl, upstreamCommitUrl } from "../utils/links";
 import GitShaLink from "./GitShaLink";
+
+const external = { target: "_blank", rel: "noopener noreferrer" };
+
+function NoArtRecord() {
+	return (
+		<Tooltip content="No ART build record found">
+			<span>-</span>
+		</Tooltip>
+	);
+}
+
+/** Upstream commit the image was built from, per its ART build record. */
+export function UpstreamCommitLink({ art }: { art: ArtBuild | null }) {
+	if (!art) return <NoArtRecord />;
+	const url = upstreamCommitUrl(art.upstream_repo, art.upstream_sha);
+	if (!url) return <>-</>;
+	return (
+		<a href={url} {...external}>
+			<code style={{ fontSize: "0.85em" }} title={art.upstream_sha}>
+				{art.upstream_sha.substring(0, 12)}
+			</code>
+		</a>
+	);
+}
+
+/** The image's ART build record, its logs and its Konflux pipeline run. */
+export function ArtBuildLinks({ art }: { art: ArtBuild | null }) {
+	if (!art) return <NoArtRecord />;
+	return (
+		<span style={{ whiteSpace: "nowrap" }}>
+			<a href={art.build_url} {...external}>
+				ART build
+			</a>
+			{" · "}
+			<a href={art.logs_url} {...external}>
+				Logs
+			</a>
+			{art.pipeline_url && (
+				<>
+					{" · "}
+					<a href={art.pipeline_url} {...external}>
+						Pipeline
+					</a>
+				</>
+			)}
+		</span>
+	);
+}
 
 /** Digest-pinned image reference, linked to its quay.io manifest page. */
 export function ImageDigestLink({ image }: { image: string }) {
@@ -33,7 +82,9 @@ export default function SnapshotComponentsTable({
 				<Tr>
 					<Th>Component</Th>
 					<Th>Image</Th>
-					<Th>Git SHA</Th>
+					<Th>Upstream</Th>
+					<Th>ART</Th>
+					<Th>Build repo</Th>
 				</Tr>
 			</Thead>
 			<Tbody>
@@ -42,6 +93,12 @@ export default function SnapshotComponentsTable({
 						<Td>{c.name}</Td>
 						<Td>
 							<ImageDigestLink image={c.image} />
+						</Td>
+						<Td>
+							<UpstreamCommitLink art={c.art} />
+						</Td>
+						<Td>
+							<ArtBuildLinks art={c.art} />
 						</Td>
 						<Td>
 							<GitShaLink sha={c.git_sha} gitUrl={c.git_url} />

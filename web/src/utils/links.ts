@@ -10,6 +10,15 @@ export function gitRepoName(gitUrl: string): string | null {
 }
 
 /**
+ * GitHub commit page of an upstream build source, or null unless the repo is
+ * on github.com and the sha is known.
+ */
+export function upstreamCommitUrl(repo: string, sha: string): string | null {
+	const m = repo.match(/^https:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?\/*$/);
+	return m && sha ? `https://github.com/${m[1]}/commit/${sha}` : null;
+}
+
+/**
  * quay.io UI manifest page for a digest-pinned image reference,
  * e.g. `quay.io/ns/repo@sha256:abc` -> `https://quay.io/repository/ns/repo/manifest/sha256:abc`.
  */

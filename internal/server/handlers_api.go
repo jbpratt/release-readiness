@@ -10,8 +10,10 @@ import (
 	"net/http"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/releaseview"
 )
@@ -91,6 +93,18 @@ func (s *Server) handleGetReleaseComponents(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	images := make([]string, len(components.Components))
+	for i, c := range components.Components {
+		images[i] = c.Image
+	}
+	arts, err := s.artBuilds(ctx, images)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	for i := range components.Components {
+		components.Components[i].Art = arts[i]
+	}
 	writeJSON(w, http.StatusOK, components)
 }
 
@@ -149,14 +163,53 @@ func (s *Server) handleGetReleaseSnapshot(w http.ResponseWriter, r *http.Request
 		return
 	}
 	components := make([]string, len(snap.Components))
+	images := make([]string, len(snap.Components))
 	for i, c := range snap.Components {
 		components[i] = c.Name
+		images[i] = c.Image
 	}
 	if !releaseview.Contains(release.KonfluxApplication, snap.Application, components) {
 		writeError(w, http.StatusNotFound, fmt.Errorf("snapshot %q is not part of release %q", name, version))
 		return
 	}
+	arts, err := s.artBuilds(ctx, images)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	for i := range snap.Components {
+		snap.Components[i].Art = arts[i]
+	}
 	writeJSON(w, http.StatusOK, snap)
+}
+
+// artBuilds returns the cached ART build links of each image, nil where none
+// is resolved. It never calls the build history service.
+func (s *Server) artBuilds(ctx context.Context, images []string) ([]*model.ArtBuild, error) {
+	arts := make([]*model.ArtBuild, len(images))
+	if s.artBaseURL == "" {
+		return arts, nil
+	}
+	digests := make([]string, len(images))
+	for i, img := range images {
+		_, digests[i], _ = strings.Cut(img, "@")
+	}
+	builds, err := s.db.ResolvedArtBuilds(ctx, digests)
+	if err != nil {
+		return nil, err
+	}
+	for i, d := range digests {
+		if b, ok := builds[d]; ok {
+			arts[i] = &model.ArtBuild{
+				BuildURL:     artbuild.PageURL(s.artBaseURL, "build", b.NVR, b.RecordID),
+				LogsURL:      artbuild.PageURL(s.artBaseURL, "logs", b.NVR, b.RecordID),
+				PipelineURL:  b.PipelineURL,
+				UpstreamRepo: b.UpstreamRepo,
+				UpstreamSHA:  b.UpstreamSHA,
+			}
+		}
+	}
+	return arts, nil
 }
 
 func (s *Server) releaseComponents(ctx context.Context, release *model.ReleaseVersion) (model.ReleaseComponents, error) {

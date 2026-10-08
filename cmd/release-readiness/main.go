@@ -4,12 +4,14 @@ import (
 	"context"
 	"flag"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/db"
 	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/kube"
@@ -32,6 +34,9 @@ func main() {
 	jiraProject := flag.String("jira-project", envOrDefault("JIRA_PROJECT", "PROJQUAY"), "JIRA project key")
 	jiraQAContactField := flag.String("jira-qa-contact-field", envOrDefault("JIRA_QA_CONTACT_FIELD", "customfield_12315948"), "JIRA custom field name for QA Contact")
 	jiraPollInterval := flag.Duration("jira-poll-interval", 5*time.Minute, "JIRA sync poll interval")
+
+	// ART build history flags
+	artURL := flag.String("art-build-history-url", "https://art-build-history-art-build-history.apps.artc2023.pc3z.p1.openshiftapps.com", "ART build history service URL (empty disables ART build links)")
 
 	flag.Parse()
 
@@ -92,7 +97,18 @@ func main() {
 		}()
 	}
 
-	srv := server.New(database, *addr, *jiraURL, *jiraProject, logger)
+	if *artURL != "" {
+		artLog := logger.With("component", "art-resolve")
+		logger.Info("art build history enabled", "url", *artURL)
+		resolver := artbuild.NewResolver(artbuild.NewClient(*artURL, &http.Client{Timeout: time.Minute}), database, artLog)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			resolver.Run(ctx, 5*time.Minute)
+		}()
+	}
+
+	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, logger)
 	if err := srv.Run(ctx); err != nil {
 		logger.Error("server", "error", err)
 		os.Exit(1)

@@ -3,6 +3,16 @@ export interface SnapshotImage {
 	image: string;
 	git_sha: string;
 	git_url: string;
+	/** null until the image is found in ART build history. */
+	art: ArtBuild | null;
+}
+
+export interface ArtBuild {
+	build_url: string;
+	logs_url: string;
+	pipeline_url: string;
+	upstream_repo: string;
+	upstream_sha: string;
 }
 
 export interface ReleaseSnapshot {
@@ -29,6 +39,7 @@ export interface ReleaseComponent {
 	application: string;
 	snapshot: string;
 	created_at: string;
+	art: ArtBuild | null;
 }
 
 export interface ReleaseComponents {
