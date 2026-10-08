@@ -8,7 +8,6 @@ import {
 	CardTitle,
 	EmptyState,
 	EmptyStateBody,
-	ExpandableSection,
 	Flex,
 	FlexItem,
 	Label,
@@ -40,7 +39,6 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
 	getRelease,
-	getReleaseComponents,
 	getReleaseIssueSummary,
 	getReleaseReadiness,
 	listReleaseIssues,
@@ -52,14 +50,8 @@ import type {
 	ReadinessResponse,
 	ReleaseVersion,
 } from "../api/types";
-import GitShaLink from "../components/GitShaLink";
 import PriorityLabel from "../components/PriorityLabel";
 import ReleaseSnapshots from "../components/ReleaseSnapshots";
-import {
-	ArtBuildLinks,
-	ImageDigestLink,
-	UpstreamCommitLink,
-} from "../components/SnapshotComponentsTable";
 import StatusLabel from "../components/StatusLabel";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import {
@@ -76,10 +68,6 @@ export default function ReleaseDetail() {
 	const { data: release, loading: loadingRelease } = useCachedFetch(
 		version ? `release:${version}` : null,
 		() => getRelease(version!),
-	);
-	const { data: releaseComponents } = useCachedFetch(
-		version ? `components:${version}` : null,
-		() => getReleaseComponents(version!),
 	);
 	const { data: issues } = useCachedFetch(
 		version ? `issues:${version}` : null,
@@ -120,7 +108,6 @@ export default function ReleaseDetail() {
 	}
 
 	const displayName = formatReleaseName(release.name);
-	const components = releaseComponents?.components ?? null;
 
 	return (
 		<>
@@ -155,53 +142,6 @@ export default function ReleaseDetail() {
 					version={version!}
 					konfluxApp={release.konflux_application}
 				/>
-
-				{components && components.length > 0 && (
-					<Card isCompact style={{ marginBottom: "1rem" }}>
-						<CardBody>
-							<ExpandableSection
-								toggleText={`Latest image per component (from multiple snapshots) (${components.length})`}
-							>
-								<Table variant="compact">
-									<Thead>
-										<Tr>
-											<Th>Component</Th>
-											<Th>Image</Th>
-											<Th>Upstream</Th>
-											<Th>ART</Th>
-											<Th>Build repo</Th>
-											<Th>Application</Th>
-											<Th>Snapshot</Th>
-											<Th>Built</Th>
-										</Tr>
-									</Thead>
-									<Tbody>
-										{components.map((c) => (
-											<Tr key={c.name}>
-												<Td>{c.name}</Td>
-												<Td>
-													<ImageDigestLink image={c.image} />
-												</Td>
-												<Td>
-													<UpstreamCommitLink art={c.art} />
-												</Td>
-												<Td>
-													<ArtBuildLinks art={c.art} />
-												</Td>
-												<Td>
-													<GitShaLink sha={c.git_sha} gitUrl={c.git_url} />
-												</Td>
-												<Td>{c.application}</Td>
-												<Td>{c.snapshot}</Td>
-												<Td>{new Date(c.created_at).toLocaleString()}</Td>
-											</Tr>
-										))}
-									</Tbody>
-								</Table>
-							</ExpandableSection>
-						</CardBody>
-					</Card>
-				)}
 
 				{(issues ?? []).length > 0 && (
 					<IssuesCard

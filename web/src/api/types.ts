@@ -31,23 +31,6 @@ export interface ReleaseSnapshotPage {
 	has_more: boolean;
 }
 
-export interface ReleaseComponent {
-	name: string;
-	image: string;
-	git_sha: string;
-	git_url: string;
-	application: string;
-	snapshot: string;
-	created_at: string;
-	art: ArtBuild | null;
-}
-
-export interface ReleaseComponents {
-	release: string;
-	as_of?: string;
-	components: ReleaseComponent[];
-}
-
 export interface KonfluxRelease {
 	id: number;
 	name: string;
