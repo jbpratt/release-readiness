@@ -43,7 +43,6 @@ const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
 const ReleaseSnapshotHistory = lazy(
 	() => import("./pages/ReleaseSnapshotHistory"),
 );
-const KonfluxReleases = lazy(() => import("./pages/KonfluxReleases"));
 
 const glossary: [string, string][] = [
 	["Upstream commit", "A commit in the public upstream repo, e.g. quay/quay."],
@@ -126,9 +125,6 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 										}
 									>
 										<Link to="/">Releases</Link>
-									</NavItem>
-									<NavItem isActive={pathname === "/konflux-releases"}>
-										<Link to="/konflux-releases">Konflux Releases</Link>
 									</NavItem>
 								</NavList>
 							</Nav>
@@ -220,7 +216,6 @@ export default function App() {
 								path="/releases/:version/snapshots"
 								element={<ReleaseSnapshotHistory />}
 							/>
-							<Route path="/konflux-releases" element={<KonfluxReleases />} />
 						</Routes>
 					</Suspense>
 				</ErrorBoundary>
