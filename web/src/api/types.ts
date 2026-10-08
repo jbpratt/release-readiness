@@ -117,3 +117,15 @@ export interface DashboardConfig {
 	jira_base_url: string;
 	jira_project: string;
 }
+
+export interface SyncProblem {
+	source: string;
+	message: string;
+	since: string | null;
+	last_success: string | null;
+	last_error_at: string | null;
+}
+
+export interface SyncStatus {
+	problems: SyncProblem[];
+}

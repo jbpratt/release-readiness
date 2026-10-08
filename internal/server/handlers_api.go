@@ -16,6 +16,7 @@ import (
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/releaseview"
+	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
@@ -31,6 +32,14 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "healthy"})
+}
+
+func (s *Server) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	writeJSON(w, http.StatusOK, struct {
+		Problems []syncstatus.Problem `json:"problems"`
+		Sources  []syncstatus.Status  `json:"sources"`
+	}{s.syncStatus.Problems(now), s.syncStatus.Sources(now)})
 }
 
 // --- Snapshots ---

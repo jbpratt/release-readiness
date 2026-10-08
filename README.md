@@ -26,6 +26,10 @@ Test results are not ingested.
 
 Discovers active releases by querying for JIRA issues with the `-area/release` component that are not Closed/Done. Parses the version from the ticket summary (e.g. "Release Quay v3.16.2") and syncs all issues matching that `fixVersion` (and optionally the Target Version custom field).
 
+### Sync status
+
+`/api/v1/sync-status` lists each enabled sync (`konflux`, `jira`, `art-builds`, `catalog`) with its last success, and as `problems` those whose last pass failed or that have had no success within 3 poll intervals (at least 10 minutes); the header shows a warning icon while any exist.
+
 ## Release view
 
 Each JIRA release maps to a Konflux application by major.minor version: fixVersion `quay-v3.16.2` (or plain `3.16.2`) maps to `quay-3-16`, and `omr-v2.0.10` to `omr-2-0`.

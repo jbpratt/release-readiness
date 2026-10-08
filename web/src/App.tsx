@@ -32,6 +32,7 @@ import {
 } from "react-router-dom";
 import "@patternfly/react-core/dist/styles/base.css";
 import ErrorBoundary from "./components/ErrorBoundary";
+import SyncStatusWarning from "./components/SyncStatusWarning";
 import "./theme.css";
 
 const ReleasesOverview = lazy(() => import("./pages/ReleasesOverview"));
@@ -103,6 +104,9 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 							</Nav>
 						</ToolbarItem>
 						<ToolbarItem align={{ default: "alignEnd" }}>
+							<SyncStatusWarning />
+						</ToolbarItem>
+						<ToolbarItem>
 							<Popover
 								headerContent="About this dashboard"
 								bodyContent={

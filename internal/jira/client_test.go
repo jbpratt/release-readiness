@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -393,5 +394,20 @@ func TestRateLimitRetry(t *testing.T) {
 	}
 	if callCount != 3 {
 		t.Errorf("expected 3 calls (2 retries + 1 success), got %d", callCount)
+	}
+}
+
+func TestAnonymousFallbackIsAuthError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Seraph-LoginReason", "AUTHENTICATED_FAILED")
+		_ = json.NewEncoder(w).Encode(searchResponse{MaxResults: 100})
+	}))
+	defer srv.Close()
+
+	client := New(Config{BaseURL: srv.URL, Token: "bogus", Project: "PROJ"})
+	client.minDelay = 0
+
+	if _, err := client.SearchIssues(context.Background(), "1.0"); err == nil || !strings.Contains(err.Error(), "returned 401") {
+		t.Fatalf("SearchIssues error = %v, want a 401", err)
 	}
 }

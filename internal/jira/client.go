@@ -398,6 +398,12 @@ func (c *Client) doGet(ctx context.Context, reqURL string) ([]byte, error) {
 		return nil, fmt.Errorf("JIRA API returned %d: %s", resp.StatusCode, string(body[:min(len(body), 200)]))
 	}
 
+	// Atlassian Cloud answers a rejected token with a 200 served anonymously,
+	// which would look like an empty project and wipe the stored issues.
+	if resp.Header.Get("X-Seraph-LoginReason") == "AUTHENTICATED_FAILED" {
+		return nil, fmt.Errorf("JIRA API returned %d: token rejected (X-Seraph-LoginReason: AUTHENTICATED_FAILED)", http.StatusUnauthorized)
+	}
+
 	return body, nil
 }
 

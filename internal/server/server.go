@@ -9,6 +9,7 @@ import (
 
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
+	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
 type Server struct {
@@ -19,12 +20,13 @@ type Server struct {
 	jiraProject string
 	artBaseURL  string
 	shipped     *catalog.Shipped
+	syncStatus  *syncstatus.Registry
 }
 
 // New builds the server. An empty artBaseURL leaves every component's art null;
 // a nil shipped leaves JIRA's released flag as the only shipped signal.
-func New(database *db.DB, addr, jiraBaseURL, jiraProject, artBaseURL string, shipped *catalog.Shipped, logger *slog.Logger) *Server {
-	s := &Server{db: database, logger: logger, jiraBaseURL: jiraBaseURL, jiraProject: jiraProject, artBaseURL: artBaseURL, shipped: shipped}
+func New(database *db.DB, addr, jiraBaseURL, jiraProject, artBaseURL string, shipped *catalog.Shipped, syncStatus *syncstatus.Registry, logger *slog.Logger) *Server {
+	s := &Server{db: database, logger: logger, jiraBaseURL: jiraBaseURL, jiraProject: jiraProject, artBaseURL: artBaseURL, shipped: shipped, syncStatus: syncStatus}
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)
 
