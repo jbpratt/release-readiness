@@ -19,7 +19,7 @@ import {
 	SunIcon,
 } from "@patternfly/react-icons";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
 import "@patternfly/react-core/dist/styles/base.css";
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./theme.css";
@@ -27,6 +27,7 @@ import "./theme.css";
 const ReleasesOverview = lazy(() => import("./pages/ReleasesOverview"));
 const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
 const SnapshotsList = lazy(() => import("./pages/SnapshotsList"));
+const KonfluxReleases = lazy(() => import("./pages/KonfluxReleases"));
 
 type Theme = "light" | "dark";
 
@@ -75,6 +76,11 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 			<MastheadContent>
 				<Toolbar>
 					<ToolbarContent>
+						<ToolbarItem>
+							<Link to="/konflux-releases" style={{ color: "inherit" }}>
+								Konflux Releases
+							</Link>
+						</ToolbarItem>
 						<ToolbarItem align={{ default: "alignEnd" }}>
 							<Popover
 								headerContent="About this dashboard"
@@ -141,6 +147,7 @@ export default function App() {
 								path="/releases/:version/snapshots"
 								element={<SnapshotsList />}
 							/>
+							<Route path="/konflux-releases" element={<KonfluxReleases />} />
 						</Routes>
 					</Suspense>
 				</ErrorBoundary>
