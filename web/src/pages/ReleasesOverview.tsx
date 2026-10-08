@@ -95,7 +95,9 @@ export default function ReleasesOverview() {
 		);
 	}
 
-	const overviewList = overviews ?? [];
+	const overviewList = [...(overviews ?? [])].sort((a, b) =>
+		b.release.name.localeCompare(a.release.name, undefined, { numeric: true }),
+	);
 	const active = overviewList.filter((ov) => !ov.release.released);
 	const released = overviewList.filter((ov) => ov.release.released);
 
