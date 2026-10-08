@@ -124,11 +124,11 @@ type searchResponse struct {
 
 // ActiveRelease represents a release discovered from JIRA via the -area/release component.
 type ActiveRelease struct {
-	FixVersion       string     // e.g. "quay-v3.16.3"
-	DueDate          *time.Time // from the release ticket's dueDate field
-	ReleaseTicketKey string     // e.g. "PROJQUAY-10276"
-	Assignee         string     // display name of the release ticket assignee
-	S3Application    string     // e.g. "quay-v3-16" (derived from fixVersion)
+	FixVersion         string     // e.g. "quay-v3.16.3"
+	DueDate            *time.Time // from the release ticket's dueDate field
+	ReleaseTicketKey   string     // e.g. "PROJQUAY-10276"
+	Assignee           string     // display name of the release ticket assignee
+	KonfluxApplication string     // e.g. "quay-3-16" (derived from fixVersion)
 }
 
 // BaseURL returns the configured JIRA base URL.
@@ -210,8 +210,8 @@ func (c *Client) DiscoverActiveReleases(ctx context.Context) ([]ActiveRelease, e
 			fixVersion = product + "-v" + version
 		}
 
-		s3App := FixVersionToS3App(fixVersion)
-		if s3App == "" {
+		konfluxApp := FixVersionToKonfluxApp(fixVersion)
+		if konfluxApp == "" {
 			continue
 		}
 
@@ -221,10 +221,10 @@ func (c *Client) DiscoverActiveReleases(ctx context.Context) ([]ActiveRelease, e
 		}
 
 		rel := ActiveRelease{
-			FixVersion:       fixVersion,
-			ReleaseTicketKey: issue.Key,
-			Assignee:         assignee,
-			S3Application:    s3App,
+			FixVersion:         fixVersion,
+			ReleaseTicketKey:   issue.Key,
+			Assignee:           assignee,
+			KonfluxApplication: konfluxApp,
 		}
 
 		if issue.Fields.DueDate != "" {
@@ -429,26 +429,26 @@ func parseRetryAfter(err error) time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
-// FixVersionToS3App maps a JIRA fixVersion to an S3 application prefix.
+// FixVersionToKonfluxApp maps a JIRA fixVersion to its Konflux application name.
 // It handles two formats:
-//   - Plain semver: "3.16.3" → "quay-v3-16" (defaults to "quay" product)
-//   - Prefixed:     "omr-v2.0.10" → "omr-v2-0" (product parsed from prefix)
-func FixVersionToS3App(fixVersion string) string {
+//   - Plain semver: "3.16.3" → "quay-3-16" (defaults to "quay" product)
+//   - Prefixed:     "omr-v2.0.10" → "omr-2-0" (product parsed from prefix)
+func FixVersionToKonfluxApp(fixVersion string) string {
 	// Check for "{product}-v{version}" format (e.g. "omr-v2.0.10")
 	if idx := strings.Index(fixVersion, "-v"); idx > 0 {
 		product := fixVersion[:idx]
 		version := fixVersion[idx+2:] // skip "-v"
 		parts := strings.Split(version, ".")
 		if len(parts) >= 2 {
-			return fmt.Sprintf("%s-v%s-%s", product, parts[0], parts[1])
+			return fmt.Sprintf("%s-%s-%s", product, parts[0], parts[1])
 		}
 		return ""
 	}
 
-	// Plain semver: "3.16.3" → "quay-v3-16"
+	// Plain semver: "3.16.3" → "quay-3-16"
 	parts := strings.Split(fixVersion, ".")
 	if len(parts) >= 2 {
-		return fmt.Sprintf("quay-v%s-%s", parts[0], parts[1])
+		return fmt.Sprintf("quay-%s-%s", parts[0], parts[1])
 	}
 	return ""
 }

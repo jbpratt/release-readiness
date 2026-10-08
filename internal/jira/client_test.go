@@ -233,8 +233,8 @@ func TestDiscoverActiveReleases(t *testing.T) {
 	if releases[0].ReleaseTicketKey != "PROJQUAY-10276" {
 		t.Errorf("release[0].ReleaseTicketKey: got %q, want PROJQUAY-10276", releases[0].ReleaseTicketKey)
 	}
-	if releases[0].S3Application != "quay-v3-16" {
-		t.Errorf("release[0].S3Application: got %q, want quay-v3-16", releases[0].S3Application)
+	if releases[0].KonfluxApplication != "quay-3-16" {
+		t.Errorf("release[0].KonfluxApplication: got %q, want quay-3-16", releases[0].KonfluxApplication)
 	}
 	if releases[0].DueDate == nil {
 		t.Fatal("release[0].DueDate: got nil, want 2026-02-28")
@@ -247,16 +247,16 @@ func TestDiscoverActiveReleases(t *testing.T) {
 	if releases[1].FixVersion != "quay-v3.17.0" {
 		t.Errorf("release[1].FixVersion: got %q, want quay-v3.17.0", releases[1].FixVersion)
 	}
-	if releases[1].S3Application != "quay-v3-17" {
-		t.Errorf("release[1].S3Application: got %q, want quay-v3-17", releases[1].S3Application)
+	if releases[1].KonfluxApplication != "quay-3-17" {
+		t.Errorf("release[1].KonfluxApplication: got %q, want quay-3-17", releases[1].KonfluxApplication)
 	}
 
 	// Check OMR release
 	if releases[2].FixVersion != "omr-v2.0.10" {
 		t.Errorf("release[2].FixVersion: got %q, want omr-v2.0.10", releases[2].FixVersion)
 	}
-	if releases[2].S3Application != "omr-v2-0" {
-		t.Errorf("release[2].S3Application: got %q, want omr-v2-0", releases[2].S3Application)
+	if releases[2].KonfluxApplication != "omr-2-0" {
+		t.Errorf("release[2].KonfluxApplication: got %q, want omr-2-0", releases[2].KonfluxApplication)
 	}
 }
 
@@ -295,24 +295,27 @@ func TestParseVersionFromSummary(t *testing.T) {
 	}
 }
 
-func TestFixVersionToS3App(t *testing.T) {
+func TestFixVersionToKonfluxApp(t *testing.T) {
 	tests := []struct {
 		input string
 		want  string
 	}{
-		{"3.16.3", "quay-v3-16"},
-		{"3.17.0", "quay-v3-17"},
-		{"3.16", "quay-v3-16"},
-		{"4.0.1", "quay-v4-0"},
-		{"omr-v2.0.10", "omr-v2-0"},
-		{"omr-v1.5.3", "omr-v1-5"},
+		{"3.16.3", "quay-3-16"},
+		{"3.17.0", "quay-3-17"},
+		{"3.16", "quay-3-16"},
+		{"4.0.1", "quay-4-0"},
+		{"quay-v3.18.2", "quay-3-18"},
+		{"quay-v3.18.0", "quay-3-18"},
+		{"quay-v5.0.1", "quay-5-0"},
+		{"omr-v2.0.10", "omr-2-0"},
+		{"omr-v1.5.3", "omr-1-5"},
 		{"invalid", ""},
 	}
 
 	for _, tc := range tests {
-		got := FixVersionToS3App(tc.input)
+		got := FixVersionToKonfluxApp(tc.input)
 		if got != tc.want {
-			t.Errorf("FixVersionToS3App(%q): got %q, want %q", tc.input, got, tc.want)
+			t.Errorf("FixVersionToKonfluxApp(%q): got %q, want %q", tc.input, got, tc.want)
 		}
 	}
 }
