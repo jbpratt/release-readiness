@@ -302,6 +302,58 @@ func TestArtBuildLinks(t *testing.T) {
 	}
 }
 
+// A component row shows a newer ART build in progress only when it started
+// after the Snapshot, from another upstream commit, and was seen recently.
+func TestPendingArtBuild(t *testing.T) {
+	srv := setupTestServer(t)
+	t0 := seedReleaseView(t, srv) // quay-3-18-b is created at t0
+	const nvr = "quay-clair-container-3.18.1-202610010000.p2.gabc1234.assembly.stream.el9"
+	if err := srv.db.UpsertArtBuild(t.Context(), artbuild.Build{
+		Digest: "quay-3-18-b", State: artbuild.StateResolved, NVR: nvr, RecordID: "rec-1", UpstreamSHA: "abc123", CheckedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	pending := artbuild.PendingBuild{
+		Group: "quay-3.18", Version: "3.18.1", Name: "quay-clair-container",
+		NVR: "quay-clair-container-3.18.1-202610010100.p2.gdef4567.assembly.stream.el9", RecordID: "rec-2",
+		UpstreamSHA: "def456", StartedAt: t0.Add(time.Hour),
+	}
+	want := &model.PendingArtBuild{
+		BuildURL:    "https://art.example/build?nvr=quay-clair-container-3.18.1-202610010100.p2.gdef4567.assembly.stream.el9&record_id=rec-2",
+		UpstreamSHA: "def456",
+		StartedAt:   t0.Add(time.Hour),
+	}
+	for _, tc := range []struct {
+		name    string
+		edit    func(p *artbuild.PendingBuild)
+		checked time.Duration
+		want    *model.PendingArtBuild
+	}{
+		{"newer build", func(*artbuild.PendingBuild) {}, 0, want},
+		{"same upstream commit", func(p *artbuild.PendingBuild) { p.UpstreamSHA = "abc123" }, 0, nil},
+		{"started before the snapshot", func(p *artbuild.PendingBuild) { p.StartedAt = t0.Add(-time.Hour) }, 0, nil},
+		{"another z-stream", func(p *artbuild.PendingBuild) { p.Version = "3.18.2" }, 0, nil},
+		{"stale", func(*artbuild.PendingBuild) {}, -11 * time.Minute, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := pending
+			tc.edit(&p)
+			if err := srv.db.ReplaceArtPendingBuilds(t.Context(), p.Group, []artbuild.PendingBuild{p}, time.Now().Add(tc.checked)); err != nil {
+				t.Fatal(err)
+			}
+			var snap model.ReleaseSnapshot
+			getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/quay-3-18-b", http.StatusOK, &snap)
+			if len(snap.Components) != 1 {
+				t.Fatalf("components: got %d, want 1", len(snap.Components))
+			}
+			got := snap.Components[0].PendingArtBuild
+			if (got == nil) != (tc.want == nil) || got != nil && (got.BuildURL != tc.want.BuildURL || got.UpstreamSHA != tc.want.UpstreamSHA || !got.StartedAt.Equal(tc.want.StartedAt)) {
+				t.Errorf("pending_art_build: got %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestReleasesOverview(t *testing.T) {
 	srv := setupTestServer(t)
 	ctx := t.Context()

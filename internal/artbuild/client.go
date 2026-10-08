@@ -26,6 +26,12 @@ type searchBuild struct {
 	NVR           string `json:"nvr"`
 	RecordID      string `json:"record_id"`
 	ImagePullspec string `json:"image_pullspec"`
+	Name          string `json:"name"`
+	Outcome       string `json:"outcome"`
+	Commitish     string `json:"commitish"`
+	SourceRepo    string `json:"source_repo"`
+	StartTime     string `json:"start_time"`
+	Type          string `json:"type"`
 }
 
 // record is a full /build record.

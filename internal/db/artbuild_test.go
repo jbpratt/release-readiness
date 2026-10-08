@@ -85,3 +85,41 @@ func TestArtBuildCache(t *testing.T) {
 		t.Errorf("resolved builds: got %+v, want only %+v", builds, resolved)
 	}
 }
+
+func TestArtPendingBuilds(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	ctx := t.Context()
+
+	t0 := time.Date(2026, 10, 8, 18, 0, 0, 0, time.UTC)
+	build := func(group, version, name, rec string) artbuild.PendingBuild {
+		return artbuild.PendingBuild{Group: group, Version: version, Name: name, NVR: name + "-" + version + "-1", RecordID: rec, UpstreamSHA: "sha-" + rec, StartedAt: t0}
+	}
+	quay := build("quay-3.18", "3.18.1", "quay-quay-container", "a")
+	clair := build("quay-3.18", "3.18.1", "quay-clair-container", "b")
+	old := build("quay-3.16", "3.16.3", "quay-quay-container", "c")
+	for group, builds := range map[string][]artbuild.PendingBuild{"quay-3.18": {quay, clair}, "quay-3.16": {old}} {
+		if err := d.ReplaceArtPendingBuilds(ctx, group, builds, t0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A later search of one group replaces only that group's set.
+	if err := d.ReplaceArtPendingBuilds(ctx, "quay-3.18", []artbuild.PendingBuild{quay}, t0.Add(10*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := d.ArtPendingBuilds(ctx, []string{"3.18.1", "3.16.3"}, t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 || !slices.Contains(got, quay) || !slices.Contains(got, old) {
+		t.Errorf("pending builds: got %+v, want %+v and %+v", got, quay, old)
+	}
+	// Rows from a search before checkedSince are stale.
+	if got, err := d.ArtPendingBuilds(ctx, []string{"3.18.1", "3.16.3"}, t0.Add(time.Minute)); err != nil || !slices.Equal(got, []artbuild.PendingBuild{quay}) {
+		t.Errorf("fresh pending builds: got %+v, %v; want only %+v", got, err, quay)
+	}
+}

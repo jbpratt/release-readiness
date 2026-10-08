@@ -10,6 +10,77 @@ import (
 	"strings"
 )
 
+const deleteArtPendingBuilds = `-- name: DeleteArtPendingBuilds :exec
+DELETE FROM art_pending_builds WHERE group_name = ?
+`
+
+func (q *Queries) DeleteArtPendingBuilds(ctx context.Context, groupName string) error {
+	_, err := q.db.ExecContext(ctx, deleteArtPendingBuilds, groupName)
+	return err
+}
+
+const insertArtPendingBuild = `-- name: InsertArtPendingBuild :exec
+INSERT INTO art_pending_builds (group_name, release_version, component, nvr, record_id, upstream_sha, upstream_repo, started_at, checked_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type InsertArtPendingBuildParams struct {
+	GroupName      string
+	ReleaseVersion string
+	Component      string
+	Nvr            string
+	RecordID       string
+	UpstreamSha    string
+	UpstreamRepo   string
+	StartedAt      string
+	CheckedAt      string
+}
+
+func (q *Queries) InsertArtPendingBuild(ctx context.Context, arg InsertArtPendingBuildParams) error {
+	_, err := q.db.ExecContext(ctx, insertArtPendingBuild,
+		arg.GroupName,
+		arg.ReleaseVersion,
+		arg.Component,
+		arg.Nvr,
+		arg.RecordID,
+		arg.UpstreamSha,
+		arg.UpstreamRepo,
+		arg.StartedAt,
+		arg.CheckedAt,
+	)
+	return err
+}
+
+const listActiveApplications = `-- name: ListActiveApplications :many
+SELECT DISTINCT konflux_application
+FROM release_versions
+WHERE released = 0 AND archived = 0 AND konflux_application != ''
+ORDER BY konflux_application
+`
+
+func (q *Queries) ListActiveApplications(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listActiveApplications)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var konflux_application string
+		if err := rows.Scan(&konflux_application); err != nil {
+			return nil, err
+		}
+		items = append(items, konflux_application)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listArtBuildCandidates = `-- name: ListArtBuildCandidates :many
 SELECT sc.image_url,
        CAST(GROUP_CONCAT(DISTINCT s.application) AS TEXT) AS applications,
@@ -58,6 +129,62 @@ func (q *Queries) ListArtBuildCandidates(ctx context.Context, arg ListArtBuildCa
 			&i.Component,
 			&i.FirstSeen,
 			&i.LastSeen,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtPendingBuilds = `-- name: ListArtPendingBuilds :many
+SELECT group_name, release_version, component, nvr, record_id, upstream_sha, upstream_repo, started_at, checked_at
+FROM art_pending_builds
+WHERE checked_at >= ? AND release_version IN (/*SLICE:versions*/?)
+`
+
+type ListArtPendingBuildsParams struct {
+	CheckedAt string
+	Versions  []string
+}
+
+// Pending builds of the given versions from a search no older than checked_at.
+func (q *Queries) ListArtPendingBuilds(ctx context.Context, arg ListArtPendingBuildsParams) ([]ArtPendingBuild, error) {
+	query := listArtPendingBuilds
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.CheckedAt)
+	if len(arg.Versions) > 0 {
+		for _, v := range arg.Versions {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:versions*/?", strings.Repeat(",?", len(arg.Versions))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:versions*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ArtPendingBuild
+	for rows.Next() {
+		var i ArtPendingBuild
+		if err := rows.Scan(
+			&i.GroupName,
+			&i.ReleaseVersion,
+			&i.Component,
+			&i.Nvr,
+			&i.RecordID,
+			&i.UpstreamSha,
+			&i.UpstreamRepo,
+			&i.StartedAt,
+			&i.CheckedAt,
 		); err != nil {
 			return nil, err
 		}

@@ -17,6 +17,18 @@ type ArtBuild struct {
 	CheckedAt    string
 }
 
+type ArtPendingBuild struct {
+	GroupName      string
+	ReleaseVersion string
+	Component      string
+	Nvr            string
+	RecordID       string
+	UpstreamSha    string
+	UpstreamRepo   string
+	StartedAt      string
+	CheckedAt      string
+}
+
 type Component struct {
 	ID          int64
 	Name        string
