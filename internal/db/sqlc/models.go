@@ -4,6 +4,19 @@
 
 package dbsqlc
 
+type ArtBuild struct {
+	Digest       string
+	State        string
+	Nvr          string
+	RecordID     string
+	UpstreamRepo string
+	UpstreamSha  string
+	RebaseRepo   string
+	RebaseSha    string
+	PipelineUrl  string
+	CheckedAt    string
+}
+
 type Component struct {
 	ID          int64
 	Name        string

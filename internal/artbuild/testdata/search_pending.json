@@ -1,0 +1,51 @@
+{
+  "builds": [
+    {
+      "art-job-url": "https://art-jenkins.apps.prod-stable-spoke1-dc-iad2.itup.redhat.com/job/aos-cd-builds/job/build%252Flayered-products/20375/",
+      "assembly": "stream",
+      "commitish": "35cf767efc3b4e7bebc7802afcf12b60cd343bc0",
+      "ec_pipeline_url": "",
+      "ec_status": "n/a",
+      "engine": "konflux",
+      "group": "quay-3.18",
+      "hermetic": true,
+      "image_pullspec": "",
+      "image_tag": "",
+      "name": "quay-operator",
+      "nvr": "quay-operator-container-3.18.1-202609300827.p2.g35cf767.assembly.stream.el9",
+      "outcome": "pending",
+      "pipeline URL": "https://konflux-ui.apps.kflux-ocp-p01.7ayg.p1.openshiftapps.com/ns/art-quay-tenant/applications/quay-3-18/pipelineruns/quay-3-18-quay-operator-sjpkg",
+      "record_id": "7be29d9b-4ea3-4ae6-fb65-7469cc8beabd",
+      "release_pipeline_url": "",
+      "source": "https://github.com/quay/quay-operator",
+      "source_repo": "https://github.com/quay/quay-operator",
+      "start_time": "Wed, 30 Sep 2026 08:36:12 GMT",
+      "time": "September 30, 2026, 08:36:12 AM",
+      "type": "image"
+    },
+    {
+      "art-job-url": "https://art-jenkins.apps.prod-stable-spoke1-dc-iad2.itup.redhat.com/job/aos-cd-builds/job/build%252Flayered-products/20375/",
+      "assembly": "stream",
+      "commitish": "35cf767efc3b4e7bebc7802afcf12b60cd343bc0",
+      "ec_pipeline_url": "",
+      "ec_status": "n/a",
+      "engine": "konflux",
+      "group": "quay-3.18",
+      "hermetic": true,
+      "image_pullspec": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:bfd08ada78f2c19d7dc773f42fc53f5ceb649ff1c34da95e62fb73f0a15a6563",
+      "image_tag": "quay-rhel9-operator-3.18.1-20260930.082714",
+      "name": "quay-operator",
+      "nvr": "quay-operator-container-3.18.1-202609300827.p2.g35cf767.assembly.stream.el9",
+      "outcome": "success",
+      "pipeline URL": "https://konflux-ui.apps.kflux-ocp-p01.7ayg.p1.openshiftapps.com/ns/art-quay-tenant/applications/quay-3-18/pipelineruns/quay-3-18-quay-operator-sjpkg",
+      "record_id": "7f4d8117-35dc-6c01-1e27-3b3d32a2fa8f",
+      "release_pipeline_url": "",
+      "source": "https://github.com/quay/quay-operator",
+      "source_repo": "https://github.com/quay/quay-operator",
+      "start_time": "Wed, 30 Sep 2026 08:36:21 GMT",
+      "time": "September 30, 2026, 08:47:12 AM",
+      "type": "image"
+    }
+  ],
+  "warnings": []
+}

@@ -55,7 +55,11 @@ import type {
 import GitShaLink from "../components/GitShaLink";
 import PriorityLabel from "../components/PriorityLabel";
 import ReleaseSnapshots from "../components/ReleaseSnapshots";
-import { ImageDigestLink } from "../components/SnapshotComponentsTable";
+import {
+	ArtBuildLinks,
+	ImageDigestLink,
+	UpstreamCommitLink,
+} from "../components/SnapshotComponentsTable";
 import StatusLabel from "../components/StatusLabel";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import {
@@ -163,7 +167,9 @@ export default function ReleaseDetail() {
 										<Tr>
 											<Th>Component</Th>
 											<Th>Image</Th>
-											<Th>Git SHA</Th>
+											<Th>Upstream</Th>
+											<Th>ART</Th>
+											<Th>Build repo</Th>
 											<Th>Application</Th>
 											<Th>Snapshot</Th>
 											<Th>Built</Th>
@@ -175,6 +181,12 @@ export default function ReleaseDetail() {
 												<Td>{c.name}</Td>
 												<Td>
 													<ImageDigestLink image={c.image} />
+												</Td>
+												<Td>
+													<UpstreamCommitLink art={c.art} />
+												</Td>
+												<Td>
+													<ArtBuildLinks art={c.art} />
 												</Td>
 												<Td>
 													<GitShaLink sha={c.git_sha} gitUrl={c.git_url} />

@@ -5,6 +5,7 @@ import {
 	gitRepoName,
 	jiraIssueUrl,
 	quayManifestUrl,
+	upstreamCommitUrl,
 } from "./links.ts";
 
 const digest = `sha256:${"ab".repeat(32)}`;
@@ -34,6 +35,25 @@ test("gitRepoName", () => {
 		"openshift-priv/quay-quay",
 	);
 	assert.equal(gitRepoName(""), null);
+});
+
+test("upstreamCommitUrl", () => {
+	const sha = "35cf767efc3b4e7bebc7802afcf12b60cd343bc0";
+	assert.equal(
+		upstreamCommitUrl("https://github.com/quay/quay-operator", sha),
+		`https://github.com/quay/quay-operator/commit/${sha}`,
+	);
+	assert.equal(
+		upstreamCommitUrl("https://github.com/quay/quay-operator.git/", sha),
+		`https://github.com/quay/quay-operator/commit/${sha}`,
+	);
+	assert.equal(
+		upstreamCommitUrl("https://github.com/quay/quay-operator", ""),
+		null,
+	);
+	assert.equal(upstreamCommitUrl("", sha), null);
+	assert.equal(upstreamCommitUrl("https://gitlab.com/quay/quay", sha), null);
+	assert.equal(upstreamCommitUrl("https://github.com/quay", sha), null);
 });
 
 test("jiraIssueUrl", () => {
