@@ -8,7 +8,6 @@ import type {
 	SnapshotProwRuns,
 } from "../api/types";
 import { quayManifestUrl, upstreamCommitUrl } from "../utils/links";
-import GitShaLink from "./GitShaLink";
 import { ProwRunBadge } from "./ProwRuns";
 
 const external = { target: "_blank", rel: "noopener noreferrer" };
@@ -122,16 +121,6 @@ export default function SnapshotComponentsTable({
 						Upstream
 					</Th>
 					<Th width={15}>ART</Th>
-					<Th
-						width={20}
-						modifier="nowrap"
-						info={{
-							tooltip:
-								"Commit in ART's openshift-priv rebase fork that was actually built; mirrors Upstream",
-						}}
-					>
-						Build repo
-					</Th>
 					{ci && <Th modifier="fitContent">Periodic CI</Th>}
 				</Tr>
 			</Thead>
@@ -164,9 +153,6 @@ export default function SnapshotComponentsTable({
 						<Td>
 							<ArtBuildLink art={c.art} />
 							<PendingArtBuildLink pending={c.pending_art_build} />
-						</Td>
-						<Td>
-							<GitShaLink sha={c.git_sha} gitUrl={c.git_url} />
 						</Td>
 						{ci && (
 							<Td modifier="fitContent">
