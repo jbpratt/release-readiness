@@ -1,3 +1,5 @@
+import type { ReleaseSnapshot } from "../api/types";
+
 export interface SnapshotFilter {
 	key: string;
 	label: string;
@@ -19,4 +21,16 @@ export function snapshotFilters(konfluxApp?: string): SnapshotFilter[] {
 		{ key: "fbc", label: "FBC", application: `fbc-${konfluxApp}` },
 		{ key: "base", label: "Base", application: "quay-images-base" },
 	];
+}
+
+/** The Snapshot named by the newest succeeded Konflux Release among snapshots. */
+export function latestReleased(snapshots: ReleaseSnapshot[]) {
+	let newest: { snapshot: ReleaseSnapshot; at: string } | undefined;
+	for (const snapshot of snapshots) {
+		for (const r of snapshot.releases ?? []) {
+			if (r.released_status === "True" && (!newest || r.created_at > newest.at))
+				newest = { snapshot, at: r.created_at };
+		}
+	}
+	return newest?.snapshot;
 }
