@@ -16,9 +16,13 @@ spec:
       labels:
         app: release-readiness
     spec:
+      serviceAccountName: release-readiness
       containers:
         - name: dashboard
           image: quay.io/quay/release-readiness:latest
+          env:
+            - name: KONFLUX_NAMESPACE
+              value: art-quay-tenant
           ports:
             - containerPort: 8080
               protocol: TCP

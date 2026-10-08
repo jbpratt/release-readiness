@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Release readiness dashboard for Quay container registry. Tracks build snapshots, integration test results, and JIRA issues across release versions. Full-stack Go backend + React SPA frontend with SQLite storage.
+Release readiness dashboard for Quay container registry. Tracks Konflux build snapshots and releases, and JIRA issues, across release versions. Full-stack Go backend + React SPA frontend with SQLite storage.
 
 ## Build & Run Commands
 
@@ -29,12 +29,8 @@ podman build -f deploy/Containerfile -t release-readiness .
 
 ### Running locally
 ```bash
-# Start backend (source dev/s3.env for S3 creds)
-./release-readiness -addr :8088 -db release-readiness.db \
-  -s3-endpoint http://localhost:3900 -s3-region garage \
-  -s3-bucket quay-release-readiness \
-  -s3-access-key $AWS_ACCESS_KEY_ID -s3-secret-key $AWS_SECRET_ACCESS_KEY \
-  -jira-token $JIRA_TOKEN
+# Start backend (the kubeconfig needs read access to Snapshots and Releases in -namespace)
+KUBECONFIG=<path> go run ./cmd/release-readiness -addr :8088 -db /tmp/rr.db
 
 # In separate terminal, start frontend dev server
 cd web && npm run dev
@@ -45,26 +41,25 @@ The Vite dev server proxies `/api` requests to `localhost:8088` (the Go backend)
 ## Architecture
 
 ### Backend (`internal/`)
-- **`cmd/release-readiness/main.go`** — CLI entry point. Runs background sync loops for S3 and JIRA.
+- **`cmd/release-readiness/main.go`** — CLI entry point. Runs background sync loops for Konflux and JIRA.
 - **`internal/server/`** — HTTP server using Go stdlib `net/http`. Routes registered in `routes.go`, API handlers in `handlers_api.go`. The React SPA is served from embedded `web/dist/` via `go:embed` with SPA fallback routing.
 - **`internal/db/`** — SQLite data layer (pure-Go driver `modernc.org/sqlite`, no CGO). Schema migrations in `migrations.go`. WAL mode enabled.
-- **`internal/s3/`** — AWS SDK v2 client for fetching snapshot data from S3/Garage object storage.
+- **`internal/kube/`** — Kubernetes dynamic client. Syncs Konflux Snapshots and Releases from `-namespace` (kubeconfig or in-cluster service account); `created_at` comes from `creationTimestamp`.
+- **`internal/konflux/`** — Konflux Snapshot spec types.
 - **`internal/jira/`** — JIRA REST API client. Discovers active releases, syncs issues by fixVersion.
 - **`internal/model/`** — Shared data types used across packages.
-- **`internal/ctrf/`** — CTRF (Common Test Report Format) JSON types.
 
 ### Frontend (`web/`)
 - React 19 + TypeScript, built with Vite 6
 - UI framework: **PatternFly 6** (Red Hat design system)
 - API client in `web/src/api/client.ts`, types in `web/src/api/types.ts`
-- Pages: `ReleasesOverview`, `ReleaseDetail`, `SnapshotsList`
+- Pages: `ReleasesOverview`, `ReleaseDetail`, `SnapshotsList`, `KonfluxReleases`
 
 ### Data Flow
-1. S3 sync loop polls for new snapshots → ingests into SQLite (components, test results)
+1. Konflux sync loop lists Snapshots and Releases in the namespace → ingests into SQLite (snapshot components, releases). Test results are not ingested.
 2. JIRA sync loop discovers active releases → syncs issues per fixVersion into SQLite
-3. React SPA fetches data via `/api/v1/` REST endpoints
+3. React SPA fetches data via `/api/v1/` REST endpoints (Konflux Releases at `/api/v1/konflux-releases`)
 
 ### Deployment
-- Kubernetes manifests in `deploy/` (Deployment, Service, Route, PVC)
-- SQLite DB persisted via PVC
-- Tekton CI pipeline in `its/pipeline.yaml`
+- Kubernetes manifests in `deploy/` (Deployment, Service, Route, PVC, RBAC). `rbac.yaml` grants the `release-readiness` ServiceAccount read on Snapshots and Releases; its Role and RoleBinding must live in the Konflux namespace the app reads.
+- SQLite DB persisted via PVC. Delete the old DB file when upgrading across the move to the Kubernetes source.
