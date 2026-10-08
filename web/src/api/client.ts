@@ -3,11 +3,13 @@ import type {
 	IssueSummary,
 	JiraIssue,
 	KonfluxRelease,
+	ProwRunsResponse,
 	ReadinessResponse,
 	ReleaseOverview,
 	ReleaseSnapshot,
 	ReleaseSnapshotPage,
 	ReleaseVersion,
+	SnapshotProwRuns,
 	SyncStatus,
 } from "./types";
 
@@ -67,6 +69,24 @@ export function listReleaseSnapshots(
 	params.set("offset", String(opts.offset));
 	return fetchJSON(
 		`${BASE}/releases/${encodeURIComponent(version)}/snapshots?${params}`,
+	);
+}
+
+export function getSnapshotProwRuns(
+	version: string,
+	name: string,
+): Promise<SnapshotProwRuns> {
+	return fetchJSON(
+		`${BASE}/releases/${encodeURIComponent(version)}/snapshots/${encodeURIComponent(name)}/prow-runs`,
+	);
+}
+
+/** The release application's runs that matched no Snapshot image. */
+export function listUnlinkedProwRuns(
+	version: string,
+): Promise<ProwRunsResponse> {
+	return fetchJSON(
+		`${BASE}/releases/${encodeURIComponent(version)}/prow-runs?unlinked=true&limit=200`,
 	);
 }
 

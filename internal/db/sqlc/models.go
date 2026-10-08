@@ -55,17 +55,17 @@ type KonfluxRelease struct {
 }
 
 type ProwRun struct {
-	JobName        string
-	BuildID        string
-	Kind           string
-	ReleaseVersion string
-	State          string
-	StartedAt      string
-	CompletedAt    string
-	ProwUrl        string
-	ArtifactState  string
-	CatalogRef     string
-	FetchedAt      string
+	JobName       string
+	BuildID       string
+	Kind          string
+	Application   string
+	State         string
+	StartedAt     string
+	CompletedAt   string
+	ProwUrl       string
+	ArtifactState string
+	CatalogRef    string
+	FetchedAt     string
 }
 
 type ProwRunImage struct {
@@ -81,7 +81,7 @@ type ProwRunImage struct {
 
 type ProwSync struct {
 	JobName            string
-	ReleaseVersion     string
+	Application        string
 	IntervalSeconds    int64
 	LastSuccessfulSync string
 }

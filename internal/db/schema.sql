@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS prow_runs (
     job_name        TEXT NOT NULL,
     build_id        TEXT NOT NULL,
     kind            TEXT NOT NULL,
-    release_version TEXT NOT NULL,
+    application     TEXT NOT NULL,
     state           TEXT NOT NULL DEFAULT '',
     started_at      TEXT NOT NULL DEFAULT '',
     completed_at    TEXT NOT NULL DEFAULT '',
@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS prow_runs (
     UNIQUE(job_name, build_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_prow_runs_release_started ON prow_runs(release_version, started_at);
+CREATE INDEX IF NOT EXISTS idx_prow_runs_application_started ON prow_runs(application, started_at);
 
 CREATE TABLE IF NOT EXISTS prow_run_images (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -124,7 +124,7 @@ CREATE INDEX IF NOT EXISTS idx_prow_run_images_digest ON prow_run_images(digest)
 
 CREATE TABLE IF NOT EXISTS prow_syncs (
     job_name             TEXT PRIMARY KEY,
-    release_version      TEXT NOT NULL,
+    application          TEXT NOT NULL,
     interval_seconds     INTEGER NOT NULL,
     last_successful_sync TEXT NOT NULL
 );

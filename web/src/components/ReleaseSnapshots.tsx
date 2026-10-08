@@ -20,11 +20,16 @@ import {
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { getReleaseSnapshot, listReleaseSnapshots } from "../api/client";
+import {
+	getReleaseSnapshot,
+	getSnapshotProwRuns,
+	listReleaseSnapshots,
+} from "../api/client";
 import type { KonfluxRelease, ReleaseSnapshot } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { relative } from "../utils/format";
 import { type SnapshotFilter, snapshotFilters } from "../utils/releaseApps";
+import { UnlinkedProwRuns } from "./ProwRuns";
 import ReleasedLabel from "./ReleasedLabel";
 import SnapshotComponentsTable from "./SnapshotComponentsTable";
 
@@ -48,6 +53,7 @@ export default function ReleaseSnapshots({
 				filters={filters}
 				defaultFilter={quay}
 			/>
+			<UnlinkedProwRuns version={version} />
 		</>
 	);
 }
@@ -312,6 +318,10 @@ function SnapshotDetail({
 		snapshot.missing ? null : `releaseSnapshot:${version}:${snapshot.name}`,
 		() => getReleaseSnapshot(version, snapshot.name),
 	);
+	const { data: prowRuns } = useCachedFetch(
+		snapshot.missing ? null : `snapshotProwRuns:${version}:${snapshot.name}`,
+		() => getSnapshotProwRuns(version, snapshot.name),
+	);
 
 	if (snapshot.missing || error?.message.startsWith("404")) {
 		return (
@@ -325,5 +335,10 @@ function SnapshotDetail({
 	}
 	if (error) return <Content component="p">{error.message}</Content>;
 	if (loading || !data) return <Spinner size="md" />;
-	return <SnapshotComponentsTable components={data.components ?? []} />;
+	return (
+		<SnapshotComponentsTable
+			components={data.components ?? []}
+			prowRuns={prowRuns}
+		/>
+	);
 }

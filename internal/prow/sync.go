@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
 const bucket = "test-platform-results-public"
@@ -98,6 +100,8 @@ type Syncer struct {
 	jobs     []Job
 	interval time.Duration
 	logger   *slog.Logger
+	// Status receives each pass's outcome; nil reports nowhere.
+	Status *syncstatus.Source
 }
 
 func NewSyncer(client *Client, store Store, jobs []Job, interval time.Duration, logger *slog.Logger) *Syncer {
@@ -121,14 +125,17 @@ func (s *Syncer) Run(ctx context.Context) {
 }
 
 func (s *Syncer) SyncOnce(ctx context.Context) {
+	var pass syncstatus.Pass
 	for _, job := range s.jobs {
 		n, err := s.syncJob(ctx, job)
 		if err != nil {
 			s.logger.Error("sync job", "job", job.Name, "error", err)
+			pass.Add(fmt.Errorf("%s: %w", job.Name, err))
 			continue
 		}
 		s.logger.Info("synced job", "job", job.Name, "fetched", n)
 	}
+	s.Status.Report(pass.Err())
 }
 
 // syncJob fetches every run not yet known to be finished. A finished run is
@@ -165,7 +172,7 @@ func (s *Syncer) syncJob(ctx context.Context, job Job) (int, error) {
 	}
 	return n, s.store.UpsertProwSync(ctx, SyncState{
 		JobName:            job.Name,
-		ReleaseVersion:     job.ReleaseVersion,
+		Application:        job.Application,
 		Interval:           s.interval,
 		LastSuccessfulSync: time.Now().UTC(),
 	})

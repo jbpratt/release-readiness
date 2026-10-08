@@ -21,18 +21,18 @@ const (
 
 // Run is one Prow job execution and the images its tested-images.json names.
 type Run struct {
-	JobName        string     `json:"job_name"`
-	BuildID        string     `json:"build_id"`
-	Kind           string     `json:"kind"`
-	ReleaseVersion string     `json:"release_version"`
-	State          string     `json:"state"`
-	StartedAt      *time.Time `json:"started_at"`
-	CompletedAt    *time.Time `json:"completed_at"`
-	ProwURL        string     `json:"prow_url"`
-	ArtifactState  string     `json:"artifact_state"`
-	CatalogRef     string     `json:"catalog_ref"`
-	FetchedAt      time.Time  `json:"fetched_at"`
-	Images         []Image    `json:"images"`
+	JobName       string     `json:"job_name"`
+	BuildID       string     `json:"build_id"`
+	Kind          string     `json:"kind"`
+	Application   string     `json:"application"`
+	State         string     `json:"state"`
+	StartedAt     *time.Time `json:"started_at"`
+	CompletedAt   *time.Time `json:"completed_at"`
+	ProwURL       string     `json:"prow_url"`
+	ArtifactState string     `json:"artifact_state"`
+	CatalogRef    string     `json:"catalog_ref"`
+	FetchedAt     time.Time  `json:"fetched_at"`
+	Images        []Image    `json:"images"`
 }
 
 // Image is a requested image a run tested. Digest is the join key against
@@ -48,20 +48,21 @@ type Image struct {
 // SyncState records when a job's runs were last listed without error.
 type SyncState struct {
 	JobName            string
-	ReleaseVersion     string
+	Application        string
 	Interval           time.Duration
 	LastSuccessfulSync time.Time
 }
 
-// Job is a configured GCS run prefix mapped to a release version.
+// Job is a configured GCS run prefix mapped to the Konflux application whose
+// images it tests, so every z-stream of a minor shares its runs.
 type Job struct {
-	Name           string
-	Prefix         string
-	ReleaseVersion string
-	Kind           string
+	Name        string
+	Prefix      string
+	Application string
+	Kind        string
 }
 
-// ParseJobs parses "key=release_version[,key=release_version...]". For
+// ParseJobs parses "key=application[,key=application...]". For
 // periodics the key is a job name under logs/; for rehearsals it is a full
 // GCS prefix.
 func ParseJobs(spec, kind string) ([]Job, error) {
@@ -71,16 +72,16 @@ func ParseJobs(spec, kind string) ([]Job, error) {
 		if entry == "" {
 			continue
 		}
-		key, release, ok := strings.Cut(entry, "=")
-		key, release = strings.Trim(strings.TrimSpace(key), "/"), strings.TrimSpace(release)
-		if !ok || key == "" || release == "" {
-			return nil, fmt.Errorf("invalid %s entry %q, want key=release_version", kind, entry)
+		key, app, ok := strings.Cut(entry, "=")
+		key, app = strings.Trim(strings.TrimSpace(key), "/"), strings.TrimSpace(app)
+		if !ok || key == "" || app == "" {
+			return nil, fmt.Errorf("invalid %s entry %q, want key=application", kind, entry)
 		}
 		prefix := key + "/"
 		if kind == KindPeriodic {
 			prefix = "logs/" + prefix
 		}
-		jobs = append(jobs, Job{Name: path.Base(key), Prefix: prefix, ReleaseVersion: release, Kind: kind})
+		jobs = append(jobs, Job{Name: path.Base(key), Prefix: prefix, Application: app, Kind: kind})
 	}
 	return jobs, nil
 }
@@ -143,15 +144,15 @@ func parseRun(job Job, buildID string, pjData, finData []byte) (*Run, string, er
 		return nil, "", fmt.Errorf("parse prowjob.json: %w", err)
 	}
 	r := &Run{
-		JobName:        job.Name,
-		BuildID:        buildID,
-		Kind:           job.Kind,
-		ReleaseVersion: job.ReleaseVersion,
-		State:          pj.Status.State,
-		StartedAt:      pj.Status.StartTime,
-		ProwURL:        pj.Status.URL,
-		ArtifactState:  ArtifactMissing,
-		Images:         []Image{},
+		JobName:       job.Name,
+		BuildID:       buildID,
+		Kind:          job.Kind,
+		Application:   job.Application,
+		State:         pj.Status.State,
+		StartedAt:     pj.Status.StartTime,
+		ProwURL:       pj.Status.URL,
+		ArtifactState: ArtifactMissing,
+		Images:        []Image{},
 	}
 	if finData != nil {
 		var fin finished
@@ -199,4 +200,47 @@ func digest(ref string) string {
 		return ""
 	}
 	return d
+}
+
+// componentRoles maps a quay-X-Y component, less its application prefix, to
+// the tested-images.json role that deploys it.
+var componentRoles = map[string]string{
+	"quay-quay":            "quay",
+	"quay-clair":           "clair",
+	"quay-builder":         "builder",
+	"quay-builder-qemu":    "builder-qemu",
+	"quay-operator":        "quay-operator",
+	"quay-operator-bundle": "quay-operator-bundle",
+}
+
+// ComponentKey is the exact (role, digest) identity a run must have tested for
+// it to count as testing a Snapshot component's image, or "" when no run can.
+// fbc-quay-X-Y-quay-operator is the catalog the run installs from.
+func ComponentKey(application, component, image string) string {
+	suffix, ok := strings.CutPrefix(component, application+"-")
+	d := digest(image)
+	if !ok || d == "" {
+		return ""
+	}
+	role := componentRoles[suffix]
+	if strings.HasPrefix(application, "fbc-") {
+		role = ""
+		if suffix == "quay-operator" {
+			role = "catalog"
+		}
+	}
+	if role == "" {
+		return ""
+	}
+	return role + "@" + d
+}
+
+// Tested reports whether r tested an image with any of keys.
+func (r *Run) Tested(keys map[string]bool) bool {
+	for _, img := range r.Images {
+		if img.Digest != "" && keys[img.Role+"@"+img.Digest] {
+			return true
+		}
+	}
+	return false
 }

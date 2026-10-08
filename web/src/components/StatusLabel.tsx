@@ -17,6 +17,7 @@ export default function StatusLabel({ status }: StatusLabelProps) {
 	if (
 		s === "passed" ||
 		s === "succeeded" ||
+		s === "success" ||
 		s === "closed" ||
 		s === "verified"
 	) {
@@ -26,7 +27,7 @@ export default function StatusLabel({ status }: StatusLabelProps) {
 			</Label>
 		);
 	}
-	if (s === "failed" || s === "error") {
+	if (s === "failed" || s === "failure" || s === "error") {
 		return (
 			<Label color="red" icon={<ExclamationCircleIcon />}>
 				{status}
@@ -40,7 +41,7 @@ export default function StatusLabel({ status }: StatusLabelProps) {
 			</Label>
 		);
 	}
-	if (s === "skipped" || s === "not_configured") {
+	if (s === "skipped" || s === "not_configured" || s === "aborted") {
 		return (
 			<Label color="grey" icon={<BanIcon />}>
 				{status}

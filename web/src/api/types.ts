@@ -112,3 +112,41 @@ export interface SyncProblem {
 export interface SyncStatus {
 	problems: SyncProblem[];
 }
+
+export interface ProwImage {
+	role: string;
+	source: string;
+	requested_ref: string;
+	digest: string;
+	image_id: string;
+}
+
+export interface ProwRun {
+	job_name: string;
+	build_id: string;
+	kind: "periodic" | "rehearsal";
+	application: string;
+	state: string;
+	started_at: string | null;
+	completed_at: string | null;
+	prow_url: string;
+	/** missing until the job publishes tested-images.json. */
+	artifact_state: "present" | "missing" | "invalid";
+	catalog_ref: string;
+	fetched_at: string;
+	images: ProwImage[];
+}
+
+interface ProwSync {
+	last_successful_sync: string | null;
+	stale: boolean;
+}
+
+export interface ProwRunsResponse extends ProwSync {
+	runs: ProwRun[];
+}
+
+/** Runs that tested each component's exact image, newest first. */
+export interface SnapshotProwRuns extends ProwSync {
+	components: Record<string, ProwRun[]>;
+}
