@@ -243,6 +243,16 @@ func (s *Syncer) syncRelease(ctx context.Context, obj *unstructured.Unstructured
 		r.ReleasedStatus, _ = cond["status"].(string)
 		r.ReleasedReason, _ = cond["reason"].(string)
 	}
+	// Released=False with reason Progressing is a running Release; only a
+	// Failed one has a task it stopped at.
+	if r.ReleasedReason == "Failed" {
+		attempts, _, _ := unstructured.NestedSlice(obj.Object, "status", "managedPipelineAttempts")
+		if n := len(attempts); n > 0 {
+			last, _ := attempts[n-1].(map[string]any)
+			r.FailedTask, _ = last["lastTask"].(string)
+			r.FailedStep, _ = last["lastStep"].(string)
+		}
+	}
 
 	return s.store.UpsertKonfluxRelease(ctx, r)
 }

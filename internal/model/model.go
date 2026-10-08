@@ -179,6 +179,8 @@ type KonfluxRelease struct {
 	Target         string     `json:"target"`
 	ReleasedStatus string     `json:"released_status"`
 	ReleasedReason string     `json:"released_reason"`
+	FailedTask     string     `json:"failed_task,omitempty"`
+	FailedStep     string     `json:"failed_step,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	StartTime      *time.Time `json:"start_time,omitempty"`
 	CompletionTime *time.Time `json:"completion_time,omitempty"`

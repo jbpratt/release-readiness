@@ -246,12 +246,21 @@ func TestGetReleaseSnapshot(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := srv.db.UpsertKonfluxRelease(t.Context(), &model.KonfluxRelease{
+		Name: "fbc-retry", Application: "fbc-quay-3-18", Snapshot: "fbc-quay-3-18-a", ReleasedStatus: "False", ReleasedReason: "Failed",
+		FailedTask: "verify-conforma", FailedStep: "assert", CreatedAt: t0.Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	var snap model.ReleaseSnapshot
 	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/fbc-quay-3-18-a", http.StatusOK, &snap)
 	wantImages := []model.SnapshotImage{{Name: "fbc-quay-3-18-index", Image: "quay.io/x/fbc-quay-3-18-index@fbc-quay-3-18-a", GitSHA: "sha-fbc-quay-3-18-a"}}
-	if !slices.Equal(snap.Components, wantImages) || len(snap.Releases) != 1 || snap.Releases[0].Name != "fbc-release" {
-		t.Errorf("snapshot: got %+v", snap)
+	if !slices.Equal(snap.Components, wantImages) || len(snap.Releases) != 2 || snap.Releases[1].Name != "fbc-release" {
+		t.Fatalf("snapshot: got %+v", snap)
+	}
+	if newest := snap.Releases[0]; newest.Name != "fbc-retry" || newest.FailedTask != "verify-conforma" || newest.FailedStep != "assert" {
+		t.Errorf("newest release: got %+v", newest)
 	}
 
 	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/base-a", http.StatusOK, &snap)

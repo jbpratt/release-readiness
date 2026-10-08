@@ -123,6 +123,51 @@ func TestSyncReleases(t *testing.T) {
 	}
 }
 
+func TestSyncReleaseFailedTask(t *testing.T) {
+	failed := map[string]any{"type": "Released", "status": "False", "reason": "Failed"}
+	attempt := func(task, step string) any {
+		return map[string]any{"lastTask": task, "lastStep": step, "failureReason": "Error"}
+	}
+	for _, tc := range []struct {
+		name     string
+		released map[string]any
+		attempts []any
+		task     string
+		step     string
+	}{
+		{"apply-mapping", failed, []any{attempt("apply-mapping", "apply-mapping")}, "apply-mapping", "apply-mapping"},
+		{"access", failed, []any{attempt("verify-access-to-resources", "")}, "verify-access-to-resources", ""},
+		{"conforma last attempt", failed, []any{attempt("apply-mapping", "apply-mapping"), attempt("verify-conforma", "assert")}, "verify-conforma", "assert"},
+		{"succeeded", map[string]any{"type": "Released", "status": "True", "reason": "Succeeded"}, []any{attempt("collect-data", "x")}, "", ""},
+		{"no attempts", failed, nil, "", ""},
+		{"progressing after failed attempt", map[string]any{"type": "Released", "status": "False", "reason": "Progressing"}, []any{attempt("verify-conforma", "assert")}, "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			database, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = database.Close() })
+			r := release("r1", "quay-3-18", time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC), tc.released)
+			if tc.attempts != nil {
+				_ = unstructured.SetNestedSlice(r.Object, tc.attempts, "status", "managedPipelineAttempts")
+			}
+			client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+				map[schema.GroupVersionResource]string{snapshotGVR: "SnapshotList", releaseGVR: "ReleaseList"}, r)
+			NewSyncer(client, testNamespace, database, nil, slog.New(slog.NewTextHandler(io.Discard, nil))).SyncOnce(ctx)
+
+			got, err := database.ListKonfluxReleases(ctx, "quay-3-18", 10, 0)
+			if err != nil || len(got) != 1 {
+				t.Fatalf("releases = %+v, %v", got, err)
+			}
+			if got[0].FailedTask != tc.task || got[0].FailedStep != tc.step {
+				t.Errorf("failed = %q/%q, want %q/%q", got[0].FailedTask, got[0].FailedStep, tc.task, tc.step)
+			}
+		})
+	}
+}
+
 func TestSyncOnce(t *testing.T) {
 	ctx := context.Background()
 	database, err := db.Open(filepath.Join(t.TempDir(), "test.db"))

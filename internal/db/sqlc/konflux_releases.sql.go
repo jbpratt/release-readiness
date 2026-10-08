@@ -11,7 +11,7 @@ import (
 )
 
 const listAllKonfluxReleases = `-- name: ListAllKonfluxReleases :many
-SELECT id, name, application, snapshot, release_plan, target, released_status, released_reason, created_at, start_time, completion_time
+SELECT id, name, application, snapshot, release_plan, target, released_status, released_reason, failed_task, failed_step, created_at, start_time, completion_time
 FROM konflux_releases
 ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
 `
@@ -39,6 +39,8 @@ func (q *Queries) ListAllKonfluxReleases(ctx context.Context, arg ListAllKonflux
 			&i.Target,
 			&i.ReleasedStatus,
 			&i.ReleasedReason,
+			&i.FailedTask,
+			&i.FailedStep,
 			&i.CreatedAt,
 			&i.StartTime,
 			&i.CompletionTime,
@@ -57,7 +59,7 @@ func (q *Queries) ListAllKonfluxReleases(ctx context.Context, arg ListAllKonflux
 }
 
 const listKonfluxReleasesByApplication = `-- name: ListKonfluxReleasesByApplication :many
-SELECT id, name, application, snapshot, release_plan, target, released_status, released_reason, created_at, start_time, completion_time
+SELECT id, name, application, snapshot, release_plan, target, released_status, released_reason, failed_task, failed_step, created_at, start_time, completion_time
 FROM konflux_releases
 WHERE application = ?
 ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
@@ -87,6 +89,8 @@ func (q *Queries) ListKonfluxReleasesByApplication(ctx context.Context, arg List
 			&i.Target,
 			&i.ReleasedStatus,
 			&i.ReleasedReason,
+			&i.FailedTask,
+			&i.FailedStep,
 			&i.CreatedAt,
 			&i.StartTime,
 			&i.CompletionTime,
@@ -105,7 +109,7 @@ func (q *Queries) ListKonfluxReleasesByApplication(ctx context.Context, arg List
 }
 
 const listKonfluxReleasesBySnapshots = `-- name: ListKonfluxReleasesBySnapshots :many
-SELECT id, name, application, snapshot, release_plan, target, released_status, released_reason, created_at, start_time, completion_time
+SELECT id, name, application, snapshot, release_plan, target, released_status, released_reason, failed_task, failed_step, created_at, start_time, completion_time
 FROM konflux_releases
 WHERE snapshot IN (/*SLICE:snapshots*/?)
 ORDER BY created_at DESC, id DESC
@@ -139,6 +143,8 @@ func (q *Queries) ListKonfluxReleasesBySnapshots(ctx context.Context, snapshots 
 			&i.Target,
 			&i.ReleasedStatus,
 			&i.ReleasedReason,
+			&i.FailedTask,
+			&i.FailedStep,
 			&i.CreatedAt,
 			&i.StartTime,
 			&i.CompletionTime,
@@ -157,8 +163,8 @@ func (q *Queries) ListKonfluxReleasesBySnapshots(ctx context.Context, snapshots 
 }
 
 const upsertKonfluxRelease = `-- name: UpsertKonfluxRelease :exec
-INSERT INTO konflux_releases (name, application, snapshot, release_plan, target, released_status, released_reason, created_at, start_time, completion_time)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO konflux_releases (name, application, snapshot, release_plan, target, released_status, released_reason, failed_task, failed_step, created_at, start_time, completion_time)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(name) DO UPDATE SET
     application=excluded.application,
     snapshot=excluded.snapshot,
@@ -166,6 +172,8 @@ ON CONFLICT(name) DO UPDATE SET
     target=excluded.target,
     released_status=excluded.released_status,
     released_reason=excluded.released_reason,
+    failed_task=excluded.failed_task,
+    failed_step=excluded.failed_step,
     created_at=excluded.created_at,
     start_time=excluded.start_time,
     completion_time=excluded.completion_time
@@ -179,6 +187,8 @@ type UpsertKonfluxReleaseParams struct {
 	Target         string
 	ReleasedStatus string
 	ReleasedReason string
+	FailedTask     string
+	FailedStep     string
 	CreatedAt      string
 	StartTime      string
 	CompletionTime string
@@ -193,6 +203,8 @@ func (q *Queries) UpsertKonfluxRelease(ctx context.Context, arg UpsertKonfluxRel
 		arg.Target,
 		arg.ReleasedStatus,
 		arg.ReleasedReason,
+		arg.FailedTask,
+		arg.FailedStep,
 		arg.CreatedAt,
 		arg.StartTime,
 		arg.CompletionTime,

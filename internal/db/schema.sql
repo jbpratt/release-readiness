@@ -68,6 +68,9 @@ CREATE TABLE IF NOT EXISTS konflux_releases (
     target          TEXT NOT NULL DEFAULT '',
     released_status TEXT NOT NULL DEFAULT '',
     released_reason TEXT NOT NULL DEFAULT '',
+    -- Task and step of the last managed pipeline attempt when Released reason=Failed.
+    failed_task     TEXT NOT NULL DEFAULT '',
+    failed_step     TEXT NOT NULL DEFAULT '',
     created_at      TEXT NOT NULL,
     start_time      TEXT NOT NULL DEFAULT '',
     completion_time TEXT NOT NULL DEFAULT ''

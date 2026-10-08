@@ -76,6 +76,8 @@ type KonfluxRelease struct {
 	Target         string
 	ReleasedStatus string
 	ReleasedReason string
+	FailedTask     string
+	FailedStep     string
 	CreatedAt      string
 	StartTime      string
 	CompletionTime string
