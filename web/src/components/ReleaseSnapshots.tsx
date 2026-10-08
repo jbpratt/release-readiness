@@ -1,4 +1,5 @@
 import {
+	Alert,
 	Card,
 	CardBody,
 	CardHeader,
@@ -32,6 +33,7 @@ import type {
 	KonfluxRelease,
 	ReleaseSnapshot,
 	ReleaseVersion,
+	SnapshotImage,
 } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { relative } from "../utils/format";
@@ -131,6 +133,16 @@ function LatestSnapshot({
 		latest && (!released || latest.created_at > released.created_at)
 			? latest
 			: undefined;
+	const releasedDetail = useCachedFetch(
+		unreleased && released && !released.missing
+			? `releaseSnapshot:${version}:${released.name}`
+			: null,
+		() => getReleaseSnapshot(version, released!.name),
+	);
+	const changed = changedSince(
+		state.detail.data?.components,
+		releasedDetail.data?.components,
+	);
 	const loading = state.loading || (!releasedList.data && !releasedList.error);
 	const error = state.error ?? releasedList.error;
 
@@ -188,14 +200,35 @@ function LatestSnapshot({
 						variant="xs"
 					/>
 				) : (
-					<SnapshotSummary
-						version={version}
-						snapshot={unreleased}
-						fetched={state.detail}
-					/>
+					<>
+						{released && changed && (
+							<Alert
+								variant="info"
+								isInline
+								isPlain
+								title={`Last released: ${released.name}, ${changed.size} of ${state.detail.data?.components?.length} images differ`}
+								style={{ marginBottom: "0.5rem" }}
+							/>
+						)}
+						<SnapshotSummary
+							version={version}
+							snapshot={unreleased}
+							fetched={state.detail}
+							changed={changed}
+						/>
+					</>
 				)}
 			</CardBody>
 		</Card>
+	);
+}
+
+/** Names of the components whose image is not the released one. */
+function changedSince(current?: SnapshotImage[], released?: SnapshotImage[]) {
+	if (!current || !released) return undefined;
+	const shipped = new Map(released.map((c) => [c.name, c.image]));
+	return new Set(
+		current.filter((c) => shipped.get(c.name) !== c.image).map((c) => c.name),
 	);
 }
 
@@ -203,10 +236,12 @@ function SnapshotSummary({
 	version,
 	snapshot,
 	fetched,
+	changed,
 }: {
 	version: string;
 	snapshot: ReleaseSnapshot;
 	fetched?: LatestSnapshotState["detail"];
+	changed?: Set<string>;
 }) {
 	return (
 		<>
@@ -224,7 +259,12 @@ function SnapshotSummary({
 					<SnapshotReleaseLabel releases={snapshot.releases} />
 				</FlexItem>
 			</Flex>
-			<SnapshotDetail version={version} snapshot={snapshot} fetched={fetched} />
+			<SnapshotDetail
+				version={version}
+				snapshot={snapshot}
+				fetched={fetched}
+				changed={changed}
+			/>
 		</>
 	);
 }
@@ -448,11 +488,13 @@ function SnapshotDetail({
 	version,
 	snapshot,
 	fetched,
+	changed,
 }: {
 	version: string;
 	snapshot: ReleaseSnapshot;
 	/** The snapshot's images when the caller already fetches them. */
 	fetched?: LatestSnapshotState["detail"];
+	changed?: Set<string>;
 }) {
 	const own = useCachedFetch(
 		snapshot.missing || fetched
@@ -482,6 +524,7 @@ function SnapshotDetail({
 		<SnapshotComponentsTable
 			components={data.components ?? []}
 			prowRuns={prowRuns}
+			changed={changed}
 		/>
 	);
 }
