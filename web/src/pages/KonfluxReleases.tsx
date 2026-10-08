@@ -19,16 +19,31 @@ import type { KonfluxRelease } from "../api/types";
 
 const PAGE_SIZE = 50;
 
-const releasedColors: Record<string, "green" | "red" | "yellow"> = {
+type LabelColor = "green" | "red" | "yellow" | "blue";
+
+const releasedColors: Record<string, LabelColor> = {
 	True: "green",
 	False: "red",
 	Unknown: "yellow",
 };
 
+const reasonColors: Record<string, LabelColor> = {
+	Succeeded: "green",
+	Failed: "red",
+	Progressing: "blue",
+};
+
 function ReleasedLabel({ release }: { release: KonfluxRelease }) {
 	if (!release.released_status) return <>-</>;
 	return (
-		<Label color={releasedColors[release.released_status] ?? "grey"} isCompact>
+		<Label
+			color={
+				reasonColors[release.released_reason] ??
+				releasedColors[release.released_status] ??
+				"grey"
+			}
+			isCompact
+		>
 			{release.released_reason || release.released_status}
 		</Label>
 	);
@@ -49,7 +64,7 @@ export default function KonfluxReleases() {
 	const [page, setPage] = useState(1);
 	const [hasMore, setHasMore] = useState(false);
 
-	// Back/forward changes the URL without going through applyFilter.
+	// Sync the input when the URL changes, e.g. on back/forward.
 	if (application !== prevApplication) {
 		setPrevApplication(application);
 		setFilter(application);
@@ -85,10 +100,14 @@ export default function KonfluxReleases() {
 		};
 	}, [application, page]);
 
-	const applyFilter = (value: string) => {
-		setPage(1);
-		setSearchParams(value ? { application: value } : {});
-	};
+	useEffect(() => {
+		if (filter === application) return;
+		const id = setTimeout(
+			() => setSearchParams(filter ? { application: filter } : {}),
+			300,
+		);
+		return () => clearTimeout(id);
+	}, [filter, application, setSearchParams]);
 
 	return (
 		<PageSection>
@@ -103,11 +122,7 @@ export default function KonfluxReleases() {
 							placeholder="Filter by application"
 							value={filter}
 							onChange={(_, v) => setFilter(v)}
-							onSearch={(_, v) => applyFilter(v)}
-							onClear={() => {
-								setFilter("");
-								applyFilter("");
-							}}
+							onClear={() => setFilter("")}
 						/>
 					</ToolbarItem>
 				</ToolbarContent>
