@@ -1,4 +1,5 @@
 import {
+	Button,
 	Card,
 	CardBody,
 	CardTitle,
@@ -12,8 +13,11 @@ import {
 	Flex,
 	FlexItem,
 	Gallery,
+	HelperText,
+	HelperTextItem,
 	Label,
 	PageSection,
+	Popover,
 	Progress,
 	ProgressMeasureLocation,
 	SearchInput,
@@ -26,12 +30,14 @@ import {
 	ToolbarContent,
 	ToolbarGroup,
 	ToolbarItem,
+	Tooltip,
 } from "@patternfly/react-core";
 import {
 	CheckCircleIcon,
 	ExclamationCircleIcon,
 	ExclamationTriangleIcon,
 	ListIcon,
+	OutlinedQuestionCircleIcon,
 	ThIcon,
 } from "@patternfly/react-icons";
 import { useEffect, useState } from "react";
@@ -47,8 +53,43 @@ import { seedCache, useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
 import { formatReleaseName, jiraIssueUrl } from "../utils/links";
 
-type SignalFilter = "all" | "red" | "yellow" | "green";
+type SignalFilter = "all" | "red" | "yellow" | "green" | "shipped";
 type ViewMode = "compact" | "expanded";
+
+// A shipped release with an open JIRA ticket shows only its shipped badge:
+// the readiness signal would only reflect the stale ticket.
+const shippedOpen = (ov: ReleaseOverview) => ov.shipped && !ov.release.released;
+
+const signalHelp = (
+	<DescriptionList isCompact>
+		<DescriptionListGroup>
+			<DescriptionListTerm>Red</DescriptionListTerm>
+			<DescriptionListDescription>
+				Past the JIRA due date and not released.
+			</DescriptionListDescription>
+		</DescriptionListGroup>
+		<DescriptionListGroup>
+			<DescriptionListTerm>Yellow</DescriptionListTerm>
+			<DescriptionListDescription>
+				Open issues remain, no build snapshots yet, or due within 3 days.
+			</DescriptionListDescription>
+		</DescriptionListGroup>
+		<DescriptionListGroup>
+			<DescriptionListTerm>Green</DescriptionListTerm>
+			<DescriptionListDescription>
+				No open issues and builds exist, or released.
+			</DescriptionListDescription>
+		</DescriptionListGroup>
+		<DescriptionListGroup>
+			<DescriptionListTerm>Shipped</DescriptionListTerm>
+			<DescriptionListDescription>
+				The Red Hat catalog has published the version but its JIRA release
+				ticket is still open. That is ticket hygiene, not release risk, so the
+				card shows no signal.
+			</DescriptionListDescription>
+		</DescriptionListGroup>
+	</DescriptionList>
+);
 
 export default function ReleasesOverview() {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -135,7 +176,8 @@ export default function ReleasesOverview() {
 		) {
 			return false;
 		}
-		if (signalFilter !== "all" && ov.readiness.signal !== signalFilter) {
+		const shown = shippedOpen(ov) ? "shipped" : ov.readiness.signal;
+		if (signalFilter !== "all" && shown !== signalFilter) {
 			return false;
 		}
 		return true;
@@ -155,15 +197,24 @@ export default function ReleasesOverview() {
 					</ToolbarItem>
 					<ToolbarItem>
 						<ToggleGroup aria-label="Signal filter">
-							{(["all", "red", "yellow", "green"] as const).map((s) => (
-								<ToggleGroupItem
-									key={s}
-									text={s.charAt(0).toUpperCase() + s.slice(1)}
-									isSelected={signalFilter === s}
-									onChange={() => setParam("signal", s)}
-								/>
-							))}
+							{(["all", "red", "yellow", "green", "shipped"] as const).map(
+								(s) => (
+									<ToggleGroupItem
+										key={s}
+										text={s.charAt(0).toUpperCase() + s.slice(1)}
+										isSelected={signalFilter === s}
+										onChange={() => setParam("signal", s)}
+									/>
+								),
+							)}
 						</ToggleGroup>
+						<Popover headerContent="Signals" bodyContent={signalHelp}>
+							<Button
+								variant="plain"
+								aria-label="Signal definitions"
+								icon={<OutlinedQuestionCircleIcon />}
+							/>
+						</Popover>
 					</ToolbarItem>
 					<ToolbarItem>
 						<Switch
@@ -172,6 +223,12 @@ export default function ReleasesOverview() {
 							isChecked={showAll}
 							onChange={(_e, checked) => setParam("all", checked ? "1" : "")}
 						/>
+						<HelperText>
+							<HelperTextItem>
+								Off: only the next release per stream. On: every release with an
+								open ticket.
+							</HelperTextItem>
+						</HelperText>
 					</ToolbarItem>
 					<ToolbarGroup align={{ default: "alignEnd" }}>
 						<ToolbarItem>
@@ -309,13 +366,15 @@ function ReleaseCard({
 					<FlexItem>
 						{displayName}
 						{shipped && !release.released && (
-							<Label isCompact color="blue" style={{ marginLeft: "0.5rem" }}>
-								Shipped, ticket still open
-							</Label>
+							<Tooltip content="The JIRA release ticket is still open: ticket hygiene, not release risk.">
+								<Label isCompact color="blue" style={{ marginLeft: "0.5rem" }}>
+									Shipped, ticket still open
+								</Label>
+							</Tooltip>
 						)}
 					</FlexItem>
 					<FlexItem>
-						{readinessSignal && (
+						{readinessSignal && !(shipped && !release.released) && (
 							<Label
 								color={
 									signalColor === "green"
