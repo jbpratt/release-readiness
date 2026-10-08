@@ -1,13 +1,12 @@
 # Release Readiness Dashboard
 
-Tracks build snapshots, integration test results, and JIRA issues across Quay release versions.
+Tracks Konflux build snapshots and releases, and JIRA issues, across Quay release versions.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    Konflux -->|snapshots + JUnit results| S3
-    S3 -->|S3 sync loop| App[Release Readiness]
+    Konflux[Konflux namespace] -->|Snapshots + Releases| App[Release Readiness]
     JIRA -->|JIRA sync loop| App
     App -->|SQLite| DB[(SQLite)]
     App -->|serves| SPA[React SPA]
@@ -17,26 +16,15 @@ The Go backend runs two background sync loops that pull data into a local SQLite
 
 ## Syncing
 
-### S3 sync (default: every 30s)
+### Konflux sync (default: every 30s)
 
-Polls S3 for new Konflux snapshots. For each new snapshot it parses `snapshot.json` (a Konflux Snapshot CR) and any JUnit XML test results, then persists them to SQLite.
+Lists `Snapshot` and `Release` resources (`appstudio.redhat.com/v1alpha1`) in the `-namespace` Konflux namespace through the Kubernetes API, using `-kubeconfig`/`KUBECONFIG` or, when unset, the in-cluster service account. New snapshots are stored with their components (git SHA, image); releases are upserted and served at `/api/v1/konflux-releases`. Each record's `created_at` is the resource's `creationTimestamp`.
+
+Test results are not ingested.
 
 ### JIRA sync (default: every 5m)
 
 Discovers active releases by querying for JIRA issues with the `-area/release` component that are not Closed/Done. Parses the version from the ticket summary (e.g. "Release Quay v3.16.2") and syncs all issues matching that `fixVersion` (and optionally the Target Version custom field).
-
-## S3 bucket layout
-
-```
-{bucket}/
-  {application}/                    # e.g. quay-v3-16, omr-v2-0
-    snapshots/
-      {snapshot-name}/
-        snapshot.json               # Konflux Snapshot CR
-        junit/
-          {scenario}/
-            *.xml                   # JUnit test results
-```
 
 ## JIRA expectations
 
@@ -63,12 +51,9 @@ cd web && npm install && npm run build
 |------|---------|---------|-------------|
 | `-addr` | — | `:8080` | Listen address |
 | `-db` | — | `dashboard.db` | SQLite database path |
-| `-s3-endpoint` | `S3_ENDPOINT` | — | S3 endpoint URL |
-| `-s3-region` | `S3_REGION` | `us-east-1` | S3 region |
-| `-s3-bucket` | `S3_BUCKET` | — | S3 bucket name (required to enable S3 sync) |
-| `-s3-access-key` | `AWS_ACCESS_KEY_ID` | — | S3 access key |
-| `-s3-secret-key` | `AWS_SECRET_ACCESS_KEY` | — | S3 secret key |
-| `-s3-poll-interval` | — | `30s` | S3 sync poll interval |
+| `-kubeconfig` | `KUBECONFIG` | — | Kubeconfig path (empty uses the in-cluster service account) |
+| `-namespace` | `KONFLUX_NAMESPACE` | `art-quay-tenant` | Konflux namespace to read Snapshots and Releases from |
+| `-konflux-poll-interval` | — | `30s` | Konflux sync poll interval |
 | `-jira-url` | `JIRA_URL` | `https://redhat.atlassian.net` | JIRA Cloud URL |
 | `-jira-email` | `JIRA_EMAIL` | — | JIRA Cloud account email for API token auth |
 | `-jira-token` | `JIRA_TOKEN` | — | JIRA Cloud API token (required to enable JIRA sync) |
@@ -79,13 +64,17 @@ cd web && npm install && npm run build
 ### Local development
 
 ```bash
-# Start backend
-./release-readiness -addr :8088 -db release-readiness.db \
-  -s3-endpoint http://localhost:3900 -s3-region garage \
-  -s3-bucket quay-release-readiness \
-  -s3-access-key $AWS_ACCESS_KEY_ID -s3-secret-key $AWS_SECRET_ACCESS_KEY \
-  -jira-token $JIRA_TOKEN
+# Start backend (the kubeconfig needs read access to Snapshots and Releases in the namespace)
+KUBECONFIG=<path> go run ./cmd/release-readiness -addr :8088 -db /tmp/rr.db
 
 # In a separate terminal, start the Vite dev server (proxies /api to localhost:8088)
 cd web && npm run dev
 ```
+
+### Deployment
+
+`deploy/rbac.yaml` creates the `release-readiness` ServiceAccount and a Role granting read-only access to Snapshots and Releases. The Role and RoleBinding must live in the Konflux namespace the app reads.
+
+### Upgrading
+
+The schema changed when the Konflux source moved to Kubernetes. Delete the old SQLite database file before upgrading; it is recreated on startup.

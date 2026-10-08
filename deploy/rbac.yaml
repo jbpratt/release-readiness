@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: release-readiness
+---
+# The Role and RoleBinding must live in the Konflux namespace the app reads
+# (-namespace / KONFLUX_NAMESPACE), which may differ from the app's namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: release-readiness-konflux-reader
+  namespace: art-quay-tenant
+rules:
+  - apiGroups: ["appstudio.redhat.com"]
+    resources: ["snapshots", "releases"]
+    verbs: ["list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: release-readiness-konflux-reader
+  namespace: art-quay-tenant
+subjects:
+  - kind: ServiceAccount
+    name: release-readiness
+    # Set to the namespace the app is deployed in.
+    namespace: release-readiness
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: release-readiness-konflux-reader
