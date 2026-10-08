@@ -1,7 +1,9 @@
 import {
 	Alert,
+	Button,
 	Card,
 	CardBody,
+	CardFooter,
 	CardHeader,
 	CardTitle,
 	Content,
@@ -23,7 +25,7 @@ import {
 } from "@patternfly/react-core";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
 	getReleaseSnapshot,
 	getSnapshotProwRuns,
@@ -42,7 +44,6 @@ import {
 	type SnapshotFilter,
 	snapshotFilters,
 } from "../utils/releaseApps";
-import { UnlinkedProwRuns } from "./ProwRuns";
 import ReleasedLabel from "./ReleasedLabel";
 import SnapshotComponentsTable from "./SnapshotComponentsTable";
 
@@ -82,32 +83,8 @@ export function useLatestSnapshot(version: string, release?: ReleaseVersion) {
 
 type LatestSnapshotState = ReturnType<typeof useLatestSnapshot>;
 
-/** A release's latest Quay snapshot, then its snapshot history. */
-export default function ReleaseSnapshots({
-	version,
-	konfluxApp,
-	latest,
-}: {
-	version: string;
-	konfluxApp?: string;
-	latest: LatestSnapshotState;
-}) {
-	const filters = snapshotFilters(konfluxApp);
-	const quay = quayFilter(filters);
-	return (
-		<>
-			<LatestSnapshot version={version} state={latest} />
-			<SnapshotHistory
-				version={version}
-				filters={filters}
-				defaultFilter={quay}
-			/>
-			<UnlinkedProwRuns version={version} />
-		</>
-	);
-}
-
-function LatestSnapshot({
+/** A release's latest unreleased or released Quay snapshot. */
+export function LatestSnapshot({
 	version,
 	state,
 }: {
@@ -219,6 +196,20 @@ function LatestSnapshot({
 					</>
 				)}
 			</CardBody>
+			<CardFooter>
+				<Button
+					variant="link"
+					isInline
+					component={(props: object) => (
+						<Link
+							{...props}
+							to={`/releases/${encodeURIComponent(version)}/snapshots`}
+						/>
+					)}
+				>
+					View snapshot history
+				</Button>
+			</CardFooter>
 		</Card>
 	);
 }
@@ -270,15 +261,15 @@ function SnapshotSummary({
 }
 
 /** Newest-first, paginated Snapshots of a release's applications. */
-function SnapshotHistory({
+export function SnapshotHistory({
 	version,
-	filters,
-	defaultFilter,
+	konfluxApp,
 }: {
 	version: string;
-	filters: SnapshotFilter[];
-	defaultFilter: SnapshotFilter;
+	konfluxApp?: string;
 }) {
+	const filters = snapshotFilters(konfluxApp);
+	const defaultFilter = quayFilter(filters);
 	const [searchParams, setSearchParams] = useSearchParams();
 	const filter =
 		filters.find((f) => f.key === searchParams.get("app")) ?? defaultFilter;

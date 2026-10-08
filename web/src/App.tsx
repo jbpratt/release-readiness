@@ -29,7 +29,6 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import {
 	BrowserRouter,
 	Link,
-	Navigate,
 	Route,
 	Routes,
 	useLocation,
@@ -41,6 +40,9 @@ import "./theme.css";
 
 const ReleasesOverview = lazy(() => import("./pages/ReleasesOverview"));
 const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
+const ReleaseSnapshotHistory = lazy(
+	() => import("./pages/ReleaseSnapshotHistory"),
+);
 const KonfluxReleases = lazy(() => import("./pages/KonfluxReleases"));
 
 const glossary: [string, string][] = [
@@ -216,7 +218,7 @@ export default function App() {
 							<Route path="/releases/:version" element={<ReleaseDetail />} />
 							<Route
 								path="/releases/:version/snapshots"
-								element={<Navigate to=".." relative="path" replace />}
+								element={<ReleaseSnapshotHistory />}
 							/>
 							<Route path="/konflux-releases" element={<KonfluxReleases />} />
 						</Routes>
