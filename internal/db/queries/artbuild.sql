@@ -35,3 +35,22 @@ LIMIT ?;
 SELECT digest, state, nvr, record_id, upstream_repo, upstream_sha, rebase_repo, rebase_sha, pipeline_url, checked_at
 FROM art_builds
 WHERE state = 'resolved' AND digest IN (sqlc.slice('digests'));
+
+-- name: ListActiveApplications :many
+SELECT DISTINCT konflux_application
+FROM release_versions
+WHERE released = 0 AND archived = 0 AND konflux_application != ''
+ORDER BY konflux_application;
+
+-- name: DeleteArtPendingBuilds :exec
+DELETE FROM art_pending_builds WHERE group_name = ?;
+
+-- name: InsertArtPendingBuild :exec
+INSERT INTO art_pending_builds (group_name, release_version, component, nvr, record_id, upstream_sha, upstream_repo, started_at, checked_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: ListArtPendingBuilds :many
+-- Pending builds of the given versions from a search no older than checked_at.
+SELECT group_name, release_version, component, nvr, record_id, upstream_sha, upstream_repo, started_at, checked_at
+FROM art_pending_builds
+WHERE checked_at >= ? AND release_version IN (sqlc.slice('versions'));

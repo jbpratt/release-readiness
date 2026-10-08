@@ -132,17 +132,9 @@ func (s *Server) handleGetReleaseSnapshot(w http.ResponseWriter, r *http.Request
 	if !ok {
 		return
 	}
-	images := make([]string, len(snap.Components))
-	for i, c := range snap.Components {
-		images[i] = c.Image
-	}
-	arts, err := s.artBuilds(ctx, images)
-	if err != nil {
+	if err := s.attachArtBuilds(ctx, snap); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
-	}
-	for i := range snap.Components {
-		snap.Components[i].Art = arts[i]
 	}
 	writeJSON(w, http.StatusOK, snap)
 }
@@ -177,33 +169,63 @@ func (s *Server) releaseSnapshot(w http.ResponseWriter, r *http.Request) (*model
 	return release, snap, true
 }
 
-// artBuilds returns the cached ART build links of each image, nil where none
-// is resolved. It never calls the build history service.
-func (s *Server) artBuilds(ctx context.Context, images []string) ([]*model.ArtBuild, error) {
-	arts := make([]*model.ArtBuild, len(images))
+// pendingFresh is two ART resolver passes: a pending build not seen by a
+// search since then is hidden while the service is unreachable.
+const pendingFresh = 10 * time.Minute
+
+// attachArtBuilds sets each component's cached ART build links, and a newer
+// build of it still running when one started after the Snapshot from another
+// upstream commit. It never calls the build history service.
+func (s *Server) attachArtBuilds(ctx context.Context, snap *model.ReleaseSnapshot) error {
 	if s.artBaseURL == "" {
-		return arts, nil
+		return nil
 	}
-	digests := make([]string, len(images))
-	for i, img := range images {
-		_, digests[i], _ = strings.Cut(img, "@")
+	digests := make([]string, len(snap.Components))
+	for i, c := range snap.Components {
+		_, digests[i], _ = strings.Cut(c.Image, "@")
 	}
 	builds, err := s.db.ResolvedArtBuilds(ctx, digests)
 	if err != nil {
-		return nil, err
+		return err
+	}
+	var versions []string
+	for _, b := range builds {
+		if _, v := artbuild.SplitNVR(b.NVR); v != "" && !slices.Contains(versions, v) {
+			versions = append(versions, v)
+		}
+	}
+	pending, err := s.db.ArtPendingBuilds(ctx, versions, time.Now().Add(-pendingFresh))
+	if err != nil {
+		return err
 	}
 	for i, d := range digests {
-		if b, ok := builds[d]; ok {
-			arts[i] = &model.ArtBuild{
-				BuildURL:     artbuild.PageURL(s.artBaseURL, "build", b.NVR, b.RecordID),
-				LogsURL:      artbuild.PageURL(s.artBaseURL, "logs", b.NVR, b.RecordID),
-				PipelineURL:  b.PipelineURL,
-				UpstreamRepo: b.UpstreamRepo,
-				UpstreamSHA:  b.UpstreamSHA,
+		b, ok := builds[d]
+		if !ok {
+			continue
+		}
+		c := &snap.Components[i]
+		c.Art = &model.ArtBuild{
+			BuildURL:     artbuild.PageURL(s.artBaseURL, "build", b.NVR, b.RecordID),
+			LogsURL:      artbuild.PageURL(s.artBaseURL, "logs", b.NVR, b.RecordID),
+			PipelineURL:  b.PipelineURL,
+			UpstreamRepo: b.UpstreamRepo,
+			UpstreamSHA:  b.UpstreamSHA,
+		}
+		// Compare upstream commits: git_sha is ART's rebase-fork commit.
+		name, version := artbuild.SplitNVR(b.NVR)
+		j := slices.IndexFunc(pending, func(p artbuild.PendingBuild) bool { return p.Name == name && p.Version == version })
+		if j < 0 || b.UpstreamSHA == "" {
+			continue
+		}
+		if p := pending[j]; p.UpstreamSHA != b.UpstreamSHA && p.StartedAt.After(snap.CreatedAt) {
+			c.PendingArtBuild = &model.PendingArtBuild{
+				BuildURL:    artbuild.PageURL(s.artBaseURL, "build", p.NVR, p.RecordID),
+				UpstreamSHA: p.UpstreamSHA,
+				StartedAt:   p.StartedAt,
 			}
 		}
 	}
-	return arts, nil
+	return nil
 }
 
 func (s *Server) releaseComponents(ctx context.Context, release *model.ReleaseVersion) (model.ReleaseComponents, error) {

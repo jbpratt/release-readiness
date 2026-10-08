@@ -14,8 +14,12 @@ import (
 const operatorImage = "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@sha256:bfd08ada78f2c19d7dc773f42fc53f5ceb649ff1c34da95e62fb73f0a15a6563"
 
 type fakeStore struct {
-	cands []Candidate
-	got   []Build
+	cands   []Candidate
+	got     []Build
+	apps    []string
+	pending map[string][]PendingBuild
+	// searchedAt is when the fake service answered the last search.
+	searchedAt, checkedAt time.Time
 }
 
 func (f *fakeStore) ListArtBuildCandidates(context.Context, time.Time, int) ([]Candidate, error) {
@@ -32,6 +36,19 @@ var operator = Candidate{
 	Component:    "quay-operator", // as stage Snapshots name it
 	Applications: []string{"quay-3-18"},
 	FirstSeen:    time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC),
+}
+
+func (f *fakeStore) ListActiveApplications(context.Context) ([]string, error) {
+	return f.apps, nil
+}
+
+func (f *fakeStore) ReplaceArtPendingBuilds(_ context.Context, group string, builds []PendingBuild, checkedAt time.Time) error {
+	if f.pending == nil {
+		f.pending = map[string][]PendingBuild{}
+	}
+	f.pending[group] = builds
+	f.checkedAt = checkedAt
+	return nil
 }
 
 func always(fixture string) func(string) string { return func(string) string { return fixture } }
@@ -151,5 +168,69 @@ func TestResolveOtherStream(t *testing.T) {
 	}
 	if b.State != StateResolved {
 		t.Errorf("build: got %+v, want resolved", b)
+	}
+}
+
+// refreshWith runs one pass with no image candidates against a service whose
+// /search answers with fixture, or 502 when fixture is empty.
+func refreshWith(t *testing.T, fixture string) (*fakeStore, []url.Values) {
+	t.Helper()
+	var searches []url.Values
+	store := &fakeStore{apps: []string{"quay-3-18", "fbc-quay-3-18", "quay-images-base"}}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		searches = append(searches, r.URL.Query())
+		store.searchedAt = time.Now()
+		if fixture == "" {
+			http.Error(w, "timeout", http.StatusBadGateway)
+			return
+		}
+		http.ServeFile(w, r, "testdata/"+fixture)
+	}))
+	defer srv.Close()
+
+	r := NewResolver(NewClient(srv.URL, srv.Client()), store, slog.Default())
+	r.gap = time.Millisecond
+	r.ResolveOnce(t.Context())
+	return store, searches
+}
+
+// Each active stream is searched once, and its newest image build per NVR
+// name and version is stored while it runs. quay-operator's and quay-clair's
+// newest builds have finished, so neither is stored.
+func TestRefreshPending(t *testing.T) {
+	store, searches := refreshWith(t, "search_group.json")
+	if len(searches) != 1 {
+		t.Fatalf("searches: got %d, want 1", len(searches))
+	}
+	if q := searches[0]; q.Get("group") != "quay-3.18" || q.Get("assembly") != "stream" || q.Has("image_sha_tag") || q.Get("dateRange") == "" {
+		t.Errorf("search query: %v", q)
+	}
+	want := []PendingBuild{
+		{
+			Group: "quay-3.18", Version: "3.18.1", Name: "quay-quay-container",
+			NVR: "quay-quay-container-3.18.1-202610081800.p2.gbbbbbbb.assembly.stream.el9", RecordID: "rec-newer",
+			UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			StartedAt: time.Date(2026, 10, 8, 18, 0, 0, 0, time.UTC),
+		},
+		{
+			Group: "quay-3.18", Version: "3.18.2", Name: "quay-quay-container",
+			NVR: "quay-quay-container-3.18.2-202610081700.p2.gccccccc.assembly.stream.el9", RecordID: "rec-z2",
+			UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: "cccccccccccccccccccccccccccccccccccccccc",
+			StartedAt: time.Date(2026, 10, 8, 17, 0, 0, 0, time.UTC),
+		},
+	}
+	if got, ok := store.pending["quay-3.18"]; !ok || !slices.Equal(got, want) {
+		t.Errorf("pending:\n got %+v\nwant %+v", store.pending, want)
+	}
+	if store.checkedAt.Before(store.searchedAt) {
+		t.Errorf("checkedAt %v is before the search at %v", store.checkedAt, store.searchedAt)
+	}
+}
+
+// A failed search leaves the stored pending builds alone.
+func TestRefreshPendingFailure(t *testing.T) {
+	store, searches := refreshWith(t, "")
+	if len(searches) != 1 || store.pending != nil {
+		t.Errorf("searches %d, replaced %+v; want 1 search and no replace", len(searches), store.pending)
 	}
 }

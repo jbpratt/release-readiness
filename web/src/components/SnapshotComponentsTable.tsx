@@ -1,7 +1,12 @@
 import { Tooltip } from "@patternfly/react-core";
-import { ExternalLinkAltIcon } from "@patternfly/react-icons";
+import { ExternalLinkAltIcon, InProgressIcon } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
-import type { ArtBuild, SnapshotImage, SnapshotProwRuns } from "../api/types";
+import type {
+	ArtBuild,
+	PendingArtBuild,
+	SnapshotImage,
+	SnapshotProwRuns,
+} from "../api/types";
 import { quayManifestUrl, upstreamCommitUrl } from "../utils/links";
 import GitShaLink from "./GitShaLink";
 import { ProwRunBadge } from "./ProwRuns";
@@ -45,6 +50,25 @@ function ArtBuildLink({ art }: { art: ArtBuild | null }) {
 				ART build{linkIcon}
 			</a>
 		</Tooltip>
+	);
+}
+
+/** A newer ART build of the component, not yet in this Snapshot. */
+function PendingArtBuildLink({ pending }: { pending: PendingArtBuild | null }) {
+	if (!pending) return null;
+	return (
+		<div style={{ fontSize: "0.85em" }}>
+			<Tooltip
+				content={`Started ${new Date(pending.started_at).toLocaleString()}; opens its ART build record`}
+			>
+				<a href={pending.build_url} {...external}>
+					<InProgressIcon style={{ marginRight: "0.25rem" }} />
+					Newer build in progress from{" "}
+					<code>{pending.upstream_sha.substring(0, 12)}</code>
+					{linkIcon}
+				</a>
+			</Tooltip>
+		</div>
 	);
 }
 
@@ -120,6 +144,7 @@ export default function SnapshotComponentsTable({
 						</Td>
 						<Td>
 							<ArtBuildLink art={c.art} />
+							<PendingArtBuildLink pending={c.pending_art_build} />
 						</Td>
 						<Td>
 							<GitShaLink sha={c.git_sha} gitUrl={c.git_url} />
