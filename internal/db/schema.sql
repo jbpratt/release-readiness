@@ -74,3 +74,18 @@ CREATE TABLE IF NOT EXISTS konflux_releases (
 );
 
 CREATE INDEX IF NOT EXISTS idx_konflux_releases_application_created ON konflux_releases(application, created_at);
+
+-- ART build history record behind a component image, keyed by its
+-- sha256:... digest. A resolved row is immutable; an unresolved one is retried.
+CREATE TABLE IF NOT EXISTS art_builds (
+    digest        TEXT PRIMARY KEY,
+    state         TEXT NOT NULL CHECK (state IN ('resolved', 'unresolved')),
+    nvr           TEXT NOT NULL DEFAULT '',
+    record_id     TEXT NOT NULL DEFAULT '',
+    upstream_repo TEXT NOT NULL DEFAULT '',
+    upstream_sha  TEXT NOT NULL DEFAULT '',
+    rebase_repo   TEXT NOT NULL DEFAULT '',
+    rebase_sha    TEXT NOT NULL DEFAULT '',
+    pipeline_url  TEXT NOT NULL DEFAULT '',
+    checked_at    TEXT NOT NULL
+);

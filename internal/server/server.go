@@ -16,10 +16,12 @@ type Server struct {
 	logger      *slog.Logger
 	jiraBaseURL string
 	jiraProject string
+	artBaseURL  string
 }
 
-func New(database *db.DB, addr, jiraBaseURL, jiraProject string, logger *slog.Logger) *Server {
-	s := &Server{db: database, logger: logger, jiraBaseURL: jiraBaseURL, jiraProject: jiraProject}
+// New builds the server. An empty artBaseURL leaves every component's art null.
+func New(database *db.DB, addr, jiraBaseURL, jiraProject, artBaseURL string, logger *slog.Logger) *Server {
+	s := &Server{db: database, logger: logger, jiraBaseURL: jiraBaseURL, jiraProject: jiraProject, artBaseURL: artBaseURL}
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)
 
