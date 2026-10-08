@@ -1,6 +1,6 @@
 package model
 
-// Snapshot represents the parsed state of a Konflux Snapshot from S3.
+// Snapshot represents the parsed state of a Konflux Snapshot.
 type Snapshot struct {
 	Application string              `json:"application"`
 	Snapshot    string              `json:"snapshot"`

@@ -8,20 +8,18 @@ import (
 	"time"
 
 	"github.com/quay/release-readiness/internal/db"
-	s3client "github.com/quay/release-readiness/internal/s3"
 )
 
 type Server struct {
 	db          *db.DB
-	s3          *s3client.Client
 	http        *http.Server
 	logger      *slog.Logger
 	jiraBaseURL string
 	jiraProject string
 }
 
-func New(database *db.DB, s3c *s3client.Client, addr, jiraBaseURL, jiraProject string, logger *slog.Logger) *Server {
-	s := &Server{db: database, s3: s3c, logger: logger, jiraBaseURL: jiraBaseURL, jiraProject: jiraProject}
+func New(database *db.DB, addr, jiraBaseURL, jiraProject string, logger *slog.Logger) *Server {
+	s := &Server{db: database, logger: logger, jiraBaseURL: jiraBaseURL, jiraProject: jiraProject}
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)
 

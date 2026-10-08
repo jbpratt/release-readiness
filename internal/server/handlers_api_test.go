@@ -25,7 +25,7 @@ func setupTestServer(t *testing.T) *Server {
 		_ = database.Close()
 		_ = os.Remove(dbPath)
 	})
-	return New(database, nil, ":0", "https://redhat.atlassian.net", "PROJQUAY", slog.Default())
+	return New(database, ":0", "https://redhat.atlassian.net", "PROJQUAY", slog.Default())
 }
 
 func TestHealthEndpoint(t *testing.T) {
