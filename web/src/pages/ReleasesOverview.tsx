@@ -50,7 +50,7 @@ type ViewMode = "compact" | "expanded";
 export default function ReleasesOverview() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const viewMode = (searchParams.get("view") ?? "compact") as ViewMode;
-	const showShipped = searchParams.get("shipped") === "1";
+	const showAll = searchParams.get("all") === "1";
 
 	const config = useConfig();
 
@@ -95,10 +95,10 @@ export default function ReleasesOverview() {
 	const overviewList = [...(overviews ?? [])].sort((a, b) =>
 		b.release.name.localeCompare(a.release.name, undefined, { numeric: true }),
 	);
-	// Only the next z-release of each stream, plus shipped ones when asked.
-	const visible = overviewList.filter(
-		(ov) => ov.next_in_stream || (showShipped && ov.shipped),
-	);
+	// Only the next z-release of each stream, unless every version is asked for.
+	const visible = showAll
+		? overviewList
+		: overviewList.filter((ov) => ov.next_in_stream);
 
 	if (overviewList.length === 0) {
 		return (
@@ -125,12 +125,10 @@ export default function ReleasesOverview() {
 				<ToolbarContent>
 					<ToolbarItem>
 						<Switch
-							id="show-shipped-releases"
-							label="Show shipped releases"
-							isChecked={showShipped}
-							onChange={(_e, checked) =>
-								setParam("shipped", checked ? "1" : "")
-							}
+							id="show-all-versions"
+							label="Show all versions"
+							isChecked={showAll}
+							onChange={(_e, checked) => setParam("all", checked ? "1" : "")}
 						/>
 					</ToolbarItem>
 					<ToolbarGroup align={{ default: "alignEnd" }}>
