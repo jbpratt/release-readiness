@@ -55,12 +55,12 @@ The Vite dev server proxies `/api` requests to `localhost:8088` (the Go backend)
 - React 19 + TypeScript, built with Vite 6
 - UI framework: **PatternFly 6** (Red Hat design system)
 - API client in `web/src/api/client.ts`, types in `web/src/api/types.ts`
-- Pages: `ReleasesOverview`, `ReleaseDetail`, `SnapshotsList`, `KonfluxReleases`
+- Pages: `ReleasesOverview`, `ReleaseDetail`, `ReleaseSnapshotHistory`
 
 ### Data Flow
 1. Konflux sync loop lists Snapshots and Releases in the namespace → ingests into SQLite (snapshot components, releases). Test results are not ingested.
 2. JIRA sync loop discovers active releases → syncs issues per fixVersion into SQLite
-3. React SPA fetches data via `/api/v1/` REST endpoints (Konflux Releases at `/api/v1/konflux-releases`)
+3. React SPA fetches data via `/api/v1/` REST endpoints
 
 ### Deployment
 - Kubernetes manifests in `deploy/` (Deployment, Service, Route, PVC, RBAC). `rbac.yaml` grants the `release-readiness` ServiceAccount read on Snapshots and Releases; its Role and RoleBinding must live in the Konflux namespace the app reads.
