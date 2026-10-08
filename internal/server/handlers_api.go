@@ -22,9 +22,14 @@ import (
 )
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{
+	// The JIRA sync is tracked only when the server was started with a token.
+	jiraEnabled := slices.ContainsFunc(s.syncStatus.Sources(time.Now()), func(st syncstatus.Status) bool {
+		return st.Source == "jira"
+	})
+	writeJSON(w, http.StatusOK, map[string]any{
 		"jira_base_url": s.jiraBaseURL,
 		"jira_project":  s.jiraProject,
+		"jira_enabled":  jiraEnabled,
 	})
 }
 

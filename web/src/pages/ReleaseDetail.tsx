@@ -73,7 +73,7 @@ export default function ReleaseDetail() {
 		version ? `release:${version}` : null,
 		() => getRelease(version!),
 	);
-	const { data: issues } = useCachedFetch(
+	const { data: issues, error: issuesError } = useCachedFetch(
 		version ? `issues:${version}` : null,
 		() => listReleaseIssues(version!),
 	);
@@ -157,13 +157,12 @@ export default function ReleaseDetail() {
 
 				<LatestSnapshot version={version!} state={latest} />
 
-				{(issues ?? []).length > 0 && (
-					<IssuesCard
-						issues={issues ?? []}
-						version={version!}
-						config={config ?? undefined}
-					/>
-				)}
+				<IssuesCard
+					issues={issues}
+					error={issuesError}
+					version={version!}
+					config={config}
+				/>
 			</PageSection>
 		</>
 	);
@@ -364,10 +363,12 @@ function buildJQL(
 
 function IssuesCard({
 	issues,
+	error,
 	version,
 	config,
 }: {
-	issues: JiraIssue[];
+	issues?: JiraIssue[];
+	error?: Error;
 	version: string;
 	config?: DashboardConfig;
 }) {
@@ -376,17 +377,18 @@ function IssuesCard({
 	const columnMgmt = useColumnManagement("rr-columns-issues", ISSUES_COLUMNS);
 
 	const issueTypes = useMemo(() => {
-		const types = new Set(issues.map((i) => i.issue_type));
+		const types = new Set((issues ?? []).map((i) => i.issue_type));
 		return ["All", ...Array.from(types).sort()];
 	}, [issues]);
 
 	const filteredIssues = useMemo(
 		() =>
 			typeFilter === "All"
-				? issues
-				: issues.filter((i) => i.issue_type === typeFilter),
+				? (issues ?? [])
+				: (issues ?? []).filter((i) => i.issue_type === typeFilter),
 		[issues, typeFilter],
 	);
+	const hasIssues = (issues ?? []).length > 0;
 
 	const jql = buildJQL(config, version);
 
@@ -398,7 +400,9 @@ function IssuesCard({
 					alignItems={{ default: "alignItemsCenter" }}
 				>
 					<FlexItem>
-						{`Linked Issues (${filteredIssues.length})`}
+						{hasIssues
+							? `Linked Issues (${filteredIssues.length})`
+							: "Linked Issues"}
 						{jql && (
 							<Popover headerContent="JQL Query" bodyContent={jql}>
 								<Button
@@ -411,54 +415,66 @@ function IssuesCard({
 							</Popover>
 						)}
 					</FlexItem>
-					<FlexItem>
-						<Flex
-							alignItems={{ default: "alignItemsCenter" }}
-							spaceItems={{ default: "spaceItemsMd" }}
-						>
-							<FlexItem>
-								<Button
-									variant="plain"
-									aria-label="Manage columns"
-									onClick={columnMgmt.openModal}
-								>
-									<ColumnsIcon />
-								</Button>
-							</FlexItem>
-							<FlexItem>
-								<Select
-									isOpen={typeSelectOpen}
-									selected={typeFilter}
-									onSelect={(_e, value) => {
-										setTypeFilter(value as string);
-										setTypeSelectOpen(false);
-									}}
-									onOpenChange={setTypeSelectOpen}
-									toggle={(toggleRef) => (
-										<MenuToggle
-											ref={toggleRef}
-											onClick={() => setTypeSelectOpen((prev) => !prev)}
-											isExpanded={typeSelectOpen}
-										>
-											Type: {typeFilter}
-										</MenuToggle>
-									)}
-								>
-									<SelectList>
-										{issueTypes.map((t) => (
-											<SelectOption key={t} value={t}>
-												{t}
-											</SelectOption>
-										))}
-									</SelectList>
-								</Select>
-							</FlexItem>
-						</Flex>
-					</FlexItem>
+					{hasIssues && (
+						<FlexItem>
+							<Flex
+								alignItems={{ default: "alignItemsCenter" }}
+								spaceItems={{ default: "spaceItemsMd" }}
+							>
+								<FlexItem>
+									<Button
+										variant="plain"
+										aria-label="Manage columns"
+										onClick={columnMgmt.openModal}
+									>
+										<ColumnsIcon />
+									</Button>
+								</FlexItem>
+								<FlexItem>
+									<Select
+										isOpen={typeSelectOpen}
+										selected={typeFilter}
+										onSelect={(_e, value) => {
+											setTypeFilter(value as string);
+											setTypeSelectOpen(false);
+										}}
+										onOpenChange={setTypeSelectOpen}
+										toggle={(toggleRef) => (
+											<MenuToggle
+												ref={toggleRef}
+												onClick={() => setTypeSelectOpen((prev) => !prev)}
+												isExpanded={typeSelectOpen}
+											>
+												Type: {typeFilter}
+											</MenuToggle>
+										)}
+									>
+										<SelectList>
+											{issueTypes.map((t) => (
+												<SelectOption key={t} value={t}>
+													{t}
+												</SelectOption>
+											))}
+										</SelectList>
+									</Select>
+								</FlexItem>
+							</Flex>
+						</FlexItem>
+					)}
 				</Flex>
 			</CardTitle>
 			<CardBody>
-				<IssuesTable issues={filteredIssues} columnMgmt={columnMgmt} />
+				{hasIssues ? (
+					<IssuesTable issues={filteredIssues} columnMgmt={columnMgmt} />
+				) : error ? (
+					error.message
+				) : !issues ? (
+					<Spinner size="md" />
+				) : config?.jira_enabled === false ? (
+					"JIRA sync is not configured on this server, so linked tickets are not shown."
+				) : (
+					"No tickets linked to this release."
+				)}
 			</CardBody>
 		</Card>
 	);
