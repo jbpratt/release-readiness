@@ -15,3 +15,11 @@
 	margin-bottom: 0.25rem;
 	font-size: 0.85rem;
 }
+
+/* No sidebar, so size the brand column to the brand: PF otherwise reserves
+   the sidebar width at xl and min-content below it, which the nav overlaps. */
+.pf-v6-c-page > .pf-v6-c-masthead {
+	--pf-v6-c-masthead--m-display-inline--GridTemplateColumns: max-content 1fr;
+	--pf-v6-c-masthead--m-display-inline--breakpoint--xl--GridTemplateColumns: max-content
+		1fr;
+}
