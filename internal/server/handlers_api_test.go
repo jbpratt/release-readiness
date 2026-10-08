@@ -184,31 +184,101 @@ func TestGetReleaseComponents(t *testing.T) {
 
 func TestListReleaseSnapshots(t *testing.T) {
 	srv := setupTestServer(t)
-	seedReleaseView(t, srv)
-
-	names := func(url string) []string {
-		t.Helper()
-		var snaps []model.SnapshotRecord
-		getJSON(t, srv, url, http.StatusOK, &snaps)
-		out := []string{}
-		for _, s := range snaps {
-			out = append(out, s.Name)
+	t0 := seedReleaseView(t, srv)
+	for i, r := range []struct{ name, app, snapshot string }{
+		{"fbc-release", "fbc-quay-3-18", "fbc-quay-3-18-a"},
+		// Same name, other application: not a Release of quay-3-18-a.
+		{"cross-app", "fbc-quay-3-18", "quay-3-18-a"},
+		{"stage-gone", "fbc-quay-3-18", "fbc-quay-3-18-gone"},
+		{"stage-gone-retry", "fbc-quay-3-18", "fbc-quay-3-18-gone"},
+	} {
+		if err := srv.db.UpsertKonfluxRelease(t.Context(), &model.KonfluxRelease{
+			Name: r.name, Application: r.app, Snapshot: r.snapshot, ReleasedStatus: "Succeeded",
+			CreatedAt: t0.Add(time.Duration(4+i) * time.Hour),
+		}); err != nil {
+			t.Fatalf("upsert release %s: %v", r.name, err)
 		}
-		return out
 	}
 
-	// base-b only carries a 3.9 base image, so 3.18 skips it.
-	want := []string{"base-a", "fbc-quay-3-18-a", "quay-3-18-b", "quay-3-18-a"}
-	if got := names("/api/v1/releases/quay-v3.18.0/snapshots"); !slices.Equal(got, want) {
-		t.Errorf("snapshots: got %v, want %v", got, want)
+	type row struct {
+		name     string
+		count    int
+		missing  bool
+		releases int
 	}
-	if got := names("/api/v1/releases/quay-v3.18.0/snapshots?limit=2&offset=1"); !slices.Equal(got, want[1:3]) {
-		t.Errorf("paged snapshots: got %v, want %v", got, want[1:3])
+	page := func(url string) ([]row, bool) {
+		t.Helper()
+		var p model.ReleaseSnapshotPage
+		getJSON(t, srv, url, http.StatusOK, &p)
+		out := []row{}
+		for _, s := range p.Snapshots {
+			out = append(out, row{s.Name, s.ComponentCount, s.Missing, len(s.Releases)})
+		}
+		return out, p.HasMore
 	}
-	if got := names("/api/v1/releases/quay-v3.20.0/snapshots"); len(got) != 0 {
+
+	// base-b only carries a 3.9 base image, so 3.18 skips it. The gone
+	// Snapshot is dated by its oldest Release.
+	all := []row{
+		{"fbc-quay-3-18-gone", 0, true, 2},
+		{"base-a", 2, false, 0},
+		{"fbc-quay-3-18-a", 1, false, 1},
+		{"quay-3-18-b", 1, false, 0},
+		{"quay-3-18-a", 2, false, 0},
+	}
+	tests := []struct {
+		query   string
+		want    []row
+		hasMore bool
+	}{
+		{"", all, false},
+		{"?limit=2&offset=1", all[1:3], true},
+		{"?limit=2&offset=3", all[3:], false},
+		{"?application=quay-images-base", all[1:2], false},
+		{"?application=fbc-quay-3-18", []row{all[0], all[2]}, false},
+		// quay-3-18-a is only named by a Release of another application.
+		{"?with_release=true", []row{all[0], all[2]}, false},
+		{"?application=fbc-quay-3-18&with_release=true&offset=1", all[2:3], false},
+		{"?application=quay-3-18&with_release=true", []row{}, false},
+	}
+	for _, tt := range tests {
+		got, hasMore := page("/api/v1/releases/quay-v3.18.0/snapshots" + tt.query)
+		if !slices.Equal(got, tt.want) || hasMore != tt.hasMore {
+			t.Errorf("%q: got %v has_more=%v, want %v has_more=%v", tt.query, got, hasMore, tt.want, tt.hasMore)
+		}
+	}
+
+	if got, _ := page("/api/v1/releases/quay-v3.20.0/snapshots"); len(got) != 0 {
 		t.Errorf("no-data snapshots: got %v, want none", got)
 	}
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots?application=quay-3-9", http.StatusBadRequest, nil)
 	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/snapshots", http.StatusNotFound, nil)
+}
+
+func TestGetReleaseSnapshot(t *testing.T) {
+	srv := setupTestServer(t)
+	t0 := seedReleaseView(t, srv)
+	if err := srv.db.UpsertKonfluxRelease(t.Context(), &model.KonfluxRelease{
+		Name: "fbc-release", Application: "fbc-quay-3-18", Snapshot: "fbc-quay-3-18-a", ReleasedStatus: "Succeeded", CreatedAt: t0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var snap model.ReleaseSnapshot
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/fbc-quay-3-18-a", http.StatusOK, &snap)
+	wantImages := []model.SnapshotImage{{Name: "fbc-quay-3-18-index", Image: "quay.io/x/fbc-quay-3-18-index@fbc-quay-3-18-a", GitSHA: "sha-fbc-quay-3-18-a"}}
+	if !slices.Equal(snap.Components, wantImages) || len(snap.Releases) != 1 || snap.Releases[0].Name != "fbc-release" {
+		t.Errorf("snapshot: got %+v", snap)
+	}
+
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/base-a", http.StatusOK, &snap)
+	for _, name := range []string{
+		"base-b",       // base Snapshot without a 3.18 image
+		"quay-3-9-a",   // another release's application
+		"no-such-snap", // never stored
+	} {
+		getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/"+name, http.StatusNotFound, nil)
+	}
 }
 
 func TestReleasesOverview(t *testing.T) {

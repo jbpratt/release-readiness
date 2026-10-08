@@ -7,6 +7,7 @@ package dbsqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const listAllKonfluxReleases = `-- name: ListAllKonfluxReleases :many
@@ -70,6 +71,58 @@ type ListKonfluxReleasesByApplicationParams struct {
 
 func (q *Queries) ListKonfluxReleasesByApplication(ctx context.Context, arg ListKonfluxReleasesByApplicationParams) ([]KonfluxRelease, error) {
 	rows, err := q.db.QueryContext(ctx, listKonfluxReleasesByApplication, arg.Application, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []KonfluxRelease
+	for rows.Next() {
+		var i KonfluxRelease
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Application,
+			&i.Snapshot,
+			&i.ReleasePlan,
+			&i.Target,
+			&i.ReleasedStatus,
+			&i.ReleasedReason,
+			&i.CreatedAt,
+			&i.StartTime,
+			&i.CompletionTime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listKonfluxReleasesBySnapshots = `-- name: ListKonfluxReleasesBySnapshots :many
+SELECT id, name, application, snapshot, release_plan, target, released_status, released_reason, created_at, start_time, completion_time
+FROM konflux_releases
+WHERE snapshot IN (/*SLICE:snapshots*/?)
+ORDER BY created_at DESC, id DESC
+`
+
+func (q *Queries) ListKonfluxReleasesBySnapshots(ctx context.Context, snapshots []string) ([]KonfluxRelease, error) {
+	query := listKonfluxReleasesBySnapshots
+	var queryParams []interface{}
+	if len(snapshots) > 0 {
+		for _, v := range snapshots {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:snapshots*/?", strings.Repeat(",?", len(snapshots))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:snapshots*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}

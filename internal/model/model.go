@@ -82,6 +82,33 @@ type ReleaseComponent struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+// ReleaseSnapshotPage is one newest-first page of a release's Snapshots.
+type ReleaseSnapshotPage struct {
+	Snapshots []ReleaseSnapshot `json:"snapshots"`
+	HasMore   bool              `json:"has_more"`
+}
+
+// ReleaseSnapshot is one Konflux Snapshot of a release's applications with the
+// Konflux Releases that name it. Missing marks a Snapshot a Release names that
+// is no longer stored; its CreatedAt is then the oldest Release's.
+type ReleaseSnapshot struct {
+	Application    string           `json:"application"`
+	Name           string           `json:"name"`
+	CreatedAt      time.Time        `json:"created_at"`
+	ComponentCount int              `json:"component_count"`
+	Missing        bool             `json:"missing,omitempty"`
+	Releases       []KonfluxRelease `json:"releases,omitempty"`
+	Components     []SnapshotImage  `json:"components,omitempty"`
+}
+
+// SnapshotImage is one component image exactly as a Snapshot records it.
+type SnapshotImage struct {
+	Name   string `json:"name"`
+	Image  string `json:"image"`
+	GitSHA string `json:"git_sha"`
+	GitURL string `json:"git_url"`
+}
+
 // ReadinessResponse represents the computed readiness signal for a release.
 type ReadinessResponse struct {
 	Signal  string `json:"signal"`  // "green", "yellow", "red"
