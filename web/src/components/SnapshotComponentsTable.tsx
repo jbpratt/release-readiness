@@ -1,4 +1,4 @@
-import { ClipboardCopy, Tooltip } from "@patternfly/react-core";
+import { ClipboardCopy, Label, Tooltip } from "@patternfly/react-core";
 import { ExternalLinkAltIcon, InProgressIcon } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import type {
@@ -99,8 +99,11 @@ function ImageDigestLink({ image }: { image: string }) {
 export default function SnapshotComponentsTable({
 	components,
 	prowRuns,
+	changed,
 }: {
 	components: SnapshotImage[];
+	/** Components whose image differs from the last released snapshot. */
+	changed?: Set<string>;
 	/** Shown only once a CI job of the release has synced. */
 	prowRuns?: SnapshotProwRuns;
 }) {
@@ -135,7 +138,14 @@ export default function SnapshotComponentsTable({
 			<Tbody>
 				{components.map((c) => (
 					<Tr key={c.name}>
-						<Td>{c.name}</Td>
+						<Td>
+							{c.name}{" "}
+							{changed?.has(c.name) && (
+								<Label color="blue" isCompact>
+									changed
+								</Label>
+							)}
+						</Td>
 						<Td>
 							<ImageDigestLink image={c.image} />
 							<ClipboardCopy
