@@ -32,6 +32,17 @@ export interface ReleaseSnapshot {
 	missing?: boolean;
 	releases?: KonfluxRelease[];
 	components?: SnapshotImage[];
+	/** Set on a Quay snapshot detail carrying the quay-operator bundle. */
+	fbc_catalog?: FBCCatalog;
+}
+
+/** Whether the newest quay-operator FBC catalog references the snapshot's bundle. */
+export interface FBCCatalog {
+	status: "current" | "behind" | "unknown";
+	catalog_snapshot: string;
+	catalog_image: string;
+	catalog_bundle_image: string;
+	snapshot_bundle_image: string;
 }
 
 export interface ReleaseSnapshotPage {

@@ -15,6 +15,7 @@ import (
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
+	"github.com/quay/release-readiness/internal/fbc"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
@@ -299,6 +300,85 @@ func TestArtBuildLinks(t *testing.T) {
 		if c.Art != nil {
 			t.Errorf("%s art: got %+v, want null (unresolved)", c.Name, c.Art)
 		}
+	}
+}
+
+// The Quay Snapshot's bundle is current when the newest quay-operator FBC
+// catalog's stable channel names its digest, behind when a fully read channel
+// does not, and unknown when the catalog cannot settle it.
+func TestFBCCatalogStatus(t *testing.T) {
+	const (
+		bundleImage = "quay.io/x/art-images@sha256:b24"
+		catImage    = "quay.io/x/art-fbc@sha256:fbc"
+	)
+	inChannel := fbc.Bundle{Package: fbc.Package, Channel: "stable-3.18", Name: "quay-operator.v3.18.1",
+		Image: "registry.redhat.io/quay/quay-operator-bundle@sha256:b24", Digest: "sha256:b24"}
+	older := fbc.Bundle{Package: fbc.Package, Channel: "stable-3.18", Name: "quay-operator.v3.18.1",
+		Image: "registry.redhat.io/quay/quay-operator-bundle@sha256:old", Digest: "sha256:old"}
+	tagged := fbc.Bundle{Package: fbc.Package, Channel: "stable-3.18", Name: "quay-operator.v3.18.2",
+		Image: "registry.redhat.io/quay/quay-operator-bundle:v3.18.2"}
+	prev := fbc.Bundle{Package: fbc.Package, Channel: "stable-3.18", Name: "quay-operator.v3.18.0",
+		Image: "registry.redhat.io/quay/quay-operator-bundle@sha256:030", Digest: "sha256:030"}
+	otherChannel := inChannel
+	otherChannel.Channel = "stable-3.17"
+	for _, tc := range []struct {
+		name          string
+		snapshotImage string
+		catalog       *[]fbc.Bundle // nil leaves the catalog unread
+		state         string
+		want          model.FBCCatalog
+	}{
+		{"current", bundleImage, &[]fbc.Bundle{prev, inChannel}, fbc.StateParsed,
+			model.FBCCatalog{Status: "current", CatalogBundleImage: inChannel.Image}},
+		{"behind", bundleImage, &[]fbc.Bundle{older}, fbc.StateParsed,
+			model.FBCCatalog{Status: "behind", CatalogBundleImage: older.Image}},
+		{"unread catalog", bundleImage, nil, "", model.FBCCatalog{Status: "unknown"}},
+		{"failed read", bundleImage, &[]fbc.Bundle{}, fbc.StateFailed, model.FBCCatalog{Status: "unknown"}},
+		{"bundle only in another channel", bundleImage, &[]fbc.Bundle{otherChannel}, fbc.StateParsed, model.FBCCatalog{Status: "unknown"}},
+		{"tag ref in channel", bundleImage, &[]fbc.Bundle{older, tagged}, fbc.StateParsed,
+			model.FBCCatalog{Status: "unknown", CatalogBundleImage: older.Image}},
+		{"snapshot bundle by tag", "quay.io/x/art-images:v3.18.1", &[]fbc.Bundle{inChannel}, fbc.StateParsed, model.FBCCatalog{Status: "unknown"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := setupTestServer(t)
+			ctx := t.Context()
+			t0 := time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC)
+			if err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}); err != nil {
+				t.Fatal(err)
+			}
+			add := func(app, name string, created time.Time, component, image string) {
+				t.Helper()
+				snap, err := srv.db.CreateSnapshot(ctx, app, name, created)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := srv.db.CreateSnapshotComponent(ctx, snap.ID, component, "", image, ""); err != nil {
+					t.Fatal(err)
+				}
+			}
+			add("fbc-quay-3-18", "fbc-3-18-op", t0, "fbc-quay-3-18-quay-operator", catImage)
+			// Newer, but not the quay-operator catalog.
+			add("fbc-quay-3-18", "fbc-3-18-cso", t0.Add(time.Hour), "fbc-quay-3-18-container-security-operator", "quay.io/x/art-fbc@sha256:c50")
+			add("quay-3-18", "quay-3-18-a", t0.Add(2*time.Hour), "quay-3-18-quay-operator-bundle", tc.snapshotImage)
+			if tc.catalog != nil {
+				if err := srv.db.ReplaceFBCCatalog(ctx, "sha256:fbc", tc.state, *tc.catalog, t0); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			var snap model.ReleaseSnapshot
+			getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/snapshots/quay-3-18-a", http.StatusOK, &snap)
+			want := tc.want
+			want.CatalogSnapshot, want.CatalogImage, want.SnapshotBundleImage = "fbc-3-18-op", catImage, tc.snapshotImage
+			if snap.FBCCatalog == nil || *snap.FBCCatalog != want {
+				t.Errorf("fbc_catalog = %+v, want %+v", snap.FBCCatalog, want)
+			}
+			var fbcSnap model.ReleaseSnapshot
+			getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/snapshots/fbc-3-18-op", http.StatusOK, &fbcSnap)
+			if fbcSnap.FBCCatalog != nil {
+				t.Errorf("FBC Snapshot fbc_catalog = %+v, want none", fbcSnap.FBCCatalog)
+			}
+		})
 	}
 }
 

@@ -7,6 +7,10 @@ import {
 	CardHeader,
 	CardTitle,
 	Content,
+	DescriptionList,
+	DescriptionListDescription,
+	DescriptionListGroup,
+	DescriptionListTerm,
 	EmptyState,
 	EmptyStateBody,
 	Flex,
@@ -15,6 +19,7 @@ import {
 	HelperTextItem,
 	Label,
 	Pagination,
+	Popover,
 	Spinner,
 	ToggleGroup,
 	ToggleGroupItem,
@@ -32,6 +37,7 @@ import {
 	listReleaseSnapshots,
 } from "../api/client";
 import type {
+	FBCCatalog,
 	KonfluxRelease,
 	ReleaseSnapshot,
 	ReleaseVersion,
@@ -192,6 +198,7 @@ export function LatestSnapshot({
 							snapshot={unreleased}
 							fetched={state.detail}
 							changed={changed}
+							fbc={state.detail.data?.fbc_catalog}
 						/>
 					</>
 				)}
@@ -228,11 +235,13 @@ function SnapshotSummary({
 	snapshot,
 	fetched,
 	changed,
+	fbc,
 }: {
 	version: string;
 	snapshot: ReleaseSnapshot;
 	fetched?: LatestSnapshotState["detail"];
 	changed?: Set<string>;
+	fbc?: FBCCatalog;
 }) {
 	return (
 		<>
@@ -249,6 +258,11 @@ function SnapshotSummary({
 				<FlexItem>
 					<SnapshotReleaseLabel releases={snapshot.releases} />
 				</FlexItem>
+				{fbc && (
+					<FlexItem>
+						<FBCCatalogLabel fbc={fbc} />
+					</FlexItem>
+				)}
 			</Flex>
 			<SnapshotDetail
 				version={version}
@@ -445,6 +459,48 @@ function CreatedAt({ iso }: { iso: string }) {
 		<Tooltip content={new Date(iso).toLocaleString()}>
 			<span>{relative(iso)}</span>
 		</Tooltip>
+	);
+}
+
+const fbcLabels = {
+	current: { color: "green", text: "FBC current" },
+	behind: { color: "orange", text: "FBC behind snapshot" },
+	unknown: { color: "grey", text: "FBC unknown" },
+} as const;
+
+/** Whether the newest quay-operator FBC catalog references the snapshot's bundle. */
+function FBCCatalogLabel({ fbc }: { fbc: FBCCatalog }) {
+	const { color, text } = fbcLabels[fbc.status];
+	const rows: [string, string][] = [
+		["Catalog snapshot", fbc.catalog_snapshot],
+		["Catalog bundle", fbc.catalog_bundle_image],
+		["Snapshot bundle", fbc.snapshot_bundle_image],
+	];
+	return (
+		<Popover
+			headerContent="quay-operator FBC catalog"
+			maxWidth="48rem"
+			bodyContent={
+				<DescriptionList isCompact>
+					{rows.map(([term, value]) => (
+						<DescriptionListGroup key={term}>
+							<DescriptionListTerm>{term}</DescriptionListTerm>
+							<DescriptionListDescription>
+								{value ? (
+									<code style={{ wordBreak: "break-all" }}>{value}</code>
+								) : (
+									"none"
+								)}
+							</DescriptionListDescription>
+						</DescriptionListGroup>
+					))}
+				</DescriptionList>
+			}
+		>
+			<Label color={color} isCompact onClick={() => {}}>
+				{text}
+			</Label>
+		</Popover>
 	);
 }
 
