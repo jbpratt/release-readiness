@@ -109,7 +109,9 @@ export default function ReleasesOverview() {
 	useEffect(() => {
 		if (!overviews) return;
 		for (const ov of overviews) {
-			seedCache(`issueSummary:${ov.release.name}`, ov.issue_summary);
+			// A cached null is never refetched; let the detail page load the summary.
+			if (ov.issue_summary)
+				seedCache(`issueSummary:${ov.release.name}`, ov.issue_summary);
 			seedCache(`readiness:${ov.release.name}`, ov.readiness);
 		}
 	}, [overviews]);
