@@ -10,9 +10,6 @@ import {
 	MastheadBrand,
 	MastheadContent,
 	MastheadMain,
-	Nav,
-	NavItem,
-	NavList,
 	Page,
 	Popover,
 	Spinner,
@@ -26,13 +23,7 @@ import {
 	SunIcon,
 } from "@patternfly/react-icons";
 import { lazy, Suspense, useEffect, useState } from "react";
-import {
-	BrowserRouter,
-	Link,
-	Route,
-	Routes,
-	useLocation,
-} from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import "@patternfly/react-core/dist/styles/base.css";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SyncStatusWarning from "./components/SyncStatusWarning";
@@ -79,7 +70,6 @@ function getInitialTheme(): Theme {
 
 function AppLayout({ children }: { children: React.ReactNode }) {
 	const [theme, setTheme] = useState<Theme>(getInitialTheme);
-	const { pathname } = useLocation();
 
 	useEffect(() => {
 		const root = document.documentElement;
@@ -116,19 +106,6 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 			<MastheadContent>
 				<Toolbar>
 					<ToolbarContent>
-						<ToolbarItem isOverflowContainer>
-							<Nav variant="horizontal" aria-label="Primary">
-								<NavList>
-									<NavItem
-										isActive={
-											pathname === "/" || pathname.startsWith("/releases/")
-										}
-									>
-										<Link to="/">Releases</Link>
-									</NavItem>
-								</NavList>
-							</Nav>
-						</ToolbarItem>
 						<ToolbarItem align={{ default: "alignEnd" }}>
 							<SyncStatusWarning />
 						</ToolbarItem>
