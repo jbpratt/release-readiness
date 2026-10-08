@@ -49,7 +49,7 @@ import {
 	type SnapshotFilter,
 	snapshotFilters,
 } from "../utils/releaseApps";
-import ReleasedLabel from "./ReleasedLabel";
+import { releaseStatus } from "../utils/releaseStatus";
 import SnapshotComponentsTable, {
 	type ChangedSince,
 	changedDot,
@@ -505,30 +505,85 @@ function FBCCatalogLabel({ fbc }: { fbc: FBCCatalog }) {
 	);
 }
 
-/** Status of the newest Konflux Release naming the Snapshot; all in the tooltip. */
+/** Status of the newest Konflux Release naming the Snapshot; details in the popover. */
 function SnapshotReleaseLabel({ releases }: { releases?: KonfluxRelease[] }) {
 	if (!releases?.length) {
 		return (
-			<Label color="grey" isCompact>
-				Not released
-			</Label>
+			<Popover
+				headerContent="Not submitted for release"
+				bodyContent="No Konflux Release names this snapshot. Auto-release is off for every Quay ReleasePlan, so this is the normal state for a build: only ART's shipment and base-image flows create Releases."
+			>
+				<Label isCompact onClick={() => {}}>
+					Not submitted for release
+				</Label>
+			</Popover>
 		);
 	}
+	const [newest, ...older] = releases;
+	const status = releaseStatus(newest);
+	const rows: [string, string | undefined][] = [
+		["Release CR", newest.name],
+		["Release plan", newest.release_plan],
+		[
+			"Failed at",
+			[newest.failed_task, newest.failed_step].filter(Boolean).join("/"),
+		],
+		[
+			"Started",
+			newest.start_time && new Date(newest.start_time).toLocaleString(),
+		],
+		[
+			"Completed",
+			newest.completion_time &&
+				new Date(newest.completion_time).toLocaleString(),
+		],
+	];
 	return (
-		<Tooltip
-			content={releases.map((r) => (
-				<div key={r.name}>
-					{r.name}: {r.released_reason || r.released_status || "pending"}
-					{r.completion_time &&
-						`, completed ${new Date(r.completion_time).toLocaleString()}`}
-				</div>
-			))}
+		<Popover
+			headerContent={status.text}
+			maxWidth="40rem"
+			bodyContent={
+				<>
+					{"detail" in status && status.detail && (
+						<Content component="p">{status.detail}</Content>
+					)}
+					<DescriptionList isCompact isHorizontal>
+						{rows
+							.filter(([, value]) => value)
+							.map(([term, value]) => (
+								<DescriptionListGroup key={term}>
+									<DescriptionListTerm>{term}</DescriptionListTerm>
+									<DescriptionListDescription>
+										<code style={{ wordBreak: "break-all" }}>{value}</code>
+									</DescriptionListDescription>
+								</DescriptionListGroup>
+							))}
+					</DescriptionList>
+					{status.color === "red" && (
+						<HelperText style={{ marginTop: "0.5rem" }}>
+							<HelperTextItem>
+								The root-cause text is only in the managed PipelineRun in
+								rhtap-releng-tenant, which ages out after about 2 hours. Look it
+								up from Release CR <code>{newest.name}</code>.
+							</HelperTextItem>
+						</HelperText>
+					)}
+					{older.length > 0 && (
+						<Content component="p" style={{ marginTop: "0.5rem" }}>
+							Earlier Releases:{" "}
+							{older
+								.map((r) => `${r.name} (${releaseStatus(r).text})`)
+								.join(", ")}
+						</Content>
+					)}
+				</>
+			}
 		>
-			<span>
-				<ReleasedLabel release={releases[0]} />
-				{releases.length > 1 && ` +${releases.length - 1}`}
-			</span>
-		</Tooltip>
+			<Label color={status.color} isCompact onClick={() => {}}>
+				{status.text}
+				{older.length > 0 && ` +${older.length}`}
+			</Label>
+		</Popover>
 	);
 }
 

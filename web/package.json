@@ -9,7 +9,7 @@
 		"dev": "vite",
 		"build": "tsc -b && vite build",
 		"preview": "vite preview",
-		"test": "node --test src/utils/links.test.ts src/utils/releaseApps.test.ts"
+		"test": "node --test src/utils/links.test.ts src/utils/releaseApps.test.ts src/utils/releaseStatus.test.ts"
 	},
 	"dependencies": {
 		"@patternfly/react-component-groups": "^6.4.0",
