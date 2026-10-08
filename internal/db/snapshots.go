@@ -6,6 +6,7 @@ import (
 
 	"github.com/quay/release-readiness/internal/db/sqlc"
 	"github.com/quay/release-readiness/internal/model"
+	"github.com/quay/release-readiness/internal/releaseview"
 )
 
 func (d *DB) CreateSnapshot(ctx context.Context, application, name string, createdAt time.Time) (*model.SnapshotRecord, error) {
@@ -112,26 +113,49 @@ func (d *DB) ListSnapshots(ctx context.Context, application string, limit, offse
 	return snapshots, nil
 }
 
-func (d *DB) LatestSnapshotPerApplication(ctx context.Context) ([]model.ApplicationSummary, error) {
-	rows, err := d.queries().LatestSnapshotPerApplication(ctx)
+// ListComponentCandidates returns every component row of the given
+// applications' snapshots, for releaseview.Select to narrow down.
+func (d *DB) ListComponentCandidates(ctx context.Context, applications []string) ([]releaseview.Component, error) {
+	rows, err := d.queries().ListComponentCandidates(ctx, applications)
 	if err != nil {
 		return nil, err
 	}
-	summaries := make([]model.ApplicationSummary, len(rows))
+	components := make([]releaseview.Component, len(rows))
 	for i, r := range rows {
-		s := model.SnapshotRecord{
-			ID:          r.ID,
+		components[i] = releaseview.Component{
+			Name:        r.Component,
+			Image:       r.ImageUrl,
+			GitSHA:      r.GitSha,
+			GitURL:      r.GitUrl,
 			Application: r.Application,
-			Name:        r.Name,
+			Snapshot:    r.Snapshot,
 			CreatedAt:   parseTime(r.CreatedAt),
-		}
-		summaries[i] = model.ApplicationSummary{
-			Application:    r.Application,
-			LatestSnapshot: &s,
-			SnapshotCount:  int(r.Cnt),
+			SnapshotID:  r.SnapshotID,
+			RowID:       r.ID,
 		}
 	}
-	return summaries, nil
+	return components, nil
+}
+
+// ListReleaseSnapshots returns the snapshots of a release's applications,
+// newest first. quay-images-base snapshots count only when they carry one of
+// the release's own base images.
+func (d *DB) ListReleaseSnapshots(ctx context.Context, konfluxApp string, limit, offset int) ([]model.SnapshotRecord, error) {
+	rows, err := d.queries().ListReleaseSnapshots(ctx, dbsqlc.ListReleaseSnapshotsParams{
+		Applications: releaseview.Applications(konfluxApp),
+		Application:  releaseview.BaseImagesApp,
+		Component:    konfluxApp + "-%",
+		Limit:        int64(limit),
+		Offset:       int64(offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+	snapshots := make([]model.SnapshotRecord, len(rows))
+	for i, r := range rows {
+		snapshots[i] = toSnapshotRecord(r)
+	}
+	return snapshots, nil
 }
 
 func toSnapshotRecord(r dbsqlc.Snapshot) model.SnapshotRecord {

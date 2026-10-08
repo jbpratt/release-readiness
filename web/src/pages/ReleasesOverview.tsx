@@ -185,6 +185,8 @@ export default function ReleasesOverview() {
 						release={ov.release}
 						issueSummary={ov.issue_summary}
 						readinessSignal={ov.readiness}
+						componentCount={ov.component_count}
+						latestBuild={ov.latest_build}
 						viewMode={viewMode}
 						jiraBaseUrl={config?.jira_base_url}
 					/>
@@ -205,6 +207,8 @@ export default function ReleasesOverview() {
 								release={ov.release}
 								issueSummary={ov.issue_summary}
 								readinessSignal={ov.readiness}
+								componentCount={ov.component_count}
+								latestBuild={ov.latest_build}
 								viewMode={viewMode}
 								jiraBaseUrl={config?.jira_base_url}
 							/>
@@ -220,12 +224,16 @@ function ReleaseCard({
 	release,
 	issueSummary,
 	readinessSignal,
+	componentCount,
+	latestBuild,
 	viewMode,
 	jiraBaseUrl,
 }: {
 	release: ReleaseVersion;
 	issueSummary?: IssueSummary;
 	readinessSignal?: ReadinessResponse;
+	componentCount: number;
+	latestBuild?: string;
 	viewMode: ViewMode;
 	jiraBaseUrl?: string;
 }) {
@@ -249,6 +257,11 @@ function ReleaseCard({
 		issueSummary && issueSummary.total > 0
 			? Math.round((issueSummary.verified / issueSummary.total) * 100)
 			: 0;
+
+	const builds =
+		componentCount > 0
+			? `${componentCount} components${latestBuild ? `, latest ${new Date(latestBuild).toLocaleDateString()}` : ""}`
+			: "None yet";
 
 	const navigate = useNavigate();
 	const displayName = formatReleaseName(release.name);
@@ -306,6 +319,10 @@ function ReleaseCard({
 								</DescriptionListDescription>
 							</DescriptionListGroup>
 						)}
+						<DescriptionListGroup>
+							<DescriptionListTerm>Builds</DescriptionListTerm>
+							<DescriptionListDescription>{builds}</DescriptionListDescription>
+						</DescriptionListGroup>
 						{release.release_ticket_key && (
 							<DescriptionListGroup>
 								<DescriptionListTerm>Ticket</DescriptionListTerm>
@@ -353,6 +370,10 @@ function ReleaseCard({
 										</div>
 									</FlexItem>
 								)}
+								<FlexItem>
+									<span className="rr-label">Builds</span>
+									<div>{builds}</div>
+								</FlexItem>
 								{issueSummary && issueSummary.cves > 0 && (
 									<FlexItem>
 										<span className="rr-label">CVEs</span>

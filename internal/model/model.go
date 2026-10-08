@@ -26,12 +26,6 @@ type SnapshotRecord struct {
 	Components  []ComponentRecord `json:"components,omitempty"`
 }
 
-type ApplicationSummary struct {
-	Application    string          `json:"application"`
-	LatestSnapshot *SnapshotRecord `json:"latest_snapshot,omitempty"`
-	SnapshotCount  int             `json:"snapshot_count"`
-}
-
 // JiraIssueRecord represents a JIRA issue cached in the database.
 type JiraIssueRecord struct {
 	ID         int64     `json:"id"`
@@ -59,12 +53,33 @@ type IssueSummary struct {
 }
 
 // ReleaseOverview is a combined view of a release with its issue summary,
-// readiness signal, and latest snapshot metadata.
+// readiness signal, and the size and age of its current component set.
 type ReleaseOverview struct {
-	Release      ReleaseVersion    `json:"release"`
-	IssueSummary *IssueSummary     `json:"issue_summary,omitempty"`
-	Readiness    ReadinessResponse `json:"readiness"`
-	Snapshot     *SnapshotRecord   `json:"snapshot,omitempty"`
+	Release        ReleaseVersion    `json:"release"`
+	IssueSummary   *IssueSummary     `json:"issue_summary,omitempty"`
+	Readiness      ReadinessResponse `json:"readiness"`
+	ComponentCount int               `json:"component_count"`
+	LatestBuild    *time.Time        `json:"latest_build,omitempty"`
+}
+
+// ReleaseComponents is the newest image per component across a release's
+// Konflux applications. The images may come from different snapshots, so
+// together they are a candidate set, not one coherent build.
+type ReleaseComponents struct {
+	Release    string             `json:"release"`
+	AsOf       *time.Time         `json:"as_of,omitempty"`
+	Components []ReleaseComponent `json:"components"`
+}
+
+// ReleaseComponent is one component image with the snapshot it came from.
+type ReleaseComponent struct {
+	Name        string    `json:"name"`
+	Image       string    `json:"image"`
+	GitSHA      string    `json:"git_sha"`
+	GitURL      string    `json:"git_url"`
+	Application string    `json:"application"`
+	Snapshot    string    `json:"snapshot"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // ReadinessResponse represents the computed readiness signal for a release.
