@@ -217,18 +217,20 @@ export default function ReleasesOverview() {
 						</Popover>
 					</ToolbarItem>
 					<ToolbarItem>
-						<Switch
-							id="show-all-releases"
-							label="Show all open release tickets"
-							isChecked={showAll}
-							onChange={(_e, checked) => setParam("all", checked ? "1" : "")}
-						/>
-						<HelperText>
-							<HelperTextItem>
-								Off: only the next release per stream. On: every release with an
-								open ticket.
-							</HelperTextItem>
-						</HelperText>
+						<Flex direction={{ default: "column" }} gap={{ default: "gapXs" }}>
+							<Switch
+								id="show-all-releases"
+								label="Show all open release tickets"
+								isChecked={showAll}
+								onChange={(_e, checked) => setParam("all", checked ? "1" : "")}
+							/>
+							<HelperText>
+								<HelperTextItem>
+									Off: only the next release per stream. On: every release with
+									an open ticket.
+								</HelperTextItem>
+							</HelperText>
+						</Flex>
 					</ToolbarItem>
 					<ToolbarGroup align={{ default: "alignEnd" }}>
 						<ToolbarItem>
