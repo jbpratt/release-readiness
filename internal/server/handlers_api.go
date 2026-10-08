@@ -61,24 +61,6 @@ func (s *Server) handleListSnapshots(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, snapshots)
 }
 
-// --- Konflux Releases ---
-
-func (s *Server) handleListKonfluxReleases(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	limit, _ := strconv.Atoi(q.Get("limit"))
-	offset, _ := strconv.Atoi(q.Get("offset"))
-	if limit <= 0 {
-		limit = 50
-	}
-	limit = min(limit, 200)
-	releases, err := s.db.ListKonfluxReleases(r.Context(), q.Get("application"), limit, offset)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, releases)
-}
-
 // --- Releases (version-centric) ---
 
 func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {

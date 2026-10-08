@@ -2,7 +2,6 @@ import type {
 	DashboardConfig,
 	IssueSummary,
 	JiraIssue,
-	KonfluxRelease,
 	ProwRunsResponse,
 	ReadinessResponse,
 	ReleaseOverview,
@@ -29,18 +28,6 @@ export function getConfig(): Promise<DashboardConfig> {
 
 export function getSyncStatus(): Promise<SyncStatus> {
 	return fetchJSON(`${BASE}/sync-status`);
-}
-
-export function listKonfluxReleases(
-	application?: string,
-	limit = 50,
-	offset = 0,
-): Promise<KonfluxRelease[]> {
-	const params = new URLSearchParams();
-	if (application) params.set("application", application);
-	params.set("limit", String(limit));
-	params.set("offset", String(offset));
-	return fetchJSON(`${BASE}/konflux-releases?${params}`);
 }
 
 // --- Release-centric API ---
