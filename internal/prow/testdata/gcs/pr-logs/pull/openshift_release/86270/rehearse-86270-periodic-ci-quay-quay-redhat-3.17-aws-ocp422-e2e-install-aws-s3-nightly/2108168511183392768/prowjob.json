@@ -1,0 +1,503 @@
+{
+	"kind": "ProwJob",
+	"apiVersion": "prow.k8s.io/v1",
+	"metadata": {
+		"name": "6f8a04bc-cc2e-4886-bf9e-58e8c78d6dd1",
+		"namespace": "ci",
+		"uid": "5cefb3ce-3f40-49f4-bc47-e70aedfd49e2",
+		"resourceVersion": "8279073251",
+		"generation": 8,
+		"creationTimestamp": "2026-10-08T12:11:55Z",
+		"labels": {
+			"ci-operator.openshift.io/cloud": "aws",
+			"ci-operator.openshift.io/cloud-cluster-profile": "aws-quay-qe",
+			"ci-operator.openshift.io/variant": "aws-ocp422-e2e-install",
+			"ci.openshift.io/generator": "prowgen",
+			"ci.openshift.io/rehearse": "86270",
+			"ci.openshift.io/rehearse.context": "periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-awsxxx",
+			"created-by-prow": "true",
+			"job-release": "4.22",
+			"pj-rehearse.openshift.io/can-be-rehearsed": "true",
+			"pj-rehearse.openshift.io/source-type": "changedPeriodic",
+			"prow.k8s.io/build-id": "2108168511183392768",
+			"prow.k8s.io/context": "periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-in",
+			"prow.k8s.io/id": "6f8a04bc-cc2e-4886-bf9e-58e8c78d6dd1",
+			"prow.k8s.io/job": "rehearse-86270-periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e",
+			"prow.k8s.io/refs.base_ref": "main",
+			"prow.k8s.io/refs.org": "openshift",
+			"prow.k8s.io/refs.pull": "86270",
+			"prow.k8s.io/refs.repo": "release",
+			"prow.k8s.io/type": "presubmit"
+		},
+		"annotations": {
+			"prow.k8s.io/context": "ci/rehearse/periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly",
+			"prow.k8s.io/job": "rehearse-86270-periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly"
+		},
+		"managedFields": [
+			{
+				"manager": "pj-rehearse",
+				"operation": "Update",
+				"apiVersion": "prow.k8s.io/v1",
+				"time": "2026-10-08T12:11:55Z",
+				"fieldsType": "FieldsV1",
+				"fieldsV1": {
+					"f:metadata": {
+						"f:annotations": {
+							".": {},
+							"f:prow.k8s.io/context": {},
+							"f:prow.k8s.io/job": {}
+						},
+						"f:labels": {
+							".": {},
+							"f:ci-operator.openshift.io/cloud": {},
+							"f:ci-operator.openshift.io/cloud-cluster-profile": {},
+							"f:ci-operator.openshift.io/variant": {},
+							"f:ci.openshift.io/generator": {},
+							"f:ci.openshift.io/rehearse": {},
+							"f:ci.openshift.io/rehearse.context": {},
+							"f:created-by-prow": {},
+							"f:job-release": {},
+							"f:pj-rehearse.openshift.io/can-be-rehearsed": {},
+							"f:pj-rehearse.openshift.io/source-type": {},
+							"f:prow.k8s.io/context": {},
+							"f:prow.k8s.io/job": {},
+							"f:prow.k8s.io/refs.base_ref": {},
+							"f:prow.k8s.io/refs.org": {},
+							"f:prow.k8s.io/refs.pull": {},
+							"f:prow.k8s.io/refs.repo": {},
+							"f:prow.k8s.io/type": {}
+						}
+					},
+					"f:spec": {
+						".": {},
+						"f:agent": {},
+						"f:cluster": {},
+						"f:context": {},
+						"f:decoration_config": {
+							".": {},
+							"f:censor_secrets": {},
+							"f:censoring_options": {
+								".": {},
+								"f:minimum_secret_length": {}
+							},
+							"f:gcs_configuration": {
+								".": {},
+								"f:bucket": {},
+								"f:compress_file_types": {},
+								"f:default_org": {},
+								"f:default_repo": {},
+								"f:job_url_prefix": {},
+								"f:mediaTypes": {
+									".": {},
+									"f:log": {}
+								},
+								"f:path_strategy": {}
+							},
+							"f:gcs_credentials_secret": {},
+							"f:grace_period": {},
+							"f:resources": {
+								".": {},
+								"f:clonerefs": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								},
+								"f:initupload": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								},
+								"f:place_entrypoint": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								},
+								"f:sidecar": {
+									".": {},
+									"f:limits": {
+										".": {},
+										"f:memory": {}
+									},
+									"f:requests": {
+										".": {},
+										"f:cpu": {},
+										"f:memory": {}
+									}
+								}
+							},
+							"f:timeout": {},
+							"f:utility_images": {
+								".": {},
+								"f:clonerefs": {},
+								"f:entrypoint": {},
+								"f:initupload": {},
+								"f:sidecar": {}
+							}
+						},
+						"f:extra_refs": {},
+						"f:job": {},
+						"f:namespace": {},
+						"f:pod_spec": {
+							".": {},
+							"f:containers": {},
+							"f:serviceAccountName": {},
+							"f:volumes": {}
+						},
+						"f:prowjob_defaults": {
+							".": {},
+							"f:tenant_id": {}
+						},
+						"f:refs": {
+							".": {},
+							"f:base_ref": {},
+							"f:base_sha": {},
+							"f:org": {},
+							"f:pulls": {},
+							"f:repo": {}
+						},
+						"f:report": {},
+						"f:rerun_command": {},
+						"f:type": {}
+					},
+					"f:status": {
+						".": {},
+						"f:startTime": {}
+					}
+				}
+			},
+			{
+				"manager": "crier",
+				"operation": "Update",
+				"apiVersion": "prow.k8s.io/v1",
+				"time": "2026-10-08T12:11:59Z",
+				"fieldsType": "FieldsV1",
+				"fieldsV1": {
+					"f:status": {
+						"f:prev_report_states": {
+							".": {},
+							"f:gcsk8sreporter": {},
+							"f:gcsreporter": {},
+							"f:github-reporter": {}
+						}
+					}
+				}
+			},
+			{
+				"manager": "prow-controller-manager",
+				"operation": "Update",
+				"apiVersion": "prow.k8s.io/v1",
+				"time": "2026-10-08T14:47:00Z",
+				"fieldsType": "FieldsV1",
+				"fieldsV1": {
+					"f:metadata": {
+						"f:labels": {
+							"f:prow.k8s.io/build-id": {},
+							"f:prow.k8s.io/id": {}
+						}
+					},
+					"f:status": {
+						"f:build_id": {},
+						"f:completionTime": {},
+						"f:description": {},
+						"f:pendingTime": {},
+						"f:pod_name": {},
+						"f:state": {},
+						"f:url": {}
+					}
+				}
+			}
+		]
+	},
+	"spec": {
+		"type": "presubmit",
+		"agent": "kubernetes",
+		"cluster": "build01",
+		"namespace": "ci",
+		"job": "rehearse-86270-periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly",
+		"refs": {
+			"org": "openshift",
+			"repo": "release",
+			"base_ref": "main",
+			"base_sha": "57ad340572df3dfef6b3312803de895348dc4b13",
+			"pulls": [
+				{
+					"number": 86270,
+					"author": "jbpratt",
+					"sha": "a70bd546da7d88a402c34c652cc6aed31b0e08a3",
+					"title": "NO-ISSUE: ci(quay): add Quay 3.17 / OCP 4.22 AWS S3 weekly periodic",
+					"link": "https://github.com/openshift/release/pull/86270"
+				}
+			]
+		},
+		"extra_refs": [
+			{
+				"org": "quay",
+				"repo": "quay",
+				"base_ref": "redhat-3.17",
+				"workdir": true,
+				"sparse_checkout_files": [
+					"web/Containerfile.playwright"
+				]
+			}
+		],
+		"report": true,
+		"context": "ci/rehearse/periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly",
+		"rerun_command": "/pj-rehearse periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly",
+		"pod_spec": {
+			"volumes": [
+				{
+					"name": "boskos",
+					"secret": {
+						"secretName": "boskos-credentials",
+						"items": [
+							{
+								"key": "credentials",
+								"path": "credentials"
+							}
+						]
+					}
+				},
+				{
+					"name": "ci-pull-credentials",
+					"secret": {
+						"secretName": "ci-pull-credentials"
+					}
+				},
+				{
+					"name": "gsm-config",
+					"configMap": {
+						"name": "gsm-config"
+					}
+				},
+				{
+					"name": "gsm-sa-key",
+					"csi": {
+						"driver": "secrets-store.csi.k8s.io",
+						"readOnly": true,
+						"volumeAttributes": {
+							"secretProviderClass": "ci-operator-sa-key-spc"
+						}
+					}
+				},
+				{
+					"name": "manifest-tool-local-pusher",
+					"secret": {
+						"secretName": "manifest-tool-local-pusher"
+					}
+				},
+				{
+					"name": "pull-secret",
+					"secret": {
+						"secretName": "registry-pull-credentials"
+					}
+				},
+				{
+					"name": "result-aggregator",
+					"secret": {
+						"secretName": "result-aggregator"
+					}
+				}
+			],
+			"containers": [
+				{
+					"name": "",
+					"image": "quay-proxy.ci.openshift.org/openshift/ci:ci_ci-operator_latest",
+					"command": [
+						"ci-operator"
+					],
+					"args": [
+						"--enable-secrets-store-csi-driver=true",
+						"--gcs-upload-secret=/secrets/gcs/service-account.json",
+						"--gsm-config=/etc/gsm-config/gsm-config.yaml",
+						"--gsm-credentials-file=/etc/gsm-credentials/key.json",
+						"--gsm-project-config=/etc/gsm-config/gsm-project-config.yaml",
+						"--image-import-pull-secret=/etc/pull-secret/.dockerconfigjson",
+						"--lease-server-credentials-file=/etc/boskos/credentials",
+						"--report-credentials-file=/etc/report/credentials",
+						"--secret-dir=/secrets/ci-pull-credentials",
+						"--target=aws-s3-nightly"
+					],
+					"ports": [
+						{
+							"name": "http",
+							"containerPort": 8080
+						}
+					],
+					"env": [
+						{
+							"name": "HTTP_SERVER_IP",
+							"valueFrom": {
+								"fieldRef": {
+									"fieldPath": "status.podIP"
+								}
+							}
+						},
+						{
+							"name": "CONFIG_SPEC_GCS_URL",
+							"value": "gs://test-platform-results-public/pj-rehearse/configs/openshift/release/86270/a70bd546da7d88a402c34c652cc6aed31b0e08a3/periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly"
+						}
+					],
+					"resources": {
+						"requests": {
+							"cpu": "10m"
+						}
+					},
+					"volumeMounts": [
+						{
+							"name": "boskos",
+							"readOnly": true,
+							"mountPath": "/etc/boskos"
+						},
+						{
+							"name": "ci-pull-credentials",
+							"readOnly": true,
+							"mountPath": "/secrets/ci-pull-credentials"
+						},
+						{
+							"name": "gcs-credentials",
+							"readOnly": true,
+							"mountPath": "/secrets/gcs"
+						},
+						{
+							"name": "gsm-config",
+							"readOnly": true,
+							"mountPath": "/etc/gsm-config"
+						},
+						{
+							"name": "gsm-sa-key",
+							"readOnly": true,
+							"mountPath": "/etc/gsm-credentials"
+						},
+						{
+							"name": "manifest-tool-local-pusher",
+							"readOnly": true,
+							"mountPath": "/secrets/manifest-tool"
+						},
+						{
+							"name": "pull-secret",
+							"readOnly": true,
+							"mountPath": "/etc/pull-secret"
+						},
+						{
+							"name": "result-aggregator",
+							"readOnly": true,
+							"mountPath": "/etc/report"
+						}
+					],
+					"imagePullPolicy": "Always"
+				}
+			],
+			"serviceAccountName": "ci-operator"
+		},
+		"decoration_config": {
+			"timeout": "8h0m0s",
+			"grace_period": "1h0m0s",
+			"utility_images": {
+				"clonerefs": "us-docker.pkg.dev/k8s-infra-prow/images/clonerefs:v20261007-6ed406f29",
+				"initupload": "us-docker.pkg.dev/k8s-infra-prow/images/initupload:v20261007-6ed406f29",
+				"entrypoint": "us-docker.pkg.dev/k8s-infra-prow/images/entrypoint:v20261007-6ed406f29",
+				"sidecar": "us-docker.pkg.dev/k8s-infra-prow/images/sidecar:v20261007-6ed406f29"
+			},
+			"resources": {
+				"clonerefs": {
+					"limits": {
+						"memory": "3Gi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "500Mi"
+					}
+				},
+				"initupload": {
+					"limits": {
+						"memory": "200Mi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "50Mi"
+					}
+				},
+				"place_entrypoint": {
+					"limits": {
+						"memory": "100Mi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "25Mi"
+					}
+				},
+				"sidecar": {
+					"limits": {
+						"memory": "2Gi"
+					},
+					"requests": {
+						"cpu": "100m",
+						"memory": "250Mi"
+					}
+				}
+			},
+			"gcs_configuration": {
+				"bucket": "test-platform-results-public",
+				"path_strategy": "single",
+				"default_org": "openshift",
+				"default_repo": "origin",
+				"mediaTypes": {
+					"log": "text/plain"
+				},
+				"job_url_prefix": "https://prow.ci.openshift.org/view/",
+				"compress_file_types": [
+					"txt",
+					"log",
+					"json",
+					"tar",
+					"html",
+					"yaml"
+				]
+			},
+			"gcs_credentials_secret": "gce-sa-credentials-gcs-publisher",
+			"censor_secrets": true,
+			"censoring_options": {
+				"minimum_secret_length": 6
+			}
+		},
+		"prowjob_defaults": {
+			"tenant_id": "GlobalDefaultID"
+		}
+	},
+	"status": {
+		"startTime": "2026-10-08T12:11:55Z",
+		"pendingTime": "2026-10-08T12:11:55Z",
+		"completionTime": "2026-10-08T14:47:00Z",
+		"state": "failure",
+		"description": "Job failed.",
+		"url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/pr-logs/pull/openshift_release/86270/rehearse-86270-periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly/2108168511183392768",
+		"pod_name": "6f8a04bc-cc2e-4886-bf9e-58e8c78d6dd1",
+		"build_id": "2108168511183392768",
+		"prev_report_states": {
+			"gcsk8sreporter": "pending",
+			"gcsreporter": "pending",
+			"github-reporter": "pending"
+		}
+	}
+}

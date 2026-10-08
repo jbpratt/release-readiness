@@ -1,0 +1,28 @@
+{
+  "kind": "storage#objects",
+  "prefixes": [
+    "pr-logs/pull/openshift_release/86270/rehearse-86270-periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly/2108233750193115136/"
+  ],
+  "items": [
+    {
+      "kind": "storage#object",
+      "id": "test-platform-results-public/pr-logs/pull/openshift_release/86270/rehearse-86270-periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly/latest-build.txt/1791478683898387",
+      "selfLink": "https://www.googleapis.com/storage/v1/b/test-platform-results-public/o/pr-logs%2Fpull%2Fopenshift_release%2F86270%2Frehearse-86270-periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly%2Flatest-build.txt",
+      "mediaLink": "https://storage.googleapis.com/download/storage/v1/b/test-platform-results-public/o/pr-logs%2Fpull%2Fopenshift_release%2F86270%2Frehearse-86270-periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly%2Flatest-build.txt?generation=1791478683898387&alt=media",
+      "name": "pr-logs/pull/openshift_release/86270/rehearse-86270-periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly/latest-build.txt",
+      "bucket": "test-platform-results-public",
+      "generation": "1791478683898387",
+      "metageneration": "1",
+      "contentType": "text/plain; charset=utf-8",
+      "storageClass": "STANDARD",
+      "size": "19",
+      "md5Hash": "6C03ElGF8HQytRYWswvrVQ==",
+      "crc32c": "jqPpcQ==",
+      "etag": "CJOkzpTyqpcDEAE=",
+      "timeCreated": "2026-10-08T16:58:03.907Z",
+      "updated": "2026-10-08T16:58:03.907Z",
+      "timeStorageClassUpdated": "2026-10-08T16:58:03.907Z",
+      "timeFinalized": "2026-10-08T16:58:03.907Z"
+    }
+  ]
+}

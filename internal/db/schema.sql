@@ -89,3 +89,42 @@ CREATE TABLE IF NOT EXISTS art_builds (
     pipeline_url  TEXT NOT NULL DEFAULT '',
     checked_at    TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS prow_runs (
+    job_name        TEXT NOT NULL,
+    build_id        TEXT NOT NULL,
+    kind            TEXT NOT NULL,
+    release_version TEXT NOT NULL,
+    state           TEXT NOT NULL DEFAULT '',
+    started_at      TEXT NOT NULL DEFAULT '',
+    completed_at    TEXT NOT NULL DEFAULT '',
+    prow_url        TEXT NOT NULL DEFAULT '',
+    artifact_state  TEXT NOT NULL DEFAULT 'missing',
+    catalog_ref     TEXT NOT NULL DEFAULT '',
+    fetched_at      TEXT NOT NULL,
+    UNIQUE(job_name, build_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_prow_runs_release_started ON prow_runs(release_version, started_at);
+
+CREATE TABLE IF NOT EXISTS prow_run_images (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_name      TEXT NOT NULL,
+    build_id      TEXT NOT NULL,
+    role          TEXT NOT NULL,
+    source        TEXT NOT NULL DEFAULT '',
+    requested_ref TEXT NOT NULL DEFAULT '',
+    digest        TEXT NOT NULL DEFAULT '',
+    image_id      TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (job_name, build_id) REFERENCES prow_runs(job_name, build_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_prow_run_images_run ON prow_run_images(job_name, build_id);
+CREATE INDEX IF NOT EXISTS idx_prow_run_images_digest ON prow_run_images(digest);
+
+CREATE TABLE IF NOT EXISTS prow_syncs (
+    job_name             TEXT PRIMARY KEY,
+    release_version      TEXT NOT NULL,
+    interval_seconds     INTEGER NOT NULL,
+    last_successful_sync TEXT NOT NULL
+);

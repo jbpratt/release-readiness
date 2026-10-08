@@ -1,0 +1,173 @@
+{
+  "build_id": "2108168511183392768",
+  "captured_at": "2026-10-08T14:40:00Z",
+  "catalog": {
+    "channel": "stable-3.17",
+    "requested_ref": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc:quay-3.17__v4.22__quay-rhel9-operator",
+    "resolved_ref": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:16703125878630f03d1781454b1da8212db6127c822f95c2cfe04e805210bb0d"
+  },
+  "complete": true,
+  "images": [
+    {
+      "container": "clair-app",
+      "image_id": "registry.redhat.io/quay/clair-rhel9@sha256:a227858e891a176be8b46cd90d2f4392e5fdccc46dbfc30567cd8c10049e36d2",
+      "pod": "quay-clair-app-56c6774885-8t5qt",
+      "requested_ref": "registry.redhat.io/quay/clair-rhel9@sha256:da60da674707e74aad96c1213a98025155870d53a19aa277fb45edeff38874d5",
+      "role": "clair",
+      "source": "pod"
+    },
+    {
+      "container": "clair-app",
+      "image_id": "registry.redhat.io/quay/clair-rhel9@sha256:a227858e891a176be8b46cd90d2f4392e5fdccc46dbfc30567cd8c10049e36d2",
+      "pod": "quay-clair-app-56c6774885-nclnj",
+      "requested_ref": "registry.redhat.io/quay/clair-rhel9@sha256:da60da674707e74aad96c1213a98025155870d53a19aa277fb45edeff38874d5",
+      "role": "clair",
+      "source": "pod"
+    },
+    {
+      "container": "clair-postgres",
+      "image_id": "registry.redhat.io/rhel9/postgresql-15@sha256:21c81483ff00cd27b3c4eae4ad0bd53e0205096815408072d850df5e0480fdd4",
+      "pod": "quay-clair-postgres-6b7b4455c8-b8tjq",
+      "requested_ref": "registry.redhat.io/rhel9/postgresql-15@sha256:689960f104c43cb81a87a05392e38d487e9baeac655629b1ddb9f0efe3cb376b",
+      "role": "clair-postgres",
+      "source": "pod"
+    },
+    {
+      "container": "quay-operator",
+      "image_id": "registry.redhat.io/quay/quay-rhel9-operator@sha256:b2b2db11f2969408665ec1205530d3ab314af0e2301a3c7b6b90b7a7a9b34da0",
+      "pod": "quay-operator-tng-574cc596df-2qrj5",
+      "requested_ref": "registry.redhat.io/quay/quay-rhel9-operator@sha256:dbdcdbe7298c427feb68b268110164f38235e9965cc1d2b4a8a48bc074d59a25",
+      "role": "quay-operator",
+      "source": "pod"
+    },
+    {
+      "container": "quay-app",
+      "image_id": "registry.redhat.io/quay/quay-rhel9@sha256:e0716d7b2f783366224c95db83a8f2eec7ea44ac1738e7a63190292ed0733877",
+      "pod": "quay-quay-app-59f8d9b4bd-clflb",
+      "requested_ref": "registry.redhat.io/quay/quay-rhel9@sha256:e0716d7b2f783366224c95db83a8f2eec7ea44ac1738e7a63190292ed0733877",
+      "role": "quay",
+      "source": "pod"
+    },
+    {
+      "container": "quay-app",
+      "image_id": "registry.redhat.io/quay/quay-rhel9@sha256:e0716d7b2f783366224c95db83a8f2eec7ea44ac1738e7a63190292ed0733877",
+      "pod": "quay-quay-app-59f8d9b4bd-rggs5",
+      "requested_ref": "registry.redhat.io/quay/quay-rhel9@sha256:e0716d7b2f783366224c95db83a8f2eec7ea44ac1738e7a63190292ed0733877",
+      "role": "quay",
+      "source": "pod"
+    },
+    {
+      "container": "quay-app-upgrade",
+      "image_id": "registry.redhat.io/quay/quay-rhel9@sha256:e0716d7b2f783366224c95db83a8f2eec7ea44ac1738e7a63190292ed0733877",
+      "pod": "quay-quay-app-upgrade-6rnls",
+      "requested_ref": "registry.redhat.io/quay/quay-rhel9@sha256:e0716d7b2f783366224c95db83a8f2eec7ea44ac1738e7a63190292ed0733877",
+      "role": "quay",
+      "source": "pod"
+    },
+    {
+      "container": "postgres",
+      "image_id": "registry.redhat.io/rhel9/postgresql-13@sha256:6746d84554eb72f1e70ae13d2de1de140065840c55c6cf756cd8502ef9136df5",
+      "pod": "quay-quay-database-64b97cb9fb-kd6h7",
+      "requested_ref": "registry.redhat.io/rhel9/postgresql-13@sha256:6746d84554eb72f1e70ae13d2de1de140065840c55c6cf756cd8502ef9136df5",
+      "role": "postgres",
+      "source": "pod"
+    },
+    {
+      "container": "quay-mirror",
+      "image_id": "registry.redhat.io/quay/quay-rhel9@sha256:e0716d7b2f783366224c95db83a8f2eec7ea44ac1738e7a63190292ed0733877",
+      "pod": "quay-quay-mirror-7575dc8846-gf7k5",
+      "requested_ref": "registry.redhat.io/quay/quay-rhel9@sha256:e0716d7b2f783366224c95db83a8f2eec7ea44ac1738e7a63190292ed0733877",
+      "role": "quay",
+      "source": "pod"
+    },
+    {
+      "container": "quay-mirror",
+      "image_id": "registry.redhat.io/quay/quay-rhel9@sha256:e0716d7b2f783366224c95db83a8f2eec7ea44ac1738e7a63190292ed0733877",
+      "pod": "quay-quay-mirror-7575dc8846-q6tz6",
+      "requested_ref": "registry.redhat.io/quay/quay-rhel9@sha256:e0716d7b2f783366224c95db83a8f2eec7ea44ac1738e7a63190292ed0733877",
+      "role": "quay",
+      "source": "pod"
+    },
+    {
+      "container": "redis-master",
+      "image_id": "registry.redhat.io/rhel9/redis-7@sha256:3a27a8dac47dd2dce166a8f90105d8bb575744f82612f60b47413e51aa66201d",
+      "pod": "quay-quay-redis-5cddf55fc9-7v672",
+      "requested_ref": "registry.redhat.io/rhel9/redis-7@sha256:3a27a8dac47dd2dce166a8f90105d8bb575744f82612f60b47413e51aa66201d",
+      "role": "redis",
+      "source": "pod"
+    },
+    {
+      "container": null,
+      "image_id": null,
+      "pod": null,
+      "requested_ref": "registry.redhat.io/quay/clair-rhel9@sha256:da60da674707e74aad96c1213a98025155870d53a19aa277fb45edeff38874d5",
+      "role": "clair",
+      "source": "csv-related"
+    },
+    {
+      "container": null,
+      "image_id": null,
+      "pod": null,
+      "requested_ref": "registry.redhat.io/quay/quay-builder-qemu-rhcos-rhel8@sha256:62be88a305b87d5b3c1529c7c7e4ab89285beb3dae623587e7818ddc338384e6",
+      "role": "builder-qemu",
+      "source": "csv-related"
+    },
+    {
+      "container": null,
+      "image_id": null,
+      "pod": null,
+      "requested_ref": "registry.redhat.io/quay/quay-builder-rhel9@sha256:fd39b1542cf46a782addb588fe95dbea1dadb127ddd94971496a72240cbe1755",
+      "role": "builder",
+      "source": "csv-related"
+    },
+    {
+      "container": null,
+      "image_id": null,
+      "pod": null,
+      "requested_ref": "registry.redhat.io/quay/quay-rhel9-operator@sha256:dbdcdbe7298c427feb68b268110164f38235e9965cc1d2b4a8a48bc074d59a25",
+      "role": "quay-operator",
+      "source": "csv-related"
+    },
+    {
+      "container": null,
+      "image_id": null,
+      "pod": null,
+      "requested_ref": "registry.redhat.io/quay/quay-rhel9@sha256:e0716d7b2f783366224c95db83a8f2eec7ea44ac1738e7a63190292ed0733877",
+      "role": "quay",
+      "source": "csv-related"
+    },
+    {
+      "container": null,
+      "image_id": null,
+      "pod": null,
+      "requested_ref": "registry.redhat.io/rhel9/postgresql-13@sha256:6746d84554eb72f1e70ae13d2de1de140065840c55c6cf756cd8502ef9136df5",
+      "role": "postgres",
+      "source": "csv-related"
+    },
+    {
+      "container": null,
+      "image_id": null,
+      "pod": null,
+      "requested_ref": "registry.redhat.io/rhel9/postgresql-15@sha256:689960f104c43cb81a87a05392e38d487e9baeac655629b1ddb9f0efe3cb376b",
+      "role": "clair-postgres",
+      "source": "csv-related"
+    },
+    {
+      "container": null,
+      "image_id": null,
+      "pod": null,
+      "requested_ref": "registry.redhat.io/rhel9/redis-7@sha256:3a27a8dac47dd2dce166a8f90105d8bb575744f82612f60b47413e51aa66201d",
+      "role": "redis",
+      "source": "csv-related"
+    }
+  ],
+  "job_name": "rehearse-86270-periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly",
+  "missing": [],
+  "operator": {
+    "bundle_ref": "registry.redhat.io/quay/quay-operator-bundle@sha256:9dbd39a4c49b8879ae5290a22ff9c139168256d91950a956bc62097b6e978de0",
+    "csv": "quay-operator.v3.17.6"
+  },
+  "provenance": [],
+  "quay_version": "v3.17.6",
+  "schema_version": 1
+}
