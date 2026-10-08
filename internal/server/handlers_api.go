@@ -328,9 +328,43 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 			ComponentCount: len(components.Components),
 			LatestBuild:    components.AsOf,
 		}
+		product, version, _ := strings.Cut(rel.Name, "-v")
+		switch {
+		case s.shipped.Has(product, version):
+			overviews[i].Shipped, overviews[i].ShippedSource = true, "catalog"
+		case rel.Released:
+			overviews[i].Shipped, overviews[i].ShippedSource = true, "jira"
+		}
 	}
+	markNextInStream(overviews)
 
 	writeJSON(w, http.StatusOK, overviews)
+}
+
+// markNextInStream flags the lowest unshipped z of each product and
+// major.minor, e.g. quay 3.18 for quay-v3.18.2. A name that does not parse
+// is a stream of its own.
+func markNextInStream(overviews []model.ReleaseOverview) {
+	type candidate struct{ i, z int }
+	next := make(map[string]candidate)
+	for i, ov := range overviews {
+		if ov.Shipped {
+			continue
+		}
+		stream, z := ov.Release.Name, 0
+		product, version, _ := strings.Cut(ov.Release.Name, "-v")
+		if parts := strings.Split(version, "."); len(parts) == 3 {
+			if n, err := strconv.Atoi(parts[2]); err == nil {
+				stream, z = product+" "+parts[0]+"."+parts[1], n
+			}
+		}
+		if c, ok := next[stream]; !ok || z < c.z {
+			next[stream] = candidate{i, z}
+		}
+	}
+	for _, c := range next {
+		overviews[c.i].NextInStream = true
+	}
 }
 
 // computeReadiness derives a readiness signal from release metadata,

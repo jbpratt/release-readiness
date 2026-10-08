@@ -18,6 +18,7 @@ import {
 	ProgressMeasureLocation,
 	SearchInput,
 	Spinner,
+	Switch,
 	Title,
 	ToggleGroup,
 	ToggleGroupItem,
@@ -54,6 +55,7 @@ export default function ReleasesOverview() {
 	const query = searchParams.get("q") ?? "";
 	const signalFilter = (searchParams.get("signal") ?? "all") as SignalFilter;
 	const viewMode = (searchParams.get("view") ?? "compact") as ViewMode;
+	const showAll = searchParams.get("all") === "1";
 
 	const config = useConfig();
 
@@ -98,7 +100,11 @@ export default function ReleasesOverview() {
 	const overviewList = [...(overviews ?? [])].sort((a, b) =>
 		b.release.name.localeCompare(a.release.name, undefined, { numeric: true }),
 	);
-	const active = overviewList.filter((ov) => !ov.release.released);
+	// By default only the next z-release of each stream; the rest stay
+	// behind the "show all" switch.
+	const active = overviewList.filter(
+		(ov) => !ov.release.released && (showAll || ov.next_in_stream),
+	);
 	const released = overviewList.filter((ov) => ov.release.released);
 
 	if (overviewList.length === 0) {
@@ -159,6 +165,14 @@ export default function ReleasesOverview() {
 							))}
 						</ToggleGroup>
 					</ToolbarItem>
+					<ToolbarItem>
+						<Switch
+							id="show-all-releases"
+							label="Show all open release tickets"
+							isChecked={showAll}
+							onChange={(_e, checked) => setParam("all", checked ? "1" : "")}
+						/>
+					</ToolbarItem>
 					<ToolbarGroup align={{ default: "alignEnd" }}>
 						<ToolbarItem>
 							<ToggleGroup aria-label="View mode">
@@ -189,6 +203,7 @@ export default function ReleasesOverview() {
 						readinessSignal={ov.readiness}
 						componentCount={ov.component_count}
 						latestBuild={ov.latest_build}
+						shipped={ov.shipped}
 						viewMode={viewMode}
 						jiraBaseUrl={config?.jira_base_url}
 					/>
@@ -211,6 +226,7 @@ export default function ReleasesOverview() {
 								readinessSignal={ov.readiness}
 								componentCount={ov.component_count}
 								latestBuild={ov.latest_build}
+								shipped={ov.shipped}
 								viewMode={viewMode}
 								jiraBaseUrl={config?.jira_base_url}
 							/>
@@ -228,6 +244,7 @@ function ReleaseCard({
 	readinessSignal,
 	componentCount,
 	latestBuild,
+	shipped,
 	viewMode,
 	jiraBaseUrl,
 }: {
@@ -236,6 +253,7 @@ function ReleaseCard({
 	readinessSignal?: ReadinessResponse;
 	componentCount: number;
 	latestBuild?: string;
+	shipped: boolean;
 	viewMode: ViewMode;
 	jiraBaseUrl?: string;
 }) {
@@ -288,7 +306,14 @@ function ReleaseCard({
 					justifyContent={{ default: "justifyContentSpaceBetween" }}
 					alignItems={{ default: "alignItemsCenter" }}
 				>
-					<FlexItem>{displayName}</FlexItem>
+					<FlexItem>
+						{displayName}
+						{shipped && !release.released && (
+							<Label isCompact color="blue" style={{ marginLeft: "0.5rem" }}>
+								Shipped, ticket still open
+							</Label>
+						)}
+					</FlexItem>
 					<FlexItem>
 						{readinessSignal && (
 							<Label

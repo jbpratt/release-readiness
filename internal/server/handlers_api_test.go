@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/quay/release-readiness/internal/artbuild"
+	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
 	"github.com/quay/release-readiness/internal/model"
 )
@@ -27,7 +28,7 @@ func setupTestServer(t *testing.T) *Server {
 		_ = database.Close()
 		_ = os.Remove(dbPath)
 	})
-	return New(database, ":0", "https://redhat.atlassian.net", "PROJQUAY", "https://art.example", slog.Default())
+	return New(database, ":0", "https://redhat.atlassian.net", "PROJQUAY", "https://art.example", nil, slog.Default())
 }
 
 func TestHealthEndpoint(t *testing.T) {
@@ -506,5 +507,95 @@ func TestListKonfluxReleases(t *testing.T) {
 	}
 	if len(releases) != 2 || releases[0].Name != "fbc-r3" || releases[1].Name != "fbc-r2" {
 		t.Errorf("releases: got %+v, want fbc-r3, fbc-r2", releases)
+	}
+}
+
+func TestMarkNextInStream(t *testing.T) {
+	type row struct {
+		name    string
+		shipped bool
+	}
+	for _, tc := range []struct {
+		desc string
+		rows []row
+		want []string
+	}{
+		{"lowest z wins, double-digit z", []row{{"quay-v3.15.10", false}, {"quay-v3.15.9", false}}, []string{"quay-v3.15.9"}},
+		{"shipped z is skipped", []row{{"quay-v3.17.5", true}, {"quay-v3.17.7", false}, {"quay-v3.17.6", false}}, []string{"quay-v3.17.6"}},
+		{"all shipped shows nothing", []row{{"quay-v3.9.27", true}}, nil},
+		{"OMR streams by major.minor", []row{{"omr-v2.0.13", false}, {"omr-v3.0.0", false}, {"omr-v3.0.1", false}}, []string{"omr-v2.0.13", "omr-v3.0.0"}},
+		{"products do not share a stream", []row{{"quay-v3.0.2", false}, {"omr-v3.0.1", false}}, []string{"quay-v3.0.2", "omr-v3.0.1"}},
+		{"unparsed name is its own stream", []row{{"3.16.3", false}, {"3.16.4", false}}, []string{"3.16.3", "3.16.4"}},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			overviews := make([]model.ReleaseOverview, len(tc.rows))
+			for i, r := range tc.rows {
+				overviews[i] = model.ReleaseOverview{Release: model.ReleaseVersion{Name: r.name}, Shipped: r.shipped}
+			}
+			markNextInStream(overviews)
+			var got []string
+			for _, ov := range overviews {
+				if ov.NextInStream {
+					got = append(got, ov.Release.Name)
+				}
+			}
+			slices.Sort(got)
+			slices.Sort(tc.want)
+			if !slices.Equal(got, tc.want) {
+				t.Errorf("next in stream: got %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestReleasesOverviewShipped(t *testing.T) {
+	srv := setupTestServer(t)
+	ctx := t.Context()
+	cat := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"total":1,"data":[{"repositories":[{"published":true,"tags":[{"name":"v3.17.5"}]}]}]}`))
+	}))
+	defer cat.Close()
+	srv.shipped = catalog.NewShipped(catalog.NewClient(cat.URL, cat.Client()), slog.Default())
+	srv.shipped.Refresh(ctx)
+
+	for _, rv := range []model.ReleaseVersion{
+		{Name: "quay-v3.17.5", KonfluxApplication: "quay-3-17"},
+		{Name: "quay-v3.17.6", KonfluxApplication: "quay-3-17"},
+		{Name: "quay-v3.18.0", KonfluxApplication: "quay-3-18", Released: true},
+		{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"},
+	} {
+		if err := srv.db.UpsertReleaseVersion(ctx, &rv); err != nil {
+			t.Fatalf("upsert release: %v", err)
+		}
+	}
+
+	w := httptest.NewRecorder()
+	srv.http.Handler.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/releases/overview", nil))
+	if w.Code != http.StatusOK {
+		t.Fatalf("overview: got %d, body: %s", w.Code, w.Body.String())
+	}
+	var overviews []model.ReleaseOverview
+	if err := json.NewDecoder(w.Body).Decode(&overviews); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	type flags struct {
+		shipped bool
+		source  string
+		next    bool
+	}
+	want := map[string]flags{
+		"quay-v3.17.5": {true, "catalog", false},
+		"quay-v3.17.6": {false, "", true},
+		"quay-v3.18.0": {true, "jira", false},
+		"quay-v3.18.1": {false, "", true},
+	}
+	for _, ov := range overviews {
+		got := flags{ov.Shipped, ov.ShippedSource, ov.NextInStream}
+		if got != want[ov.Release.Name] {
+			t.Errorf("%s: got %+v, want %+v", ov.Release.Name, got, want[ov.Release.Name])
+		}
+	}
+	if len(overviews) != len(want) {
+		t.Errorf("overviews: got %d, want %d", len(overviews), len(want))
 	}
 }
