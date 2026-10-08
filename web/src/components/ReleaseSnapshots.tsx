@@ -1,6 +1,7 @@
 import {
 	Card,
 	CardBody,
+	CardHeader,
 	CardTitle,
 	Content,
 	EmptyState,
@@ -34,7 +35,11 @@ import type {
 } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { relative } from "../utils/format";
-import { type SnapshotFilter, snapshotFilters } from "../utils/releaseApps";
+import {
+	latestReleased,
+	type SnapshotFilter,
+	snapshotFilters,
+} from "../utils/releaseApps";
 import { UnlinkedProwRuns } from "./ProwRuns";
 import ReleasedLabel from "./ReleasedLabel";
 import SnapshotComponentsTable from "./SnapshotComponentsTable";
@@ -107,45 +112,120 @@ function LatestSnapshot({
 	version: string;
 	state: LatestSnapshotState;
 }) {
-	const { application, snapshot: latest, loading, error } = state;
+	const { application, snapshot: latest } = state;
+	const [view, setView] = useState<"unreleased" | "released">("unreleased");
+	const releasedList = useCachedFetch(
+		`releasedSnapshots:${version}:${application}`,
+		() =>
+			listReleaseSnapshots(version, {
+				application,
+				withRelease: true,
+				limit: 100,
+				offset: 0,
+			}),
+	);
+	const released =
+		releasedList.data && latestReleased(releasedList.data.snapshots);
+	// Unreleased is the newest Snapshot when it postdates the released one.
+	const unreleased =
+		latest && (!released || latest.created_at > released.created_at)
+			? latest
+			: undefined;
+	const loading = state.loading || (!releasedList.data && !releasedList.error);
+	const error = state.error ?? releasedList.error;
 
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<CardTitle>Latest snapshot</CardTitle>
+			<CardHeader
+				actions={{
+					hasNoOffset: true,
+					actions: (
+						<ToggleGroup aria-label="Snapshot" isCompact>
+							<ToggleGroupItem
+								text="Latest unreleased"
+								isSelected={view === "unreleased"}
+								onChange={() => setView("unreleased")}
+							/>
+							<ToggleGroupItem
+								text="Latest released"
+								isSelected={view === "released"}
+								onChange={() => setView("released")}
+							/>
+						</ToggleGroup>
+					),
+				}}
+			>
+				<CardTitle>Latest snapshot</CardTitle>
+			</CardHeader>
 			<CardBody>
 				{loading ? (
 					<Spinner size="md" />
 				) : error ? (
 					<Content component="p">{error.message}</Content>
+				) : view === "released" ? (
+					released ? (
+						<SnapshotSummary version={version} snapshot={released} />
+					) : (
+						<EmptyState
+							titleText="No released snapshot"
+							headingLevel="h4"
+							variant="xs"
+						>
+							<EmptyStateBody>
+								No Konflux Release of {application || "this release"} has
+								succeeded yet.
+							</EmptyStateBody>
+						</EmptyState>
+					)
 				) : !latest ? (
 					<Content component="p">
 						No snapshots of {application || "this release"} yet.
 					</Content>
+				) : !unreleased ? (
+					<EmptyState
+						titleText="Latest snapshot is already released"
+						headingLevel="h4"
+						variant="xs"
+					/>
 				) : (
-					<>
-						<Flex
-							alignItems={{ default: "alignItemsCenter" }}
-							style={{ marginBottom: "0.5rem" }}
-						>
-							<FlexItem>
-								<code>{latest.name}</code>
-							</FlexItem>
-							<FlexItem>
-								<CreatedAt iso={latest.created_at} />
-							</FlexItem>
-							<FlexItem>
-								<SnapshotReleaseLabel releases={latest.releases} />
-							</FlexItem>
-						</Flex>
-						<SnapshotDetail
-							version={version}
-							snapshot={latest}
-							fetched={state.detail}
-						/>
-					</>
+					<SnapshotSummary
+						version={version}
+						snapshot={unreleased}
+						fetched={state.detail}
+					/>
 				)}
 			</CardBody>
 		</Card>
+	);
+}
+
+function SnapshotSummary({
+	version,
+	snapshot,
+	fetched,
+}: {
+	version: string;
+	snapshot: ReleaseSnapshot;
+	fetched?: LatestSnapshotState["detail"];
+}) {
+	return (
+		<>
+			<Flex
+				alignItems={{ default: "alignItemsCenter" }}
+				style={{ marginBottom: "0.5rem" }}
+			>
+				<FlexItem>
+					<code>{snapshot.name}</code>
+				</FlexItem>
+				<FlexItem>
+					<CreatedAt iso={snapshot.created_at} />
+				</FlexItem>
+				<FlexItem>
+					<SnapshotReleaseLabel releases={snapshot.releases} />
+				</FlexItem>
+			</Flex>
+			<SnapshotDetail version={version} snapshot={snapshot} fetched={fetched} />
+		</>
 	);
 }
 
