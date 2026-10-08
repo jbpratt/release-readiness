@@ -2,10 +2,12 @@ package kube
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -16,7 +18,9 @@ import (
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 
 	"github.com/quay/release-readiness/internal/db"
+	"github.com/quay/release-readiness/internal/fbc"
 	"github.com/quay/release-readiness/internal/model"
+	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
 const testNamespace = "art-quay-tenant"
@@ -181,6 +185,85 @@ func TestSyncOnce(t *testing.T) {
 		if len(snaps) != 1 {
 			t.Errorf("%s: %d snapshots after second sync, want 1", app, len(snaps))
 		}
+	}
+}
+
+// fakeCatalogs serves bundles per image, fails images without any, and
+// records each read.
+type fakeCatalogs struct {
+	bundles map[string][]fbc.Bundle
+	reads   []string
+}
+
+func (f *fakeCatalogs) Bundles(_ context.Context, image string) ([]fbc.Bundle, error) {
+	f.reads = append(f.reads, image)
+	if b, ok := f.bundles[image]; ok {
+		return b, nil
+	}
+	return nil, errors.New("401 Unauthorized")
+}
+
+func TestSyncCatalogs(t *testing.T) {
+	ctx := context.Background()
+	database, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	const (
+		old    = "quay.io/x/art-fbc@sha256:01d"
+		newest = "quay.io/x/art-fbc@sha256:2e3"
+		cso    = "quay.io/x/art-fbc@sha256:c50"
+		failed = "quay.io/x/art-fbc@sha256:bad"
+	)
+	t0 := time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC)
+	operator := func(app, image string) map[string]any {
+		return component(app+"-quay-operator", image, "https://github.com/quay/quay-operator", "abc")
+	}
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{snapshotGVR: "SnapshotList", releaseGVR: "ReleaseList"},
+		snapshot("fbc-3-18-old", "fbc-quay-3-18", t0, operator("fbc-quay-3-18", old)),
+		snapshot("fbc-3-18-new", "fbc-quay-3-18", t0.Add(time.Hour), operator("fbc-quay-3-18", newest)),
+		// The newest FBC Snapshot overall is another operator's.
+		snapshot("fbc-3-18-cso", "fbc-quay-3-18", t0.Add(2*time.Hour),
+			component("fbc-quay-3-18-container-security-operator", cso, "", "")),
+		snapshot("fbc-3-17-new", "fbc-quay-3-17", t0, operator("fbc-quay-3-17", failed)),
+	)
+	bundle := fbc.Bundle{Package: fbc.Package, Channel: "stable-3.18", Name: "quay-operator.v3.18.1",
+		Image: "registry.redhat.io/quay/quay-operator-bundle@sha256:b24", Digest: "sha256:b24"}
+	catalogs := &fakeCatalogs{bundles: map[string][]fbc.Bundle{newest: {bundle}}}
+	withTx := func(ctx context.Context, fn func(Store) error) error {
+		return database.InTx(ctx, func(tx *db.DB) error { return fn(tx) })
+	}
+	status := syncstatus.New()
+	s := NewSyncer(client, testNamespace, database, withTx, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	s.Catalogs, s.CatalogStatus = catalogs, status.Track("fbc-catalogs", 0)
+
+	s.SyncOnce(ctx)
+	if want := []string{newest, failed}; !slices.Equal(catalogs.reads, want) {
+		t.Errorf("reads = %v, want %v", catalogs.reads, want)
+	}
+	got, err := database.LatestFBCCatalog(ctx, "fbc-quay-3-18", "fbc-quay-3-18-quay-operator", "stable-3.18")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Snapshot != "fbc-3-18-new" || got.State != fbc.StateParsed || !slices.Equal(got.Bundles, []fbc.Bundle{bundle}) {
+		t.Errorf("3.18 catalog = %+v", got)
+	}
+	if got, _ := database.LatestFBCCatalog(ctx, "fbc-quay-3-17", "fbc-quay-3-17-quay-operator", "stable-3.17"); got.State != fbc.StateFailed || len(got.Bundles) != 0 {
+		t.Errorf("3.17 catalog = %+v, want failed", got)
+	}
+
+	// Both are cached, the failure until its retry is due, and the failure
+	// stays reported while nothing is read.
+	catalogs.reads = nil
+	s.SyncOnce(ctx)
+	if len(catalogs.reads) != 0 {
+		t.Errorf("second pass reads = %v, want none", catalogs.reads)
+	}
+	if p := status.Problems(time.Now()); len(p) != 1 || p[0].Source != "fbc-catalogs" {
+		t.Errorf("problems = %+v, want fbc-catalogs failing", p)
 	}
 }
 

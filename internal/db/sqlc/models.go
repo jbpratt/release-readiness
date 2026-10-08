@@ -36,6 +36,21 @@ type Component struct {
 	CreatedAt   string
 }
 
+type FbcCatalog struct {
+	Digest    string
+	State     string
+	CheckedAt string
+}
+
+type FbcCatalogBundle struct {
+	CatalogDigest string
+	Package       string
+	Channel       string
+	BundleName    string
+	BundleRef     string
+	BundleDigest  string
+}
+
 type JiraIssue struct {
 	ID         int64
 	Key        string

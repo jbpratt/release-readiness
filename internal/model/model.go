@@ -106,6 +106,19 @@ type ReleaseSnapshot struct {
 	Missing        bool             `json:"missing,omitempty"`
 	Releases       []KonfluxRelease `json:"releases,omitempty"`
 	Components     []SnapshotImage  `json:"components,omitempty"`
+	FBCCatalog     *FBCCatalog      `json:"fbc_catalog,omitempty"`
+}
+
+// FBCCatalog compares a Quay Snapshot's quay-operator bundle with the
+// stable-X.Y channel of the newest quay-operator FBC catalog of its release.
+// Status is "current" when the channel references the bundle's digest,
+// "behind" when a fully read channel of digest refs does not, else "unknown".
+type FBCCatalog struct {
+	Status              string `json:"status"`
+	CatalogSnapshot     string `json:"catalog_snapshot"`
+	CatalogImage        string `json:"catalog_image"`
+	CatalogBundleImage  string `json:"catalog_bundle_image"`
+	SnapshotBundleImage string `json:"snapshot_bundle_image"`
 }
 
 // SnapshotImage is one component image exactly as a Snapshot records it.

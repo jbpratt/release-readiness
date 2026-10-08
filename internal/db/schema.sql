@@ -144,3 +144,23 @@ CREATE TABLE IF NOT EXISTS art_pending_builds (
     checked_at      TEXT NOT NULL,
     PRIMARY KEY (group_name, release_version, component)
 );
+
+-- File-based catalog read from an FBC image, keyed by its sha256:... digest.
+-- A parsed row is immutable, even with no bundles; a failed one is retried.
+CREATE TABLE IF NOT EXISTS fbc_catalogs (
+    digest     TEXT PRIMARY KEY,
+    state      TEXT NOT NULL CHECK (state IN ('parsed', 'failed')),
+    checked_at TEXT NOT NULL
+);
+
+-- Channel entries of a parsed catalog with the bundle image each names.
+-- bundle_digest is empty unless bundle_ref is pinned by sha256 digest.
+CREATE TABLE IF NOT EXISTS fbc_catalog_bundles (
+    catalog_digest TEXT NOT NULL,
+    package        TEXT NOT NULL,
+    channel        TEXT NOT NULL,
+    bundle_name    TEXT NOT NULL,
+    bundle_ref     TEXT NOT NULL,
+    bundle_digest  TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (catalog_digest, channel, bundle_name)
+);
