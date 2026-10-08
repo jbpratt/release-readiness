@@ -19,85 +19,11 @@ type ComponentRecord struct {
 }
 
 type SnapshotRecord struct {
-	ID                   int64                 `json:"id"`
-	Application          string                `json:"application"`
-	Name                 string                `json:"name"`
-	TestsPassed          bool                  `json:"tests_passed"`
-	HasTests             bool                  `json:"has_tests"`
-	CreatedAt            time.Time             `json:"created_at"`
-	Components           []ComponentRecord     `json:"components,omitempty"`
-	TestSuites           []TestSuite           `json:"test_suites,omitempty"`
-	VulnerabilityReports []VulnerabilityReport `json:"vulnerability_reports,omitempty"`
-}
-
-type TestSuite struct {
-	ID          int64      `json:"id"`
-	SnapshotID  int64      `json:"snapshot_id"`
-	Name        string     `json:"name"`
-	Status      string     `json:"status"`
-	PipelineRun string     `json:"pipeline_run"`
-	ToolName    string     `json:"tool_name"`
-	ToolVersion string     `json:"tool_version"`
-	Tests       int        `json:"tests"`
-	Passed      int        `json:"passed"`
-	Failed      int        `json:"failed"`
-	Skipped     int        `json:"skipped"`
-	Pending     int        `json:"pending"`
-	Other       int        `json:"other"`
-	Flaky       int        `json:"flaky"`
-	StartTime   int64      `json:"start_time"`
-	StopTime    int64      `json:"stop_time"`
-	DurationMs  int64      `json:"duration_ms"`
-	CreatedAt   time.Time  `json:"created_at"`
-	TestCases   []TestCase `json:"test_cases,omitempty"`
-}
-
-type TestSuiteMeta struct {
-	ID         int64  `json:"id"`
-	SnapshotID int64  `json:"snapshot_id"`
-	Name       string `json:"name"`
-}
-
-type TestCase struct {
-	ID          int64   `json:"id"`
-	TestSuiteID int64   `json:"test_suite_id"`
-	Name        string  `json:"name"`
-	Status      string  `json:"status"`
-	DurationMs  float64 `json:"duration_ms"`
-	Message     string  `json:"message,omitempty"`
-	Trace       string  `json:"trace,omitempty"`
-	FilePath    string  `json:"file_path,omitempty"`
-	Suite       string  `json:"suite,omitempty"`
-	Retries     int     `json:"retries"`
-	Flaky       bool    `json:"flaky"`
-}
-
-type VulnerabilityReport struct {
-	ID              int64           `json:"id"`
-	SnapshotID      int64           `json:"snapshot_id"`
-	Component       string          `json:"component"`
-	Arch            string          `json:"arch"`
-	Total           int             `json:"total"`
-	Critical        int             `json:"critical"`
-	High            int             `json:"high"`
-	Medium          int             `json:"medium"`
-	Low             int             `json:"low"`
-	Unknown         int             `json:"unknown"`
-	Fixable         int             `json:"fixable"`
-	CreatedAt       time.Time       `json:"created_at"`
-	Vulnerabilities []Vulnerability `json:"vulnerabilities,omitempty"`
-}
-
-type Vulnerability struct {
-	ID             int64  `json:"id"`
-	ReportID       int64  `json:"report_id"`
-	Name           string `json:"name"`
-	Severity       string `json:"severity"`
-	PackageName    string `json:"package_name"`
-	PackageVersion string `json:"package_version"`
-	FixedInVersion string `json:"fixed_in_version"`
-	Description    string `json:"description"`
-	Link           string `json:"link"`
+	ID          int64             `json:"id"`
+	Application string            `json:"application"`
+	Name        string            `json:"name"`
+	CreatedAt   time.Time         `json:"created_at"`
+	Components  []ComponentRecord `json:"components,omitempty"`
 }
 
 type ApplicationSummary struct {
