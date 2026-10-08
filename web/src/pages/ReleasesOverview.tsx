@@ -41,7 +41,6 @@ import type {
 	ReadinessResponse,
 	ReleaseOverview,
 	ReleaseVersion,
-	SnapshotRecord,
 } from "../api/types";
 import { seedCache, useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
@@ -186,7 +185,6 @@ export default function ReleasesOverview() {
 						release={ov.release}
 						issueSummary={ov.issue_summary}
 						readinessSignal={ov.readiness}
-						snapshot={ov.snapshot}
 						viewMode={viewMode}
 						jiraBaseUrl={config?.jira_base_url}
 					/>
@@ -207,7 +205,6 @@ export default function ReleasesOverview() {
 								release={ov.release}
 								issueSummary={ov.issue_summary}
 								readinessSignal={ov.readiness}
-								snapshot={ov.snapshot}
 								viewMode={viewMode}
 								jiraBaseUrl={config?.jira_base_url}
 							/>
@@ -223,14 +220,12 @@ function ReleaseCard({
 	release,
 	issueSummary,
 	readinessSignal,
-	snapshot,
 	viewMode,
 	jiraBaseUrl,
 }: {
 	release: ReleaseVersion;
 	issueSummary?: IssueSummary;
 	readinessSignal?: ReadinessResponse;
-	snapshot?: SnapshotRecord;
 	viewMode: ViewMode;
 	jiraBaseUrl?: string;
 }) {
@@ -329,30 +324,6 @@ function ReleaseCard({
 								</DescriptionListDescription>
 							</DescriptionListGroup>
 						)}
-						{snapshot && (
-							<DescriptionListGroup>
-								<DescriptionListTerm>Tests</DescriptionListTerm>
-								<DescriptionListDescription>
-									{!snapshot.has_tests ? (
-										<Label color="grey" isCompact>
-											N/A
-										</Label>
-									) : snapshot.tests_passed ? (
-										<Label color="green" icon={<CheckCircleIcon />} isCompact>
-											Passed
-										</Label>
-									) : (
-										<Label
-											color="red"
-											icon={<ExclamationCircleIcon />}
-											isCompact
-										>
-											Failed
-										</Label>
-									)}
-								</DescriptionListDescription>
-							</DescriptionListGroup>
-						)}
 					</DescriptionList>
 				) : (
 					<Flex direction={{ default: "column" }}>
@@ -378,34 +349,6 @@ function ReleaseCard({
 												</a>
 											) : (
 												release.release_ticket_key
-											)}
-										</div>
-									</FlexItem>
-								)}
-								{snapshot && (
-									<FlexItem>
-										<span className="rr-label">Tests</span>
-										<div>
-											{!snapshot.has_tests ? (
-												<Label color="grey" isCompact>
-													N/A
-												</Label>
-											) : snapshot.tests_passed ? (
-												<Label
-													color="green"
-													icon={<CheckCircleIcon />}
-													isCompact
-												>
-													Passed
-												</Label>
-											) : (
-												<Label
-													color="red"
-													icon={<ExclamationCircleIcon />}
-													isCompact
-												>
-													Failed
-												</Label>
 											)}
 										</div>
 									</FlexItem>

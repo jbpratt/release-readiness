@@ -73,10 +73,3 @@ export function getReleaseReadiness(
 ): Promise<ReadinessResponse> {
 	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}/readiness`);
 }
-
-export function downloadSuiteArtifacts(
-	snapshotId: number,
-	suiteId: number,
-): void {
-	window.open(`${BASE}/snapshots/${snapshotId}/suites/${suiteId}/artifacts`);
-}
