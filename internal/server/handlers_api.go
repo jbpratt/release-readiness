@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -101,18 +103,60 @@ func (s *Server) handleListReleaseSnapshots(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	q := r.URL.Query()
+	apps := releaseview.Applications(release.KonfluxApplication)
+	if app := q.Get("application"); app != "" {
+		if !slices.Contains(apps, app) {
+			writeError(w, http.StatusBadRequest, fmt.Errorf("application %q is not part of release %q", app, version))
+			return
+		}
+		apps = []string{app}
+	}
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	offset, _ := strconv.Atoi(q.Get("offset"))
 	if limit <= 0 {
-		limit = 50
+		limit = 25
 	}
-	limit = min(limit, 200)
-	snapshots, err := s.db.ListReleaseSnapshots(ctx, release.KonfluxApplication, limit, offset)
+	limit = min(limit, 100)
+	offset = max(offset, 0)
+	// One extra row tells whether another page exists.
+	snapshots, err := s.db.ListReleaseSnapshots(ctx, release.KonfluxApplication, apps, q.Get("with_release") == "true", limit+1, offset)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, snapshots)
+	page := model.ReleaseSnapshotPage{Snapshots: snapshots, HasMore: len(snapshots) > limit}
+	if page.HasMore {
+		page.Snapshots = snapshots[:limit]
+	}
+	writeJSON(w, http.StatusOK, page)
+}
+
+func (s *Server) handleGetReleaseSnapshot(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	version, name := r.PathValue("version"), r.PathValue("name")
+	release, err := s.db.GetReleaseVersion(ctx, version)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
+		return
+	}
+	snap, err := s.db.GetReleaseSnapshot(ctx, name)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, fmt.Errorf("snapshot %q not found", name))
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	components := make([]string, len(snap.Components))
+	for i, c := range snap.Components {
+		components[i] = c.Name
+	}
+	if !releaseview.Contains(release.KonfluxApplication, snap.Application, components) {
+		writeError(w, http.StatusNotFound, fmt.Errorf("snapshot %q is not part of release %q", name, version))
+		return
+	}
+	writeJSON(w, http.StatusOK, snap)
 }
 
 func (s *Server) releaseComponents(ctx context.Context, release *model.ReleaseVersion) (model.ReleaseComponents, error) {

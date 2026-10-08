@@ -38,13 +38,31 @@ JOIN snapshots s ON s.id = sc.snapshot_id
 WHERE s.application IN (sqlc.slice('applications'));
 
 -- name: ListReleaseSnapshots :many
-SELECT id, application, name, created_at
-FROM snapshots s
-WHERE s.application IN (sqlc.slice('applications'))
-  AND (s.application != ?
-       OR EXISTS (SELECT 1 FROM snapshot_components sc
-                  WHERE sc.snapshot_id = s.id AND sc.component LIKE ?))
-ORDER BY s.created_at DESC, s.id DESC
+-- Snapshots of the given applications, plus Snapshots a Release names that are
+-- no longer stored (missing = 1). quay-images-base is shared across versions,
+-- so its Snapshots count only with a component matching the LIKE pattern.
+WITH candidates AS (
+    SELECT s.name, s.application, s.created_at,
+           (SELECT COUNT(*) FROM snapshot_components sc WHERE sc.snapshot_id = s.id) AS component_count,
+           0 AS missing
+    FROM snapshots s
+    WHERE s.application IN (sqlc.slice('applications'))
+      AND (s.application != ?
+           OR EXISTS (SELECT 1 FROM snapshot_components sc
+                      WHERE sc.snapshot_id = s.id AND sc.component LIKE ?))
+      AND (? = 0 OR EXISTS (SELECT 1 FROM konflux_releases r
+                            WHERE r.snapshot = s.name AND r.application = s.application))
+    UNION ALL
+    SELECT r.snapshot, r.application, MIN(r.created_at), 0, 1
+    FROM konflux_releases r
+    WHERE r.application IN (sqlc.slice('missing_applications'))
+      AND r.snapshot != ''
+      AND NOT EXISTS (SELECT 1 FROM snapshots s WHERE s.name = r.snapshot)
+    GROUP BY r.application, r.snapshot
+)
+SELECT name, application, created_at, component_count, missing
+FROM candidates
+ORDER BY created_at DESC, name DESC
 LIMIT ? OFFSET ?;
 
 -- name: GetSnapshotByID :one

@@ -190,25 +190,53 @@ func (q *Queries) ListComponentCandidates(ctx context.Context, applications []st
 }
 
 const listReleaseSnapshots = `-- name: ListReleaseSnapshots :many
-SELECT id, application, name, created_at
-FROM snapshots s
-WHERE s.application IN (/*SLICE:applications*/?)
-  AND (s.application != ?
-       OR EXISTS (SELECT 1 FROM snapshot_components sc
-                  WHERE sc.snapshot_id = s.id AND sc.component LIKE ?))
-ORDER BY s.created_at DESC, s.id DESC
+WITH candidates AS (
+    SELECT s.name, s.application, s.created_at,
+           (SELECT COUNT(*) FROM snapshot_components sc WHERE sc.snapshot_id = s.id) AS component_count,
+           0 AS missing
+    FROM snapshots s
+    WHERE s.application IN (/*SLICE:applications*/?)
+      AND (s.application != ?
+           OR EXISTS (SELECT 1 FROM snapshot_components sc
+                      WHERE sc.snapshot_id = s.id AND sc.component LIKE ?))
+      AND (? = 0 OR EXISTS (SELECT 1 FROM konflux_releases r
+                            WHERE r.snapshot = s.name AND r.application = s.application))
+    UNION ALL
+    SELECT r.snapshot, r.application, MIN(r.created_at), 0, 1
+    FROM konflux_releases r
+    WHERE r.application IN (/*SLICE:missing_applications*/?)
+      AND r.snapshot != ''
+      AND NOT EXISTS (SELECT 1 FROM snapshots s WHERE s.name = r.snapshot)
+    GROUP BY r.application, r.snapshot
+)
+SELECT name, application, created_at, component_count, missing
+FROM candidates
+ORDER BY created_at DESC, name DESC
 LIMIT ? OFFSET ?
 `
 
 type ListReleaseSnapshotsParams struct {
-	Applications []string
-	Application  string
-	Component    string
-	Limit        int64
-	Offset       int64
+	Applications        []string
+	Application         string
+	Component           string
+	Column4             interface{}
+	MissingApplications []string
+	Limit               int64
+	Offset              int64
 }
 
-func (q *Queries) ListReleaseSnapshots(ctx context.Context, arg ListReleaseSnapshotsParams) ([]Snapshot, error) {
+type ListReleaseSnapshotsRow struct {
+	Name           string
+	Application    string
+	CreatedAt      string
+	ComponentCount int64
+	Missing        int64
+}
+
+// Snapshots of the given applications, plus Snapshots a Release names that are
+// no longer stored (missing = 1). quay-images-base is shared across versions,
+// so its Snapshots count only with a component matching the LIKE pattern.
+func (q *Queries) ListReleaseSnapshots(ctx context.Context, arg ListReleaseSnapshotsParams) ([]ListReleaseSnapshotsRow, error) {
 	query := listReleaseSnapshots
 	var queryParams []interface{}
 	if len(arg.Applications) > 0 {
@@ -221,6 +249,15 @@ func (q *Queries) ListReleaseSnapshots(ctx context.Context, arg ListReleaseSnaps
 	}
 	queryParams = append(queryParams, arg.Application)
 	queryParams = append(queryParams, arg.Component)
+	queryParams = append(queryParams, arg.Column4)
+	if len(arg.MissingApplications) > 0 {
+		for _, v := range arg.MissingApplications {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:missing_applications*/?", strings.Repeat(",?", len(arg.MissingApplications))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:missing_applications*/?", "NULL", 1)
+	}
 	queryParams = append(queryParams, arg.Limit)
 	queryParams = append(queryParams, arg.Offset)
 	rows, err := q.db.QueryContext(ctx, query, queryParams...)
@@ -228,14 +265,15 @@ func (q *Queries) ListReleaseSnapshots(ctx context.Context, arg ListReleaseSnaps
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Snapshot
+	var items []ListReleaseSnapshotsRow
 	for rows.Next() {
-		var i Snapshot
+		var i ListReleaseSnapshotsRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.Application,
 			&i.Name,
+			&i.Application,
 			&i.CreatedAt,
+			&i.ComponentCount,
+			&i.Missing,
 		); err != nil {
 			return nil, err
 		}

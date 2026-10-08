@@ -43,19 +43,23 @@ func (d *DB) ListKonfluxReleases(ctx context.Context, application string, limit,
 	}
 	releases := make([]model.KonfluxRelease, len(rows))
 	for i, r := range rows {
-		releases[i] = model.KonfluxRelease{
-			ID:             r.ID,
-			Name:           r.Name,
-			Application:    r.Application,
-			Snapshot:       r.Snapshot,
-			ReleasePlan:    r.ReleasePlan,
-			Target:         r.Target,
-			ReleasedStatus: r.ReleasedStatus,
-			ReleasedReason: r.ReleasedReason,
-			CreatedAt:      parseTime(r.CreatedAt),
-			StartTime:      parseOptionalTime(r.StartTime),
-			CompletionTime: parseOptionalTime(r.CompletionTime),
-		}
+		releases[i] = toKonfluxRelease(r)
 	}
 	return releases, nil
+}
+
+func toKonfluxRelease(r dbsqlc.KonfluxRelease) model.KonfluxRelease {
+	return model.KonfluxRelease{
+		ID:             r.ID,
+		Name:           r.Name,
+		Application:    r.Application,
+		Snapshot:       r.Snapshot,
+		ReleasePlan:    r.ReleasePlan,
+		Target:         r.Target,
+		ReleasedStatus: r.ReleasedStatus,
+		ReleasedReason: r.ReleasedReason,
+		CreatedAt:      parseTime(r.CreatedAt),
+		StartTime:      parseOptionalTime(r.StartTime),
+		CompletionTime: parseOptionalTime(r.CompletionTime),
+	}
 }
