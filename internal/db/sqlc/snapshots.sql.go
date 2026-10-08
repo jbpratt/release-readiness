@@ -90,10 +90,15 @@ const latestSnapshotPerApplication = `-- name: LatestSnapshotPerApplication :man
 SELECT s.id, s.application, s.name, s.created_at, CAST(counts.cnt AS INTEGER) AS cnt
 FROM snapshots s
 JOIN (
-    SELECT application, MAX(id) AS max_id, COUNT(*) AS cnt
+    SELECT application, COUNT(*) AS cnt
     FROM snapshots
     GROUP BY application
-) counts ON s.id = counts.max_id
+) counts ON s.application = counts.application
+WHERE s.id = (
+    SELECT id FROM snapshots latest
+    WHERE latest.application = s.application
+    ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1
+)
 ORDER BY s.application
 `
 
@@ -137,7 +142,7 @@ func (q *Queries) LatestSnapshotPerApplication(ctx context.Context) ([]LatestSna
 const listAllSnapshots = `-- name: ListAllSnapshots :many
 SELECT id, application, name, created_at
 FROM snapshots
-ORDER BY id DESC LIMIT ? OFFSET ?
+ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
 `
 
 type ListAllSnapshotsParams struct {
@@ -214,7 +219,7 @@ const listSnapshotsByApplication = `-- name: ListSnapshotsByApplication :many
 SELECT id, application, name, created_at
 FROM snapshots
 WHERE application = ?
-ORDER BY id DESC LIMIT ? OFFSET ?
+ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
 `
 
 type ListSnapshotsByApplicationParams struct {
