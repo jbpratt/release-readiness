@@ -1,15 +1,11 @@
 package server
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/quay/release-readiness/internal/model"
@@ -251,88 +247,6 @@ func computeReadiness(release *model.ReleaseVersion, issueSummary *model.IssueSu
 	}
 
 	return model.ReadinessResponse{Signal: signal, Message: message}
-}
-
-// --- Artifacts ---
-
-func (s *Server) handleDownloadSuiteArtifacts(w http.ResponseWriter, r *http.Request) {
-	if s.s3 == nil {
-		writeError(w, http.StatusServiceUnavailable, fmt.Errorf("S3 not configured"))
-		return
-	}
-
-	snapshotID, err := strconv.ParseInt(r.PathValue("snapshotId"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid snapshot ID"))
-		return
-	}
-	suiteID, err := strconv.ParseInt(r.PathValue("suiteId"), 10, 64)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid suite ID"))
-		return
-	}
-
-	ctx := r.Context()
-
-	snap, err := s.db.GetSnapshotByID(ctx, snapshotID)
-	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("snapshot %d not found", snapshotID))
-		return
-	}
-
-	suite, err := s.db.GetTestSuiteByID(ctx, suiteID)
-	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("test suite %d not found", suiteID))
-		return
-	}
-	if suite.SnapshotID != snapshotID {
-		writeError(w, http.StatusBadRequest, fmt.Errorf("suite %d does not belong to snapshot %d", suiteID, snapshotID))
-		return
-	}
-
-	prefix := snap.Application + "/snapshots/" + snap.Name + "/" + suite.Name + "/"
-	keys, err := s.s3.ListObjects(ctx, prefix)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, fmt.Errorf("listing artifacts: %w", err))
-		return
-	}
-	if len(keys) == 0 {
-		writeError(w, http.StatusNotFound, fmt.Errorf("no artifacts found for suite %q", suite.Name))
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/gzip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s-artifacts.tar.gz"`, suite.Name))
-
-	gw := gzip.NewWriter(w)
-	defer func() { _ = gw.Close() }()
-	tw := tar.NewWriter(gw)
-	defer func() { _ = tw.Close() }()
-
-	for _, key := range keys {
-		body, size, err := s.s3.GetObjectStream(ctx, key)
-		if err != nil {
-			s.logger.Error("fetch artifact", "key", key, "error", err)
-			continue
-		}
-
-		relPath := strings.TrimPrefix(key, prefix)
-		if err := tw.WriteHeader(&tar.Header{
-			Name: relPath,
-			Size: size,
-			Mode: 0o644,
-		}); err != nil {
-			_ = body.Close()
-			s.logger.Error("write tar header", "key", key, "error", err)
-			return
-		}
-		if _, err := io.Copy(tw, body); err != nil {
-			_ = body.Close()
-			s.logger.Error("write tar body", "key", key, "error", err)
-			return
-		}
-		_ = body.Close()
-	}
 }
 
 // --- Helpers ---
