@@ -28,6 +28,10 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/releases/{version}/issues", s.handleListReleaseIssues)
 	mux.HandleFunc("GET /api/v1/releases/{version}/issues/summary", s.handleGetReleaseIssueSummary)
 	mux.HandleFunc("GET /api/v1/releases/{version}/readiness", s.handleGetReleaseReadiness)
+	mux.HandleFunc("GET /api/v1/releases/{version}/prow-runs", s.handleListReleaseProwRuns)
+
+	// Prow periodic CI runs
+	mux.HandleFunc("GET /api/v1/prow-runs/by-digest/{digest}", s.handleListProwRunsByDigest)
 
 	// SPA — serve React app from embedded dist/
 	distSub, _ := fs.Sub(web.DistFS, "dist")
