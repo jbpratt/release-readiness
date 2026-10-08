@@ -4,7 +4,6 @@ import type {
 	JiraIssue,
 	KonfluxRelease,
 	ReadinessResponse,
-	ReleaseComponents,
 	ReleaseOverview,
 	ReleaseSnapshot,
 	ReleaseSnapshotPage,
@@ -50,14 +49,6 @@ export function listReleasesOverview(): Promise<ReleaseOverview[]> {
 
 export function getRelease(version: string): Promise<ReleaseVersion> {
 	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}`);
-}
-
-export function getReleaseComponents(
-	version: string,
-): Promise<ReleaseComponents> {
-	return fetchJSON(
-		`${BASE}/releases/${encodeURIComponent(version)}/components`,
-	);
 }
 
 export function listReleaseSnapshots(

@@ -89,34 +89,6 @@ func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, release)
 }
 
-func (s *Server) handleGetReleaseComponents(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	version := r.PathValue("version")
-	release, err := s.db.GetReleaseVersion(ctx, version)
-	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
-		return
-	}
-	components, err := s.releaseComponents(ctx, release)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	images := make([]string, len(components.Components))
-	for i, c := range components.Components {
-		images[i] = c.Image
-	}
-	arts, err := s.artBuilds(ctx, images)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	for i := range components.Components {
-		components.Components[i].Art = arts[i]
-	}
-	writeJSON(w, http.StatusOK, components)
-}
-
 func (s *Server) handleListReleaseSnapshots(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	version := r.PathValue("version")

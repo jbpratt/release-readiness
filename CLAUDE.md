@@ -47,7 +47,7 @@ The Vite dev server proxies `/api` requests to `localhost:8088` (the Go backend)
 - **`internal/kube/`** — Kubernetes dynamic client. Syncs Konflux Snapshots and Releases from `-namespace` (kubeconfig or in-cluster service account); `created_at` comes from `creationTimestamp`.
 - **`internal/konflux/`** — Konflux Snapshot spec types.
 - **`internal/jira/`** — JIRA REST API client. Discovers active releases, syncs issues by fixVersion.
-- **`internal/releaseview/`** — Release component set. A fixVersion maps to a Konflux application (`quay-v3.16.2` → `quay-3-16`); a release merges `fbc-quay-X-Y`, `quay-X-Y` and the `quay-X-Y-*` components of `quay-images-base`, keeping the newest image per component. Served at `/api/v1/releases/{version}/components` and `/snapshots`.
+- **`internal/releaseview/`** — Release component set. A fixVersion maps to a Konflux application (`quay-v3.16.2` → `quay-3-16`); a release merges `fbc-quay-X-Y`, `quay-X-Y` and the `quay-X-Y-*` components of `quay-images-base`, keeping the newest image per component. Served at `/api/v1/releases/{version}/snapshots`.
 - **`internal/model/`** — Shared data types used across packages.
 
 ### Frontend (`web/`)
