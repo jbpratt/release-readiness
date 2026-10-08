@@ -2,6 +2,7 @@ import type {
 	DashboardConfig,
 	IssueSummary,
 	JiraIssue,
+	KonfluxRelease,
 	ReadinessResponse,
 	ReleaseOverview,
 	ReleaseVersion,
@@ -32,6 +33,18 @@ export function listSnapshots(
 	params.set("limit", String(limit));
 	params.set("offset", String(offset));
 	return fetchJSON(`${BASE}/snapshots?${params}`);
+}
+
+export function listKonfluxReleases(
+	application?: string,
+	limit = 50,
+	offset = 0,
+): Promise<KonfluxRelease[]> {
+	const params = new URLSearchParams();
+	if (application) params.set("application", application);
+	params.set("limit", String(limit));
+	params.set("offset", String(offset));
+	return fetchJSON(`${BASE}/konflux-releases?${params}`);
 }
 
 // --- Release-centric API ---

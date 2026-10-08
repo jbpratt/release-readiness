@@ -275,3 +275,38 @@ func TestGetReleaseReadiness(t *testing.T) {
 		t.Errorf("with snapshot: got %+v, want green/No open issues", got)
 	}
 }
+
+func TestListKonfluxReleases(t *testing.T) {
+	srv := setupTestServer(t)
+	ctx := t.Context()
+
+	base := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	for i, r := range []struct{ name, app string }{
+		{"fbc-r1", "fbc-quay-3-18"},
+		{"quay-r1", "quay-3-18"},
+		{"fbc-r2", "fbc-quay-3-18"},
+		{"fbc-r3", "fbc-quay-3-18"},
+	} {
+		err := srv.db.UpsertKonfluxRelease(ctx, &model.KonfluxRelease{
+			Name: r.name, Application: r.app, CreatedAt: base.Add(time.Duration(i) * time.Hour),
+		})
+		if err != nil {
+			t.Fatalf("upsert release: %v", err)
+		}
+	}
+
+	req := httptest.NewRequest("GET", "/api/v1/konflux-releases?application=fbc-quay-3-18&limit=2", nil)
+	w := httptest.NewRecorder()
+	srv.http.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("list konflux releases: got %d, body: %s", w.Code, w.Body.String())
+	}
+	var releases []model.KonfluxRelease
+	if err := json.NewDecoder(w.Body).Decode(&releases); err != nil {
+		t.Fatal(err)
+	}
+	if len(releases) != 2 || releases[0].Name != "fbc-r3" || releases[1].Name != "fbc-r2" {
+		t.Errorf("releases: got %+v, want fbc-r3, fbc-r2", releases)
+	}
+}

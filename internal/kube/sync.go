@@ -19,7 +19,13 @@ import (
 	"github.com/quay/release-readiness/internal/model"
 )
 
-var snapshotGVR = schema.GroupVersionResource{Group: "appstudio.redhat.com", Version: "v1alpha1", Resource: "snapshots"}
+var (
+	snapshotGVR = schema.GroupVersionResource{Group: "appstudio.redhat.com", Version: "v1alpha1", Resource: "snapshots"}
+	releaseGVR  = schema.GroupVersionResource{Group: "appstudio.redhat.com", Version: "v1alpha1", Resource: "releases"}
+)
+
+// syncTimeout bounds one sync so a hung API call cannot stall the loop.
+const syncTimeout = 5 * time.Minute
 
 // NewClient builds a dynamic client from kubeconfig, or from the in-cluster
 // service account when kubeconfig is empty.
@@ -44,12 +50,13 @@ type Store interface {
 	CreateSnapshot(ctx context.Context, application, name string, createdAt time.Time) (*model.SnapshotRecord, error)
 	EnsureComponent(ctx context.Context, name string) (*model.Component, error)
 	CreateSnapshotComponent(ctx context.Context, snapshotID int64, component, gitSHA, imageURL, gitURL string) error
+	UpsertKonfluxRelease(ctx context.Context, r *model.KonfluxRelease) error
 }
 
 // TxFunc wraps a function in a database transaction, passing a tx-scoped Store.
 type TxFunc func(ctx context.Context, fn func(Store) error) error
 
-// Syncer periodically ingests Konflux Snapshots from a namespace into a Store.
+// Syncer periodically ingests Konflux Snapshots and Releases from a namespace into a Store.
 type Syncer struct {
 	client    dynamic.Interface
 	namespace string
@@ -79,18 +86,26 @@ func (s *Syncer) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// SyncOnce lists all Snapshots in the namespace and ingests any not yet stored.
+// SyncOnce ingests Snapshots not yet stored and upserts every Release, whose
+// status keeps changing after creation.
 func (s *Syncer) SyncOnce(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, syncTimeout)
+	defer cancel()
+	s.each(ctx, snapshotGVR, s.sync)
+	s.each(ctx, releaseGVR, s.syncRelease)
+}
+
+func (s *Syncer) each(ctx context.Context, gvr schema.GroupVersionResource, fn func(context.Context, *unstructured.Unstructured) error) {
 	opts := metav1.ListOptions{Limit: 500}
 	for {
-		list, err := s.client.Resource(snapshotGVR).Namespace(s.namespace).List(ctx, opts)
+		list, err := s.client.Resource(gvr).Namespace(s.namespace).List(ctx, opts)
 		if err != nil {
-			s.logger.Error("list snapshots", "namespace", s.namespace, "error", err)
+			s.logger.Error("list", "resource", gvr.Resource, "namespace", s.namespace, "error", err)
 			return
 		}
 		for i := range list.Items {
-			if err := s.sync(ctx, &list.Items[i]); err != nil {
-				s.logger.Error("ingest snapshot", "snapshot", list.Items[i].GetName(), "error", err)
+			if err := fn(ctx, &list.Items[i]); err != nil {
+				s.logger.Error("ingest", "resource", gvr.Resource, "name", list.Items[i].GetName(), "error", err)
 			}
 		}
 		opts.Continue = list.GetContinue()
@@ -138,4 +153,39 @@ func (s *Syncer) sync(ctx context.Context, obj *unstructured.Unstructured) error
 		}
 		return nil
 	})
+}
+
+func (s *Syncer) syncRelease(ctx context.Context, obj *unstructured.Unstructured) error {
+	r := &model.KonfluxRelease{
+		Name:        obj.GetName(),
+		Application: obj.GetLabels()["appstudio.openshift.io/application"],
+		CreatedAt:   obj.GetCreationTimestamp().UTC(),
+	}
+	r.Snapshot, _, _ = unstructured.NestedString(obj.Object, "spec", "snapshot")
+	r.ReleasePlan, _, _ = unstructured.NestedString(obj.Object, "spec", "releasePlan")
+	r.Target, _, _ = unstructured.NestedString(obj.Object, "status", "target")
+	r.StartTime = nestedTime(obj, "status", "startTime")
+	r.CompletionTime = nestedTime(obj, "status", "completionTime")
+
+	conditions, _, _ := unstructured.NestedSlice(obj.Object, "status", "conditions")
+	for _, c := range conditions {
+		cond, ok := c.(map[string]any)
+		if !ok || cond["type"] != "Released" {
+			continue
+		}
+		r.ReleasedStatus, _ = cond["status"].(string)
+		r.ReleasedReason, _ = cond["reason"].(string)
+	}
+
+	return s.store.UpsertKonfluxRelease(ctx, r)
+}
+
+func nestedTime(obj *unstructured.Unstructured, fields ...string) *time.Time {
+	v, _, _ := unstructured.NestedString(obj.Object, fields...)
+	t, err := time.Parse(time.RFC3339, v)
+	if err != nil {
+		return nil
+	}
+	t = t.UTC()
+	return &t
 }

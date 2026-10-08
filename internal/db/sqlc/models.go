@@ -27,6 +27,20 @@ type JiraIssue struct {
 	UpdatedAt  string
 }
 
+type KonfluxRelease struct {
+	ID             int64
+	Name           string
+	Application    string
+	Snapshot       string
+	ReleasePlan    string
+	Target         string
+	ReleasedStatus string
+	ReleasedReason string
+	CreatedAt      string
+	StartTime      string
+	CompletionTime string
+}
+
 type ReleaseVersion struct {
 	ID                    int64
 	Name                  string

@@ -77,6 +77,13 @@ func parseOptionalTime(s string) *time.Time {
 	return &t
 }
 
+func formatOptionalTime(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return t.UTC().Format(time.RFC3339)
+}
+
 func boolToInt64(b bool) int64 {
 	if b {
 		return 1
