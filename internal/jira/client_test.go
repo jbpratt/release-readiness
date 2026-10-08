@@ -411,3 +411,26 @@ func TestAnonymousFallbackIsAuthError(t *testing.T) {
 		t.Fatalf("SearchIssues error = %v, want a 401", err)
 	}
 }
+
+func TestAPIURLSeparateFromSiteURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/ex/jira/abc/rest/api/3/search/jql" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(searchResponse{})
+	}))
+	defer srv.Close()
+
+	client := New(Config{BaseURL: srv.URL + "/ex/jira/abc", SiteURL: "https://site.example/", Project: "PROJ"})
+	client.minDelay = 0
+	if _, err := client.SearchIssues(context.Background(), "1.0"); err != nil {
+		t.Fatalf("SearchIssues: %v", err)
+	}
+	if got := client.SiteURL(); got != "https://site.example" {
+		t.Errorf("SiteURL: got %q, want https://site.example", got)
+	}
+	if got := New(Config{BaseURL: "https://jira.example/"}).SiteURL(); got != "https://jira.example" {
+		t.Errorf("default SiteURL: got %q, want https://jira.example", got)
+	}
+}

@@ -17,7 +17,8 @@ import (
 
 // Config holds JIRA connection settings.
 type Config struct {
-	BaseURL        string // e.g. https://redhat.atlassian.net
+	BaseURL        string // REST API base, e.g. https://redhat.atlassian.net
+	SiteURL        string // browse-link base; defaults to BaseURL
 	Email          string // JIRA Cloud account email for Basic Auth
 	Token          string // JIRA Cloud API token
 	Project        string // e.g. PROJQUAY
@@ -27,6 +28,7 @@ type Config struct {
 // Client is a JIRA REST API client.
 type Client struct {
 	baseURL        string
+	siteURL        string
 	email          string
 	token          string
 	project        string
@@ -37,8 +39,13 @@ type Client struct {
 
 // New creates a new JIRA client.
 func New(cfg Config) *Client {
+	siteURL := cfg.SiteURL
+	if siteURL == "" {
+		siteURL = cfg.BaseURL
+	}
 	return &Client{
 		baseURL:        strings.TrimRight(cfg.BaseURL, "/"),
+		siteURL:        strings.TrimRight(siteURL, "/"),
 		email:          cfg.Email,
 		token:          cfg.Token,
 		project:        cfg.Project,
@@ -131,9 +138,9 @@ type ActiveRelease struct {
 	KonfluxApplication string     // e.g. "quay-3-16" (derived from fixVersion)
 }
 
-// BaseURL returns the configured JIRA base URL.
-func (c *Client) BaseURL() string {
-	return c.baseURL
+// SiteURL returns the JIRA site URL used for browse links.
+func (c *Client) SiteURL() string {
+	return c.siteURL
 }
 
 // versionRe matches version patterns like "v3.16.2", "v2.0.10", "3.16.2" in release ticket summaries.
