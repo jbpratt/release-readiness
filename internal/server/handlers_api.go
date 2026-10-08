@@ -82,12 +82,12 @@ func (s *Server) handleGetReleaseSnapshot(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if release.S3Application == "" {
-		writeError(w, http.StatusNotFound, fmt.Errorf("no S3 application mapped for release %q", version))
+	if release.KonfluxApplication == "" {
+		writeError(w, http.StatusNotFound, fmt.Errorf("no Konflux application mapped for release %q", version))
 		return
 	}
 
-	// Get the latest snapshot for this release's S3 application
+	// Get the latest snapshot for this release's Konflux application
 	apps, err := s.db.LatestSnapshotPerApplication(ctx)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -95,9 +95,9 @@ func (s *Server) handleGetReleaseSnapshot(w http.ResponseWriter, r *http.Request
 	}
 
 	for _, app := range apps {
-		if app.Application == release.S3Application {
+		if app.Application == release.KonfluxApplication {
 			if app.LatestSnapshot == nil {
-				writeError(w, http.StatusNotFound, fmt.Errorf("no snapshots found for %s", release.S3Application))
+				writeError(w, http.StatusNotFound, fmt.Errorf("no snapshots found for %s", release.KonfluxApplication))
 				return
 			}
 			// Get full snapshot with components and test results
@@ -111,7 +111,7 @@ func (s *Server) handleGetReleaseSnapshot(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	writeError(w, http.StatusNotFound, fmt.Errorf("no snapshots found for application %s", release.S3Application))
+	writeError(w, http.StatusNotFound, fmt.Errorf("no snapshots found for application %s", release.KonfluxApplication))
 }
 
 func (s *Server) handleListReleaseIssues(w http.ResponseWriter, r *http.Request) {
@@ -151,11 +151,11 @@ func (s *Server) handleGetReleaseReadiness(w http.ResponseWriter, r *http.Reques
 	issueSummary, _ := s.db.GetIssueSummary(ctx, version)
 
 	hasSnapshot := false
-	if release.S3Application != "" {
+	if release.KonfluxApplication != "" {
 		apps, err := s.db.LatestSnapshotPerApplication(ctx)
 		if err == nil {
 			for _, app := range apps {
-				if app.Application == release.S3Application && app.LatestSnapshot != nil {
+				if app.Application == release.KonfluxApplication && app.LatestSnapshot != nil {
 					hasSnapshot = true
 					break
 				}
@@ -203,8 +203,8 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 	for i, rel := range releases {
 		summary := issueSummaries[rel.Name]
 		var snap *model.SnapshotRecord
-		if rel.S3Application != "" {
-			if s := snapshotMap[rel.S3Application]; s != nil {
+		if rel.KonfluxApplication != "" {
+			if s := snapshotMap[rel.KonfluxApplication]; s != nil {
 				// Return snapshot metadata only (no components)
 				snapCopy := *s
 				snapCopy.Components = nil

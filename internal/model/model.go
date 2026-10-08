@@ -82,7 +82,7 @@ type ReleaseVersion struct {
 	Archived              bool       `json:"archived"`
 	ReleaseTicketKey      string     `json:"release_ticket_key,omitempty"`
 	ReleaseTicketAssignee string     `json:"release_ticket_assignee,omitempty"`
-	S3Application         string     `json:"s3_application,omitempty"`
+	KonfluxApplication    string     `json:"konflux_application,omitempty"`
 	DueDate               *time.Time `json:"due_date,omitempty"`
 }
 

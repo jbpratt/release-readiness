@@ -35,10 +35,14 @@ export default function SnapshotsList() {
 
 	const fetchPage = useCallback(
 		(p: number) => {
-			if (!release?.s3_application) return;
+			if (!release?.konflux_application) return;
 			setLoading(true);
 			setError(null);
-			listSnapshots(release.s3_application, PAGE_SIZE + 1, (p - 1) * PAGE_SIZE)
+			listSnapshots(
+				release.konflux_application,
+				PAGE_SIZE + 1,
+				(p - 1) * PAGE_SIZE,
+			)
 				.then((data) => {
 					const rows = data ?? [];
 					if (rows.length > PAGE_SIZE) {
@@ -56,14 +60,14 @@ export default function SnapshotsList() {
 				})
 				.finally(() => setLoading(false));
 		},
-		[release?.s3_application],
+		[release?.konflux_application],
 	);
 
 	useEffect(() => {
-		if (release?.s3_application) {
+		if (release?.konflux_application) {
 			fetchPage(1);
 		}
-	}, [release?.s3_application, fetchPage]);
+	}, [release?.konflux_application, fetchPage]);
 
 	const onSetPage = (_: unknown, p: number) => {
 		setPage(p);
