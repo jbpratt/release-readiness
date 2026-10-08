@@ -36,7 +36,7 @@ import {
 	Tr,
 } from "@patternfly/react-table";
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import {
 	getRelease,
 	getReleaseIssueSummary,
@@ -51,7 +51,8 @@ import type {
 	ReleaseVersion,
 } from "../api/types";
 import PriorityLabel from "../components/PriorityLabel";
-import ReleaseSnapshots, {
+import {
+	LatestSnapshot,
 	useLatestSnapshot,
 } from "../components/ReleaseSnapshots";
 import StatusLabel from "../components/StatusLabel";
@@ -85,6 +86,17 @@ export default function ReleaseDetail() {
 		() => getReleaseReadiness(version!),
 	);
 	const latest = useLatestSnapshot(version!, release);
+	const [searchParams] = useSearchParams();
+
+	// Old deep links carry snapshot history filters; send them to the history page.
+	if (searchParams.has("app") || searchParams.has("with_release")) {
+		return (
+			<Navigate
+				to={{ pathname: "snapshots", search: `?${searchParams}` }}
+				replace
+			/>
+		);
+	}
 
 	if (loadingRelease && !release) {
 		return (
@@ -143,11 +155,7 @@ export default function ReleaseDetail() {
 					latest={latest}
 				/>
 
-				<ReleaseSnapshots
-					version={version!}
-					konfluxApp={release.konflux_application}
-					latest={latest}
-				/>
+				<LatestSnapshot version={version!} state={latest} />
 
 				{(issues ?? []).length > 0 && (
 					<IssuesCard
