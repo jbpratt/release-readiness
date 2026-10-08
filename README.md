@@ -26,6 +26,12 @@ Test results are not ingested.
 
 Discovers active releases by querying for JIRA issues with the `-area/release` component that are not Closed/Done. Parses the version from the ticket summary (e.g. "Release Quay v3.16.2") and syncs all issues matching that `fixVersion` (and optionally the Target Version custom field).
 
+## Release view
+
+Each JIRA release maps to a Konflux application by major.minor version: fixVersion `quay-v3.16.2` (or plain `3.16.2`) maps to `quay-3-16`, and `omr-v2.0.10` to `omr-2-0`.
+
+A Quay release's components come from three applications: `fbc-quay-X-Y` (the shipped FBC, 3.16+ only), `quay-X-Y`, and the `quay-X-Y-*` base image components of `quay-images-base`. The newest image per component across them is served at `/api/v1/releases/{version}/components`, and the contributing snapshots at `/api/v1/releases/{version}/snapshots`.
+
 ## JIRA expectations
 
 - **Release discovery** — searches for issues where `component = "-area/release"` and status is not Closed/Done
