@@ -1,5 +1,9 @@
-import { ClipboardCopy, Label, Tooltip } from "@patternfly/react-core";
-import { ExternalLinkAltIcon, InProgressIcon } from "@patternfly/react-icons";
+import { ClipboardCopy, Tooltip } from "@patternfly/react-core";
+import {
+	CircleIcon,
+	ExternalLinkAltIcon,
+	InProgressIcon,
+} from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import type {
 	ArtBuild,
@@ -14,6 +18,18 @@ const external = { target: "_blank", rel: "noopener noreferrer" };
 
 const linkIcon = (
 	<ExternalLinkAltIcon style={{ fontSize: "0.75em", marginLeft: "0.25rem" }} />
+);
+
+/** Images that differ from the last released snapshot, named by `since`. */
+export type ChangedSince = { since: string; names: Set<string> };
+
+export const changedDot = (
+	<CircleIcon
+		style={{
+			fontSize: "0.5em",
+			color: "var(--pf-t--global--icon--color--status--info--default)",
+		}}
+	/>
 );
 
 function NoArtRecord() {
@@ -101,8 +117,7 @@ export default function SnapshotComponentsTable({
 	changed,
 }: {
 	components: SnapshotImage[];
-	/** Components whose image differs from the last released snapshot. */
-	changed?: Set<string>;
+	changed?: ChangedSince;
 	/** Shown only once a CI job of the release has synced. */
 	prowRuns?: SnapshotProwRuns;
 }) {
@@ -128,12 +143,23 @@ export default function SnapshotComponentsTable({
 				{components.map((c) => (
 					<Tr key={c.name}>
 						<Td>
-							{c.name}{" "}
-							{changed?.has(c.name) && (
-								<Label color="blue" isCompact>
-									changed
-								</Label>
+							{changed && (
+								<span style={{ display: "inline-block", width: "1rem" }}>
+									{changed.names.has(c.name) && (
+										<Tooltip
+											content={`Differs from last released ${changed.since}`}
+										>
+											<span
+												role="img"
+												aria-label={`Differs from last released ${changed.since}`}
+											>
+												{changedDot}
+											</span>
+										</Tooltip>
+									)}
+								</span>
 							)}
+							{c.name}
 						</Td>
 						<Td>
 							<ImageDigestLink image={c.image} />

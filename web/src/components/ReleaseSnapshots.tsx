@@ -1,5 +1,4 @@
 import {
-	Alert,
 	Button,
 	Card,
 	CardBody,
@@ -51,7 +50,10 @@ import {
 	snapshotFilters,
 } from "../utils/releaseApps";
 import ReleasedLabel from "./ReleasedLabel";
-import SnapshotComponentsTable from "./SnapshotComponentsTable";
+import SnapshotComponentsTable, {
+	type ChangedSince,
+	changedDot,
+} from "./SnapshotComponentsTable";
 
 const PAGE_SIZE = 25;
 
@@ -122,10 +124,14 @@ export function LatestSnapshot({
 			: null,
 		() => getReleaseSnapshot(version, released!.name),
 	);
-	const changed = changedSince(
+	const changedNames = changedSince(
 		state.detail.data?.components,
 		releasedDetail.data?.components,
 	);
+	const changed =
+		released && changedNames
+			? { since: released.name, names: changedNames }
+			: undefined;
 	const loading = state.loading || (!releasedList.data && !releasedList.error);
 	const error = state.error ?? releasedList.error;
 
@@ -183,24 +189,13 @@ export function LatestSnapshot({
 						variant="xs"
 					/>
 				) : (
-					<>
-						{released && changed && (
-							<Alert
-								variant="info"
-								isInline
-								isPlain
-								title={`Last released: ${released.name}, ${changed.size} of ${state.detail.data?.components?.length} images differ`}
-								style={{ marginBottom: "0.5rem" }}
-							/>
-						)}
-						<SnapshotSummary
-							version={version}
-							snapshot={unreleased}
-							fetched={state.detail}
-							changed={changed}
-							fbc={state.detail.data?.fbc_catalog}
-						/>
-					</>
+					<SnapshotSummary
+						version={version}
+						snapshot={unreleased}
+						fetched={state.detail}
+						changed={changed}
+						fbc={state.detail.data?.fbc_catalog}
+					/>
 				)}
 			</CardBody>
 			<CardFooter>
@@ -240,7 +235,7 @@ function SnapshotSummary({
 	version: string;
 	snapshot: ReleaseSnapshot;
 	fetched?: LatestSnapshotState["detail"];
-	changed?: Set<string>;
+	changed?: ChangedSince;
 	fbc?: FBCCatalog;
 }) {
 	return (
@@ -264,6 +259,12 @@ function SnapshotSummary({
 					</FlexItem>
 				)}
 			</Flex>
+			{changed && fetched?.data?.components && (
+				<Content component="p" style={{ marginBottom: "0.5rem" }}>
+					{changedDot} {changed.names.size} of {fetched.data.components.length}{" "}
+					images changed since <code>{changed.since}</code>
+				</Content>
+			)}
 			<SnapshotDetail
 				version={version}
 				snapshot={snapshot}
@@ -541,7 +542,7 @@ function SnapshotDetail({
 	snapshot: ReleaseSnapshot;
 	/** The snapshot's images when the caller already fetches them. */
 	fetched?: LatestSnapshotState["detail"];
-	changed?: Set<string>;
+	changed?: ChangedSince;
 }) {
 	const own = useCachedFetch(
 		snapshot.missing || fetched
