@@ -61,7 +61,11 @@ import {
 	useColumnManagement,
 } from "../hooks/useColumnManagement";
 import { useConfig } from "../hooks/useConfig";
-import { formatReleaseName, jiraIssueUrl, quayImageUrl } from "../utils/links";
+import {
+	formatReleaseName,
+	jiraIssueUrl,
+	quayManifestUrl,
+} from "../utils/links";
 
 export default function ReleaseDetail() {
 	const { version } = useParams<{ version: string }>();
@@ -172,7 +176,7 @@ export default function ReleaseDetail() {
 								</Thead>
 								<Tbody>
 									{components.map((c) => {
-										const imgUrl = quayImageUrl(c.image);
+										const imgUrl = quayManifestUrl(c.image);
 										const digest = c.image.split("@")[1];
 										const imgDisplay = digest
 											? digest.replace(/^(sha256:.{12}).*/, "$1")
@@ -202,11 +206,7 @@ export default function ReleaseDetail() {
 													)}
 												</Td>
 												<Td>
-													<GitShaLink
-														component={c.name}
-														sha={c.git_sha}
-														gitUrl={c.git_url}
-													/>
+													<GitShaLink sha={c.git_sha} gitUrl={c.git_url} />
 												</Td>
 												<Td>{c.application}</Td>
 												<Td>{c.snapshot}</Td>

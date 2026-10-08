@@ -1,0 +1,50 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import {
+	formatReleaseName,
+	gitRepoName,
+	jiraIssueUrl,
+	quayManifestUrl,
+} from "./links.ts";
+
+const digest = `sha256:${"ab".repeat(32)}`;
+
+test("quayManifestUrl", () => {
+	assert.equal(
+		quayManifestUrl(
+			`quay.io/redhat-user-workloads/ocp-art-tenant/art-images@${digest}`,
+		),
+		`https://quay.io/repository/redhat-user-workloads/ocp-art-tenant/art-images/manifest/${digest}`,
+	);
+	assert.equal(
+		quayManifestUrl(`quay.io/projectquay/quay@${digest}`),
+		`https://quay.io/repository/projectquay/quay/manifest/${digest}`,
+	);
+	assert.equal(quayManifestUrl("quay.io/projectquay/quay:v3.18.0"), null);
+	assert.equal(quayManifestUrl(`registry.redhat.io/quay/quay@${digest}`), null);
+});
+
+test("gitRepoName", () => {
+	assert.equal(
+		gitRepoName("https://github.com/openshift-priv/quay-quay"),
+		"openshift-priv/quay-quay",
+	);
+	assert.equal(
+		gitRepoName("https://github.com/openshift-priv/quay-quay.git"),
+		"openshift-priv/quay-quay",
+	);
+	assert.equal(gitRepoName(""), null);
+});
+
+test("jiraIssueUrl", () => {
+	assert.equal(
+		jiraIssueUrl("PROJQUAY-1", "https://issues.redhat.com/"),
+		"https://issues.redhat.com/browse/PROJQUAY-1",
+	);
+});
+
+test("formatReleaseName", () => {
+	assert.equal(formatReleaseName("quay-v3.18.0"), "Quay v3.18.0");
+	assert.equal(formatReleaseName("omr-v2.0.10"), "OMR v2.0.10");
+	assert.equal(formatReleaseName("3.14.6"), "Quay v3.14.6");
+});
