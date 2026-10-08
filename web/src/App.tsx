@@ -97,9 +97,9 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 												and assignee to compute a readiness signal.
 											</Content>
 											<Content component="li">
-												<strong>Build Snapshots</strong> — polls S3 for Konflux
-												snapshot manifests. Each contains component builds (git
-												SHA, image) and JUnit test results.
+												<strong>Build Snapshots</strong> — reads Konflux
+												Snapshots and Releases from Kubernetes. Each snapshot
+												lists its component builds (git SHA, image).
 											</Content>
 										</Content>
 									</Content>
