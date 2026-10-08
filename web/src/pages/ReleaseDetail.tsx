@@ -141,7 +141,7 @@ export default function ReleaseDetail() {
 					<FlexItem>
 						<Title headingLevel="h1">{displayName}</Title>
 					</FlexItem>
-					{release.s3_application && (
+					{release.konflux_application && (
 						<FlexItem>
 							<Link to={`/releases/${encodeURIComponent(version!)}/snapshots`}>
 								View all snapshots

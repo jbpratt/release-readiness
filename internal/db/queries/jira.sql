@@ -24,7 +24,7 @@ FROM jira_issues
 WHERE fix_version = ?;
 
 -- name: UpsertReleaseVersion :exec
-INSERT INTO release_versions (name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, s3_application, due_date)
+INSERT INTO release_versions (name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(name) DO UPDATE SET
     description=excluded.description,
@@ -33,21 +33,21 @@ ON CONFLICT(name) DO UPDATE SET
     archived=excluded.archived,
     release_ticket_key=excluded.release_ticket_key,
     release_ticket_assignee=excluded.release_ticket_assignee,
-    s3_application=excluded.s3_application,
+    konflux_application=excluded.konflux_application,
     due_date=excluded.due_date;
 
 -- name: GetReleaseVersion :one
-SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, s3_application, due_date
+SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
 FROM release_versions WHERE name = ?;
 
 -- name: ListActiveReleaseVersions :many
-SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, s3_application, due_date
+SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
 FROM release_versions
 WHERE released = 0 AND archived = 0
 ORDER BY name;
 
 -- name: ListAllReleaseVersions :many
-SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, s3_application, due_date
+SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
 FROM release_versions
 ORDER BY name;
 

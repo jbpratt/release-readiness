@@ -50,7 +50,7 @@ type ReleaseVersion struct {
 	Archived              int64
 	ReleaseTicketKey      string
 	ReleaseTicketAssignee string
-	S3Application         string
+	KonfluxApplication    string
 	DueDate               string
 }
 
