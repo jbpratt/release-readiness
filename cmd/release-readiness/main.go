@@ -34,6 +34,7 @@ func main() {
 
 	// JIRA flags
 	jiraURL := flag.String("jira-url", envOrDefault("JIRA_URL", "https://redhat.atlassian.net"), "JIRA Cloud URL")
+	jiraAPIURL := flag.String("jira-api-url", os.Getenv("JIRA_API_URL"), "JIRA REST API base URL (defaults to -jira-url; use https://api.atlassian.com/ex/jira/<cloudId> for scoped API tokens)")
 	jiraEmail := flag.String("jira-email", os.Getenv("JIRA_EMAIL"), "JIRA Cloud account email for API token auth")
 	jiraToken := flag.String("jira-token", os.Getenv("JIRA_TOKEN"), "JIRA Cloud API token")
 	jiraProject := flag.String("jira-project", envOrDefault("JIRA_PROJECT", "PROJQUAY"), "JIRA project key")
@@ -105,15 +106,20 @@ func main() {
 
 	// Start JIRA sync if token is configured
 	if *jiraToken != "" {
+		apiURL := *jiraURL
+		if *jiraAPIURL != "" {
+			apiURL = *jiraAPIURL
+		}
 		jiraClient := jira.New(jira.Config{
-			BaseURL:        *jiraURL,
+			BaseURL:        apiURL,
+			SiteURL:        *jiraURL,
 			Email:          *jiraEmail,
 			Token:          *jiraToken,
 			Project:        *jiraProject,
 			QAContactField: *jiraQAContactField,
 		})
 		jiraLog := logger.With("component", "jira-sync")
-		logger.Info("jira sync enabled", "url", *jiraURL, "project", *jiraProject, "interval", *jiraPollInterval)
+		logger.Info("jira sync enabled", "url", *jiraURL, "api_url", apiURL, "project", *jiraProject, "interval", *jiraPollInterval)
 		jiraTx := func(ctx context.Context, fn func(jira.Store) error) error {
 			return database.InTx(ctx, func(txDB *db.DB) error {
 				return fn(txDB)

@@ -176,7 +176,7 @@ func (s *Syncer) syncVersion(ctx context.Context, fixVersion string) error {
 				updatedAt = time.Now().UTC()
 			}
 
-			jiraURL := fmt.Sprintf("%s/browse/%s", s.client.BaseURL(), issue.Key)
+			jiraURL := fmt.Sprintf("%s/browse/%s", s.client.SiteURL(), issue.Key)
 
 			record := &model.JiraIssueRecord{
 				Key:        issue.Key,

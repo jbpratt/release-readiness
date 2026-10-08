@@ -74,6 +74,7 @@ cd web && npm install && npm run build
 | `-konflux-poll-interval` | — | `30s` | Konflux sync poll interval |
 | `-art-build-history-url` | — | `https://art-build-history-art-build-history.apps.artc2023.pc3z.p1.openshiftapps.com` | ART build history service; component images are looked up there in the background for build and upstream commit links (empty disables) |
 | `-jira-url` | `JIRA_URL` | `https://redhat.atlassian.net` | JIRA Cloud URL |
+| `-jira-api-url` | `JIRA_API_URL` | `-jira-url` | JIRA REST API base URL; set to `https://api.atlassian.com/ex/jira/<cloudId>` for scoped API tokens |
 | `-jira-email` | `JIRA_EMAIL` | — | JIRA Cloud account email for API token auth |
 | `-jira-token` | `JIRA_TOKEN` | — | JIRA Cloud API token (required to enable JIRA sync) |
 | `-jira-project` | `JIRA_PROJECT` | `PROJQUAY` | JIRA project key |
