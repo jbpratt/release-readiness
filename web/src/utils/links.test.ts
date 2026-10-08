@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
 	formatReleaseName,
-	gitRepoName,
 	jiraIssueUrl,
 	quayManifestUrl,
 	upstreamCommitUrl,
@@ -23,18 +22,6 @@ test("quayManifestUrl", () => {
 	);
 	assert.equal(quayManifestUrl("quay.io/projectquay/quay:v3.18.0"), null);
 	assert.equal(quayManifestUrl(`registry.redhat.io/quay/quay@${digest}`), null);
-});
-
-test("gitRepoName", () => {
-	assert.equal(
-		gitRepoName("https://github.com/openshift-priv/quay-quay"),
-		"openshift-priv/quay-quay",
-	);
-	assert.equal(
-		gitRepoName("https://github.com/openshift-priv/quay-quay.git"),
-		"openshift-priv/quay-quay",
-	);
-	assert.equal(gitRepoName(""), null);
 });
 
 test("upstreamCommitUrl", () => {

@@ -3,12 +3,6 @@ export function jiraIssueUrl(key: string, baseUrl: string): string {
 	return `${baseUrl.replace(/\/+$/, "")}/browse/${key}`;
 }
 
-/** `owner/repo` from a git clone URL, or null if it has no path. */
-export function gitRepoName(gitUrl: string): string | null {
-	const m = gitUrl.match(/^https?:\/\/[^/]+\/(.+?)(?:\.git)?\/*$/);
-	return m ? m[1] : null;
-}
-
 /**
  * GitHub commit page of an upstream build source, or null unless the repo is
  * on github.com and the sha is known.
