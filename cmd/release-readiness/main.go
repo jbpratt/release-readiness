@@ -17,6 +17,7 @@ import (
 	"github.com/quay/release-readiness/internal/db"
 	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/kube"
+	"github.com/quay/release-readiness/internal/prow"
 	"github.com/quay/release-readiness/internal/server"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
@@ -44,10 +45,26 @@ func main() {
 	// Red Hat container catalog flags
 	catalogURL := flag.String("catalog-url", "https://catalog.redhat.com/api/containers/v1", "Red Hat container catalog API URL (empty leaves JIRA's released flag as the only shipped signal)")
 
+	// Prow flags
+	prowJobs := flag.String("prow-jobs", os.Getenv("PROW_JOBS"), "periodic Prow jobs to ingest, as job_name=release_version[,...]")
+	prowRehearsals := flag.String("prow-rehearsals", "", "rehearsal GCS prefixes to ingest, as gcs-prefix=release_version[,...]")
+	prowInterval := flag.Duration("prow-interval", 15*time.Minute, "Prow sync poll interval")
+
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	slog.SetDefault(logger)
+
+	periodics, err := prow.ParseJobs(*prowJobs, prow.KindPeriodic)
+	if err != nil {
+		logger.Error("parse -prow-jobs", "error", err)
+		os.Exit(1)
+	}
+	rehearsals, err := prow.ParseJobs(*prowRehearsals, prow.KindRehearsal)
+	if err != nil {
+		logger.Error("parse -prow-rehearsals", "error", err)
+		os.Exit(1)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -128,6 +145,16 @@ func main() {
 		go func() {
 			defer wg.Done()
 			shipped.Run(ctx, time.Hour)
+		}()
+	}
+
+	if prowJobList := append(periodics, rehearsals...); len(prowJobList) > 0 {
+		logger.Info("prow sync enabled", "jobs", len(prowJobList), "interval", *prowInterval)
+		syncer := prow.NewSyncer(prow.NewClient(prow.DefaultBaseURL), database, prowJobList, *prowInterval, logger.With("component", "prow-sync"))
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			syncer.Run(ctx)
 		}()
 	}
 
