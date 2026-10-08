@@ -60,6 +60,12 @@ type ReleaseOverview struct {
 	Readiness      ReadinessResponse `json:"readiness"`
 	ComponentCount int               `json:"component_count"`
 	LatestBuild    *time.Time        `json:"latest_build,omitempty"`
+	// Shipped is set when the catalog published the version's tag
+	// (ShippedSource "catalog") or JIRA marks it released ("jira").
+	Shipped       bool   `json:"shipped"`
+	ShippedSource string `json:"shipped_source"`
+	// NextInStream marks the lowest unshipped z of its product and major.minor.
+	NextInStream bool `json:"next_in_stream"`
 }
 
 // ReleaseComponents is the newest image per component across a release's

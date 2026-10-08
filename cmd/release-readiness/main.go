@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/quay/release-readiness/internal/artbuild"
+	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
 	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/kube"
@@ -37,6 +38,9 @@ func main() {
 
 	// ART build history flags
 	artURL := flag.String("art-build-history-url", "https://art-build-history-art-build-history.apps.artc2023.pc3z.p1.openshiftapps.com", "ART build history service URL (empty disables ART build links)")
+
+	// Red Hat container catalog flags
+	catalogURL := flag.String("catalog-url", "https://catalog.redhat.com/api/containers/v1", "Red Hat container catalog API URL (empty leaves JIRA's released flag as the only shipped signal)")
 
 	flag.Parse()
 
@@ -108,7 +112,18 @@ func main() {
 		}()
 	}
 
-	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, logger)
+	var shipped *catalog.Shipped
+	if *catalogURL != "" {
+		logger.Info("catalog shipped lookup enabled", "url", *catalogURL)
+		shipped = catalog.NewShipped(catalog.NewClient(*catalogURL, &http.Client{Timeout: time.Minute}), logger.With("component", "catalog"))
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			shipped.Run(ctx, time.Hour)
+		}()
+	}
+
+	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, shipped, logger)
 	if err := srv.Run(ctx); err != nil {
 		logger.Error("server", "error", err)
 		os.Exit(1)

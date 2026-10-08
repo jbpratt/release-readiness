@@ -108,6 +108,9 @@ export interface ReleaseOverview {
 	readiness: ReadinessResponse;
 	component_count: number;
 	latest_build?: string;
+	shipped: boolean;
+	shipped_source: "catalog" | "jira" | "";
+	next_in_stream: boolean;
 }
 
 export interface DashboardConfig {
