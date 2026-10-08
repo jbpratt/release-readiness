@@ -1,6 +1,7 @@
 import {
 	EmptyState,
 	EmptyStateBody,
+	Label,
 	PageSection,
 	Pagination,
 	SearchInput,
@@ -23,6 +24,23 @@ function formatTime(t?: string): string {
 	return t ? new Date(t).toLocaleString() : "-";
 }
 
+/** Releases per application, keeping the API's newest-first order. */
+function byApplication(releases: KonfluxRelease[]) {
+	const groups = new Map<string, KonfluxRelease[]>();
+	for (const r of releases) {
+		const rows = groups.get(r.application) ?? [];
+		rows.push(r);
+		groups.set(r.application, rows);
+	}
+	return [...groups];
+}
+
+/** Consecutive Failed releases from the newest, e.g. a retry loop. */
+function failureStreak(rows: KonfluxRelease[]) {
+	const i = rows.findIndex((r) => r.released_reason !== "Failed");
+	return i === -1 ? rows.length : i;
+}
+
 export default function KonfluxReleases() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const application = searchParams.get("application") ?? "";
@@ -33,6 +51,7 @@ export default function KonfluxReleases() {
 	const [error, setError] = useState<string | null>(null);
 	const [page, setPage] = useState(1);
 	const [hasMore, setHasMore] = useState(false);
+	const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
 	// Sync the input when the URL changes, e.g. on back/forward.
 	if (application !== prevApplication) {
@@ -124,8 +143,9 @@ export default function KonfluxReleases() {
 					<Table variant="compact">
 						<Thead>
 							<Tr>
-								<Th>Name</Th>
+								<Th screenReaderText="Row expansion" />
 								<Th>Application</Th>
+								<Th>Name</Th>
 								<Th>Snapshot</Th>
 								<Th>Release plan</Th>
 								<Th>Released</Th>
@@ -133,21 +153,67 @@ export default function KonfluxReleases() {
 								<Th>Completed</Th>
 							</Tr>
 						</Thead>
-						<Tbody>
-							{releases.map((r) => (
-								<Tr key={r.id}>
-									<Td>{r.name}</Td>
-									<Td>{r.application || "-"}</Td>
-									<Td>{r.snapshot}</Td>
-									<Td>{r.release_plan}</Td>
-									<Td>
-										<ReleasedLabel release={r} />
-									</Td>
-									<Td>{formatTime(r.created_at)}</Td>
-									<Td>{formatTime(r.completion_time)}</Td>
-								</Tr>
-							))}
-						</Tbody>
+						{byApplication(releases).map(([app, rows], i) => {
+							const isExpanded = expanded.has(app);
+							const streak = failureStreak(rows);
+							// Pages span all applications, so the next page may hold more of any group's rows.
+							const more = hasMore ? "+" : "";
+							return (
+								<Tbody key={app} isExpanded={isExpanded}>
+									<Tr>
+										<Td
+											expand={{
+												rowIndex: i,
+												isExpanded,
+												onToggle: () =>
+													setExpanded((prev) => {
+														const next = new Set(prev);
+														if (!next.delete(app)) next.add(app);
+														return next;
+													}),
+											}}
+										/>
+										<Td modifier="nowrap">
+											<strong>{app || "-"}</strong>
+										</Td>
+										<Td colSpan={3}>
+											{rows.length}
+											{more} release{rows.length === 1 && !more ? "" : "s"}
+										</Td>
+										<Td>
+											<ReleasedLabel release={rows[0]} />
+											{streak > 0 && (
+												<Label
+													color="red"
+													variant="outline"
+													isCompact
+													style={{ marginLeft: "0.5rem" }}
+												>
+													Failure streak: {streak}
+													{streak === rows.length && more}
+												</Label>
+											)}
+										</Td>
+										<Td>{formatTime(rows[0].created_at)}</Td>
+										<Td>{formatTime(rows[0].completion_time)}</Td>
+									</Tr>
+									{rows.map((r) => (
+										<Tr key={r.id} isExpanded={isExpanded}>
+											<Td />
+											<Td />
+											<Td>{r.name}</Td>
+											<Td>{r.snapshot}</Td>
+											<Td>{r.release_plan}</Td>
+											<Td>
+												<ReleasedLabel release={r} />
+											</Td>
+											<Td>{formatTime(r.created_at)}</Td>
+											<Td>{formatTime(r.completion_time)}</Td>
+										</Tr>
+									))}
+								</Tbody>
+							);
+						})}
 					</Table>
 					<Pagination
 						itemCount={
