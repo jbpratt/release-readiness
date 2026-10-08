@@ -1,9 +1,9 @@
 -- name: UpsertProwRun :exec
-INSERT INTO prow_runs (job_name, build_id, kind, release_version, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at)
+INSERT INTO prow_runs (job_name, build_id, kind, application, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(job_name, build_id) DO UPDATE SET
     kind=excluded.kind,
-    release_version=excluded.release_version,
+    application=excluded.application,
     state=excluded.state,
     started_at=excluded.started_at,
     completed_at=excluded.completed_at,
@@ -22,14 +22,14 @@ VALUES (?, ?, ?, ?, ?, ?, ?);
 -- name: ListFinishedProwBuildIDs :many
 SELECT build_id FROM prow_runs WHERE job_name = ? AND completed_at != '';
 
--- name: ListProwRunsByRelease :many
-SELECT job_name, build_id, kind, release_version, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at
+-- name: ListProwRunsByApplication :many
+SELECT job_name, build_id, kind, application, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at
 FROM prow_runs
-WHERE release_version = ?
-ORDER BY started_at DESC, build_id DESC LIMIT ? OFFSET ?;
+WHERE application = ?
+ORDER BY started_at DESC, build_id DESC;
 
 -- name: ListProwRunsByDigest :many
-SELECT job_name, build_id, kind, release_version, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at
+SELECT job_name, build_id, kind, application, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at
 FROM prow_runs r
 WHERE EXISTS (
     SELECT 1 FROM prow_run_images i
@@ -44,12 +44,12 @@ WHERE job_name = ? AND build_id = ?
 ORDER BY id;
 
 -- name: UpsertProwSync :exec
-INSERT INTO prow_syncs (job_name, release_version, interval_seconds, last_successful_sync)
+INSERT INTO prow_syncs (job_name, application, interval_seconds, last_successful_sync)
 VALUES (?, ?, ?, ?)
 ON CONFLICT(job_name) DO UPDATE SET
-    release_version=excluded.release_version,
+    application=excluded.application,
     interval_seconds=excluded.interval_seconds,
     last_successful_sync=excluded.last_successful_sync;
 
 -- name: ListProwSyncs :many
-SELECT job_name, release_version, interval_seconds, last_successful_sync FROM prow_syncs;
+SELECT job_name, application, interval_seconds, last_successful_sync FROM prow_syncs;

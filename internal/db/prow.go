@@ -13,17 +13,17 @@ func (d *DB) UpsertProwRun(ctx context.Context, r *prow.Run) error {
 	return d.InTx(ctx, func(tx *DB) error {
 		q := tx.queries()
 		if err := q.UpsertProwRun(ctx, dbsqlc.UpsertProwRunParams{
-			JobName:        r.JobName,
-			BuildID:        r.BuildID,
-			Kind:           r.Kind,
-			ReleaseVersion: r.ReleaseVersion,
-			State:          r.State,
-			StartedAt:      formatOptionalTime(r.StartedAt),
-			CompletedAt:    formatOptionalTime(r.CompletedAt),
-			ProwUrl:        r.ProwURL,
-			ArtifactState:  r.ArtifactState,
-			CatalogRef:     r.CatalogRef,
-			FetchedAt:      r.FetchedAt.UTC().Format(time.RFC3339),
+			JobName:       r.JobName,
+			BuildID:       r.BuildID,
+			Kind:          r.Kind,
+			Application:   r.Application,
+			State:         r.State,
+			StartedAt:     formatOptionalTime(r.StartedAt),
+			CompletedAt:   formatOptionalTime(r.CompletedAt),
+			ProwUrl:       r.ProwURL,
+			ArtifactState: r.ArtifactState,
+			CatalogRef:    r.CatalogRef,
+			FetchedAt:     r.FetchedAt.UTC().Format(time.RFC3339),
 		}); err != nil {
 			return err
 		}
@@ -51,13 +51,10 @@ func (d *DB) ListFinishedProwBuildIDs(ctx context.Context, jobName string) ([]st
 	return d.queries().ListFinishedProwBuildIDs(ctx, jobName)
 }
 
-// ListProwRunsByRelease returns a release's runs, newest first.
-func (d *DB) ListProwRunsByRelease(ctx context.Context, release string, limit, offset int) ([]prow.Run, error) {
-	rows, err := d.queries().ListProwRunsByRelease(ctx, dbsqlc.ListProwRunsByReleaseParams{
-		ReleaseVersion: release,
-		Limit:          int64(limit),
-		Offset:         int64(offset),
-	})
+// ListProwRunsByApplication returns every run of the application's jobs,
+// newest first.
+func (d *DB) ListProwRunsByApplication(ctx context.Context, application string) ([]prow.Run, error) {
+	rows, err := d.queries().ListProwRunsByApplication(ctx, application)
 	if err != nil {
 		return nil, err
 	}
@@ -85,18 +82,18 @@ func (d *DB) toProwRuns(ctx context.Context, rows []dbsqlc.ProwRun) ([]prow.Run,
 			return nil, err
 		}
 		runs[i] = prow.Run{
-			JobName:        r.JobName,
-			BuildID:        r.BuildID,
-			Kind:           r.Kind,
-			ReleaseVersion: r.ReleaseVersion,
-			State:          r.State,
-			StartedAt:      parseOptionalTime(r.StartedAt),
-			CompletedAt:    parseOptionalTime(r.CompletedAt),
-			ProwURL:        r.ProwUrl,
-			ArtifactState:  r.ArtifactState,
-			CatalogRef:     r.CatalogRef,
-			FetchedAt:      parseTime(r.FetchedAt),
-			Images:         make([]prow.Image, len(imgs)),
+			JobName:       r.JobName,
+			BuildID:       r.BuildID,
+			Kind:          r.Kind,
+			Application:   r.Application,
+			State:         r.State,
+			StartedAt:     parseOptionalTime(r.StartedAt),
+			CompletedAt:   parseOptionalTime(r.CompletedAt),
+			ProwURL:       r.ProwUrl,
+			ArtifactState: r.ArtifactState,
+			CatalogRef:    r.CatalogRef,
+			FetchedAt:     parseTime(r.FetchedAt),
+			Images:        make([]prow.Image, len(imgs)),
 		}
 		for j, img := range imgs {
 			runs[i].Images[j] = prow.Image{
@@ -114,7 +111,7 @@ func (d *DB) toProwRuns(ctx context.Context, rows []dbsqlc.ProwRun) ([]prow.Run,
 func (d *DB) UpsertProwSync(ctx context.Context, s prow.SyncState) error {
 	return d.queries().UpsertProwSync(ctx, dbsqlc.UpsertProwSyncParams{
 		JobName:            s.JobName,
-		ReleaseVersion:     s.ReleaseVersion,
+		Application:        s.Application,
 		IntervalSeconds:    int64(s.Interval / time.Second),
 		LastSuccessfulSync: s.LastSuccessfulSync.UTC().Format(time.RFC3339),
 	})
@@ -129,7 +126,7 @@ func (d *DB) ListProwSyncs(ctx context.Context) ([]prow.SyncState, error) {
 	for i, r := range rows {
 		states[i] = prow.SyncState{
 			JobName:            r.JobName,
-			ReleaseVersion:     r.ReleaseVersion,
+			Application:        r.Application,
 			Interval:           time.Duration(r.IntervalSeconds) * time.Second,
 			LastSuccessfulSync: parseTime(r.LastSuccessfulSync),
 		}

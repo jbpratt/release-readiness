@@ -128,30 +128,13 @@ func (s *Server) handleListReleaseSnapshots(w http.ResponseWriter, r *http.Reque
 
 func (s *Server) handleGetReleaseSnapshot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	version, name := r.PathValue("version"), r.PathValue("name")
-	release, err := s.db.GetReleaseVersion(ctx, version)
-	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
+	_, snap, ok := s.releaseSnapshot(w, r)
+	if !ok {
 		return
 	}
-	snap, err := s.db.GetReleaseSnapshot(ctx, name)
-	if errors.Is(err, sql.ErrNoRows) {
-		writeError(w, http.StatusNotFound, fmt.Errorf("snapshot %q not found", name))
-		return
-	}
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	components := make([]string, len(snap.Components))
 	images := make([]string, len(snap.Components))
 	for i, c := range snap.Components {
-		components[i] = c.Name
 		images[i] = c.Image
-	}
-	if !releaseview.Contains(release.KonfluxApplication, snap.Application, components) {
-		writeError(w, http.StatusNotFound, fmt.Errorf("snapshot %q is not part of release %q", name, version))
-		return
 	}
 	arts, err := s.artBuilds(ctx, images)
 	if err != nil {
@@ -162,6 +145,36 @@ func (s *Server) handleGetReleaseSnapshot(w http.ResponseWriter, r *http.Request
 		snap.Components[i].Art = arts[i]
 	}
 	writeJSON(w, http.StatusOK, snap)
+}
+
+// releaseSnapshot loads the {version} release and its {name} Snapshot, or
+// writes the error and returns false.
+func (s *Server) releaseSnapshot(w http.ResponseWriter, r *http.Request) (*model.ReleaseVersion, *model.ReleaseSnapshot, bool) {
+	ctx := r.Context()
+	version, name := r.PathValue("version"), r.PathValue("name")
+	release, err := s.db.GetReleaseVersion(ctx, version)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
+		return nil, nil, false
+	}
+	snap, err := s.db.GetReleaseSnapshot(ctx, name)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, fmt.Errorf("snapshot %q not found", name))
+		return nil, nil, false
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return nil, nil, false
+	}
+	components := make([]string, len(snap.Components))
+	for i, c := range snap.Components {
+		components[i] = c.Name
+	}
+	if !releaseview.Contains(release.KonfluxApplication, snap.Application, components) {
+		writeError(w, http.StatusNotFound, fmt.Errorf("snapshot %q is not part of release %q", name, version))
+		return nil, nil, false
+	}
+	return release, snap, true
 }
 
 // artBuilds returns the cached ART build links of each image, nil where none

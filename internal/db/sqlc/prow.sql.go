@@ -127,8 +127,50 @@ func (q *Queries) ListProwRunImages(ctx context.Context, arg ListProwRunImagesPa
 	return items, nil
 }
 
+const listProwRunsByApplication = `-- name: ListProwRunsByApplication :many
+SELECT job_name, build_id, kind, application, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at
+FROM prow_runs
+WHERE application = ?
+ORDER BY started_at DESC, build_id DESC
+`
+
+func (q *Queries) ListProwRunsByApplication(ctx context.Context, application string) ([]ProwRun, error) {
+	rows, err := q.db.QueryContext(ctx, listProwRunsByApplication, application)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ProwRun
+	for rows.Next() {
+		var i ProwRun
+		if err := rows.Scan(
+			&i.JobName,
+			&i.BuildID,
+			&i.Kind,
+			&i.Application,
+			&i.State,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.ProwUrl,
+			&i.ArtifactState,
+			&i.CatalogRef,
+			&i.FetchedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProwRunsByDigest = `-- name: ListProwRunsByDigest :many
-SELECT job_name, build_id, kind, release_version, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at
+SELECT job_name, build_id, kind, application, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at
 FROM prow_runs r
 WHERE EXISTS (
     SELECT 1 FROM prow_run_images i
@@ -156,55 +198,7 @@ func (q *Queries) ListProwRunsByDigest(ctx context.Context, arg ListProwRunsByDi
 			&i.JobName,
 			&i.BuildID,
 			&i.Kind,
-			&i.ReleaseVersion,
-			&i.State,
-			&i.StartedAt,
-			&i.CompletedAt,
-			&i.ProwUrl,
-			&i.ArtifactState,
-			&i.CatalogRef,
-			&i.FetchedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listProwRunsByRelease = `-- name: ListProwRunsByRelease :many
-SELECT job_name, build_id, kind, release_version, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at
-FROM prow_runs
-WHERE release_version = ?
-ORDER BY started_at DESC, build_id DESC LIMIT ? OFFSET ?
-`
-
-type ListProwRunsByReleaseParams struct {
-	ReleaseVersion string
-	Limit          int64
-	Offset         int64
-}
-
-func (q *Queries) ListProwRunsByRelease(ctx context.Context, arg ListProwRunsByReleaseParams) ([]ProwRun, error) {
-	rows, err := q.db.QueryContext(ctx, listProwRunsByRelease, arg.ReleaseVersion, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ProwRun
-	for rows.Next() {
-		var i ProwRun
-		if err := rows.Scan(
-			&i.JobName,
-			&i.BuildID,
-			&i.Kind,
-			&i.ReleaseVersion,
+			&i.Application,
 			&i.State,
 			&i.StartedAt,
 			&i.CompletedAt,
@@ -227,7 +221,7 @@ func (q *Queries) ListProwRunsByRelease(ctx context.Context, arg ListProwRunsByR
 }
 
 const listProwSyncs = `-- name: ListProwSyncs :many
-SELECT job_name, release_version, interval_seconds, last_successful_sync FROM prow_syncs
+SELECT job_name, application, interval_seconds, last_successful_sync FROM prow_syncs
 `
 
 func (q *Queries) ListProwSyncs(ctx context.Context) ([]ProwSync, error) {
@@ -241,7 +235,7 @@ func (q *Queries) ListProwSyncs(ctx context.Context) ([]ProwSync, error) {
 		var i ProwSync
 		if err := rows.Scan(
 			&i.JobName,
-			&i.ReleaseVersion,
+			&i.Application,
 			&i.IntervalSeconds,
 			&i.LastSuccessfulSync,
 		); err != nil {
@@ -259,11 +253,11 @@ func (q *Queries) ListProwSyncs(ctx context.Context) ([]ProwSync, error) {
 }
 
 const upsertProwRun = `-- name: UpsertProwRun :exec
-INSERT INTO prow_runs (job_name, build_id, kind, release_version, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at)
+INSERT INTO prow_runs (job_name, build_id, kind, application, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(job_name, build_id) DO UPDATE SET
     kind=excluded.kind,
-    release_version=excluded.release_version,
+    application=excluded.application,
     state=excluded.state,
     started_at=excluded.started_at,
     completed_at=excluded.completed_at,
@@ -274,17 +268,17 @@ ON CONFLICT(job_name, build_id) DO UPDATE SET
 `
 
 type UpsertProwRunParams struct {
-	JobName        string
-	BuildID        string
-	Kind           string
-	ReleaseVersion string
-	State          string
-	StartedAt      string
-	CompletedAt    string
-	ProwUrl        string
-	ArtifactState  string
-	CatalogRef     string
-	FetchedAt      string
+	JobName       string
+	BuildID       string
+	Kind          string
+	Application   string
+	State         string
+	StartedAt     string
+	CompletedAt   string
+	ProwUrl       string
+	ArtifactState string
+	CatalogRef    string
+	FetchedAt     string
 }
 
 func (q *Queries) UpsertProwRun(ctx context.Context, arg UpsertProwRunParams) error {
@@ -292,7 +286,7 @@ func (q *Queries) UpsertProwRun(ctx context.Context, arg UpsertProwRunParams) er
 		arg.JobName,
 		arg.BuildID,
 		arg.Kind,
-		arg.ReleaseVersion,
+		arg.Application,
 		arg.State,
 		arg.StartedAt,
 		arg.CompletedAt,
@@ -305,17 +299,17 @@ func (q *Queries) UpsertProwRun(ctx context.Context, arg UpsertProwRunParams) er
 }
 
 const upsertProwSync = `-- name: UpsertProwSync :exec
-INSERT INTO prow_syncs (job_name, release_version, interval_seconds, last_successful_sync)
+INSERT INTO prow_syncs (job_name, application, interval_seconds, last_successful_sync)
 VALUES (?, ?, ?, ?)
 ON CONFLICT(job_name) DO UPDATE SET
-    release_version=excluded.release_version,
+    application=excluded.application,
     interval_seconds=excluded.interval_seconds,
     last_successful_sync=excluded.last_successful_sync
 `
 
 type UpsertProwSyncParams struct {
 	JobName            string
-	ReleaseVersion     string
+	Application        string
 	IntervalSeconds    int64
 	LastSuccessfulSync string
 }
@@ -323,7 +317,7 @@ type UpsertProwSyncParams struct {
 func (q *Queries) UpsertProwSync(ctx context.Context, arg UpsertProwSyncParams) error {
 	_, err := q.db.ExecContext(ctx, upsertProwSync,
 		arg.JobName,
-		arg.ReleaseVersion,
+		arg.Application,
 		arg.IntervalSeconds,
 		arg.LastSuccessfulSync,
 	)

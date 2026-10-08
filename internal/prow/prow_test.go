@@ -13,6 +13,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
 const (
@@ -48,11 +50,11 @@ func runFixture(t *testing.T, job Job, id, file string) []byte {
 
 func testJobs(t *testing.T) []Job {
 	t.Helper()
-	periodic, err := ParseJobs(periodicJob+"=quay-v3.18.0", KindPeriodic)
+	periodic, err := ParseJobs(periodicJob+"=quay-3-18", KindPeriodic)
 	if err != nil {
 		t.Fatal(err)
 	}
-	rehearsal, err := ParseJobs(rehearsalPrefix+"/=quay-v3.17.0", KindRehearsal)
+	rehearsal, err := ParseJobs(rehearsalPrefix+"/=quay-3-17", KindRehearsal)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,14 +64,14 @@ func testJobs(t *testing.T) []Job {
 func TestParseJobs(t *testing.T) {
 	jobs := testJobs(t)
 	want := []Job{
-		{Name: periodicJob, Prefix: "logs/" + periodicJob + "/", ReleaseVersion: "quay-v3.18.0", Kind: KindPeriodic},
-		{Name: "rehearse-86270-periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly", Prefix: rehearsalPrefix + "/", ReleaseVersion: "quay-v3.17.0", Kind: KindRehearsal},
+		{Name: periodicJob, Prefix: "logs/" + periodicJob + "/", Application: "quay-3-18", Kind: KindPeriodic},
+		{Name: "rehearse-86270-periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly", Prefix: rehearsalPrefix + "/", Application: "quay-3-17", Kind: KindRehearsal},
 	}
 	if len(jobs) != 2 || jobs[0] != want[0] || jobs[1] != want[1] {
 		t.Errorf("ParseJobs = %+v, want %+v", jobs, want)
 	}
 	if _, err := ParseJobs("no-release", KindPeriodic); err == nil {
-		t.Error("ParseJobs without =release_version: want error")
+		t.Error("ParseJobs without =application: want error")
 	}
 	if jobs, err := ParseJobs("", KindPeriodic); err != nil || len(jobs) != 0 {
 		t.Errorf("ParseJobs(\"\") = %v, %v, want none", jobs, err)
@@ -84,7 +86,7 @@ func TestParseRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	if r.State != "failure" || r.CompletedAt == nil || r.StartedAt == nil || target != "aws-s3-nightly" ||
-		r.Kind != KindRehearsal || r.ReleaseVersion != "quay-v3.17.0" || r.ArtifactState != ArtifactMissing ||
+		r.Kind != KindRehearsal || r.Application != "quay-3-17" || r.ArtifactState != ArtifactMissing ||
 		!strings.HasSuffix(r.ProwURL, "/"+failedRun) {
 		t.Errorf("finished run = %+v, target %q", r, target)
 	}
@@ -220,9 +222,14 @@ func TestSync(t *testing.T) {
 	srv, gets := fakeGCS(t, extra)
 	store := &memStore{runs: map[string]*Run{}, syncs: map[string]SyncState{}}
 	s := NewSyncer(NewClient(srv.URL), store, testJobs(t), 15*time.Minute, slog.New(slog.DiscardHandler))
+	reg := syncstatus.New()
+	s.Status = reg.Track("prow", 15*time.Minute)
 
 	s.SyncOnce(t.Context())
 
+	if p := reg.Problems(time.Now()); len(p) != 0 {
+		t.Errorf("problems after a clean pass = %+v", p)
+	}
 	want := map[string]struct{ state, artifact string }{
 		periodicRun: {"failure", ArtifactMissing},
 		failedRun:   {"failure", ArtifactPresent},
@@ -238,7 +245,7 @@ func TestSync(t *testing.T) {
 			t.Errorf("run %s = %+v, want %s/%s", id, r, w.state, w.artifact)
 		}
 	}
-	if r := store.runs[periodicRun]; r.Kind != KindPeriodic || r.JobName != periodicJob || r.ReleaseVersion != "quay-v3.18.0" {
+	if r := store.runs[periodicRun]; r.Kind != KindPeriodic || r.JobName != periodicJob || r.Application != "quay-3-18" {
 		t.Errorf("periodic run = %+v", r)
 	}
 	if len(store.syncs) != 2 {
@@ -254,6 +261,40 @@ func TestSync(t *testing.T) {
 	for id, n := range map[string]int{failedRun: 1, invalidRun: 1, pendingRun: 2} {
 		if got := gets[rehearsalPrefix+"/"+id+"/prowjob.json"]; got != n {
 			t.Errorf("prowjob.json fetches for %s = %d, want %d", id, got, n)
+		}
+	}
+}
+
+func TestSyncReportsFailedListing(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "down", http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	reg := syncstatus.New()
+	s := NewSyncer(NewClient(srv.URL), &memStore{runs: map[string]*Run{}, syncs: map[string]SyncState{}}, testJobs(t), 15*time.Minute, slog.New(slog.DiscardHandler))
+	s.Status = reg.Track("prow", 15*time.Minute)
+
+	s.SyncOnce(t.Context())
+
+	p := reg.Problems(time.Now())
+	if len(p) != 1 || p[0].Source != "prow" || !strings.Contains(p[0].Message, "503") || !strings.Contains(p[0].Message, "2 errors this pass") {
+		t.Fatalf("problems = %+v, want one prow failure covering both jobs", p)
+	}
+}
+
+func TestComponentKey(t *testing.T) {
+	const d = "sha256:16703125878630f03d1781454b1da8212db6127c822f95c2cfe04e805210bb0d"
+	for _, tc := range []struct{ app, component, image, want string }{
+		{"quay-3-17", "quay-3-17-quay-quay", "quay.io/x/art-images@" + d, "quay@" + d},
+		{"quay-3-17", "quay-3-17-quay-operator-bundle", "quay.io/x/art-images@" + d, "quay-operator-bundle@" + d},
+		{"fbc-quay-3-17", "fbc-quay-3-17-quay-operator", "quay.io/x/art-fbc@" + d, "catalog@" + d},
+		{"fbc-quay-3-17", "fbc-quay-3-17-quay-bridge-operator", "quay.io/x/art-fbc@" + d, ""},
+		{"quay-3-17", "quay-3-17-base-rhel9", "quay.io/x/art-images@" + d, ""},
+		{"quay-images-base", "quay-3-17-quay-quay", "quay.io/x/art-images@" + d, ""},
+		{"quay-3-17", "quay-3-17-quay-quay", "quay.io/x/art-images:v3.17.6", ""},
+	} {
+		if got := ComponentKey(tc.app, tc.component, tc.image); got != tc.want {
+			t.Errorf("ComponentKey(%s, %s) = %q, want %q", tc.app, tc.component, got, tc.want)
 		}
 	}
 }
