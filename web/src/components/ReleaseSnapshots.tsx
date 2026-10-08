@@ -7,6 +7,8 @@ import {
 	EmptyStateBody,
 	Flex,
 	FlexItem,
+	HelperText,
+	HelperTextItem,
 	Label,
 	Pagination,
 	Spinner,
@@ -228,6 +230,13 @@ function SnapshotHistory({
 						</ToolbarItem>
 					</ToolbarContent>
 				</Toolbar>
+				<HelperText style={{ marginBottom: "0.5rem" }}>
+					<HelperTextItem>
+						Quay images: the release's own components. FBC: its file-based
+						catalog (operator index) builds. Base: shared base images. With
+						Release: only snapshots a Konflux Release has used.
+					</HelperTextItem>
+				</HelperText>
 
 				{loading ? (
 					<div style={{ textAlign: "center" }}>
@@ -250,7 +259,15 @@ function SnapshotHistory({
 									<Th>Created</Th>
 									<Th>Snapshot</Th>
 									<Th>Images</Th>
-									<Th>Release</Th>
+									<Th
+										modifier="nowrap"
+										info={{
+											tooltip:
+												"Status of the Konflux Release CR for this snapshot, not whether the product version shipped",
+										}}
+									>
+										Release pipeline
+									</Th>
 								</Tr>
 							</Thead>
 							{snapshots.map((s, i) => {
