@@ -17,6 +17,7 @@ import (
 
 	"github.com/quay/release-readiness/internal/konflux"
 	"github.com/quay/release-readiness/internal/model"
+	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
 var (
@@ -63,6 +64,8 @@ type Syncer struct {
 	store     Store
 	withTx    TxFunc
 	logger    *slog.Logger
+	// Status receives each pass's outcome; nil reports nowhere.
+	Status *syncstatus.Source
 }
 
 // NewSyncer creates a Syncer that lists Snapshots in namespace and persists them to store.
@@ -91,21 +94,25 @@ func (s *Syncer) Run(ctx context.Context, interval time.Duration) {
 func (s *Syncer) SyncOnce(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, syncTimeout)
 	defer cancel()
-	s.each(ctx, snapshotGVR, s.sync)
-	s.each(ctx, releaseGVR, s.syncRelease)
+	var pass syncstatus.Pass
+	s.each(ctx, &pass, snapshotGVR, s.sync)
+	s.each(ctx, &pass, releaseGVR, s.syncRelease)
+	s.Status.Report(pass.Err())
 }
 
-func (s *Syncer) each(ctx context.Context, gvr schema.GroupVersionResource, fn func(context.Context, *unstructured.Unstructured) error) {
+func (s *Syncer) each(ctx context.Context, pass *syncstatus.Pass, gvr schema.GroupVersionResource, fn func(context.Context, *unstructured.Unstructured) error) {
 	opts := metav1.ListOptions{Limit: 500}
 	for {
 		list, err := s.client.Resource(gvr).Namespace(s.namespace).List(ctx, opts)
 		if err != nil {
 			s.logger.Error("list", "resource", gvr.Resource, "namespace", s.namespace, "error", err)
+			pass.Add(fmt.Errorf("list %s: %w", gvr.Resource, err))
 			return
 		}
 		for i := range list.Items {
 			if err := fn(ctx, &list.Items[i]); err != nil {
 				s.logger.Error("ingest", "resource", gvr.Resource, "name", list.Items[i].GetName(), "error", err)
+				pass.Add(fmt.Errorf("ingest %s %s: %w", gvr.Resource, list.Items[i].GetName(), err))
 			}
 		}
 		opts.Continue = list.GetContinue()

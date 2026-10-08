@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ import (
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
 	"github.com/quay/release-readiness/internal/model"
+	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
 func setupTestServer(t *testing.T) *Server {
@@ -28,7 +30,7 @@ func setupTestServer(t *testing.T) *Server {
 		_ = database.Close()
 		_ = os.Remove(dbPath)
 	})
-	return New(database, ":0", "https://redhat.atlassian.net", "PROJQUAY", "https://art.example", nil, slog.Default())
+	return New(database, ":0", "https://redhat.atlassian.net", "PROJQUAY", "https://art.example", nil, syncstatus.New(), slog.Default())
 }
 
 func TestHealthEndpoint(t *testing.T) {
@@ -47,6 +49,35 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 	if resp["status"] != "healthy" {
 		t.Errorf("status: got %q, want healthy", resp["status"])
+	}
+}
+
+func TestSyncStatus(t *testing.T) {
+	srv := setupTestServer(t)
+	srv.syncStatus.Track("konflux", time.Minute).Report(nil)
+	srv.syncStatus.Track("jira", 0).Report(errors.New("JIRA authentication failed: boom"))
+
+	var got struct {
+		Problems []map[string]any `json:"problems"`
+		Sources  []map[string]any `json:"sources"`
+	}
+	getJSON(t, srv, "/api/v1/sync-status", http.StatusOK, &got)
+
+	if len(got.Problems) != 1 {
+		t.Fatalf("problems = %v, want one", got.Problems)
+	}
+	p := got.Problems[0]
+	if p["source"] != "jira" || p["message"] != "JIRA authentication failed: boom" || p["last_success"] != nil {
+		t.Errorf("problem = %v", p)
+	}
+	for _, k := range []string{"since", "last_error_at"} {
+		if _, err := time.Parse(time.RFC3339, p[k].(string)); err != nil {
+			t.Errorf("%s = %v, want RFC3339", k, p[k])
+		}
+	}
+	if len(got.Sources) != 2 || got.Sources[0]["source"] != "jira" || got.Sources[0]["ok"] != false ||
+		got.Sources[1]["source"] != "konflux" || got.Sources[1]["ok"] != true || got.Sources[1]["last_success"] == nil {
+		t.Errorf("sources = %v, want jira failing then konflux ok", got.Sources)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/quay/release-readiness/internal/model"
+	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
 // Store is the subset of the database layer needed by the JIRA syncer.
@@ -27,6 +28,8 @@ type Syncer struct {
 	store  Store
 	withTx TxFunc
 	logger *slog.Logger
+	// Status receives each pass's outcome; nil reports nowhere.
+	Status *syncstatus.Source
 }
 
 // NewSyncer creates a Syncer that uses client to fetch data and store to persist it.
@@ -52,9 +55,13 @@ func (s *Syncer) Run(ctx context.Context, interval time.Duration) {
 
 // SyncOnce discovers active releases and syncs their issues.
 func (s *Syncer) SyncOnce(ctx context.Context) {
+	var pass syncstatus.Pass
+	defer func() { s.Status.Report(authError(pass.Err())) }()
+
 	releases, err := s.client.DiscoverActiveReleases(ctx)
 	if err != nil {
 		s.logger.Error("discover releases", "error", err)
+		pass.Add(err)
 		return
 	}
 
@@ -75,6 +82,7 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 
 		versionInfo, err := s.client.GetVersion(ctx, rel.FixVersion)
 		if err != nil {
+			// A fixVersion missing from JIRA is a data problem on one ticket, not sync health.
 			s.logger.Warn("get version metadata", "version", rel.FixVersion, "error", err)
 		} else {
 			rv.Description = versionInfo.Description
@@ -90,9 +98,10 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 
 		if err := s.store.UpsertReleaseVersion(ctx, rv); err != nil {
 			s.logger.Error("upsert version", "version", rel.FixVersion, "error", err)
+			pass.Add(fmt.Errorf("upsert version %s: %w", rel.FixVersion, err))
 		}
 
-		s.syncVersion(ctx, rel.FixVersion)
+		pass.Add(s.syncVersion(ctx, rel.FixVersion))
 	}
 
 	// Reconcile unreleased versions in DB that may have been released in
@@ -101,6 +110,7 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 	dbVersions, err := s.store.ListActiveReleaseVersions(ctx)
 	if err != nil {
 		s.logger.Error("list active db versions", "error", err)
+		pass.Add(fmt.Errorf("list active db versions: %w", err))
 	} else {
 		for _, dbv := range dbVersions {
 			if activeSet[dbv.Name] {
@@ -121,20 +131,29 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 				}
 				if err := s.store.UpsertReleaseVersion(ctx, &dbv); err != nil {
 					s.logger.Error("upsert version", "version", dbv.Name, "error", err)
+					pass.Add(fmt.Errorf("upsert version %s: %w", dbv.Name, err))
 				}
-				s.syncVersion(ctx, dbv.Name)
+				pass.Add(s.syncVersion(ctx, dbv.Name))
 				s.logger.Info("reconciled version", "version", dbv.Name, "released", versionInfo.Released)
 			}
 		}
 	}
 }
 
+// authError marks a rejected token, which every later pass will hit too.
+func authError(err error) error {
+	if err != nil && (strings.Contains(err.Error(), "returned 401") || strings.Contains(err.Error(), "returned 403")) {
+		return fmt.Errorf("JIRA authentication failed: %w", err)
+	}
+	return err
+}
+
 // syncVersion fetches all issues for a single fixVersion and upserts them.
-func (s *Syncer) syncVersion(ctx context.Context, fixVersion string) {
+func (s *Syncer) syncVersion(ctx context.Context, fixVersion string) error {
 	issues, err := s.client.SearchIssues(ctx, fixVersion)
 	if err != nil {
 		s.logger.Error("search issues", "version", fixVersion, "error", err)
-		return
+		return fmt.Errorf("search issues %s: %w", fixVersion, err)
 	}
 
 	if err := s.withTx(ctx, func(txStore Store) error {
@@ -185,8 +204,9 @@ func (s *Syncer) syncVersion(ctx context.Context, fixVersion string) {
 		return nil
 	}); err != nil {
 		s.logger.Error("sync version", "version", fixVersion, "error", err)
-		return
+		return fmt.Errorf("sync version %s: %w", fixVersion, err)
 	}
 
 	s.logger.Info("synced issues", "count", len(issues), "version", fixVersion)
+	return nil
 }

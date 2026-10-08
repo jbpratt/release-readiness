@@ -2,12 +2,15 @@ package artbuild
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"regexp"
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
 const (
@@ -53,6 +56,8 @@ type Resolver struct {
 	store  Store
 	logger *slog.Logger
 	gap    time.Duration
+	// Status receives each pass's outcome; nil reports nowhere.
+	Status *syncstatus.Source
 }
 
 func NewResolver(client *Client, store Store, logger *slog.Logger) *Resolver {
@@ -78,10 +83,13 @@ func (r *Resolver) Run(ctx context.Context, interval time.Duration) {
 // ResolveOnce looks up up to perPass candidates. A lookup that fails is
 // left for the next pass; only a clean miss is cached as unresolved.
 func (r *Resolver) ResolveOnce(ctx context.Context) {
+	var pass syncstatus.Pass
+	defer func() { r.Status.Report(pass.Err()) }()
 	now := time.Now().UTC()
 	cands, err := r.store.ListArtBuildCandidates(ctx, now.Add(-retryAfter), perPass)
 	if err != nil {
 		r.logger.Error("list candidates", "error", err)
+		pass.Add(fmt.Errorf("list candidates: %w", err))
 		return
 	}
 	pace := time.NewTicker(r.gap)
@@ -94,10 +102,12 @@ func (r *Resolver) ResolveOnce(ctx context.Context) {
 				return
 			}
 			r.logger.Warn("lookup", "image", c.Image, "error", err)
+			pass.Add(fmt.Errorf("lookup %s: %w", c.Image, err))
 			continue
 		}
 		if err := r.store.UpsertArtBuild(ctx, b); err != nil {
 			r.logger.Error("store", "image", c.Image, "error", err)
+			pass.Add(fmt.Errorf("store %s: %w", c.Image, err))
 			continue
 		}
 		if b.State == StateResolved {
