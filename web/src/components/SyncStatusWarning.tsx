@@ -47,6 +47,13 @@ export default function SyncStatusWarning() {
 									last success{" "}
 									{p.last_success ? relative(p.last_success) : "never"}
 								</Content>
+								{/* Failing sources carry since; stale ones do not. */}
+								{!p.since && (
+									<Content component="p">
+										Builds or snapshots from the stale period may not be visible
+										yet.
+									</Content>
+								)}
 							</Content>
 						</StackItem>
 					))}
