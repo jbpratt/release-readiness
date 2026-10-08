@@ -1,8 +1,9 @@
 import { Tooltip } from "@patternfly/react-core";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
-import type { ArtBuild, SnapshotImage } from "../api/types";
+import type { ArtBuild, SnapshotImage, SnapshotProwRuns } from "../api/types";
 import { quayManifestUrl, upstreamCommitUrl } from "../utils/links";
 import GitShaLink from "./GitShaLink";
+import { ProwRunBadge } from "./ProwRuns";
 
 const external = { target: "_blank", rel: "noopener noreferrer" };
 
@@ -59,9 +60,13 @@ function ImageDigestLink({ image }: { image: string }) {
 /** The component images exactly as one Snapshot records them. */
 export default function SnapshotComponentsTable({
 	components,
+	prowRuns,
 }: {
 	components: SnapshotImage[];
+	/** Shown only once a CI job of the release has synced. */
+	prowRuns?: SnapshotProwRuns;
 }) {
+	const ci = prowRuns?.last_successful_sync ? prowRuns : undefined;
 	return (
 		<Table variant="compact" aria-label="Snapshot components">
 			<Thead>
@@ -71,6 +76,7 @@ export default function SnapshotComponentsTable({
 					<Th width={15}>Upstream</Th>
 					<Th width={15}>ART</Th>
 					<Th width={20}>Build repo</Th>
+					{ci && <Th modifier="fitContent">Periodic CI</Th>}
 				</Tr>
 			</Thead>
 			<Tbody>
@@ -89,6 +95,16 @@ export default function SnapshotComponentsTable({
 						<Td>
 							<GitShaLink sha={c.git_sha} gitUrl={c.git_url} />
 						</Td>
+						{ci && (
+							<Td modifier="fitContent">
+								<ProwRunBadge
+									component={c.name}
+									image={c.image}
+									runs={ci.components[c.name] ?? []}
+									sync={ci}
+								/>
+							</Td>
+						)}
 					</Tr>
 				))}
 			</Tbody>

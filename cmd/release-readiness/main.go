@@ -46,8 +46,8 @@ func main() {
 	catalogURL := flag.String("catalog-url", "https://catalog.redhat.com/api/containers/v1", "Red Hat container catalog API URL (empty leaves JIRA's released flag as the only shipped signal)")
 
 	// Prow flags
-	prowJobs := flag.String("prow-jobs", os.Getenv("PROW_JOBS"), "periodic Prow jobs to ingest, as job_name=release_version[,...]")
-	prowRehearsals := flag.String("prow-rehearsals", "", "rehearsal GCS prefixes to ingest, as gcs-prefix=release_version[,...]")
+	prowJobs := flag.String("prow-jobs", os.Getenv("PROW_JOBS"), "periodic Prow jobs to ingest, as job_name=konflux_application[,...] (e.g. ...-aws-s3-nightly=quay-3-18)")
+	prowRehearsals := flag.String("prow-rehearsals", "", "rehearsal GCS prefixes to ingest, as gcs-prefix=konflux_application[,...]")
 	prowInterval := flag.Duration("prow-interval", 15*time.Minute, "Prow sync poll interval")
 
 	flag.Parse()
@@ -151,6 +151,7 @@ func main() {
 	if prowJobList := append(periodics, rehearsals...); len(prowJobList) > 0 {
 		logger.Info("prow sync enabled", "jobs", len(prowJobList), "interval", *prowInterval)
 		syncer := prow.NewSyncer(prow.NewClient(prow.DefaultBaseURL), database, prowJobList, *prowInterval, logger.With("component", "prow-sync"))
+		syncer.Status = status.Track("prow", *prowInterval)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

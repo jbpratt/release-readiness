@@ -48,6 +48,7 @@ The Vite dev server proxies `/api` requests to `localhost:8088` (the Go backend)
 - **`internal/konflux/`** — Konflux Snapshot spec types.
 - **`internal/jira/`** — JIRA REST API client. Discovers active releases, syncs issues by fixVersion.
 - **`internal/releaseview/`** — Release component set. A fixVersion maps to a Konflux application (`quay-v3.16.2` → `quay-3-16`); a release merges `fbc-quay-X-Y`, `quay-X-Y` and the `quay-X-Y-*` components of `quay-images-base`, keeping the newest image per component. Served at `/api/v1/releases/{version}/snapshots`.
+- **`internal/prow/`** — Prow periodic CI runs from public GCS, keyed by Konflux application (`-prow-jobs job=quay-3-18`). A run tests a Snapshot component only on an exact (role, digest) match (`ComponentKey`). Served at `/api/v1/releases/{version}/prow-runs` and `/api/v1/releases/{version}/snapshots/{name}/prow-runs`.
 - **`internal/model/`** — Shared data types used across packages.
 
 ### Frontend (`web/`)

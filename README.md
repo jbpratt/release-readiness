@@ -26,9 +26,15 @@ Test results are not ingested.
 
 Discovers active releases by querying for JIRA issues with the `-area/release` component that are not Closed/Done. Parses the version from the ticket summary (e.g. "Release Quay v3.16.2") and syncs all issues matching that `fixVersion` (and optionally the Target Version custom field).
 
+### Prow sync (default: every 15m, only when jobs are configured)
+
+Lists the runs of each `-prow-jobs` periodic (and `-prow-rehearsals` prefix) in the public `test-platform-results-public` GCS bucket and stores each run's state, Prow link and, once the run has finished, the images its `tested-images.json` names. A job maps to a Konflux application, so every z-stream of a minor (`quay-v3.18.1`, `quay-v3.18.2`) shows the same runs.
+
+A run counts as testing a Snapshot component only on an exact (role, manifest digest) match: `quay-X-Y-quay-{quay,clair,builder,builder-qemu,operator,operator-bundle}` against the matching role, and `fbc-quay-X-Y-quay-operator` against the catalog. `/api/v1/releases/{version}/snapshots/{name}/prow-runs` returns those runs per component; `/api/v1/releases/{version}/prow-runs` pages through the application's runs (`limit`, `offset`, `unlinked=true` for runs matching no Snapshot image).
+
 ### Sync status
 
-`/api/v1/sync-status` lists each enabled sync (`konflux`, `jira`, `art-builds`, `catalog`) with its last success, and as `problems` those whose last pass failed or that have had no success within 3 poll intervals (at least 10 minutes); the header shows a warning icon while any exist.
+`/api/v1/sync-status` lists each enabled sync (`konflux`, `jira`, `art-builds`, `catalog`, `prow`) with its last success, and as `problems` those whose last pass failed or that have had no success within 3 poll intervals (at least 10 minutes); the header shows a warning icon while any exist.
 
 ## Release view
 
@@ -71,6 +77,9 @@ cd web && npm install && npm run build
 | `-jira-project` | `JIRA_PROJECT` | `PROJQUAY` | JIRA project key |
 | `-jira-target-version-field` | `JIRA_TARGET_VERSION_FIELD` | `customfield_12319940` | JIRA custom field for Target Version |
 | `-jira-poll-interval` | — | `5m` | JIRA sync poll interval |
+| `-prow-jobs` | `PROW_JOBS` | — | Periodic Prow jobs to ingest, as `job_name=konflux_application[,...]`, e.g. `periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly=quay-3-18` |
+| `-prow-rehearsals` | — | — | Rehearsal GCS prefixes to ingest, as `gcs-prefix=konflux_application[,...]`; their runs are labelled Rehearsal |
+| `-prow-interval` | — | `15m` | Prow sync poll interval |
 | `-catalog-url` | — | `https://catalog.redhat.com/api/containers/v1` | Red Hat container catalog API, checked hourly in the background to mark versions shipped (empty leaves JIRA's released flag as the only shipped signal) |
 
 ### Local development
