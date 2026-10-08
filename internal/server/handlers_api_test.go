@@ -53,6 +53,21 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 }
 
+func TestConfigJiraEnabled(t *testing.T) {
+	srv := setupTestServer(t)
+	var got map[string]any
+	getJSON(t, srv, "/api/v1/config", http.StatusOK, &got)
+	if got["jira_enabled"] != false {
+		t.Errorf("without a jira sync: jira_enabled = %v, want false", got["jira_enabled"])
+	}
+
+	srv.syncStatus.Track("jira", time.Minute)
+	getJSON(t, srv, "/api/v1/config", http.StatusOK, &got)
+	if got["jira_enabled"] != true {
+		t.Errorf("with a jira sync: jira_enabled = %v, want true", got["jira_enabled"])
+	}
+}
+
 func TestSyncStatus(t *testing.T) {
 	srv := setupTestServer(t)
 	srv.syncStatus.Track("konflux", time.Minute).Report(nil)
