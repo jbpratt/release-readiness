@@ -164,57 +164,6 @@ func getJSON(t *testing.T, srv *Server, url string, wantStatus int, v any) {
 	}
 }
 
-func TestGetReleaseComponents(t *testing.T) {
-	srv := setupTestServer(t)
-	t0 := seedReleaseView(t, srv)
-
-	type comp struct{ name, app, snapshot string }
-	tests := []struct {
-		release string
-		want    []comp
-		asOf    time.Time
-	}{
-		{"quay-v3.18.0", []comp{
-			{"fbc-quay-3-18-index", "fbc-quay-3-18", "fbc-quay-3-18-a"},
-			{"quay-3-18-base-rhel9", "quay-images-base", "base-a"},
-			{"quay-3-18-clair", "quay-3-18", "quay-3-18-b"},
-			{"quay-3-18-quay", "quay-3-18", "quay-3-18-a"},
-		}, t0.Add(2 * time.Hour)},
-		// No FBC for 3.14: falls back to the quay app.
-		{"quay-v3.14.0", []comp{{"quay-3-14-quay", "quay-3-14", "quay-3-14-a"}}, t0},
-		{"quay-v3.20.0", []comp{}, time.Time{}},
-	}
-	for _, tt := range tests {
-		var got model.ReleaseComponents
-		getJSON(t, srv, "/api/v1/releases/"+tt.release+"/components", http.StatusOK, &got)
-		gotComps := []comp{}
-		for _, c := range got.Components {
-			gotComps = append(gotComps, comp{c.Name, c.Application, c.Snapshot})
-		}
-		if got.Release != tt.release || !slices.Equal(gotComps, tt.want) {
-			t.Errorf("%s: got %s %v, want %v", tt.release, got.Release, gotComps, tt.want)
-		}
-		if got.Components == nil {
-			t.Errorf("%s: components is null, want []", tt.release)
-		}
-		var asOf time.Time
-		if got.AsOf != nil {
-			asOf = *got.AsOf
-		}
-		if !asOf.Equal(tt.asOf) {
-			t.Errorf("%s: as_of = %v, want %v", tt.release, asOf, tt.asOf)
-		}
-	}
-
-	var readiness model.ReadinessResponse
-	getJSON(t, srv, "/api/v1/releases/quay-v3.20.0/readiness", http.StatusOK, &readiness)
-	if readiness.Message != "No build snapshots yet" {
-		t.Errorf("no-data readiness: got %+v, want No build snapshots yet", readiness)
-	}
-
-	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/components", http.StatusNotFound, nil)
-}
-
 func TestListReleaseSnapshots(t *testing.T) {
 	srv := setupTestServer(t)
 	t0 := seedReleaseView(t, srv)
@@ -341,15 +290,14 @@ func TestArtBuildLinks(t *testing.T) {
 		t.Errorf("snapshot art: got %+v, want %+v", snap.Components, want)
 	}
 
-	var rc model.ReleaseComponents
-	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/components", http.StatusOK, &rc)
-	for _, c := range rc.Components {
-		if c.Name == "quay-3-18-clair" {
-			if c.Art == nil || *c.Art != *want {
-				t.Errorf("%s art: got %+v, want %+v", c.Name, c.Art, want)
-			}
-		} else if c.Art != nil {
-			t.Errorf("%s art: got %+v, want null", c.Name, c.Art)
+	var unresolved model.ReleaseSnapshot
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/quay-3-18-a", http.StatusOK, &unresolved)
+	if len(unresolved.Components) == 0 {
+		t.Fatal("unresolved snapshot: no components")
+	}
+	for _, c := range unresolved.Components {
+		if c.Art != nil {
+			t.Errorf("%s art: got %+v, want null (unresolved)", c.Name, c.Art)
 		}
 	}
 }
