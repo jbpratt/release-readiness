@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/quay/release-readiness/internal/artbuild"
+	"github.com/quay/release-readiness/internal/fbc"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/releaseview"
 	"github.com/quay/release-readiness/internal/syncstatus"
@@ -128,7 +130,7 @@ func (s *Server) handleListReleaseSnapshots(w http.ResponseWriter, r *http.Reque
 
 func (s *Server) handleGetReleaseSnapshot(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	_, snap, ok := s.releaseSnapshot(w, r)
+	release, snap, ok := s.releaseSnapshot(w, r)
 	if !ok {
 		return
 	}
@@ -136,7 +138,55 @@ func (s *Server) handleGetReleaseSnapshot(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	if err := s.attachFBCCatalog(ctx, release, snap); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, snap)
+}
+
+var quayYStream = regexp.MustCompile(`^quay-(\d+)-(\d+)$`)
+
+// attachFBCCatalog compares the Snapshot's quay-operator bundle with the newest
+// stored quay-operator FBC catalog of the release, by full sha256 digest:
+// the catalog names registry.redhat.io where Konflux names quay.io. It never
+// reads the registry, and an unread or failed catalog is unknown.
+func (s *Server) attachFBCCatalog(ctx context.Context, release *model.ReleaseVersion, snap *model.ReleaseSnapshot) error {
+	app := release.KonfluxApplication
+	m := quayYStream.FindStringSubmatch(app)
+	i := slices.IndexFunc(snap.Components, func(c model.SnapshotImage) bool { return c.Name == app+"-quay-operator-bundle" })
+	if m == nil || i < 0 {
+		return nil
+	}
+	fc := &model.FBCCatalog{Status: "unknown", SnapshotBundleImage: snap.Components[i].Image}
+	snap.FBCCatalog = fc
+	cat, err := s.db.LatestFBCCatalog(ctx, "fbc-"+app, "fbc-"+app+"-quay-operator", "stable-"+m[1]+"."+m[2])
+	if err != nil || cat == nil {
+		return err
+	}
+	fc.CatalogSnapshot, fc.CatalogImage = cat.Snapshot, cat.Image
+	_, want, _ := strings.Cut(fc.SnapshotBundleImage, "@")
+	if cat.State != fbc.StateParsed || len(cat.Bundles) == 0 || !strings.HasPrefix(want, "sha256:") {
+		return nil
+	}
+	// Behind shows the catalog's bundle of this z-stream, if it has one.
+	name := fbc.Package + ".v" + strings.TrimPrefix(release.Name, "quay-v")
+	behind := true
+	for _, b := range cat.Bundles {
+		if b.Digest == want {
+			fc.Status, fc.CatalogBundleImage = "current", b.Image
+			return nil
+		}
+		if b.Name == name {
+			fc.CatalogBundleImage = b.Image
+		}
+		// A tag ref may name the bundle, so the channel cannot prove it absent.
+		behind = behind && b.Digest != ""
+	}
+	if behind {
+		fc.Status = "behind"
+	}
+	return nil
 }
 
 // releaseSnapshot loads the {version} release and its {name} Snapshot, or

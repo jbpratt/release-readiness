@@ -15,6 +15,7 @@ import (
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
+	"github.com/quay/release-readiness/internal/fbc"
 	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/kube"
 	"github.com/quay/release-readiness/internal/prow"
@@ -92,6 +93,9 @@ func main() {
 		}
 		syncer := kube.NewSyncer(kc, *namespace, database, konfluxTx, konfluxLog)
 		syncer.Status = status.Track("konflux", *konfluxPollInterval)
+		syncer.Catalogs = fbc.NewClient(&http.Client{Timeout: time.Minute})
+		// Reported only when a catalog is read, so it has no staleness check.
+		syncer.CatalogStatus = status.Track("fbc-catalogs", 0)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

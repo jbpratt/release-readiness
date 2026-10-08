@@ -1,0 +1,38 @@
+---
+defaultChannel: stable-3.18
+name: quay-operator
+schema: olm.package
+---
+entries:
+- name: quay-operator.v3.18.0
+- name: quay-operator.v3.18.1
+  replaces: quay-operator.v3.18.0
+name: stable-3.18
+package: quay-operator
+schema: olm.channel
+---
+entries:
+- name: quay-operator.v3.17.9
+name: stable-3.17
+package: quay-operator
+schema: olm.channel
+---
+image: registry.redhat.io/quay/quay-operator-bundle@sha256:030ee454a0e8ae48d1c934128f554ff0b83afe1ca1803cdedfc14bb28a62d019
+name: quay-operator.v3.18.0
+package: quay-operator
+properties:
+- type: olm.package
+  value:
+    packageName: quay-operator
+    version: 3.18.0
+schema: olm.bundle
+---
+image: registry.redhat.io/quay/quay-operator-bundle@sha256:b241d01c6f2171ead9cd1060dfd5cd0000c426eb62e475e00565c2796de881ba
+name: quay-operator.v3.18.1
+package: quay-operator
+schema: olm.bundle
+---
+image: registry.redhat.io/quay/quay-operator-bundle:v3.17.9
+name: quay-operator.v3.17.9
+package: quay-operator
+schema: olm.bundle

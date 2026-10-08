@@ -20,6 +20,8 @@ The Go backend runs two background sync loops that pull data into a local SQLite
 
 Lists `Snapshot` and `Release` resources (`appstudio.redhat.com/v1alpha1`) in the `-namespace` Konflux namespace through the Kubernetes API, using `-kubeconfig`/`KUBECONFIG` or, when unset, the in-cluster service account. New snapshots are stored with their components (git SHA, image); releases are upserted and served at `/api/v1/konflux-releases`. Each record's `created_at` is the resource's `creationTimestamp`.
 
+Each pass also reads the file-based catalog of the newest quay-operator FBC images not yet read, pulled anonymously from the image's registry (registry v2 API), to check whether a Quay Snapshot's operator bundle is in the catalog.
+
 Test results are not ingested.
 
 ### JIRA sync (default: every 5m)
@@ -34,13 +36,13 @@ A run counts as testing a Snapshot component only on an exact (role, manifest di
 
 ### Sync status
 
-`/api/v1/sync-status` lists each enabled sync (`konflux`, `jira`, `art-builds`, `catalog`, `prow`) with its last success, and as `problems` those whose last pass failed or that have had no success within 3 poll intervals (at least 10 minutes); the header shows a warning icon while any exist.
+`/api/v1/sync-status` lists each enabled sync (`konflux`, `jira`, `art-builds`, `catalog`, `fbc-catalogs`, `prow`) with its last success, and as `problems` those whose last pass failed or that have had no success within 3 poll intervals (at least 10 minutes); the header shows a warning icon while any exist.
 
 ## Release view
 
 Each JIRA release maps to a Konflux application by major.minor version: fixVersion `quay-v3.16.2` (or plain `3.16.2`) maps to `quay-3-16`, and `omr-v2.0.10` to `omr-2-0`.
 
-A Quay release's components come from three applications: `fbc-quay-X-Y` (the shipped FBC, 3.16+ only), `quay-X-Y`, and the `quay-X-Y-*` base image components of `quay-images-base`. `/api/v1/releases/{version}/snapshots` pages through the release's snapshots, newest first (`limit`, `offset`, `application`, `with_release=true`), and `/api/v1/releases/{version}/snapshots/{name}` returns one snapshot's components.
+A Quay release's components come from three applications: `fbc-quay-X-Y` (the shipped FBC, 3.16+ only), `quay-X-Y`, and the `quay-X-Y-*` base image components of `quay-images-base`. `/api/v1/releases/{version}/snapshots` pages through the release's snapshots, newest first (`limit`, `offset`, `application`, `with_release=true`), and `/api/v1/releases/{version}/snapshots/{name}` returns one snapshot's components, each with any newer ART build still running (`pending_art_build`), and for a Quay snapshot whether the FBC catalog carries its operator bundle (`fbc_catalog`: `current`, `behind` or `unknown`).
 
 ## JIRA expectations
 

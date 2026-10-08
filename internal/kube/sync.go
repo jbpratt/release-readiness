@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,6 +16,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"github.com/quay/release-readiness/internal/fbc"
 	"github.com/quay/release-readiness/internal/konflux"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/syncstatus"
@@ -25,8 +27,13 @@ var (
 	releaseGVR  = schema.GroupVersionResource{Group: "appstudio.redhat.com", Version: "v1alpha1", Resource: "releases"}
 )
 
-// syncTimeout bounds one sync so a hung API call cannot stall the loop.
-const syncTimeout = 5 * time.Minute
+const (
+	// syncTimeout bounds one sync so a hung API call cannot stall the loop.
+	syncTimeout = 5 * time.Minute
+	// fbcRetryAfter spaces out reads of a catalog image that failed.
+	fbcRetryAfter = 15 * time.Minute
+	fbcPerPass    = 5
+)
 
 // NewClient builds a dynamic client from kubeconfig, or from the in-cluster
 // service account when kubeconfig is empty.
@@ -52,6 +59,14 @@ type Store interface {
 	EnsureComponent(ctx context.Context, name string) (*model.Component, error)
 	CreateSnapshotComponent(ctx context.Context, snapshotID int64, component, gitSHA, imageURL, gitURL string) error
 	UpsertKonfluxRelease(ctx context.Context, r *model.KonfluxRelease) error
+	ListFBCCatalogCandidates(ctx context.Context, retryBefore time.Time, limit int) ([]string, error)
+	// ReplaceFBCCatalog atomically stores the outcome of reading one catalog image.
+	ReplaceFBCCatalog(ctx context.Context, digest, state string, bundles []fbc.Bundle, checkedAt time.Time) error
+}
+
+// CatalogReader reads the bundles of a digest-pinned FBC image.
+type CatalogReader interface {
+	Bundles(ctx context.Context, image string) ([]fbc.Bundle, error)
 }
 
 // TxFunc wraps a function in a database transaction, passing a tx-scoped Store.
@@ -66,6 +81,10 @@ type Syncer struct {
 	logger    *slog.Logger
 	// Status receives each pass's outcome; nil reports nowhere.
 	Status *syncstatus.Source
+	// Catalogs, when set, reads new quay-operator FBC catalogs after each
+	// pass and reports to CatalogStatus.
+	Catalogs      CatalogReader
+	CatalogStatus *syncstatus.Source
 }
 
 // NewSyncer creates a Syncer that lists Snapshots in namespace and persists them to store.
@@ -98,6 +117,47 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 	s.each(ctx, &pass, snapshotGVR, s.sync)
 	s.each(ctx, &pass, releaseGVR, s.syncRelease)
 	s.Status.Report(pass.Err())
+	if s.Catalogs != nil {
+		s.syncCatalogs(ctx)
+	}
+}
+
+// syncCatalogs reads the catalogs of the newest quay-operator FBC images not
+// yet read. A failed read is stored so the API reports unknown, not a stale
+// catalog, and is retried after fbcRetryAfter. A pass with nothing to read
+// leaves the last outcome standing.
+func (s *Syncer) syncCatalogs(ctx context.Context) {
+	now := time.Now().UTC()
+	images, err := s.store.ListFBCCatalogCandidates(ctx, now.Add(-fbcRetryAfter), fbcPerPass)
+	if err != nil {
+		s.logger.Error("list fbc catalog candidates", "error", err)
+		s.CatalogStatus.Report(fmt.Errorf("list catalog candidates: %w", err))
+		return
+	}
+	if len(images) == 0 {
+		return
+	}
+	var pass syncstatus.Pass
+	for _, img := range images {
+		_, digest, _ := strings.Cut(img, "@")
+		state := fbc.StateParsed
+		bundles, err := s.Catalogs.Bundles(ctx, img)
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			s.logger.Warn("read fbc catalog", "image", img, "error", err)
+			pass.Add(fmt.Errorf("read catalog %s: %w", img, err))
+			state, bundles = fbc.StateFailed, nil
+		}
+		if err := s.store.ReplaceFBCCatalog(ctx, digest, state, bundles, now); err != nil {
+			s.logger.Error("store fbc catalog", "image", img, "error", err)
+			pass.Add(fmt.Errorf("store catalog %s: %w", img, err))
+			continue
+		}
+		s.logger.Info("read fbc catalog", "image", img, "state", state, "bundles", len(bundles))
+	}
+	s.CatalogStatus.Report(pass.Err())
 }
 
 func (s *Syncer) each(ctx context.Context, pass *syncstatus.Pass, gvr schema.GroupVersionResource, fn func(context.Context, *unstructured.Unstructured) error) {
