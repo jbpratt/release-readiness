@@ -3,25 +3,19 @@ export function jiraIssueUrl(key: string, baseUrl: string): string {
 	return `${baseUrl.replace(/\/+$/, "")}/browse/${key}`;
 }
 
-/**
- * Derive a GitHub commit URL from a Konflux component name and SHA.
- *
- * Component names follow the pattern `{org}-{repo}-v{major}-{minor}`,
- * e.g. `quay-quay-v3-14` -> `https://github.com/quay/quay/commit/{sha}`.
- */
-export function githubCommitUrl(component: string, sha: string): string | null {
-	const stripped = component.replace(/-v\d+-\d+$/, "");
-	const idx = stripped.indexOf("-");
-	if (idx <= 0 || idx >= stripped.length - 1) return null;
-	const org = stripped.substring(0, idx);
-	const repo = stripped.substring(idx + 1);
-	return `https://github.com/${org}/${repo}/commit/${sha}`;
+/** `owner/repo` from a git clone URL, or null if it has no path. */
+export function gitRepoName(gitUrl: string): string | null {
+	const m = gitUrl.match(/^https?:\/\/[^/]+\/(.+?)(?:\.git)?\/*$/);
+	return m ? m[1] : null;
 }
 
-/** Prepend https:// to a quay.io image reference if missing. */
-export function quayImageUrl(imageUrl: string): string | null {
-	if (!imageUrl.startsWith("quay.io/")) return null;
-	return `https://${imageUrl.split("@")[0]}`;
+/**
+ * quay.io UI manifest page for a digest-pinned image reference,
+ * e.g. `quay.io/ns/repo@sha256:abc` -> `https://quay.io/repository/ns/repo/manifest/sha256:abc`.
+ */
+export function quayManifestUrl(image: string): string | null {
+	const m = image.match(/^quay\.io\/([^@:]+)(?::[^@]*)?@(sha256:[0-9a-f]+)$/);
+	return m ? `https://quay.io/repository/${m[1]}/manifest/${m[2]}` : null;
 }
 
 /**

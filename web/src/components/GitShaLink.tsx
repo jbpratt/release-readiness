@@ -1,25 +1,36 @@
-import { githubCommitUrl } from "../utils/links";
+import {
+	ClipboardCopy,
+	clipboardCopyFunc,
+	Tooltip,
+} from "@patternfly/react-core";
+import { gitRepoName } from "../utils/links";
 
+// The build repo is a private ART mirror, so the sha is copyable rather than linked.
 export default function GitShaLink({
-	component,
 	sha,
 	gitUrl,
 }: {
-	component: string;
 	sha: string;
 	gitUrl?: string;
 }) {
 	if (!sha) return null;
-	const display = sha.substring(0, 12);
-	const url = gitUrl
-		? `${gitUrl.replace(/\.git$/, "").replace(/\/+$/, "")}/commit/${sha}`
-		: githubCommitUrl(component, sha);
-	if (url) {
-		return (
-			<a href={url} target="_blank" rel="noopener noreferrer">
-				<code>{display}</code>
-			</a>
-		);
+	const repo = gitUrl ? gitRepoName(gitUrl) : null;
+	let tip = "Build repo commit";
+	if (repo) {
+		tip += ` in ${repo}`;
+		if (repo.startsWith("openshift-priv/")) tip += " (private ART mirror)";
 	}
-	return <code>{display}</code>;
+	return (
+		<Tooltip content={tip}>
+			<span>
+				<ClipboardCopy
+					variant="inline-compact"
+					isCode
+					onCopy={(e) => clipboardCopyFunc(e, sha)}
+				>
+					{sha.substring(0, 12)}
+				</ClipboardCopy>
+			</span>
+		</Tooltip>
+	);
 }
