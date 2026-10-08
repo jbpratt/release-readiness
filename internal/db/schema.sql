@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS release_versions (
     archived           INTEGER NOT NULL DEFAULT 0,
     release_ticket_key      TEXT NOT NULL DEFAULT '',
     release_ticket_assignee TEXT NOT NULL DEFAULT '',
-    s3_application          TEXT NOT NULL DEFAULT '',
+    konflux_application     TEXT NOT NULL DEFAULT '',
     due_date                TEXT NOT NULL DEFAULT ''
 );
 

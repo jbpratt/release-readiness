@@ -69,7 +69,7 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 			Name:                  rel.FixVersion,
 			ReleaseTicketKey:      rel.ReleaseTicketKey,
 			ReleaseTicketAssignee: rel.Assignee,
-			S3Application:         rel.KonfluxApplication,
+			KonfluxApplication:    rel.KonfluxApplication,
 			DueDate:               rel.DueDate,
 		}
 

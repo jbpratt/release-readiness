@@ -60,7 +60,7 @@ export interface ReleaseVersion {
 	archived: boolean;
 	release_ticket_key?: string;
 	release_ticket_assignee?: string;
-	s3_application?: string;
+	konflux_application?: string;
 	due_date?: string;
 }
 

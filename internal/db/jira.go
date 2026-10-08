@@ -142,7 +142,7 @@ func (d *DB) UpsertReleaseVersion(ctx context.Context, v *model.ReleaseVersion) 
 		Archived:              boolToInt64(v.Archived),
 		ReleaseTicketKey:      v.ReleaseTicketKey,
 		ReleaseTicketAssignee: v.ReleaseTicketAssignee,
-		S3Application:         v.S3Application,
+		KonfluxApplication:    v.KonfluxApplication,
 		DueDate:               dueDate,
 	})
 }
@@ -153,7 +153,7 @@ func (d *DB) GetReleaseVersion(ctx context.Context, name string) (*model.Release
 		return nil, err
 	}
 	return toReleaseVersion(row.Name, row.Description, row.ReleaseDate, row.Released, row.Archived,
-		row.ReleaseTicketKey, row.ReleaseTicketAssignee, row.S3Application, row.DueDate), nil
+		row.ReleaseTicketKey, row.ReleaseTicketAssignee, row.KonfluxApplication, row.DueDate), nil
 }
 
 func (d *DB) ListActiveReleaseVersions(ctx context.Context) ([]model.ReleaseVersion, error) {
@@ -164,7 +164,7 @@ func (d *DB) ListActiveReleaseVersions(ctx context.Context) ([]model.ReleaseVers
 	versions := make([]model.ReleaseVersion, len(rows))
 	for i, r := range rows {
 		versions[i] = *toReleaseVersion(r.Name, r.Description, r.ReleaseDate, r.Released, r.Archived,
-			r.ReleaseTicketKey, r.ReleaseTicketAssignee, r.S3Application, r.DueDate)
+			r.ReleaseTicketKey, r.ReleaseTicketAssignee, r.KonfluxApplication, r.DueDate)
 	}
 	return versions, nil
 }
@@ -177,7 +177,7 @@ func (d *DB) ListAllReleaseVersions(ctx context.Context) ([]model.ReleaseVersion
 	versions := make([]model.ReleaseVersion, len(rows))
 	for i, r := range rows {
 		versions[i] = *toReleaseVersion(r.Name, r.Description, r.ReleaseDate, r.Released, r.Archived,
-			r.ReleaseTicketKey, r.ReleaseTicketAssignee, r.S3Application, r.DueDate)
+			r.ReleaseTicketKey, r.ReleaseTicketAssignee, r.KonfluxApplication, r.DueDate)
 	}
 	return versions, nil
 }
@@ -200,7 +200,7 @@ func (d *DB) DeleteJiraIssuesNotIn(ctx context.Context, fixVersion string, keys 
 	return err
 }
 
-func toReleaseVersion(name, description, relDate string, released, archived int64, ticketKey, ticketAssignee, s3App, dueDate string) *model.ReleaseVersion {
+func toReleaseVersion(name, description, relDate string, released, archived int64, ticketKey, ticketAssignee, konfluxApp, dueDate string) *model.ReleaseVersion {
 	return &model.ReleaseVersion{
 		Name:                  name,
 		Description:           description,
@@ -209,7 +209,7 @@ func toReleaseVersion(name, description, relDate string, released, archived int6
 		Archived:              archived == 1,
 		ReleaseTicketKey:      ticketKey,
 		ReleaseTicketAssignee: ticketAssignee,
-		S3Application:         s3App,
+		KonfluxApplication:    konfluxApp,
 		DueDate:               parseOptionalTime(dueDate),
 	}
 }

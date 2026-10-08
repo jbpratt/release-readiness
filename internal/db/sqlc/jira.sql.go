@@ -51,7 +51,7 @@ func (q *Queries) GetIssueSummary(ctx context.Context, fixVersion string) (GetIs
 }
 
 const getReleaseVersion = `-- name: GetReleaseVersion :one
-SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, s3_application, due_date
+SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
 FROM release_versions WHERE name = ?
 `
 
@@ -63,7 +63,7 @@ type GetReleaseVersionRow struct {
 	Archived              int64
 	ReleaseTicketKey      string
 	ReleaseTicketAssignee string
-	S3Application         string
+	KonfluxApplication    string
 	DueDate               string
 }
 
@@ -78,14 +78,14 @@ func (q *Queries) GetReleaseVersion(ctx context.Context, name string) (GetReleas
 		&i.Archived,
 		&i.ReleaseTicketKey,
 		&i.ReleaseTicketAssignee,
-		&i.S3Application,
+		&i.KonfluxApplication,
 		&i.DueDate,
 	)
 	return i, err
 }
 
 const listActiveReleaseVersions = `-- name: ListActiveReleaseVersions :many
-SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, s3_application, due_date
+SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
 FROM release_versions
 WHERE released = 0 AND archived = 0
 ORDER BY name
@@ -99,7 +99,7 @@ type ListActiveReleaseVersionsRow struct {
 	Archived              int64
 	ReleaseTicketKey      string
 	ReleaseTicketAssignee string
-	S3Application         string
+	KonfluxApplication    string
 	DueDate               string
 }
 
@@ -120,7 +120,7 @@ func (q *Queries) ListActiveReleaseVersions(ctx context.Context) ([]ListActiveRe
 			&i.Archived,
 			&i.ReleaseTicketKey,
 			&i.ReleaseTicketAssignee,
-			&i.S3Application,
+			&i.KonfluxApplication,
 			&i.DueDate,
 		); err != nil {
 			return nil, err
@@ -137,7 +137,7 @@ func (q *Queries) ListActiveReleaseVersions(ctx context.Context) ([]ListActiveRe
 }
 
 const listAllReleaseVersions = `-- name: ListAllReleaseVersions :many
-SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, s3_application, due_date
+SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
 FROM release_versions
 ORDER BY name
 `
@@ -150,7 +150,7 @@ type ListAllReleaseVersionsRow struct {
 	Archived              int64
 	ReleaseTicketKey      string
 	ReleaseTicketAssignee string
-	S3Application         string
+	KonfluxApplication    string
 	DueDate               string
 }
 
@@ -171,7 +171,7 @@ func (q *Queries) ListAllReleaseVersions(ctx context.Context) ([]ListAllReleaseV
 			&i.Archived,
 			&i.ReleaseTicketKey,
 			&i.ReleaseTicketAssignee,
-			&i.S3Application,
+			&i.KonfluxApplication,
 			&i.DueDate,
 		); err != nil {
 			return nil, err
@@ -237,7 +237,7 @@ func (q *Queries) UpsertJiraIssue(ctx context.Context, arg UpsertJiraIssueParams
 }
 
 const upsertReleaseVersion = `-- name: UpsertReleaseVersion :exec
-INSERT INTO release_versions (name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, s3_application, due_date)
+INSERT INTO release_versions (name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(name) DO UPDATE SET
     description=excluded.description,
@@ -246,7 +246,7 @@ ON CONFLICT(name) DO UPDATE SET
     archived=excluded.archived,
     release_ticket_key=excluded.release_ticket_key,
     release_ticket_assignee=excluded.release_ticket_assignee,
-    s3_application=excluded.s3_application,
+    konflux_application=excluded.konflux_application,
     due_date=excluded.due_date
 `
 
@@ -258,7 +258,7 @@ type UpsertReleaseVersionParams struct {
 	Archived              int64
 	ReleaseTicketKey      string
 	ReleaseTicketAssignee string
-	S3Application         string
+	KonfluxApplication    string
 	DueDate               string
 }
 
@@ -271,7 +271,7 @@ func (q *Queries) UpsertReleaseVersion(ctx context.Context, arg UpsertReleaseVer
 		arg.Archived,
 		arg.ReleaseTicketKey,
 		arg.ReleaseTicketAssignee,
-		arg.S3Application,
+		arg.KonfluxApplication,
 		arg.DueDate,
 	)
 	return err

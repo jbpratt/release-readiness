@@ -80,16 +80,16 @@ func TestGetReleaseSnapshot(t *testing.T) {
 	srv := setupTestServer(t)
 	ctx := t.Context()
 
-	// Create a snapshot for the S3 application
-	_, err := srv.db.CreateSnapshot(ctx, "quay-v3-16", "quay-v3-16-snap-1", time.Now())
+	// Create a snapshot for the Konflux application
+	_, err := srv.db.CreateSnapshot(ctx, "quay-3-16", "quay-3-16-snap-1", time.Now())
 	if err != nil {
 		t.Fatalf("create snapshot: %v", err)
 	}
 
-	// Create the release version pointing to this S3 app
+	// Create the release version pointing to this Konflux app
 	err = srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{
-		Name:          "3.16.3",
-		S3Application: "quay-v3-16",
+		Name:               "3.16.3",
+		KonfluxApplication: "quay-3-16",
 	})
 	if err != nil {
 		t.Fatalf("upsert release: %v", err)
@@ -107,8 +107,8 @@ func TestGetReleaseSnapshot(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&snap); err != nil {
 		t.Fatal(err)
 	}
-	if snap.Name != "quay-v3-16-snap-1" {
-		t.Errorf("snapshot name: got %q, want quay-v3-16-snap-1", snap.Name)
+	if snap.Name != "quay-3-16-snap-1" {
+		t.Errorf("snapshot name: got %q, want quay-3-16-snap-1", snap.Name)
 	}
 }
 
@@ -118,15 +118,15 @@ func TestReleasesOverview(t *testing.T) {
 
 	dueDate := time.Now().Add(10 * 24 * time.Hour)
 	err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{
-		Name:          "3.16.3",
-		S3Application: "quay-v3-16",
-		DueDate:       &dueDate,
+		Name:               "3.16.3",
+		KonfluxApplication: "quay-3-16",
+		DueDate:            &dueDate,
 	})
 	if err != nil {
 		t.Fatalf("upsert release: %v", err)
 	}
 
-	_, err = srv.db.CreateSnapshot(ctx, "quay-v3-16", "quay-v3-16-snap-1", time.Now())
+	_, err = srv.db.CreateSnapshot(ctx, "quay-3-16", "quay-3-16-snap-1", time.Now())
 	if err != nil {
 		t.Fatalf("create snapshot: %v", err)
 	}
@@ -173,8 +173,8 @@ func TestReleasesOverview(t *testing.T) {
 	if ov.Snapshot == nil {
 		t.Fatal("snapshot: got nil")
 	}
-	if ov.Snapshot.Name != "quay-v3-16-snap-1" {
-		t.Errorf("snapshot name: got %q, want quay-v3-16-snap-1", ov.Snapshot.Name)
+	if ov.Snapshot.Name != "quay-3-16-snap-1" {
+		t.Errorf("snapshot name: got %q, want quay-3-16-snap-1", ov.Snapshot.Name)
 	}
 	// Snapshot should not include components or test_results in overview
 	if ov.Snapshot.Components != nil {
@@ -239,9 +239,9 @@ func TestGetReleaseReadiness(t *testing.T) {
 	// Create a release with a future due date
 	dueDate := time.Now().Add(10 * 24 * time.Hour)
 	err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{
-		Name:          "3.16.3",
-		S3Application: "quay-v3-16",
-		DueDate:       &dueDate,
+		Name:               "3.16.3",
+		KonfluxApplication: "quay-3-16",
+		DueDate:            &dueDate,
 	})
 	if err != nil {
 		t.Fatalf("upsert release: %v", err)
@@ -266,7 +266,7 @@ func TestGetReleaseReadiness(t *testing.T) {
 		t.Errorf("without snapshot: got %+v, want yellow/No build snapshots yet", got)
 	}
 
-	_, err = srv.db.CreateSnapshot(ctx, "quay-v3-16", "quay-v3-16-snap-1", time.Now())
+	_, err = srv.db.CreateSnapshot(ctx, "quay-3-16", "quay-3-16-snap-1", time.Now())
 	if err != nil {
 		t.Fatalf("create snapshot: %v", err)
 	}
