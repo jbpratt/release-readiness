@@ -128,3 +128,19 @@ CREATE TABLE IF NOT EXISTS prow_syncs (
     interval_seconds     INTEGER NOT NULL,
     last_successful_sync TEXT NOT NULL
 );
+
+-- Newest running ART image build per NVR name and version in a group, as of
+-- the group's last successful search. Pending builds have no image digest.
+-- component is the NVR name, e.g. quay-quay-container.
+CREATE TABLE IF NOT EXISTS art_pending_builds (
+    group_name      TEXT NOT NULL,
+    release_version TEXT NOT NULL,
+    component       TEXT NOT NULL,
+    nvr             TEXT NOT NULL,
+    record_id       TEXT NOT NULL,
+    upstream_sha    TEXT NOT NULL DEFAULT '',
+    upstream_repo   TEXT NOT NULL DEFAULT '',
+    started_at      TEXT NOT NULL,
+    checked_at      TEXT NOT NULL,
+    PRIMARY KEY (group_name, release_version, component)
+);

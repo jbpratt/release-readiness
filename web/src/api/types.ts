@@ -5,6 +5,14 @@ export interface SnapshotImage {
 	git_url: string;
 	/** null until the image is found in ART build history. */
 	art: ArtBuild | null;
+	/** A newer ART build still running from another upstream commit. */
+	pending_art_build: PendingArtBuild | null;
+}
+
+export interface PendingArtBuild {
+	build_url: string;
+	upstream_sha: string;
+	started_at: string;
 }
 
 export interface ArtBuild {

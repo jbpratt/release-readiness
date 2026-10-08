@@ -110,11 +110,12 @@ type ReleaseSnapshot struct {
 
 // SnapshotImage is one component image exactly as a Snapshot records it.
 type SnapshotImage struct {
-	Name   string    `json:"name"`
-	Image  string    `json:"image"`
-	GitSHA string    `json:"git_sha"`
-	GitURL string    `json:"git_url"`
-	Art    *ArtBuild `json:"art"`
+	Name            string           `json:"name"`
+	Image           string           `json:"image"`
+	GitSHA          string           `json:"git_sha"`
+	GitURL          string           `json:"git_url"`
+	Art             *ArtBuild        `json:"art"`
+	PendingArtBuild *PendingArtBuild `json:"pending_art_build"`
 }
 
 // ArtBuild links a component image to its ART build history record and the
@@ -125,6 +126,14 @@ type ArtBuild struct {
 	PipelineURL  string `json:"pipeline_url"`
 	UpstreamRepo string `json:"upstream_repo"`
 	UpstreamSHA  string `json:"upstream_sha"`
+}
+
+// PendingArtBuild is a newer ART build of a component, still running, from a
+// different upstream commit than the Snapshot's image.
+type PendingArtBuild struct {
+	BuildURL    string    `json:"build_url"`
+	UpstreamSHA string    `json:"upstream_sha"`
+	StartedAt   time.Time `json:"started_at"`
 }
 
 // ReadinessResponse represents the computed readiness signal for a release.

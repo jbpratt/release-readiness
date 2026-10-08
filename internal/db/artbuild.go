@@ -67,3 +67,61 @@ func (d *DB) ResolvedArtBuilds(ctx context.Context, digests []string) (map[strin
 	}
 	return builds, nil
 }
+
+func (d *DB) ListActiveApplications(ctx context.Context) ([]string, error) {
+	return d.queries().ListActiveApplications(ctx)
+}
+
+func (d *DB) ReplaceArtPendingBuilds(ctx context.Context, group string, builds []artbuild.PendingBuild, checkedAt time.Time) error {
+	return d.InTx(ctx, func(tx *DB) error {
+		q := tx.queries()
+		if err := q.DeleteArtPendingBuilds(ctx, group); err != nil {
+			return err
+		}
+		for _, b := range builds {
+			if err := q.InsertArtPendingBuild(ctx, dbsqlc.InsertArtPendingBuildParams{
+				GroupName:      group,
+				ReleaseVersion: b.Version,
+				Component:      b.Name,
+				Nvr:            b.NVR,
+				RecordID:       b.RecordID,
+				UpstreamSha:    b.UpstreamSHA,
+				UpstreamRepo:   b.UpstreamRepo,
+				StartedAt:      b.StartedAt.UTC().Format(time.RFC3339),
+				CheckedAt:      checkedAt.UTC().Format(time.RFC3339),
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// ArtPendingBuilds returns the pending builds of versions stored by a search
+// at or after checkedSince.
+func (d *DB) ArtPendingBuilds(ctx context.Context, versions []string, checkedSince time.Time) ([]artbuild.PendingBuild, error) {
+	if len(versions) == 0 {
+		return nil, nil
+	}
+	rows, err := d.queries().ListArtPendingBuilds(ctx, dbsqlc.ListArtPendingBuildsParams{
+		CheckedAt: checkedSince.UTC().Format(time.RFC3339),
+		Versions:  versions,
+	})
+	if err != nil {
+		return nil, err
+	}
+	builds := make([]artbuild.PendingBuild, len(rows))
+	for i, r := range rows {
+		builds[i] = artbuild.PendingBuild{
+			Group:        r.GroupName,
+			Version:      r.ReleaseVersion,
+			Name:         r.Component,
+			NVR:          r.Nvr,
+			RecordID:     r.RecordID,
+			UpstreamRepo: r.UpstreamRepo,
+			UpstreamSHA:  r.UpstreamSha,
+			StartedAt:    parseTime(r.StartedAt),
+		}
+	}
+	return builds, nil
+}
