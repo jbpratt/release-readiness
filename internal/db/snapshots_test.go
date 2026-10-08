@@ -38,15 +38,4 @@ func TestSnapshotsOrderedByCreatedAt(t *testing.T) {
 			}
 		}
 	}
-
-	summaries, err := d.LatestSnapshotPerApplication(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(summaries) != 1 {
-		t.Fatalf("got %d summaries, want 1", len(summaries))
-	}
-	if got := summaries[0]; got.LatestSnapshot.Name != "newest" || got.SnapshotCount != 3 {
-		t.Errorf("latest = %q count %d, want %q count 3", got.LatestSnapshot.Name, got.SnapshotCount, "newest")
-	}
 }

@@ -7,6 +7,7 @@ package dbsqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const createSnapshot = `-- name: CreateSnapshot :execlastid
@@ -86,45 +87,31 @@ func (q *Queries) GetSnapshotRow(ctx context.Context, name string) (Snapshot, er
 	return i, err
 }
 
-const latestSnapshotPerApplication = `-- name: LatestSnapshotPerApplication :many
-SELECT s.id, s.application, s.name, s.created_at, CAST(counts.cnt AS INTEGER) AS cnt
-FROM snapshots s
-JOIN (
-    SELECT application, COUNT(*) AS cnt
-    FROM snapshots
-    GROUP BY application
-) counts ON s.application = counts.application
-WHERE s.id = (
-    SELECT id FROM snapshots latest
-    WHERE latest.application = s.application
-    ORDER BY latest.created_at DESC, latest.id DESC LIMIT 1
-)
-ORDER BY s.application
+const listAllSnapshots = `-- name: ListAllSnapshots :many
+SELECT id, application, name, created_at
+FROM snapshots
+ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
 `
 
-type LatestSnapshotPerApplicationRow struct {
-	ID          int64
-	Application string
-	Name        string
-	CreatedAt   string
-	Cnt         int64
+type ListAllSnapshotsParams struct {
+	Limit  int64
+	Offset int64
 }
 
-func (q *Queries) LatestSnapshotPerApplication(ctx context.Context) ([]LatestSnapshotPerApplicationRow, error) {
-	rows, err := q.db.QueryContext(ctx, latestSnapshotPerApplication)
+func (q *Queries) ListAllSnapshots(ctx context.Context, arg ListAllSnapshotsParams) ([]Snapshot, error) {
+	rows, err := q.db.QueryContext(ctx, listAllSnapshots, arg.Limit, arg.Offset)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []LatestSnapshotPerApplicationRow
+	var items []Snapshot
 	for rows.Next() {
-		var i LatestSnapshotPerApplicationRow
+		var i Snapshot
 		if err := rows.Scan(
 			&i.ID,
 			&i.Application,
 			&i.Name,
 			&i.CreatedAt,
-			&i.Cnt,
 		); err != nil {
 			return nil, err
 		}
@@ -139,19 +126,104 @@ func (q *Queries) LatestSnapshotPerApplication(ctx context.Context) ([]LatestSna
 	return items, nil
 }
 
-const listAllSnapshots = `-- name: ListAllSnapshots :many
-SELECT id, application, name, created_at
-FROM snapshots
-ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
+const listComponentCandidates = `-- name: ListComponentCandidates :many
+SELECT sc.id, sc.component, sc.git_sha, sc.image_url, sc.git_url,
+       s.id AS snapshot_id, s.application, s.name AS snapshot, s.created_at
+FROM snapshot_components sc
+JOIN snapshots s ON s.id = sc.snapshot_id
+WHERE s.application IN (/*SLICE:applications*/?)
 `
 
-type ListAllSnapshotsParams struct {
-	Limit  int64
-	Offset int64
+type ListComponentCandidatesRow struct {
+	ID          int64
+	Component   string
+	GitSha      string
+	ImageUrl    string
+	GitUrl      string
+	SnapshotID  int64
+	Application string
+	Snapshot    string
+	CreatedAt   string
 }
 
-func (q *Queries) ListAllSnapshots(ctx context.Context, arg ListAllSnapshotsParams) ([]Snapshot, error) {
-	rows, err := q.db.QueryContext(ctx, listAllSnapshots, arg.Limit, arg.Offset)
+func (q *Queries) ListComponentCandidates(ctx context.Context, applications []string) ([]ListComponentCandidatesRow, error) {
+	query := listComponentCandidates
+	var queryParams []interface{}
+	if len(applications) > 0 {
+		for _, v := range applications {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:applications*/?", strings.Repeat(",?", len(applications))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:applications*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListComponentCandidatesRow
+	for rows.Next() {
+		var i ListComponentCandidatesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Component,
+			&i.GitSha,
+			&i.ImageUrl,
+			&i.GitUrl,
+			&i.SnapshotID,
+			&i.Application,
+			&i.Snapshot,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReleaseSnapshots = `-- name: ListReleaseSnapshots :many
+SELECT id, application, name, created_at
+FROM snapshots s
+WHERE s.application IN (/*SLICE:applications*/?)
+  AND (s.application != ?
+       OR EXISTS (SELECT 1 FROM snapshot_components sc
+                  WHERE sc.snapshot_id = s.id AND sc.component LIKE ?))
+ORDER BY s.created_at DESC, s.id DESC
+LIMIT ? OFFSET ?
+`
+
+type ListReleaseSnapshotsParams struct {
+	Applications []string
+	Application  string
+	Component    string
+	Limit        int64
+	Offset       int64
+}
+
+func (q *Queries) ListReleaseSnapshots(ctx context.Context, arg ListReleaseSnapshotsParams) ([]Snapshot, error) {
+	query := listReleaseSnapshots
+	var queryParams []interface{}
+	if len(arg.Applications) > 0 {
+		for _, v := range arg.Applications {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:applications*/?", strings.Repeat(",?", len(arg.Applications))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:applications*/?", "NULL", 1)
+	}
+	queryParams = append(queryParams, arg.Application)
+	queryParams = append(queryParams, arg.Component)
+	queryParams = append(queryParams, arg.Limit)
+	queryParams = append(queryParams, arg.Offset)
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
 	if err != nil {
 		return nil, err
 	}

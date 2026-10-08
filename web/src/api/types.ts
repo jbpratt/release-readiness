@@ -15,6 +15,22 @@ export interface SnapshotRecord {
 	components?: ComponentRecord[];
 }
 
+export interface ReleaseComponent {
+	name: string;
+	image: string;
+	git_sha: string;
+	git_url: string;
+	application: string;
+	snapshot: string;
+	created_at: string;
+}
+
+export interface ReleaseComponents {
+	release: string;
+	as_of?: string;
+	components: ReleaseComponent[];
+}
+
 export interface KonfluxRelease {
 	id: number;
 	name: string;
@@ -73,7 +89,8 @@ export interface ReleaseOverview {
 	release: ReleaseVersion;
 	issue_summary?: IssueSummary;
 	readiness: ReadinessResponse;
-	snapshot?: SnapshotRecord;
+	component_count: number;
+	latest_build?: string;
 }
 
 export interface DashboardConfig {

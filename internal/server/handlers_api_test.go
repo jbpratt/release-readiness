@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -76,40 +77,138 @@ func TestListSnapshots(t *testing.T) {
 	}
 }
 
-func TestGetReleaseSnapshot(t *testing.T) {
-	srv := setupTestServer(t)
-	ctx := t.Context()
-
-	// Create a snapshot for the Konflux application
-	_, err := srv.db.CreateSnapshot(ctx, "quay-3-16", "quay-3-16-snap-1", time.Now())
+// seedSnapshot creates a snapshot whose components are named comps.
+func seedSnapshot(t *testing.T, srv *Server, app, name string, created time.Time, comps ...string) {
+	t.Helper()
+	snap, err := srv.db.CreateSnapshot(t.Context(), app, name, created)
 	if err != nil {
-		t.Fatalf("create snapshot: %v", err)
+		t.Fatalf("create snapshot %s: %v", name, err)
 	}
-
-	// Create the release version pointing to this Konflux app
-	err = srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{
-		Name:               "3.16.3",
-		KonfluxApplication: "quay-3-16",
-	})
-	if err != nil {
-		t.Fatalf("upsert release: %v", err)
+	for _, c := range comps {
+		if err := srv.db.CreateSnapshotComponent(t.Context(), snap.ID, c, "sha-"+name, "quay.io/x/"+c+"@"+name, ""); err != nil {
+			t.Fatalf("create component %s: %v", c, err)
+		}
 	}
+}
 
-	req := httptest.NewRequest("GET", "/api/v1/releases/3.16.3/snapshot", nil)
+// seedReleaseView seeds quay, FBC and base-image snapshots for 3.18 plus
+// unrelated 3.9 and 3.14 data.
+func seedReleaseView(t *testing.T, srv *Server) time.Time {
+	t.Helper()
+	t0 := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	hour := func(n int) time.Time { return t0.Add(time.Duration(n) * time.Hour) }
+	seedSnapshot(t, srv, "quay-3-18", "quay-3-18-a", hour(0), "quay-3-18-quay", "quay-3-18-base-rhel9")
+	seedSnapshot(t, srv, "quay-3-18", "quay-3-18-b", hour(0), "quay-3-18-clair")
+	seedSnapshot(t, srv, "fbc-quay-3-18", "fbc-quay-3-18-a", hour(1), "fbc-quay-3-18-index")
+	seedSnapshot(t, srv, "quay-images-base", "base-a", hour(2), "quay-3-18-base-rhel9", "quay-3-9-base-rhel9")
+	seedSnapshot(t, srv, "quay-images-base", "base-b", hour(3), "quay-3-9-base-rhel9")
+	seedSnapshot(t, srv, "quay-3-9", "quay-3-9-a", hour(3), "quay-3-9-quay")
+	seedSnapshot(t, srv, "quay-3-14", "quay-3-14-a", hour(0), "quay-3-14-quay")
+	for name, app := range map[string]string{
+		"quay-v3.18.0": "quay-3-18",
+		"quay-v3.14.0": "quay-3-14",
+		"quay-v3.20.0": "quay-3-20",
+	} {
+		if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: name, KonfluxApplication: app}); err != nil {
+			t.Fatalf("upsert release %s: %v", name, err)
+		}
+	}
+	return t0
+}
+
+func getJSON(t *testing.T, srv *Server, url string, wantStatus int, v any) {
+	t.Helper()
+	req := httptest.NewRequest("GET", url, nil)
 	w := httptest.NewRecorder()
 	srv.http.Handler.ServeHTTP(w, req)
+	if w.Code != wantStatus {
+		t.Fatalf("GET %s: got %d, want %d, body: %s", url, w.Code, wantStatus, w.Body.String())
+	}
+	if v != nil {
+		if err := json.NewDecoder(w.Body).Decode(v); err != nil {
+			t.Fatalf("GET %s: decode: %v", url, err)
+		}
+	}
+}
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("get release snapshot: got %d, body: %s", w.Code, w.Body.String())
+func TestGetReleaseComponents(t *testing.T) {
+	srv := setupTestServer(t)
+	t0 := seedReleaseView(t, srv)
+
+	type comp struct{ name, app, snapshot string }
+	tests := []struct {
+		release string
+		want    []comp
+		asOf    time.Time
+	}{
+		{"quay-v3.18.0", []comp{
+			{"fbc-quay-3-18-index", "fbc-quay-3-18", "fbc-quay-3-18-a"},
+			{"quay-3-18-base-rhel9", "quay-images-base", "base-a"},
+			{"quay-3-18-clair", "quay-3-18", "quay-3-18-b"},
+			{"quay-3-18-quay", "quay-3-18", "quay-3-18-a"},
+		}, t0.Add(2 * time.Hour)},
+		// No FBC for 3.14: falls back to the quay app.
+		{"quay-v3.14.0", []comp{{"quay-3-14-quay", "quay-3-14", "quay-3-14-a"}}, t0},
+		{"quay-v3.20.0", []comp{}, time.Time{}},
+	}
+	for _, tt := range tests {
+		var got model.ReleaseComponents
+		getJSON(t, srv, "/api/v1/releases/"+tt.release+"/components", http.StatusOK, &got)
+		gotComps := []comp{}
+		for _, c := range got.Components {
+			gotComps = append(gotComps, comp{c.Name, c.Application, c.Snapshot})
+		}
+		if got.Release != tt.release || !slices.Equal(gotComps, tt.want) {
+			t.Errorf("%s: got %s %v, want %v", tt.release, got.Release, gotComps, tt.want)
+		}
+		if got.Components == nil {
+			t.Errorf("%s: components is null, want []", tt.release)
+		}
+		var asOf time.Time
+		if got.AsOf != nil {
+			asOf = *got.AsOf
+		}
+		if !asOf.Equal(tt.asOf) {
+			t.Errorf("%s: as_of = %v, want %v", tt.release, asOf, tt.asOf)
+		}
 	}
 
-	var snap model.SnapshotRecord
-	if err := json.NewDecoder(w.Body).Decode(&snap); err != nil {
-		t.Fatal(err)
+	var readiness model.ReadinessResponse
+	getJSON(t, srv, "/api/v1/releases/quay-v3.20.0/readiness", http.StatusOK, &readiness)
+	if readiness.Message != "No build snapshots yet" {
+		t.Errorf("no-data readiness: got %+v, want No build snapshots yet", readiness)
 	}
-	if snap.Name != "quay-3-16-snap-1" {
-		t.Errorf("snapshot name: got %q, want quay-3-16-snap-1", snap.Name)
+
+	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/components", http.StatusNotFound, nil)
+}
+
+func TestListReleaseSnapshots(t *testing.T) {
+	srv := setupTestServer(t)
+	seedReleaseView(t, srv)
+
+	names := func(url string) []string {
+		t.Helper()
+		var snaps []model.SnapshotRecord
+		getJSON(t, srv, url, http.StatusOK, &snaps)
+		out := []string{}
+		for _, s := range snaps {
+			out = append(out, s.Name)
+		}
+		return out
 	}
+
+	// base-b only carries a 3.9 base image, so 3.18 skips it.
+	want := []string{"base-a", "fbc-quay-3-18-a", "quay-3-18-b", "quay-3-18-a"}
+	if got := names("/api/v1/releases/quay-v3.18.0/snapshots"); !slices.Equal(got, want) {
+		t.Errorf("snapshots: got %v, want %v", got, want)
+	}
+	if got := names("/api/v1/releases/quay-v3.18.0/snapshots?limit=2&offset=1"); !slices.Equal(got, want[1:3]) {
+		t.Errorf("paged snapshots: got %v, want %v", got, want[1:3])
+	}
+	if got := names("/api/v1/releases/quay-v3.20.0/snapshots"); len(got) != 0 {
+		t.Errorf("no-data snapshots: got %v, want none", got)
+	}
+	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/snapshots", http.StatusNotFound, nil)
 }
 
 func TestReleasesOverview(t *testing.T) {
@@ -126,10 +225,8 @@ func TestReleasesOverview(t *testing.T) {
 		t.Fatalf("upsert release: %v", err)
 	}
 
-	_, err = srv.db.CreateSnapshot(ctx, "quay-3-16", "quay-3-16-snap-1", time.Now())
-	if err != nil {
-		t.Fatalf("create snapshot: %v", err)
-	}
+	built := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	seedSnapshot(t, srv, "quay-3-16", "quay-3-16-snap-1", built, "quay-3-16-quay")
 
 	err = srv.db.UpsertJiraIssue(ctx, &model.JiraIssueRecord{
 		Key: "PROJQUAY-1", Summary: "fix bug", Status: "Open",
@@ -170,15 +267,8 @@ func TestReleasesOverview(t *testing.T) {
 	if ov.IssueSummary.Total != 1 || ov.IssueSummary.Bugs != 1 {
 		t.Errorf("issue_summary: got total=%d bugs=%d, want 1/1", ov.IssueSummary.Total, ov.IssueSummary.Bugs)
 	}
-	if ov.Snapshot == nil {
-		t.Fatal("snapshot: got nil")
-	}
-	if ov.Snapshot.Name != "quay-3-16-snap-1" {
-		t.Errorf("snapshot name: got %q, want quay-3-16-snap-1", ov.Snapshot.Name)
-	}
-	// Snapshot should not include components or test_results in overview
-	if ov.Snapshot.Components != nil {
-		t.Errorf("snapshot components: should be nil in overview, got %d", len(ov.Snapshot.Components))
+	if ov.ComponentCount != 1 || ov.LatestBuild == nil || !ov.LatestBuild.Equal(built) {
+		t.Errorf("components: got count=%d latest_build=%v, want 1/%v", ov.ComponentCount, ov.LatestBuild, built)
 	}
 	if ov.Readiness.Signal != "yellow" {
 		t.Errorf("readiness: got %q, want yellow (open issues remain)", ov.Readiness.Signal)
@@ -266,10 +356,7 @@ func TestGetReleaseReadiness(t *testing.T) {
 		t.Errorf("without snapshot: got %+v, want yellow/No build snapshots yet", got)
 	}
 
-	_, err = srv.db.CreateSnapshot(ctx, "quay-3-16", "quay-3-16-snap-1", time.Now())
-	if err != nil {
-		t.Fatalf("create snapshot: %v", err)
-	}
+	seedSnapshot(t, srv, "quay-3-16", "quay-3-16-snap-1", time.Now(), "quay-3-16-quay")
 
 	if got := getReadiness(); got.Signal != "green" || got.Message != "No open issues" {
 		t.Errorf("with snapshot: got %+v, want green/No open issues", got)
