@@ -58,3 +58,19 @@ CREATE TABLE IF NOT EXISTS release_versions (
     s3_application          TEXT NOT NULL DEFAULT '',
     due_date                TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS konflux_releases (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    name            TEXT NOT NULL UNIQUE,
+    application     TEXT NOT NULL DEFAULT '',
+    snapshot        TEXT NOT NULL DEFAULT '',
+    release_plan    TEXT NOT NULL DEFAULT '',
+    target          TEXT NOT NULL DEFAULT '',
+    released_status TEXT NOT NULL DEFAULT '',
+    released_reason TEXT NOT NULL DEFAULT '',
+    created_at      TEXT NOT NULL,
+    start_time      TEXT NOT NULL DEFAULT '',
+    completion_time TEXT NOT NULL DEFAULT ''
+);
+
+CREATE INDEX IF NOT EXISTS idx_konflux_releases_application_created ON konflux_releases(application, created_at);

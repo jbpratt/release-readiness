@@ -22,7 +22,7 @@ func main() {
 
 	// Konflux flags
 	kubeconfig := flag.String("kubeconfig", os.Getenv("KUBECONFIG"), "kubeconfig path (empty uses the in-cluster service account)")
-	namespace := flag.String("namespace", envOrDefault("KONFLUX_NAMESPACE", "art-quay-tenant"), "Konflux namespace to read Snapshots from")
+	namespace := flag.String("namespace", envOrDefault("KONFLUX_NAMESPACE", "art-quay-tenant"), "Konflux namespace to read Snapshots and Releases from")
 	konfluxPollInterval := flag.Duration("konflux-poll-interval", 30*time.Second, "Konflux sync poll interval")
 
 	// JIRA flags

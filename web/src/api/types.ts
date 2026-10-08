@@ -15,6 +15,20 @@ export interface SnapshotRecord {
 	components?: ComponentRecord[];
 }
 
+export interface KonfluxRelease {
+	id: number;
+	name: string;
+	application: string;
+	snapshot: string;
+	release_plan: string;
+	target: string;
+	released_status: string;
+	released_reason: string;
+	created_at: string;
+	start_time?: string;
+	completion_time?: string;
+}
+
 export interface JiraIssue {
 	key: string;
 	summary: string;

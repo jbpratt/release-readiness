@@ -16,6 +16,9 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Snapshots API
 	mux.HandleFunc("GET /api/v1/snapshots", s.handleListSnapshots)
 
+	// Konflux Releases API
+	mux.HandleFunc("GET /api/v1/konflux-releases", s.handleListKonfluxReleases)
+
 	// Releases API (version-centric)
 	mux.HandleFunc("GET /api/v1/releases/overview", s.handleReleasesOverview)
 	mux.HandleFunc("GET /api/v1/releases/{version}", s.handleGetRelease)

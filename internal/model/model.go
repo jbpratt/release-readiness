@@ -85,3 +85,19 @@ type ReleaseVersion struct {
 	S3Application         string     `json:"s3_application,omitempty"`
 	DueDate               *time.Time `json:"due_date,omitempty"`
 }
+
+// KonfluxRelease is a Konflux Release custom resource, distinct from the JIRA
+// ReleaseVersion.
+type KonfluxRelease struct {
+	ID             int64      `json:"id"`
+	Name           string     `json:"name"`
+	Application    string     `json:"application"`
+	Snapshot       string     `json:"snapshot"`
+	ReleasePlan    string     `json:"release_plan"`
+	Target         string     `json:"target"`
+	ReleasedStatus string     `json:"released_status"`
+	ReleasedReason string     `json:"released_reason"`
+	CreatedAt      time.Time  `json:"created_at"`
+	StartTime      *time.Time `json:"start_time,omitempty"`
+	CompletionTime *time.Time `json:"completion_time,omitempty"`
+}
