@@ -241,10 +241,10 @@ function ReleaseSignal({
 							</div>
 						</FlexItem>
 					)}
-					{release.release_ticket_assignee && (
+					{release.release_ticket_key && (
 						<FlexItem style={{ textAlign: "center" }}>
 							<div className="rr-label">Assignee</div>
-							<div>{release.release_ticket_assignee}</div>
+							<div>{release.release_ticket_assignee || "Unassigned"}</div>
 						</FlexItem>
 					)}
 					{release.released && (

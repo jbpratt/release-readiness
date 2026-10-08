@@ -1,4 +1,5 @@
 import { Tooltip } from "@patternfly/react-core";
+import { ExternalLinkAltIcon } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import type { ArtBuild, SnapshotImage, SnapshotProwRuns } from "../api/types";
 import { quayManifestUrl, upstreamCommitUrl } from "../utils/links";
@@ -6,6 +7,10 @@ import GitShaLink from "./GitShaLink";
 import { ProwRunBadge } from "./ProwRuns";
 
 const external = { target: "_blank", rel: "noopener noreferrer" };
+
+const linkIcon = (
+	<ExternalLinkAltIcon style={{ fontSize: "0.75em", marginLeft: "0.25rem" }} />
+);
 
 function NoArtRecord() {
 	return (
@@ -21,11 +26,13 @@ function UpstreamCommitLink({ art }: { art: ArtBuild | null }) {
 	const url = upstreamCommitUrl(art.upstream_repo, art.upstream_sha);
 	if (!url) return <>-</>;
 	return (
-		<a href={url} {...external}>
-			<code style={{ fontSize: "0.85em" }} title={art.upstream_sha}>
-				{art.upstream_sha.substring(0, 12)}
-			</code>
-		</a>
+		<Tooltip content={`${art.upstream_repo} ${art.upstream_sha}`}>
+			<a href={url} {...external}>
+				<code style={{ fontSize: "0.85em" }}>
+					{art.upstream_sha.substring(0, 12)}
+				</code>
+			</a>
+		</Tooltip>
 	);
 }
 
@@ -33,9 +40,11 @@ function UpstreamCommitLink({ art }: { art: ArtBuild | null }) {
 function ArtBuildLink({ art }: { art: ArtBuild | null }) {
 	if (!art) return <NoArtRecord />;
 	return (
-		<a href={art.build_url} {...external}>
-			ART build
-		</a>
+		<Tooltip content="Opens ART build history: the build record, its logs and pipeline run">
+			<a href={art.build_url} {...external}>
+				ART build{linkIcon}
+			</a>
+		</Tooltip>
 	);
 }
 
@@ -44,16 +53,21 @@ function ImageDigestLink({ image }: { image: string }) {
 	const url = quayManifestUrl(image);
 	const digest = image.split("@")[1];
 	const text = (
-		<code style={{ fontSize: "0.85em" }} title={image}>
+		<code style={{ fontSize: "0.85em" }}>
 			{digest ? digest.replace(/^(sha256:.{12}).*/, "$1") : image}
 		</code>
 	);
-	return url ? (
-		<a href={url} target="_blank" rel="noopener noreferrer">
-			{text}
-		</a>
-	) : (
-		text
+	return (
+		<Tooltip content={url ? `Opens on quay.io: ${image}` : image}>
+			{url ? (
+				<a href={url} {...external}>
+					{text}
+					{linkIcon}
+				</a>
+			) : (
+				text
+			)}
+		</Tooltip>
 	);
 }
 
@@ -73,9 +87,24 @@ export default function SnapshotComponentsTable({
 				<Tr>
 					<Th width={30}>Component</Th>
 					<Th width={20}>Image</Th>
-					<Th width={15}>Upstream</Th>
+					<Th
+						width={15}
+						modifier="nowrap"
+						info={{ tooltip: "Commit in the public upstream repo" }}
+					>
+						Upstream
+					</Th>
 					<Th width={15}>ART</Th>
-					<Th width={20}>Build repo</Th>
+					<Th
+						width={20}
+						modifier="nowrap"
+						info={{
+							tooltip:
+								"Commit in ART's openshift-priv rebase fork that was actually built; mirrors Upstream",
+						}}
+					>
+						Build repo
+					</Th>
 					{ci && <Th modifier="fitContent">Periodic CI</Th>}
 				</Tr>
 			</Thead>
