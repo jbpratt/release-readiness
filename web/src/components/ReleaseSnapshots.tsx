@@ -25,7 +25,11 @@ import {
 	getSnapshotProwRuns,
 	listReleaseSnapshots,
 } from "../api/client";
-import type { KonfluxRelease, ReleaseSnapshot } from "../api/types";
+import type {
+	KonfluxRelease,
+	ReleaseSnapshot,
+	ReleaseVersion,
+} from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { relative } from "../utils/format";
 import { type SnapshotFilter, snapshotFilters } from "../utils/releaseApps";
@@ -35,19 +39,55 @@ import SnapshotComponentsTable from "./SnapshotComponentsTable";
 
 const PAGE_SIZE = 25;
 
+const quayFilter = (filters: SnapshotFilter[]) =>
+	filters.find((f) => f.key === "quay") ?? filters[0];
+
+/**
+ * A release's latest Quay snapshot and its images, fetched once for both the
+ * release status stepper and the latest snapshot card.
+ */
+export function useLatestSnapshot(version: string, release?: ReleaseVersion) {
+	const { application } = quayFilter(
+		snapshotFilters(release?.konflux_application),
+	);
+	const list = useCachedFetch(
+		release ? `latestSnapshot:${version}:${application}` : null,
+		() => listReleaseSnapshots(version, { application, limit: 1, offset: 0 }),
+	);
+	const snapshot = list.data?.snapshots[0];
+	const detail = useCachedFetch(
+		snapshot && !snapshot.missing
+			? `releaseSnapshot:${version}:${snapshot.name}`
+			: null,
+		() => getReleaseSnapshot(version, snapshot!.name),
+	);
+	return {
+		application,
+		snapshot,
+		// Also covers the render before the fetch starts, once release loads.
+		loading: !list.data && !list.error,
+		error: list.error,
+		detail,
+	};
+}
+
+type LatestSnapshotState = ReturnType<typeof useLatestSnapshot>;
+
 /** A release's latest Quay snapshot, then its snapshot history. */
 export default function ReleaseSnapshots({
 	version,
 	konfluxApp,
+	latest,
 }: {
 	version: string;
 	konfluxApp?: string;
+	latest: LatestSnapshotState;
 }) {
 	const filters = snapshotFilters(konfluxApp);
-	const quay = filters.find((f) => f.key === "quay") ?? filters[0];
+	const quay = quayFilter(filters);
 	return (
 		<>
-			<LatestSnapshot version={version} application={quay.application} />
+			<LatestSnapshot version={version} state={latest} />
 			<SnapshotHistory
 				version={version}
 				filters={filters}
@@ -60,16 +100,12 @@ export default function ReleaseSnapshots({
 
 function LatestSnapshot({
 	version,
-	application,
+	state,
 }: {
 	version: string;
-	application: string;
+	state: LatestSnapshotState;
 }) {
-	const { data, loading, error } = useCachedFetch(
-		`latestSnapshot:${version}:${application}`,
-		() => listReleaseSnapshots(version, { application, limit: 1, offset: 0 }),
-	);
-	const latest = data?.snapshots[0];
+	const { application, snapshot: latest, loading, error } = state;
 
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
@@ -99,7 +135,11 @@ function LatestSnapshot({
 								<SnapshotReleaseLabel releases={latest.releases} />
 							</FlexItem>
 						</Flex>
-						<SnapshotDetail version={version} snapshot={latest} />
+						<SnapshotDetail
+							version={version}
+							snapshot={latest}
+							fetched={state.detail}
+						/>
 					</>
 				)}
 			</CardBody>
@@ -310,14 +350,20 @@ function SnapshotReleaseLabel({ releases }: { releases?: KonfluxRelease[] }) {
 function SnapshotDetail({
 	version,
 	snapshot,
+	fetched,
 }: {
 	version: string;
 	snapshot: ReleaseSnapshot;
+	/** The snapshot's images when the caller already fetches them. */
+	fetched?: LatestSnapshotState["detail"];
 }) {
-	const { data, loading, error } = useCachedFetch(
-		snapshot.missing ? null : `releaseSnapshot:${version}:${snapshot.name}`,
+	const own = useCachedFetch(
+		snapshot.missing || fetched
+			? null
+			: `releaseSnapshot:${version}:${snapshot.name}`,
 		() => getReleaseSnapshot(version, snapshot.name),
 	);
+	const { data, loading, error } = fetched ?? own;
 	const { data: prowRuns } = useCachedFetch(
 		snapshot.missing ? null : `snapshotProwRuns:${version}:${snapshot.name}`,
 		() => getSnapshotProwRuns(version, snapshot.name),
