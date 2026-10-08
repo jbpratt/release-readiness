@@ -1,4 +1,4 @@
-import { Tooltip } from "@patternfly/react-core";
+import { ClipboardCopy, Tooltip } from "@patternfly/react-core";
 import { ExternalLinkAltIcon, InProgressIcon } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import type {
@@ -138,6 +138,15 @@ export default function SnapshotComponentsTable({
 						<Td>{c.name}</Td>
 						<Td>
 							<ImageDigestLink image={c.image} />
+							<ClipboardCopy
+								variant="inline-compact"
+								isCode
+								truncation
+								hoverTip="Copy pullspec"
+								clickTip="Copied"
+							>
+								{c.image}
+							</ClipboardCopy>
 						</Td>
 						<Td>
 							<UpstreamCommitLink art={c.art} />
