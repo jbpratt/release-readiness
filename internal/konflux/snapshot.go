@@ -4,8 +4,8 @@ import (
 	"github.com/quay/release-readiness/internal/model"
 )
 
-// SnapshotSpec is the Konflux Snapshot spec as stored in S3.
-// This is the spec section of the Snapshot CR, not the full Kubernetes resource.
+// SnapshotSpec is the spec section of a Konflux Snapshot CR, not the full
+// Kubernetes resource.
 type SnapshotSpec struct {
 	Application string `json:"application"`
 	Components  []struct {
@@ -21,8 +21,8 @@ type SnapshotSpec struct {
 }
 
 // Convert transforms a SnapshotSpec into a model.Snapshot.
-// The name parameter is the snapshot directory name from S3 (since
-// the spec does not include the snapshot name).
+// The name parameter is the Snapshot's metadata.name, which the spec does
+// not include.
 func Convert(spec SnapshotSpec, name string) model.Snapshot {
 	snap := model.Snapshot{
 		Application: spec.Application,
