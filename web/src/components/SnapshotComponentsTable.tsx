@@ -15,7 +15,7 @@ function NoArtRecord() {
 }
 
 /** Upstream commit the image was built from, per its ART build record. */
-export function UpstreamCommitLink({ art }: { art: ArtBuild | null }) {
+function UpstreamCommitLink({ art }: { art: ArtBuild | null }) {
 	if (!art) return <NoArtRecord />;
 	const url = upstreamCommitUrl(art.upstream_repo, art.upstream_sha);
 	if (!url) return <>-</>;
@@ -28,32 +28,18 @@ export function UpstreamCommitLink({ art }: { art: ArtBuild | null }) {
 	);
 }
 
-/** The image's ART build record, its logs and its Konflux pipeline run. */
-export function ArtBuildLinks({ art }: { art: ArtBuild | null }) {
+/** The image's ART build record; that page links its logs and pipeline run. */
+function ArtBuildLink({ art }: { art: ArtBuild | null }) {
 	if (!art) return <NoArtRecord />;
 	return (
-		<span style={{ whiteSpace: "nowrap" }}>
-			<a href={art.build_url} {...external}>
-				ART build
-			</a>
-			{" · "}
-			<a href={art.logs_url} {...external}>
-				Logs
-			</a>
-			{art.pipeline_url && (
-				<>
-					{" · "}
-					<a href={art.pipeline_url} {...external}>
-						Pipeline
-					</a>
-				</>
-			)}
-		</span>
+		<a href={art.build_url} {...external}>
+			ART build
+		</a>
 	);
 }
 
 /** Digest-pinned image reference, linked to its quay.io manifest page. */
-export function ImageDigestLink({ image }: { image: string }) {
+function ImageDigestLink({ image }: { image: string }) {
 	const url = quayManifestUrl(image);
 	const digest = image.split("@")[1];
 	const text = (
@@ -80,11 +66,11 @@ export default function SnapshotComponentsTable({
 		<Table variant="compact" aria-label="Snapshot components">
 			<Thead>
 				<Tr>
-					<Th>Component</Th>
-					<Th>Image</Th>
-					<Th>Upstream</Th>
-					<Th>ART</Th>
-					<Th>Build repo</Th>
+					<Th width={30}>Component</Th>
+					<Th width={20}>Image</Th>
+					<Th width={15}>Upstream</Th>
+					<Th width={15}>ART</Th>
+					<Th width={20}>Build repo</Th>
 				</Tr>
 			</Thead>
 			<Tbody>
@@ -98,7 +84,7 @@ export default function SnapshotComponentsTable({
 							<UpstreamCommitLink art={c.art} />
 						</Td>
 						<Td>
-							<ArtBuildLinks art={c.art} />
+							<ArtBuildLink art={c.art} />
 						</Td>
 						<Td>
 							<GitShaLink sha={c.git_sha} gitUrl={c.git_url} />

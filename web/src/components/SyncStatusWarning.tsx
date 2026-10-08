@@ -10,25 +10,9 @@ import { ExclamationTriangleIcon } from "@patternfly/react-icons";
 import { useEffect } from "react";
 import { getSyncStatus } from "../api/client";
 import { useCachedFetch } from "../hooks/useCachedFetch";
+import { relative } from "../utils/format";
 
 const POLL_MS = 60_000;
-
-const units: [Intl.RelativeTimeFormatUnit, number][] = [
-	["day", 86_400],
-	["hour", 3_600],
-	["minute", 60],
-	["second", 1],
-];
-
-function relative(iso: string): string {
-	const secs = Math.round((new Date(iso).getTime() - Date.now()) / 1000);
-	const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-	const [unit, size] = units.find(([, size]) => Math.abs(secs) >= size) ?? [
-		"second",
-		1,
-	];
-	return rtf.format(Math.round(secs / size), unit);
-}
 
 export default function SyncStatusWarning() {
 	// The TTL sits under the poll period so every tick refetches.
