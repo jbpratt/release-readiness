@@ -52,7 +52,7 @@ func TestListSnapshots(t *testing.T) {
 	srv := setupTestServer(t)
 	ctx := t.Context()
 
-	_, err := srv.db.CreateSnapshot(ctx, "quay-v3-17", "quay-v3-17-20260213-000", time.Now())
+	_, err := srv.db.CreateSnapshot(ctx, "quay-3-17", "quay-3-17-20260213-000", time.Now())
 	if err != nil {
 		t.Fatalf("create snapshot: %v", err)
 	}
@@ -72,8 +72,8 @@ func TestListSnapshots(t *testing.T) {
 	if len(snapshots) != 1 {
 		t.Errorf("snapshots: got %d, want 1", len(snapshots))
 	}
-	if snapshots[0].Application != "quay-v3-17" {
-		t.Errorf("application: got %q, want %q", snapshots[0].Application, "quay-v3-17")
+	if snapshots[0].Application != "quay-3-17" {
+		t.Errorf("application: got %q, want %q", snapshots[0].Application, "quay-3-17")
 	}
 }
 

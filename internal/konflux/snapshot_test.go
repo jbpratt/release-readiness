@@ -6,7 +6,7 @@ import (
 
 func TestConvert(t *testing.T) {
 	spec := SnapshotSpec{
-		Application: "quay-v3-17",
+		Application: "quay-3-17",
 	}
 	spec.Components = append(spec.Components, struct {
 		Name           string `json:"name"`
@@ -26,8 +26,8 @@ func TestConvert(t *testing.T) {
 
 	snap := Convert(spec, "my-snapshot-name")
 
-	if snap.Application != "quay-v3-17" {
-		t.Errorf("Application = %q, want %q", snap.Application, "quay-v3-17")
+	if snap.Application != "quay-3-17" {
+		t.Errorf("Application = %q, want %q", snap.Application, "quay-3-17")
 	}
 	if snap.Snapshot != "my-snapshot-name" {
 		t.Errorf("Snapshot = %q, want %q", snap.Snapshot, "my-snapshot-name")
