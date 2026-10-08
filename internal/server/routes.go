@@ -12,6 +12,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Health & Config
 	mux.HandleFunc("GET /api/v1/health", s.handleHealth)
 	mux.HandleFunc("GET /api/v1/config", s.handleConfig)
+	mux.HandleFunc("GET /api/v1/sync-status", s.handleSyncStatus)
 
 	// Snapshots API
 	mux.HandleFunc("GET /api/v1/snapshots", s.handleListSnapshots)

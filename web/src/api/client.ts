@@ -9,6 +9,7 @@ import type {
 	ReleaseSnapshot,
 	ReleaseSnapshotPage,
 	ReleaseVersion,
+	SyncStatus,
 } from "./types";
 
 const BASE = "/api/v1";
@@ -23,6 +24,10 @@ export async function fetchJSON<T>(url: string): Promise<T> {
 
 export function getConfig(): Promise<DashboardConfig> {
 	return fetchJSON(`${BASE}/config`);
+}
+
+export function getSyncStatus(): Promise<SyncStatus> {
+	return fetchJSON(`${BASE}/sync-status`);
 }
 
 export function listKonfluxReleases(

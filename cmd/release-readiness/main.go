@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/kube"
 	"github.com/quay/release-readiness/internal/server"
+	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
 func main() {
@@ -58,9 +60,11 @@ func main() {
 	defer func() { _ = database.Close() }()
 
 	var wg sync.WaitGroup
+	status := syncstatus.New()
 
 	if kc, err := kube.NewClient(*kubeconfig); err != nil {
 		logger.Error("create kubernetes client, konflux sync disabled", "error", err)
+		status.Track("konflux", 0).Report(fmt.Errorf("create kubernetes client: %w", err))
 	} else {
 		konfluxLog := logger.With("component", "konflux-sync")
 		logger.Info("konflux sync enabled", "namespace", *namespace, "interval", *konfluxPollInterval)
@@ -70,6 +74,7 @@ func main() {
 			})
 		}
 		syncer := kube.NewSyncer(kc, *namespace, database, konfluxTx, konfluxLog)
+		syncer.Status = status.Track("konflux", *konfluxPollInterval)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -94,6 +99,7 @@ func main() {
 			})
 		}
 		syncer := jira.NewSyncer(jiraClient, database, jiraTx, jiraLog)
+		syncer.Status = status.Track("jira", *jiraPollInterval)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -105,6 +111,7 @@ func main() {
 		artLog := logger.With("component", "art-resolve")
 		logger.Info("art build history enabled", "url", *artURL)
 		resolver := artbuild.NewResolver(artbuild.NewClient(*artURL, &http.Client{Timeout: time.Minute}), database, artLog)
+		resolver.Status = status.Track("art-builds", 5*time.Minute)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -116,6 +123,7 @@ func main() {
 	if *catalogURL != "" {
 		logger.Info("catalog shipped lookup enabled", "url", *catalogURL)
 		shipped = catalog.NewShipped(catalog.NewClient(*catalogURL, &http.Client{Timeout: time.Minute}), logger.With("component", "catalog"))
+		shipped.Status = status.Track("catalog", time.Hour)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -123,7 +131,7 @@ func main() {
 		}()
 	}
 
-	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, shipped, logger)
+	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, shipped, status, logger)
 	if err := srv.Run(ctx); err != nil {
 		logger.Error("server", "error", err)
 		os.Exit(1)

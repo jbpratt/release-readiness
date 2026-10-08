@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
 // Repositories lists the registry.access.redhat.com repositories that publish
@@ -98,6 +100,8 @@ type Shipped struct {
 	logger   *slog.Logger
 	mu       sync.RWMutex
 	versions map[string]bool // "product X.Y.Z"
+	// Status receives each refresh's outcome; nil reports nowhere.
+	Status *syncstatus.Source
 }
 
 func NewShipped(client *Client, logger *slog.Logger) *Shipped {
@@ -128,6 +132,7 @@ func (s *Shipped) Refresh(ctx context.Context) {
 			tags, err := s.client.PublishedTags(ctx, repo)
 			if err != nil {
 				s.logger.Warn("catalog refresh", "repository", repo, "error", err)
+				s.Status.Report(fmt.Errorf("read %s: %w", repo, err))
 				return
 			}
 			// OMR tags drop the v prefix from 2.0.9 on.
@@ -139,6 +144,7 @@ func (s *Shipped) Refresh(ctx context.Context) {
 	s.mu.Lock()
 	s.versions = versions
 	s.mu.Unlock()
+	s.Status.Report(nil)
 	s.logger.Info("catalog refreshed", "tags", len(versions))
 }
 
