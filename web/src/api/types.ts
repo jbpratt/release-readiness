@@ -1,18 +1,24 @@
-export interface ComponentRecord {
-	id: number;
-	snapshot_id: number;
-	component: string;
+export interface SnapshotImage {
+	name: string;
+	image: string;
 	git_sha: string;
-	image_url: string;
 	git_url: string;
 }
 
-export interface SnapshotRecord {
-	id: number;
+export interface ReleaseSnapshot {
 	application: string;
 	name: string;
 	created_at: string;
-	components?: ComponentRecord[];
+	component_count: number;
+	/** A Konflux Release names this Snapshot, but it is no longer stored. */
+	missing?: boolean;
+	releases?: KonfluxRelease[];
+	components?: SnapshotImage[];
+}
+
+export interface ReleaseSnapshotPage {
+	snapshots: ReleaseSnapshot[];
+	has_more: boolean;
 }
 
 export interface ReleaseComponent {

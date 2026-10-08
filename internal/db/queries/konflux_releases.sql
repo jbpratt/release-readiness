@@ -22,3 +22,9 @@ SELECT id, name, application, snapshot, release_plan, target, released_status, r
 FROM konflux_releases
 WHERE application = ?
 ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?;
+
+-- name: ListKonfluxReleasesBySnapshots :many
+SELECT id, name, application, snapshot, release_plan, target, released_status, released_reason, created_at, start_time, completion_time
+FROM konflux_releases
+WHERE snapshot IN (sqlc.slice('snapshots'))
+ORDER BY created_at DESC, id DESC;

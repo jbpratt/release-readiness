@@ -8,6 +8,7 @@ import {
 	CardTitle,
 	EmptyState,
 	EmptyStateBody,
+	ExpandableSection,
 	Flex,
 	FlexItem,
 	Label,
@@ -49,11 +50,12 @@ import type {
 	IssueSummary,
 	JiraIssue,
 	ReadinessResponse,
-	ReleaseComponent,
 	ReleaseVersion,
 } from "../api/types";
 import GitShaLink from "../components/GitShaLink";
 import PriorityLabel from "../components/PriorityLabel";
+import ReleaseSnapshots from "../components/ReleaseSnapshots";
+import { ImageDigestLink } from "../components/SnapshotComponentsTable";
 import StatusLabel from "../components/StatusLabel";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import {
@@ -61,11 +63,7 @@ import {
 	useColumnManagement,
 } from "../hooks/useColumnManagement";
 import { useConfig } from "../hooks/useConfig";
-import {
-	formatReleaseName,
-	jiraIssueUrl,
-	quayManifestUrl,
-} from "../utils/links";
+import { formatReleaseName, jiraIssueUrl } from "../utils/links";
 
 export default function ReleaseDetail() {
 	const { version } = useParams<{ version: string }>();
@@ -140,70 +138,43 @@ export default function ReleaseDetail() {
 					<FlexItem>
 						<Title headingLevel="h1">{displayName}</Title>
 					</FlexItem>
-					{components && components.length > 0 && (
-						<FlexItem>
-							<Link to={`/releases/${encodeURIComponent(version!)}/snapshots`}>
-								View all snapshots
-							</Link>
-						</FlexItem>
-					)}
 				</Flex>
 
 				<ReleaseSignal
 					release={release}
 					readiness={readinessSignal ?? null}
 					jiraBaseUrl={config?.jira_base_url}
-					components={components}
 					issueSummary={issueSummary ?? null}
+				/>
+
+				<ReleaseSnapshots
+					version={version!}
+					konfluxApp={release.konflux_application}
 				/>
 
 				{components && components.length > 0 && (
 					<Card isCompact style={{ marginBottom: "1rem" }}>
-						<CardTitle>
-							Current component images ({components.length})
-						</CardTitle>
 						<CardBody>
-							<Table variant="compact">
-								<Thead>
-									<Tr>
-										<Th>Component</Th>
-										<Th>Image</Th>
-										<Th>Git SHA</Th>
-										<Th>Application</Th>
-										<Th>Snapshot</Th>
-										<Th>Built</Th>
-									</Tr>
-								</Thead>
-								<Tbody>
-									{components.map((c) => {
-										const imgUrl = quayManifestUrl(c.image);
-										const digest = c.image.split("@")[1];
-										const imgDisplay = digest
-											? digest.replace(/^(sha256:.{12}).*/, "$1")
-											: c.image;
-										return (
+							<ExpandableSection
+								toggleText={`Latest image per component (from multiple snapshots) (${components.length})`}
+							>
+								<Table variant="compact">
+									<Thead>
+										<Tr>
+											<Th>Component</Th>
+											<Th>Image</Th>
+											<Th>Git SHA</Th>
+											<Th>Application</Th>
+											<Th>Snapshot</Th>
+											<Th>Built</Th>
+										</Tr>
+									</Thead>
+									<Tbody>
+										{components.map((c) => (
 											<Tr key={c.name}>
 												<Td>{c.name}</Td>
 												<Td>
-													{imgUrl ? (
-														<a
-															href={imgUrl}
-															target="_blank"
-															rel="noopener noreferrer"
-															title={c.image}
-														>
-															<code style={{ fontSize: "0.85em" }}>
-																{imgDisplay}
-															</code>
-														</a>
-													) : (
-														<code
-															style={{ fontSize: "0.85em" }}
-															title={c.image}
-														>
-															{imgDisplay}
-														</code>
-													)}
+													<ImageDigestLink image={c.image} />
 												</Td>
 												<Td>
 													<GitShaLink sha={c.git_sha} gitUrl={c.git_url} />
@@ -212,10 +183,10 @@ export default function ReleaseDetail() {
 												<Td>{c.snapshot}</Td>
 												<Td>{new Date(c.created_at).toLocaleString()}</Td>
 											</Tr>
-										);
-									})}
-								</Tbody>
-							</Table>
+										))}
+									</Tbody>
+								</Table>
+							</ExpandableSection>
 						</CardBody>
 					</Card>
 				)}
@@ -236,13 +207,11 @@ function ReleaseSignal({
 	release,
 	readiness,
 	jiraBaseUrl,
-	components,
 	issueSummary,
 }: {
 	release: ReleaseVersion;
 	readiness: ReadinessResponse | null;
 	jiraBaseUrl?: string;
-	components: ReleaseComponent[] | null;
 	issueSummary: IssueSummary | null;
 }) {
 	const dueDate = release.due_date ? new Date(release.due_date) : null;
@@ -271,18 +240,12 @@ function ReleaseSignal({
 			)
 		: null;
 
-	const buildsReady = components !== null && components.length > 0;
 	const bugsVerified =
 		issueSummary !== null && issueSummary.total > 0 && issueSummary.open === 0;
 
-	const progressItems = [
-		{
-			label: "Builds ready",
-			done: buildsReady,
-			warning: components !== null && !buildsReady,
-		},
-		...(issueSummary ? [{ label: "Bugs verified", done: bugsVerified }] : []),
-	];
+	const progressItems = issueSummary
+		? [{ label: "Bugs verified", done: bugsVerified }]
+		: [];
 
 	const firstIncomplete = progressItems.findIndex((i) => !i.done);
 
@@ -337,22 +300,22 @@ function ReleaseSignal({
 						</FlexItem>
 					)}
 				</Flex>
-				<ProgressStepper isCenterAligned style={{ marginTop: "1.5rem" }}>
-					{progressItems.map((item, idx) => (
-						<ProgressStep
-							key={item.label}
-							variant={
-								item.done ? "success" : item.warning ? "warning" : "pending"
-							}
-							isCurrent={idx === firstIncomplete}
-							id={`step-${idx}`}
-							titleId={`step-${idx}-title`}
-							aria-label={item.label}
-						>
-							{item.label}
-						</ProgressStep>
-					))}
-				</ProgressStepper>
+				{progressItems.length > 0 && (
+					<ProgressStepper isCenterAligned style={{ marginTop: "1.5rem" }}>
+						{progressItems.map((item, idx) => (
+							<ProgressStep
+								key={item.label}
+								variant={item.done ? "success" : "pending"}
+								isCurrent={idx === firstIncomplete}
+								id={`step-${idx}`}
+								titleId={`step-${idx}-title`}
+								aria-label={item.label}
+							>
+								{item.label}
+							</ProgressStep>
+						))}
+					</ProgressStepper>
+				)}
 			</CardBody>
 		</Card>
 	);

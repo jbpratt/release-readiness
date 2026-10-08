@@ -137,25 +137,97 @@ func (d *DB) ListComponentCandidates(ctx context.Context, applications []string)
 	return components, nil
 }
 
-// ListReleaseSnapshots returns the snapshots of a release's applications,
-// newest first. quay-images-base snapshots count only when they carry one of
-// the release's own base images.
-func (d *DB) ListReleaseSnapshots(ctx context.Context, konfluxApp string, limit, offset int) ([]model.SnapshotRecord, error) {
+// ListReleaseSnapshots returns a newest-first page of the Snapshots of apps
+// that belong to the release konfluxApp, each with the Konflux Releases that
+// name it. Snapshots a Release names but that are no longer stored come back
+// as Missing, dated by their oldest Release.
+func (d *DB) ListReleaseSnapshots(ctx context.Context, konfluxApp string, apps []string, withRelease bool, limit, offset int) ([]model.ReleaseSnapshot, error) {
+	var missingApps []string
+	for _, app := range apps {
+		// A missing base Snapshot has no components to tie it to a version.
+		if app != releaseview.BaseImagesApp {
+			missingApps = append(missingApps, app)
+		}
+	}
 	rows, err := d.queries().ListReleaseSnapshots(ctx, dbsqlc.ListReleaseSnapshotsParams{
-		Applications: releaseview.Applications(konfluxApp),
-		Application:  releaseview.BaseImagesApp,
-		Component:    konfluxApp + "-%",
-		Limit:        int64(limit),
-		Offset:       int64(offset),
+		Applications:        apps,
+		Application:         releaseview.BaseImagesApp,
+		Component:           konfluxApp + "-%",
+		Column4:             withRelease, // sqlc cannot name a bare boolean parameter
+		MissingApplications: missingApps,
+		Limit:               int64(limit),
+		Offset:              int64(offset),
 	})
 	if err != nil {
 		return nil, err
 	}
-	snapshots := make([]model.SnapshotRecord, len(rows))
+	snapshots := make([]model.ReleaseSnapshot, len(rows))
 	for i, r := range rows {
-		snapshots[i] = toSnapshotRecord(r)
+		snapshots[i] = model.ReleaseSnapshot{
+			Application:    r.Application,
+			Name:           r.Name,
+			CreatedAt:      parseTime(r.CreatedAt),
+			ComponentCount: int(r.ComponentCount),
+			Missing:        r.Missing == 1,
+		}
+	}
+	if err := d.attachKonfluxReleases(ctx, snapshots); err != nil {
+		return nil, err
 	}
 	return snapshots, nil
+}
+
+// GetReleaseSnapshot returns a stored Snapshot with its component images and
+// the Konflux Releases that name it.
+func (d *DB) GetReleaseSnapshot(ctx context.Context, name string) (*model.ReleaseSnapshot, error) {
+	row, err := d.queries().GetSnapshotRow(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	components, err := d.listSnapshotComponents(ctx, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	snap := model.ReleaseSnapshot{
+		Application:    row.Application,
+		Name:           row.Name,
+		CreatedAt:      parseTime(row.CreatedAt),
+		ComponentCount: len(components),
+		Components:     make([]model.SnapshotImage, len(components)),
+	}
+	for i, c := range components {
+		snap.Components[i] = model.SnapshotImage{Name: c.Component, Image: c.ImageURL, GitSHA: c.GitSHA, GitURL: c.GitURL}
+	}
+	snaps := []model.ReleaseSnapshot{snap}
+	if err := d.attachKonfluxReleases(ctx, snaps); err != nil {
+		return nil, err
+	}
+	return &snaps[0], nil
+}
+
+// attachKonfluxReleases sets each snapshot's Releases: those naming it from
+// the same application.
+func (d *DB) attachKonfluxReleases(ctx context.Context, snapshots []model.ReleaseSnapshot) error {
+	if len(snapshots) == 0 {
+		return nil
+	}
+	names := make([]string, len(snapshots))
+	for i, s := range snapshots {
+		names[i] = s.Name
+	}
+	rows, err := d.queries().ListKonfluxReleasesBySnapshots(ctx, names)
+	if err != nil {
+		return err
+	}
+	byKey := map[[2]string][]model.KonfluxRelease{}
+	for _, r := range rows {
+		k := [2]string{r.Application, r.Snapshot}
+		byKey[k] = append(byKey[k], toKonfluxRelease(r))
+	}
+	for i := range snapshots {
+		snapshots[i].Releases = byKey[[2]string{snapshots[i].Application, snapshots[i].Name}]
+	}
+	return nil
 }
 
 func toSnapshotRecord(r dbsqlc.Snapshot) model.SnapshotRecord {

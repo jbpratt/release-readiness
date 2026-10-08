@@ -30,7 +30,7 @@ Discovers active releases by querying for JIRA issues with the `-area/release` c
 
 Each JIRA release maps to a Konflux application by major.minor version: fixVersion `quay-v3.16.2` (or plain `3.16.2`) maps to `quay-3-16`, and `omr-v2.0.10` to `omr-2-0`.
 
-A Quay release's components come from three applications: `fbc-quay-X-Y` (the shipped FBC, 3.16+ only), `quay-X-Y`, and the `quay-X-Y-*` base image components of `quay-images-base`. The newest image per component across them is served at `/api/v1/releases/{version}/components`, and the contributing snapshots at `/api/v1/releases/{version}/snapshots`.
+A Quay release's components come from three applications: `fbc-quay-X-Y` (the shipped FBC, 3.16+ only), `quay-X-Y`, and the `quay-X-Y-*` base image components of `quay-images-base`. The newest image per component across them is served at `/api/v1/releases/{version}/components`. `/api/v1/releases/{version}/snapshots` pages through the release's snapshots, newest first (`limit`, `offset`, `application`, `with_release=true`), and `/api/v1/releases/{version}/snapshots/{name}` returns one snapshot's components.
 
 ## JIRA expectations
 

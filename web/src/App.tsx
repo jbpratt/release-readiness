@@ -25,6 +25,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import {
 	BrowserRouter,
 	Link,
+	Navigate,
 	Route,
 	Routes,
 	useLocation,
@@ -35,7 +36,6 @@ import "./theme.css";
 
 const ReleasesOverview = lazy(() => import("./pages/ReleasesOverview"));
 const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
-const SnapshotsList = lazy(() => import("./pages/SnapshotsList"));
 const KonfluxReleases = lazy(() => import("./pages/KonfluxReleases"));
 
 type Theme = "light" | "dark";
@@ -166,7 +166,7 @@ export default function App() {
 							<Route path="/releases/:version" element={<ReleaseDetail />} />
 							<Route
 								path="/releases/:version/snapshots"
-								element={<SnapshotsList />}
+								element={<Navigate to=".." relative="path" replace />}
 							/>
 							<Route path="/konflux-releases" element={<KonfluxReleases />} />
 						</Routes>

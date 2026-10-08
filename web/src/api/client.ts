@@ -6,8 +6,9 @@ import type {
 	ReadinessResponse,
 	ReleaseComponents,
 	ReleaseOverview,
+	ReleaseSnapshot,
+	ReleaseSnapshotPage,
 	ReleaseVersion,
-	SnapshotRecord,
 } from "./types";
 
 const BASE = "/api/v1";
@@ -56,14 +57,29 @@ export function getReleaseComponents(
 
 export function listReleaseSnapshots(
 	version: string,
-	limit = 50,
-	offset = 0,
-): Promise<SnapshotRecord[]> {
+	opts: {
+		application?: string;
+		withRelease?: boolean;
+		limit: number;
+		offset: number;
+	},
+): Promise<ReleaseSnapshotPage> {
 	const params = new URLSearchParams();
-	params.set("limit", String(limit));
-	params.set("offset", String(offset));
+	if (opts.application) params.set("application", opts.application);
+	if (opts.withRelease) params.set("with_release", "true");
+	params.set("limit", String(opts.limit));
+	params.set("offset", String(opts.offset));
 	return fetchJSON(
 		`${BASE}/releases/${encodeURIComponent(version)}/snapshots?${params}`,
+	);
+}
+
+export function getReleaseSnapshot(
+	version: string,
+	name: string,
+): Promise<ReleaseSnapshot> {
+	return fetchJSON(
+		`${BASE}/releases/${encodeURIComponent(version)}/snapshots/${encodeURIComponent(name)}`,
 	);
 }
 

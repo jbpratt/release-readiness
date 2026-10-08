@@ -1,7 +1,6 @@
 import {
 	EmptyState,
 	EmptyStateBody,
-	Label,
 	PageSection,
 	Pagination,
 	SearchInput,
@@ -16,38 +15,9 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { listKonfluxReleases } from "../api/client";
 import type { KonfluxRelease } from "../api/types";
+import ReleasedLabel from "../components/ReleasedLabel";
 
 const PAGE_SIZE = 50;
-
-type LabelColor = "green" | "red" | "yellow" | "blue";
-
-const releasedColors: Record<string, LabelColor> = {
-	True: "green",
-	False: "red",
-	Unknown: "yellow",
-};
-
-const reasonColors: Record<string, LabelColor> = {
-	Succeeded: "green",
-	Failed: "red",
-	Progressing: "blue",
-};
-
-function ReleasedLabel({ release }: { release: KonfluxRelease }) {
-	if (!release.released_status) return <>-</>;
-	return (
-		<Label
-			color={
-				reasonColors[release.released_reason] ??
-				releasedColors[release.released_status] ??
-				"grey"
-			}
-			isCompact
-		>
-			{release.released_reason || release.released_status}
-		</Label>
-	);
-}
 
 function formatTime(t?: string): string {
 	return t ? new Date(t).toLocaleString() : "-";
