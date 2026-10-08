@@ -59,6 +59,9 @@ export interface KonfluxRelease {
 	target: string;
 	released_status: string;
 	released_reason: string;
+	/** Task and step of the last managed pipeline attempt of a failed Release. */
+	failed_task?: string;
+	failed_step?: string;
 	created_at: string;
 	start_time?: string;
 	completion_time?: string;
