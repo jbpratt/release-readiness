@@ -1,5 +1,4 @@
 import {
-	Button,
 	Card,
 	CardBody,
 	CardTitle,
@@ -9,18 +8,13 @@ import {
 	DescriptionListTerm,
 	EmptyState,
 	EmptyStateBody,
-	ExpandableSection,
 	Flex,
 	FlexItem,
 	Gallery,
-	HelperText,
-	HelperTextItem,
 	Label,
 	PageSection,
-	Popover,
 	Progress,
 	ProgressMeasureLocation,
-	SearchInput,
 	Spinner,
 	Switch,
 	Title,
@@ -37,66 +31,26 @@ import {
 	ExclamationCircleIcon,
 	ExclamationTriangleIcon,
 	ListIcon,
-	OutlinedQuestionCircleIcon,
 	ThIcon,
 } from "@patternfly/react-icons";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { listReleasesOverview } from "../api/client";
 import type {
 	IssueSummary,
 	ReadinessResponse,
-	ReleaseOverview,
 	ReleaseVersion,
 } from "../api/types";
 import { seedCache, useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
 import { formatReleaseName, jiraIssueUrl } from "../utils/links";
 
-type SignalFilter = "all" | "red" | "yellow" | "green" | "shipped";
 type ViewMode = "compact" | "expanded";
-
-// A shipped release with an open JIRA ticket shows only its shipped badge:
-// the readiness signal would only reflect the stale ticket.
-const shippedOpen = (ov: ReleaseOverview) => ov.shipped && !ov.release.released;
-
-const signalHelp = (
-	<DescriptionList isCompact>
-		<DescriptionListGroup>
-			<DescriptionListTerm>Red</DescriptionListTerm>
-			<DescriptionListDescription>
-				Past the JIRA due date and not released.
-			</DescriptionListDescription>
-		</DescriptionListGroup>
-		<DescriptionListGroup>
-			<DescriptionListTerm>Yellow</DescriptionListTerm>
-			<DescriptionListDescription>
-				Open issues remain, no build snapshots yet, or due within 3 days.
-			</DescriptionListDescription>
-		</DescriptionListGroup>
-		<DescriptionListGroup>
-			<DescriptionListTerm>Green</DescriptionListTerm>
-			<DescriptionListDescription>
-				No open issues and builds exist, or released.
-			</DescriptionListDescription>
-		</DescriptionListGroup>
-		<DescriptionListGroup>
-			<DescriptionListTerm>Shipped</DescriptionListTerm>
-			<DescriptionListDescription>
-				The Red Hat catalog has published the version but its JIRA release
-				ticket is still open. That is ticket hygiene, not release risk, so the
-				card shows no signal.
-			</DescriptionListDescription>
-		</DescriptionListGroup>
-	</DescriptionList>
-);
 
 export default function ReleasesOverview() {
 	const [searchParams, setSearchParams] = useSearchParams();
-	const query = searchParams.get("q") ?? "";
-	const signalFilter = (searchParams.get("signal") ?? "all") as SignalFilter;
 	const viewMode = (searchParams.get("view") ?? "compact") as ViewMode;
-	const showAll = searchParams.get("all") === "1";
+	const showShipped = searchParams.get("shipped") === "1";
 
 	const config = useConfig();
 
@@ -115,8 +69,6 @@ export default function ReleasesOverview() {
 			seedCache(`readiness:${ov.release.name}`, ov.readiness);
 		}
 	}, [overviews]);
-
-	const [releasedExpanded, setReleasedExpanded] = useState(false);
 
 	const setParam = (key: string, value: string) => {
 		setSearchParams((prev) => {
@@ -143,12 +95,10 @@ export default function ReleasesOverview() {
 	const overviewList = [...(overviews ?? [])].sort((a, b) =>
 		b.release.name.localeCompare(a.release.name, undefined, { numeric: true }),
 	);
-	// By default only the next z-release of each stream; the rest stay
-	// behind the "show all" switch.
-	const active = overviewList.filter(
-		(ov) => !ov.release.released && (showAll || ov.next_in_stream),
+	// Only the next z-release of each stream, plus shipped ones when asked.
+	const visible = overviewList.filter(
+		(ov) => ov.next_in_stream || (showShipped && ov.shipped),
 	);
-	const released = overviewList.filter((ov) => ov.release.released);
 
 	if (overviewList.length === 0) {
 		return (
@@ -169,70 +119,19 @@ export default function ReleasesOverview() {
 
 	const galleryMinWidth = viewMode === "compact" ? "300px" : "400px";
 
-	const filterOverview = (ov: ReleaseOverview): boolean => {
-		const displayName = formatReleaseName(ov.release.name);
-		if (
-			query &&
-			!displayName.toLowerCase().includes(query.toLowerCase()) &&
-			!ov.release.name.toLowerCase().includes(query.toLowerCase())
-		) {
-			return false;
-		}
-		const shown = shippedOpen(ov) ? "shipped" : ov.readiness.signal;
-		if (signalFilter !== "all" && shown !== signalFilter) {
-			return false;
-		}
-		return true;
-	};
-
 	return (
 		<PageSection>
 			<Toolbar>
 				<ToolbarContent>
 					<ToolbarItem>
-						<SearchInput
-							placeholder="Filter releases..."
-							value={query}
-							onChange={(_e, val) => setParam("q", val)}
-							onClear={() => setParam("q", "")}
+						<Switch
+							id="show-shipped-releases"
+							label="Show shipped releases"
+							isChecked={showShipped}
+							onChange={(_e, checked) =>
+								setParam("shipped", checked ? "1" : "")
+							}
 						/>
-					</ToolbarItem>
-					<ToolbarItem>
-						<ToggleGroup aria-label="Signal filter">
-							{(["all", "red", "yellow", "green", "shipped"] as const).map(
-								(s) => (
-									<ToggleGroupItem
-										key={s}
-										text={s.charAt(0).toUpperCase() + s.slice(1)}
-										isSelected={signalFilter === s}
-										onChange={() => setParam("signal", s)}
-									/>
-								),
-							)}
-						</ToggleGroup>
-						<Popover headerContent="Signals" bodyContent={signalHelp}>
-							<Button
-								variant="plain"
-								aria-label="Signal definitions"
-								icon={<OutlinedQuestionCircleIcon />}
-							/>
-						</Popover>
-					</ToolbarItem>
-					<ToolbarItem>
-						<Flex direction={{ default: "column" }} gap={{ default: "gapXs" }}>
-							<Switch
-								id="show-all-releases"
-								label="Show all open release tickets"
-								isChecked={showAll}
-								onChange={(_e, checked) => setParam("all", checked ? "1" : "")}
-							/>
-							<HelperText>
-								<HelperTextItem>
-									Off: only the next release per stream. On: every release with
-									an open ticket.
-								</HelperTextItem>
-							</HelperText>
-						</Flex>
 					</ToolbarItem>
 					<ToolbarGroup align={{ default: "alignEnd" }}>
 						<ToolbarItem>
@@ -256,7 +155,7 @@ export default function ReleasesOverview() {
 			</Toolbar>
 
 			<Gallery hasGutter minWidths={{ default: galleryMinWidth }}>
-				{active.filter(filterOverview).map((ov) => (
+				{visible.map((ov) => (
 					<ReleaseCard
 						key={ov.release.name}
 						release={ov.release}
@@ -270,31 +169,6 @@ export default function ReleasesOverview() {
 					/>
 				))}
 			</Gallery>
-
-			{released.length > 0 && (
-				<ExpandableSection
-					toggleText={`Released (${released.length})`}
-					isExpanded={releasedExpanded}
-					onToggle={(_e, val) => setReleasedExpanded(val)}
-					style={{ marginTop: "1.5rem" }}
-				>
-					<Gallery hasGutter minWidths={{ default: galleryMinWidth }}>
-						{released.filter(filterOverview).map((ov) => (
-							<ReleaseCard
-								key={ov.release.name}
-								release={ov.release}
-								issueSummary={ov.issue_summary}
-								readinessSignal={ov.readiness}
-								componentCount={ov.component_count}
-								latestBuild={ov.latest_build}
-								shipped={ov.shipped}
-								viewMode={viewMode}
-								jiraBaseUrl={config?.jira_base_url}
-							/>
-						))}
-					</Gallery>
-				</ExpandableSection>
-			)}
 		</PageSection>
 	);
 }
@@ -378,6 +252,8 @@ function ReleaseCard({
 						)}
 					</FlexItem>
 					<FlexItem>
+						{/* A shipped release with an open JIRA ticket shows only its shipped
+						    badge: the readiness signal would only reflect the stale ticket. */}
 						{readinessSignal && !(shipped && !release.released) && (
 							<Label
 								color={
