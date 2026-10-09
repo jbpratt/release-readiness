@@ -14,6 +14,7 @@ import {
 	ToolbarItem,
 } from "@patternfly/react-core";
 import {
+	ExternalLinkAltIcon,
 	MoonIcon,
 	OutlinedQuestionCircleIcon,
 	SunIcon,
@@ -23,6 +24,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import "@patternfly/react-core/dist/styles/base.css";
 import ErrorBoundary from "./components/ErrorBoundary";
 import "./theme.css";
+import { ART_PIPELINES_HEALTH_URL } from "./utils/links";
 
 const ReleasesOverview = lazy(() => import("./pages/ReleasesOverview"));
 const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
@@ -76,6 +78,19 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 				<Toolbar>
 					<ToolbarContent>
 						<ToolbarItem align={{ default: "alignEnd" }}>
+							<Button
+								component="a"
+								variant="link"
+								href={ART_PIPELINES_HEALTH_URL}
+								target="_blank"
+								rel="noopener noreferrer"
+								icon={<ExternalLinkAltIcon />}
+								iconPosition="end"
+							>
+								ART pipelines
+							</Button>
+						</ToolbarItem>
+						<ToolbarItem>
 							<Popover
 								headerContent="About this dashboard"
 								bodyContent={
