@@ -150,6 +150,24 @@ type PendingArtBuild struct {
 	StartedAt   time.Time `json:"started_at"`
 }
 
+// BuildAttempts is a release's ART image-build attempts whose start time
+// falls in the span ART history was read without a gap, newest first.
+// CoveredFrom and CoveredTo are null when it was never read.
+type BuildAttempts struct {
+	CoveredFrom *time.Time     `json:"covered_from"`
+	CoveredTo   *time.Time     `json:"covered_to"`
+	Attempts    []BuildAttempt `json:"attempts"`
+}
+
+// BuildAttempt is one ART image build. Component is its NVR name.
+type BuildAttempt struct {
+	Component string    `json:"component"`
+	NVR       string    `json:"nvr"`
+	Outcome   string    `json:"outcome"`
+	StartedAt time.Time `json:"started_at"`
+	BuildURL  string    `json:"build_url"`
+}
+
 // ReadinessResponse represents the computed readiness signal for a release.
 type ReadinessResponse struct {
 	Signal  string `json:"signal"`  // "green", "yellow", "red"

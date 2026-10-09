@@ -1,4 +1,5 @@
 import type {
+	BuildAttempts,
 	DashboardConfig,
 	IssueSummary,
 	JiraIssue,
@@ -110,4 +111,10 @@ export function getReleaseReadiness(
 	version: string,
 ): Promise<ReadinessResponse> {
 	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}/readiness`);
+}
+
+export function getBuildAttempts(version: string): Promise<BuildAttempts> {
+	return fetchJSON(
+		`${BASE}/releases/${encodeURIComponent(version)}/build-attempts`,
+	);
 }

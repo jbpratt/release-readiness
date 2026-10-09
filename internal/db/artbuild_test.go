@@ -123,3 +123,77 @@ func TestArtPendingBuilds(t *testing.T) {
 		t.Errorf("fresh pending builds: got %+v, %v; want only %+v", got, err, quay)
 	}
 }
+
+func TestArtBuildAttempts(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	ctx := t.Context()
+
+	const (
+		group  = "quay-3.18"
+		quay   = "quay-quay-container-3.18.1-202610010000.p2.gaaaaaaa.assembly.stream.el9"
+		clair  = "quay-clair-container-3.18.1-202610020000.p2.gbbbbbbb.assembly.stream.el9"
+		digest = "sha256:aaaa"
+	)
+	t0 := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	attempt := func(nvr, rec, outcome, digest string, started time.Time) artbuild.Attempt {
+		name, version := artbuild.SplitNVR(nvr)
+		return artbuild.Attempt{Group: group, Version: version, Name: name, NVR: nvr, RecordID: rec, Outcome: outcome, ImageDigest: digest, StartedAt: started}
+	}
+	store := func(from, to time.Time, attempts ...artbuild.Attempt) {
+		t.Helper()
+		if err := d.StoreArtBuildAttempts(ctx, group, attempts, from, to); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list := func() []string {
+		t.Helper()
+		attempts, err := d.ArtBuildAttempts(ctx, group, "3.18.1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, a := range attempts {
+			got = append(got, a.RecordID+":"+a.Outcome)
+		}
+		return got
+	}
+
+	if _, _, ok, err := d.ArtBuildCoverage(ctx, group); ok || err != nil {
+		t.Fatalf("coverage before any search: ok %v, err %v; want none", ok, err)
+	}
+
+	// clair's pending record is updated in place; quay's finishes as a
+	// second record of its NVR, which replaces the pending one.
+	store(t0.Add(-7*24*time.Hour), t0.Add(time.Hour),
+		attempt(quay, "q-pending", "pending", "", t0),
+		attempt(clair, "c-1", "pending", "", t0.Add(30*time.Minute)))
+	if got, want := list(), []string{"c-1:pending", "q-pending:pending"}; !slices.Equal(got, want) {
+		t.Errorf("first pass: got %v, want %v", got, want)
+	}
+	store(t0.Add(-6*24*time.Hour), t0.Add(2*time.Hour),
+		attempt(quay, "q-pending", "pending", "", t0),
+		attempt(quay, "q-done", "success", digest, t0.Add(time.Minute)),
+		attempt(clair, "c-1", "build_error", "", t0.Add(30*time.Minute)))
+	if got, want := list(), []string{"c-1:build_error", "q-done:success"}; !slices.Equal(got, want) {
+		t.Errorf("second pass: got %v, want %v", got, want)
+	}
+	from, to, ok, err := d.ArtBuildCoverage(ctx, group)
+	if err != nil || !ok || !from.Equal(t0.Add(-7*24*time.Hour)) || !to.Equal(t0.Add(2*time.Hour)) {
+		t.Errorf("coverage: [%v, %v] ok %v err %v; want both windows joined", from, to, ok, err)
+	}
+
+	// A window starting after the covered span ends leaves a gap: the span
+	// restarts, and attempts before it are no longer known complete.
+	gapFrom := t0.Add(10 * 24 * time.Hour)
+	store(gapFrom, gapFrom.Add(7*24*time.Hour), attempt(quay, "q-late", "build_error", "", gapFrom.Add(time.Hour)))
+	if from, _, _, _ := d.ArtBuildCoverage(ctx, group); !from.Equal(gapFrom) {
+		t.Errorf("coverage after a gap starts %v, want %v", from, gapFrom)
+	}
+	if got, want := list(), []string{"q-late:build_error"}; !slices.Equal(got, want) {
+		t.Errorf("after a gap: got %v, want %v", got, want)
+	}
+}

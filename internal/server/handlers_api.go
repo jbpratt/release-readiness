@@ -266,6 +266,50 @@ func (s *Server) attachArtBuilds(ctx context.Context, snap *model.ReleaseSnapsho
 	return nil
 }
 
+// handleListBuildAttempts returns the release's ART image-build attempts
+// from the stored history of its stream. It never calls the service.
+func (s *Server) handleListBuildAttempts(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	version := r.PathValue("version")
+	release, err := s.db.GetReleaseVersion(ctx, version)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
+		return
+	}
+	resp := model.BuildAttempts{Attempts: []model.BuildAttempt{}}
+	m := quayYStream.FindStringSubmatch(release.KonfluxApplication)
+	if m == nil {
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+	group := "quay-" + m[1] + "." + m[2]
+	from, to, ok, err := s.db.ArtBuildCoverage(ctx, group)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if !ok {
+		writeJSON(w, http.StatusOK, resp)
+		return
+	}
+	resp.CoveredFrom, resp.CoveredTo = &from, &to
+	attempts, err := s.db.ArtBuildAttempts(ctx, group, strings.TrimPrefix(release.Name, "quay-v"))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	for _, a := range attempts {
+		resp.Attempts = append(resp.Attempts, model.BuildAttempt{
+			Component: a.Name,
+			NVR:       a.NVR,
+			Outcome:   a.Outcome,
+			StartedAt: a.StartedAt,
+			BuildURL:  artbuild.PageURL(s.artBaseURL, "build", a.NVR, a.RecordID),
+		})
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (s *Server) releaseComponents(ctx context.Context, release *model.ReleaseVersion) (model.ReleaseComponents, error) {
 	candidates, err := s.db.ListComponentCandidates(ctx, releaseview.Applications(release.KonfluxApplication))
 	if err != nil {
