@@ -1,6 +1,6 @@
-// Package github proves which tickets a STAGE build carries by reading the
-// upstream commits between it and the previous STAGE build through the
-// read-only GitHub REST API.
+// Package github finds the tickets a STAGE build carries by reading, through
+// the read-only GitHub REST API, the upstream commits each of its components
+// gained after leaving its repo's default branch.
 package github
 
 import (
@@ -35,9 +35,6 @@ type Commit struct {
 
 // Comparison is base...head with every page of its commits read.
 type Comparison struct {
-	Status       string
-	AheadBy      int
-	BehindBy     int
 	TotalCommits int
 	Commits      []Commit
 }
@@ -48,10 +45,7 @@ func (c *Client) Compare(ctx context.Context, owner, repo, base, head string) (*
 	var cmp Comparison
 	for page := 1; ; page++ {
 		var resp struct {
-			Status       string `json:"status"`
-			AheadBy      int    `json:"ahead_by"`
-			BehindBy     int    `json:"behind_by"`
-			TotalCommits int    `json:"total_commits"`
+			TotalCommits int `json:"total_commits"`
 			Commits      []struct {
 				SHA     string `json:"sha"`
 				HTMLURL string `json:"html_url"`
@@ -65,7 +59,7 @@ func (c *Client) Compare(ctx context.Context, owner, repo, base, head string) (*
 			return nil, err
 		}
 		if page == 1 {
-			cmp.Status, cmp.AheadBy, cmp.BehindBy, cmp.TotalCommits = resp.Status, resp.AheadBy, resp.BehindBy, resp.TotalCommits
+			cmp.TotalCommits = resp.TotalCommits
 		}
 		for _, rc := range resp.Commits {
 			cmp.Commits = append(cmp.Commits, Commit{SHA: rc.SHA, HTMLURL: rc.HTMLURL, Message: rc.Commit.Message})
@@ -74,24 +68,6 @@ func (c *Client) Compare(ctx context.Context, owner, repo, base, head string) (*
 			return &cmp, nil
 		}
 	}
-}
-
-// MergedPR returns the URL of the first merged pull request GitHub associates
-// with commit sha, or "" when there is none.
-func (c *Client) MergedPR(ctx context.Context, owner, repo, sha string) (string, error) {
-	var prs []struct {
-		HTMLURL  string  `json:"html_url"`
-		MergedAt *string `json:"merged_at"`
-	}
-	if err := c.get(ctx, fmt.Sprintf("/repos/%s/%s/commits/%s/pulls", url.PathEscape(owner), url.PathEscape(repo), sha), &prs); err != nil {
-		return "", err
-	}
-	for _, pr := range prs {
-		if pr.MergedAt != nil {
-			return pr.HTMLURL, nil
-		}
-	}
-	return "", nil
 }
 
 func (c *Client) get(ctx context.Context, path string, v any) error {

@@ -183,36 +183,3 @@ CREATE TABLE IF NOT EXISTS staged_snapshots (
 );
 
 CREATE INDEX IF NOT EXISTS idx_staged_snapshots_assembly ON staged_snapshots(assembly, env, kind, created_at);
-
--- GitHub compare of one STAGE build component image's upstream commit
--- (head_sha) against the same component in the previous successful STAGE
--- build (base_sha). A complete scan read every commit in the range; an
--- unknown one carries the reason it could not.
-CREATE TABLE IF NOT EXISTS build_evidence_scans (
-    snapshot_name TEXT NOT NULL,
-    component     TEXT NOT NULL,
-    image_digest  TEXT NOT NULL,
-    upstream_repo TEXT NOT NULL DEFAULT '',
-    base_sha      TEXT NOT NULL DEFAULT '',
-    head_sha      TEXT NOT NULL DEFAULT '',
-    state         TEXT NOT NULL CHECK (state IN ('complete', 'unknown')),
-    reason        TEXT NOT NULL DEFAULT '',
-    checked_at    TEXT NOT NULL,
-    PRIMARY KEY (snapshot_name, component, image_digest)
-);
-
-CREATE INDEX IF NOT EXISTS idx_build_evidence_scans_range ON build_evidence_scans(upstream_repo, base_sha, head_sha);
-
--- Ticket keys found in the commit messages of a scan's range.
-CREATE TABLE IF NOT EXISTS ticket_evidence (
-    snapshot_name TEXT NOT NULL,
-    component     TEXT NOT NULL,
-    image_digest  TEXT NOT NULL,
-    ticket_key    TEXT NOT NULL,
-    commit_sha    TEXT NOT NULL,
-    commit_url    TEXT NOT NULL DEFAULT '',
-    pr_url        TEXT NOT NULL DEFAULT '',
-    source        TEXT NOT NULL,
-    checked_at    TEXT NOT NULL,
-    PRIMARY KEY (snapshot_name, component, image_digest, ticket_key, commit_sha)
-);

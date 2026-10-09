@@ -15,8 +15,7 @@ ORDER BY created_at DESC, name DESC
 LIMIT 1;
 
 -- name: ListSuccessfulStageReleases :many
-SELECT kr.name AS release_name, kr.release_plan, kr.completion_time,
-       s.id AS snapshot_id, s.name AS snapshot_name, s.created_at AS snapshot_created_at
+SELECT kr.release_plan, kr.completion_time, s.id AS snapshot_id, s.name AS snapshot_name
 FROM staged_snapshots ss
 JOIN snapshots s ON s.name = ss.name
 JOIN konflux_releases kr ON kr.snapshot = s.name AND kr.application = s.application

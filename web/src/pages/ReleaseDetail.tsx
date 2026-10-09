@@ -48,16 +48,18 @@ import {
 import { useMemo, useState } from "react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import {
+	getBuildTickets,
 	getRelease,
 	getReleaseIssueSummary,
 	getReleaseReadiness,
 	getStaged,
-	listReleaseIssues,
 } from "../api/client";
 import type {
+	BuildCommit,
+	BuildTicket,
+	BuildTickets,
 	DashboardConfig,
 	IssueSummary,
-	JiraIssue,
 	ReadinessResponse,
 	ReleaseVersion,
 	StagedSnapshot,
@@ -87,9 +89,9 @@ export default function ReleaseDetail() {
 		version ? `release:${version}` : null,
 		() => getRelease(version!),
 	);
-	const { data: issues, error: issuesError } = useCachedFetch(
-		version ? `issues:${version}` : null,
-		() => listReleaseIssues(version!),
+	const { data: tickets, error: ticketsError } = useCachedFetch(
+		version ? `buildTickets:${version}` : null,
+		() => getBuildTickets(version!),
 	);
 	const { data: issueSummary } = useCachedFetch(
 		version ? `issueSummary:${version}` : null,
@@ -190,9 +192,10 @@ export default function ReleaseDetail() {
 				</Tabs>
 
 				<IssuesCard
-					issues={issues}
-					error={issuesError}
+					data={tickets}
+					error={ticketsError}
 					version={version!}
+					app={release.konflux_application}
 					config={config}
 				/>
 			</PageSection>
@@ -522,6 +525,8 @@ const ISSUES_COLUMNS: ColumnDef[] = [
 	{ key: "status", label: "Status" },
 	{ key: "assignee", label: "Assignee" },
 	{ key: "qaContact", label: "QA Contact" },
+	{ key: "target", label: "Target" },
+	{ key: "inBuild", label: "In build" },
 ];
 
 const priorityWeight: Record<string, number> = {
@@ -542,16 +547,19 @@ function buildJQL(
 }
 
 function IssuesCard({
-	issues,
+	data,
 	error,
 	version,
+	app,
 	config,
 }: {
-	issues?: JiraIssue[];
+	data?: BuildTickets;
 	error?: Error;
 	version: string;
+	app?: string;
 	config?: DashboardConfig;
 }) {
+	const issues = data?.tickets;
 	const [typeFilter, setTypeFilter] = useState<string>("All");
 	const [typeSelectOpen, setTypeSelectOpen] = useState(false);
 	const columnMgmt = useColumnManagement("rr-columns-issues", ISSUES_COLUMNS);
@@ -580,7 +588,7 @@ function IssuesCard({
 					alignItems={{ default: "alignItemsCenter" }}
 				>
 					<FlexItem>
-						Planned for {formatReleaseName(version)} (Jira Target Version)
+						Tickets for {formatReleaseName(version)}
 						{hasIssues && ` (${filteredIssues.length})`}
 						{jql && (
 							<Popover headerContent="JQL Query" bodyContent={jql}>
@@ -643,13 +651,41 @@ function IssuesCard({
 				</Flex>
 			</CardTitle>
 			<CardBody>
+				{data && (
+					<div style={{ marginBottom: "0.5rem" }}>
+						<div>
+							{data.build ? (
+								<>
+									Build <code>{data.build.snapshot}</code>, STAGE{" "}
+									{relative(data.build.completed_at)}
+								</>
+							) : (
+								`No STAGE build: ${data.reason}`
+							)}
+						</div>
+						{data.not_compared.length > 0 && (
+							<div>
+								Not compared:{" "}
+								{data.not_compared
+									.map((c) => `${c.component} (${c.reason})`)
+									.join(", ")}
+							</div>
+						)}
+					</div>
+				)}
 				<HelperText style={{ marginBottom: "0.5rem" }}>
 					<HelperTextItem>
-						Release intent from Jira, not the verified contents of any build.
+						Target Version tickets from Jira, plus .z tickets a build commit
+						names. In build links the commits that name the ticket.
 					</HelperTextItem>
 				</HelperText>
 				{hasIssues ? (
-					<IssuesTable issues={filteredIssues} columnMgmt={columnMgmt} />
+					<IssuesTable
+						issues={filteredIssues}
+						hasBuild={!!data?.build}
+						app={app}
+						columnMgmt={columnMgmt}
+					/>
 				) : error ? (
 					error.message
 				) : !issues ? (
@@ -664,11 +700,25 @@ function IssuesCard({
 	);
 }
 
+// The page already names the release, so quay-3-18-quay-clair reads clair.
+const commitLabel = (c: BuildCommit, app?: string) => {
+	const prefix = `${app}-quay-`;
+	const name =
+		app && c.component.startsWith(prefix)
+			? c.component.slice(prefix.length)
+			: c.component;
+	return `${name}@${c.commit_sha.slice(0, 7)}`;
+};
+
 function IssuesTable({
 	issues,
+	hasBuild,
+	app,
 	columnMgmt,
 }: {
-	issues: JiraIssue[];
+	issues: BuildTicket[];
+	hasBuild: boolean;
+	app?: string;
 	columnMgmt: ReturnType<typeof useColumnManagement>;
 }) {
 	const { isColumnVisible, visibleColumns } = columnMgmt;
@@ -704,10 +754,19 @@ function IssuesTable({
 				case "qaContact":
 					cmp = a.qa_contact.localeCompare(b.qa_contact);
 					break;
+				case "inBuild":
+					// "" for no commit, so "-" sorts first.
+					cmp = a.in_build
+						.map((c) => commitLabel(c, app))
+						.join(" ")
+						.localeCompare(
+							b.in_build.map((c) => commitLabel(c, app)).join(" "),
+						);
+					break;
 			}
 			return activeSortDirection === "asc" ? cmp : -cmp;
 		});
-	}, [issues, activeSortKey, activeSortDirection]);
+	}, [issues, activeSortKey, activeSortDirection, app]);
 
 	const visibleColumnKeys = visibleColumns.map((c) => c.key);
 
@@ -771,6 +830,15 @@ function IssuesTable({
 								QA Contact
 							</Th>
 						)}
+						{isColumnVisible("target") && <Th>Target</Th>}
+						{isColumnVisible("inBuild") && (
+							<Th
+								sort={getSortParams("inBuild")}
+								style={{ whiteSpace: "nowrap" }}
+							>
+								In build
+							</Th>
+						)}
 					</Tr>
 				</Thead>
 				<Tbody>
@@ -805,6 +873,28 @@ function IssuesTable({
 							)}
 							{isColumnVisible("assignee") && <Td>{issue.assignee}</Td>}
 							{isColumnVisible("qaContact") && <Td>{issue.qa_contact}</Td>}
+							{isColumnVisible("target") && (
+								<Td>{issue.fix_version.replace(/^[a-z]+-v/, "")}</Td>
+							)}
+							{isColumnVisible("inBuild") && (
+								<Td style={{ whiteSpace: "nowrap" }}>
+									{hasBuild &&
+										(issue.in_build.length === 0
+											? "-"
+											: issue.in_build.map((c) => (
+													<div key={`${c.component}@${c.commit_sha}`}>
+														<a
+															href={c.commit_url}
+															target="_blank"
+															rel="noopener noreferrer"
+															title={c.component}
+														>
+															{commitLabel(c, app)}
+														</a>
+													</div>
+												)))}
+								</Td>
+							)}
 						</Tr>
 					))}
 				</Tbody>

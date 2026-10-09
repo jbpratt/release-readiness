@@ -99,6 +99,28 @@ export interface JiraIssue {
 	qa_contact: string;
 }
 
+/** An upstream commit in one component of a build. */
+export interface BuildCommit {
+	component: string;
+	commit_sha: string;
+	commit_url: string;
+}
+
+/** A ticket with the selected STAGE build's commits whose message names it. */
+export interface BuildTicket extends JiraIssue {
+	in_build: BuildCommit[];
+}
+
+/** A release's tickets checked against its selected STAGE build. */
+export interface BuildTickets {
+	/** null when no STAGE build is selected; reason says why. */
+	build: { snapshot: string; completed_at: string } | null;
+	reason?: string;
+	/** Build components whose commits were not read. */
+	not_compared: { component: string; reason: string }[];
+	tickets: BuildTicket[];
+}
+
 export interface IssueSummary {
 	total: number;
 	verified: number;
