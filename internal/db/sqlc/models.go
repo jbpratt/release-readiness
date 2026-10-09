@@ -4,6 +4,10 @@
 
 package dbsqlc
 
+import (
+	"database/sql"
+)
+
 type ArtBuild struct {
 	Digest       string
 	State        string
@@ -15,6 +19,25 @@ type ArtBuild struct {
 	RebaseSha    string
 	PipelineUrl  string
 	CheckedAt    string
+}
+
+type ArtBuildAttempt struct {
+	GroupName      string
+	RecordID       string
+	ReleaseVersion string
+	Component      string
+	Nvr            string
+	Outcome        string
+	StartTime      string
+	ImageDigest    sql.NullString
+	FirstSeen      string
+	LastSeen       string
+}
+
+type ArtBuildCoverage struct {
+	GroupName   string
+	CoveredFrom string
+	CoveredTo   string
 }
 
 type ArtPendingBuild struct {

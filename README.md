@@ -42,7 +42,7 @@ A run counts as testing a Snapshot component only on an exact (role, manifest di
 
 Each JIRA release maps to a Konflux application by major.minor version: fixVersion `quay-v3.16.2` (or plain `3.16.2`) maps to `quay-3-16`, and `omr-v2.0.10` to `omr-2-0`.
 
-A Quay release's components come from three applications: `fbc-quay-X-Y` (the shipped FBC, 3.16+ only), `quay-X-Y`, and the `quay-X-Y-*` base image components of `quay-images-base`. `/api/v1/releases/{version}/snapshots` pages through the release's snapshots, newest first (`limit`, `offset`, `application`, `with_release=true`), and `/api/v1/releases/{version}/snapshots/{name}` returns one snapshot's components, each with any newer ART build still running (`pending_art_build`), and for a Quay snapshot whether the FBC catalog carries its operator bundle (`fbc_catalog`: `current`, `behind` or `unknown`).
+A Quay release's components come from three applications: `fbc-quay-X-Y` (the shipped FBC, 3.16+ only), `quay-X-Y`, and the `quay-X-Y-*` base image components of `quay-images-base`. `/api/v1/releases/{version}/snapshots` pages through the release's snapshots, newest first (`limit`, `offset`, `application`, `with_release=true`), and `/api/v1/releases/{version}/snapshots/{name}` returns one snapshot's components, each with any newer ART build still running (`pending_art_build`), and for a Quay snapshot whether the FBC catalog carries its operator bundle (`fbc_catalog`: `current`, `behind` or `unknown`). `/api/v1/releases/{version}/build-attempts` returns the release's ART image-build attempts, newest first, within the span ART history was read without a gap; `covered_from` and `covered_to` are null when the stream was never read.
 
 ## JIRA expectations
 
@@ -72,7 +72,7 @@ cd web && npm install && npm run build
 | `-kubeconfig` | `KUBECONFIG` | — | Kubeconfig path (empty uses the in-cluster service account) |
 | `-namespace` | `KONFLUX_NAMESPACE` | `art-quay-tenant` | Konflux namespace to read Snapshots and Releases from |
 | `-konflux-poll-interval` | — | `30s` | Konflux sync poll interval |
-| `-art-build-history-url` | — | `https://art-build-history-art-build-history.apps.artc2023.pc3z.p1.openshiftapps.com` | ART build history service; component images are looked up there in the background for build and upstream commit links (empty disables) |
+| `-art-build-history-url` | — | `https://art-build-history-art-build-history.apps.artc2023.pc3z.p1.openshiftapps.com` | ART build history service; component images are looked up there in the background for build and upstream commit links, and each Quay stream's image-build attempts are kept (empty disables) |
 | `-jira-url` | `JIRA_URL` | `https://redhat.atlassian.net` | JIRA Cloud URL |
 | `-jira-api-url` | `JIRA_API_URL` | `-jira-url` | JIRA REST API base URL; set to `https://api.atlassian.com/ex/jira/<cloudId>` for scoped API tokens |
 | `-jira-email` | `JIRA_EMAIL` | — | JIRA Cloud account email for API token auth |

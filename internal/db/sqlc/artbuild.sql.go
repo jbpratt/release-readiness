@@ -7,6 +7,7 @@ package dbsqlc
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 )
 
@@ -17,6 +18,22 @@ DELETE FROM art_pending_builds WHERE group_name = ?
 func (q *Queries) DeleteArtPendingBuilds(ctx context.Context, groupName string) error {
 	_, err := q.db.ExecContext(ctx, deleteArtPendingBuilds, groupName)
 	return err
+}
+
+const getArtBuildCoverage = `-- name: GetArtBuildCoverage :one
+SELECT covered_from, covered_to FROM art_build_coverage WHERE group_name = ?
+`
+
+type GetArtBuildCoverageRow struct {
+	CoveredFrom string
+	CoveredTo   string
+}
+
+func (q *Queries) GetArtBuildCoverage(ctx context.Context, groupName string) (GetArtBuildCoverageRow, error) {
+	row := q.db.QueryRowContext(ctx, getArtBuildCoverage, groupName)
+	var i GetArtBuildCoverageRow
+	err := row.Scan(&i.CoveredFrom, &i.CoveredTo)
+	return i, err
 }
 
 const insertArtPendingBuild = `-- name: InsertArtPendingBuild :exec
@@ -71,6 +88,62 @@ func (q *Queries) ListActiveApplications(ctx context.Context) ([]string, error) 
 			return nil, err
 		}
 		items = append(items, konflux_application)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listArtBuildAttempts = `-- name: ListArtBuildAttempts :many
+SELECT a.component, a.nvr, a.record_id, a.outcome, a.start_time
+FROM art_build_attempts a
+JOIN art_build_coverage c ON c.group_name = a.group_name
+WHERE a.group_name = ? AND a.release_version = ?
+  AND a.start_time >= c.covered_from
+  AND NOT (a.outcome = 'pending' AND EXISTS (
+      SELECT 1 FROM art_build_attempts f
+      WHERE f.group_name = a.group_name AND f.nvr = a.nvr AND f.outcome != 'pending'))
+ORDER BY a.start_time DESC, a.record_id DESC
+`
+
+type ListArtBuildAttemptsParams struct {
+	GroupName      string
+	ReleaseVersion string
+}
+
+type ListArtBuildAttemptsRow struct {
+	Component string
+	Nvr       string
+	RecordID  string
+	Outcome   string
+	StartTime string
+}
+
+// A version's attempts inside its group's covered span, newest first. A
+// pending record whose NVR has a finished one is the same attempt.
+func (q *Queries) ListArtBuildAttempts(ctx context.Context, arg ListArtBuildAttemptsParams) ([]ListArtBuildAttemptsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtBuildAttempts, arg.GroupName, arg.ReleaseVersion)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtBuildAttemptsRow
+	for rows.Next() {
+		var i ListArtBuildAttemptsRow
+		if err := rows.Scan(
+			&i.Component,
+			&i.Nvr,
+			&i.RecordID,
+			&i.Outcome,
+			&i.StartTime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -290,5 +363,69 @@ func (q *Queries) UpsertArtBuild(ctx context.Context, arg UpsertArtBuildParams) 
 		arg.PipelineUrl,
 		arg.CheckedAt,
 	)
+	return err
+}
+
+const upsertArtBuildAttempt = `-- name: UpsertArtBuildAttempt :exec
+INSERT INTO art_build_attempts (group_name, record_id, release_version, component, nvr, outcome, start_time, image_digest, first_seen, last_seen)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(group_name, record_id) DO UPDATE SET
+    outcome = excluded.outcome,
+    start_time = excluded.start_time,
+    image_digest = excluded.image_digest,
+    last_seen = excluded.last_seen
+`
+
+type UpsertArtBuildAttemptParams struct {
+	GroupName      string
+	RecordID       string
+	ReleaseVersion string
+	Component      string
+	Nvr            string
+	Outcome        string
+	StartTime      string
+	ImageDigest    sql.NullString
+	FirstSeen      string
+	LastSeen       string
+}
+
+func (q *Queries) UpsertArtBuildAttempt(ctx context.Context, arg UpsertArtBuildAttemptParams) error {
+	_, err := q.db.ExecContext(ctx, upsertArtBuildAttempt,
+		arg.GroupName,
+		arg.RecordID,
+		arg.ReleaseVersion,
+		arg.Component,
+		arg.Nvr,
+		arg.Outcome,
+		arg.StartTime,
+		arg.ImageDigest,
+		arg.FirstSeen,
+		arg.LastSeen,
+	)
+	return err
+}
+
+const upsertArtBuildCoverage = `-- name: UpsertArtBuildCoverage :exec
+INSERT INTO art_build_coverage (group_name, covered_from, covered_to)
+VALUES (?, ?, ?)
+ON CONFLICT(group_name) DO UPDATE SET
+    covered_from = CASE
+        WHEN excluded.covered_from <= art_build_coverage.covered_to
+        THEN min(art_build_coverage.covered_from, excluded.covered_from)
+        ELSE excluded.covered_from
+    END,
+    covered_to = excluded.covered_to
+`
+
+type UpsertArtBuildCoverageParams struct {
+	GroupName   string
+	CoveredFrom string
+	CoveredTo   string
+}
+
+// A search window that starts after the stored span ends leaves a gap, so the
+// span restarts at the window.
+func (q *Queries) UpsertArtBuildCoverage(ctx context.Context, arg UpsertArtBuildCoverageParams) error {
+	_, err := q.db.ExecContext(ctx, upsertArtBuildCoverage, arg.GroupName, arg.CoveredFrom, arg.CoveredTo)
 	return err
 }
