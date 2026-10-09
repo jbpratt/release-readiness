@@ -105,7 +105,7 @@ export function LatestSnapshot({
 	issueSummary: IssueSummary | null;
 }) {
 	const { application, snapshot: latest } = state;
-	const [view, setView] = useState<"unreleased" | "released">("unreleased");
+	const [selected, setView] = useState<"unreleased" | "released">();
 	const releasedList = useCachedFetch(
 		`releasedSnapshots:${version}:${application}`,
 		() =>
@@ -137,6 +137,7 @@ export function LatestSnapshot({
 			: undefined;
 	const loading = state.loading || (!releasedList.data && !releasedList.error);
 	const error = state.error ?? releasedList.error;
+	const view = selected ?? (released ? "released" : "unreleased");
 
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
@@ -146,15 +147,25 @@ export function LatestSnapshot({
 					actions: (
 						<ToggleGroup aria-label="Snapshot" isCompact>
 							<ToggleGroupItem
-								text="Latest unreleased"
-								isSelected={view === "unreleased"}
-								onChange={() => setView("unreleased")}
-							/>
-							<ToggleGroupItem
 								text="Latest released"
 								isSelected={view === "released"}
 								onChange={() => setView("released")}
 							/>
+							<ToggleGroupItem
+								text="Latest unreleased"
+								buttonId="latest-unreleased-toggle"
+								isSelected={view === "unreleased"}
+								onChange={() => setView("unreleased")}
+							/>
+							{!loading && (
+								<Tooltip
+									content={unreleasedReason(unreleased, !!released)}
+									position="top-end"
+									triggerRef={() =>
+										document.getElementById("latest-unreleased-toggle")!
+									}
+								/>
+							)}
 						</ToggleGroup>
 					),
 				}}
@@ -238,6 +249,17 @@ export function LatestSnapshot({
 			</CardFooter>
 		</Card>
 	);
+}
+
+/** Why the newest snapshot has no succeeded Konflux Release. */
+function unreleasedReason(snapshot?: ReleaseSnapshot, hasReleased?: boolean) {
+	if (!snapshot)
+		return hasReleased
+			? "No build since the latest released snapshot."
+			: "No snapshots of this release yet.";
+	const newest = snapshot.releases?.[0];
+	if (!newest) return "No Konflux Release names this snapshot yet.";
+	return `Its newest Konflux Release: ${releaseStatus(newest).text}.`;
 }
 
 /** JIRA counts for the whole release; issues are not mapped to components. */
