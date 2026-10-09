@@ -36,6 +36,15 @@ const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
 const ReleaseSnapshotHistory = lazy(
 	() => import("./pages/ReleaseSnapshotHistory"),
 );
+// Release page redesign mockups: only in the dev server or a VITE_MOCKUPS=1
+// build, so the production bundle carries none of their code.
+const mockups =
+	import.meta.env.DEV || import.meta.env.VITE_MOCKUPS === "1"
+		? {
+				Release: lazy(() => import("./mockups/ReleaseMockup")),
+				Builds: lazy(() => import("./mockups/BuildsMockup")),
+			}
+		: undefined;
 
 const glossary: [string, string][] = [
 	["Upstream commit", "A commit in the public upstream repo, e.g. quay/quay."],
@@ -209,6 +218,18 @@ export default function App() {
 								path="/releases/:version/snapshots"
 								element={<ReleaseSnapshotHistory />}
 							/>
+							{mockups && (
+								<>
+									<Route
+										path="/mockups/releases/:version"
+										element={<mockups.Release />}
+									/>
+									<Route
+										path="/mockups/releases/:version/snapshots"
+										element={<mockups.Builds />}
+									/>
+								</>
+							)}
 						</Routes>
 					</Suspense>
 				</ErrorBoundary>

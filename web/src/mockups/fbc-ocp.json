@@ -1,0 +1,325 @@
+{
+	"captured_at": "2026-10-09T22:09:25Z",
+	"catalogs": [
+		{
+			"version": "3.17.6",
+			"operator": "quay-operator",
+			"ocp": "v4.14",
+			"name": "quay-stage-3-17-6-fbc-20261008084003",
+			"created_at": "2026-10-08T08:40:03Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.17.6",
+			"operator": "quay-operator",
+			"ocp": "v4.15",
+			"name": "quay-stage-3-17-6-fbc-20261008084008",
+			"created_at": "2026-10-08T08:40:08Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.17.6",
+			"operator": "quay-operator",
+			"ocp": "v4.16",
+			"name": "quay-stage-3-17-6-fbc-20261008084006",
+			"created_at": "2026-10-08T08:40:06Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.17.6",
+			"operator": "quay-operator",
+			"ocp": "v4.17",
+			"name": "quay-stage-3-17-6-fbc-20261008084015",
+			"created_at": "2026-10-08T08:40:15Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.17.6",
+			"operator": "quay-operator",
+			"ocp": "v4.18",
+			"name": "quay-stage-3-17-6-fbc-20261008084018",
+			"created_at": "2026-10-08T08:40:18Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.17.6",
+			"operator": "quay-operator",
+			"ocp": "v4.19",
+			"name": "quay-stage-3-17-6-fbc-20261008084025",
+			"created_at": "2026-10-08T08:40:25Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.17.6",
+			"operator": "quay-operator",
+			"ocp": "v4.20",
+			"name": "quay-stage-3-17-6-fbc-20261008084023",
+			"created_at": "2026-10-08T08:40:23Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.17.6",
+			"operator": "quay-operator",
+			"ocp": "v4.21",
+			"name": "quay-stage-3-17-6-fbc-20261008084027",
+			"created_at": "2026-10-08T08:40:27Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.17.6",
+			"operator": "quay-operator",
+			"ocp": "v4.22",
+			"name": "quay-stage-3-17-6-fbc-20261008084029",
+			"created_at": "2026-10-08T08:40:29Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "container-security-operator",
+			"ocp": "v4.14",
+			"name": "quay-stage-3-18-1-fbc-20261007201903",
+			"created_at": "2026-10-07T20:19:03Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "container-security-operator",
+			"ocp": "v4.15",
+			"name": "quay-stage-3-18-1-fbc-20261007201912",
+			"created_at": "2026-10-07T20:19:12Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "container-security-operator",
+			"ocp": "v4.16",
+			"name": "quay-stage-3-18-1-fbc-20261007201924",
+			"created_at": "2026-10-07T20:19:24Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "container-security-operator",
+			"ocp": "v4.17",
+			"name": "quay-stage-3-18-1-fbc-20261007201941",
+			"created_at": "2026-10-07T20:19:41Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "container-security-operator",
+			"ocp": "v4.18",
+			"name": "quay-stage-3-18-1-fbc-20261007202029",
+			"created_at": "2026-10-07T20:20:29Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "container-security-operator",
+			"ocp": "v4.19",
+			"name": "quay-stage-3-18-1-fbc-20261007220012",
+			"created_at": "2026-10-07T22:00:12Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "container-security-operator",
+			"ocp": "v4.20",
+			"name": "quay-stage-3-18-1-fbc-20261007222929",
+			"created_at": "2026-10-07T22:29:29Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "container-security-operator",
+			"ocp": "v4.21",
+			"name": "quay-stage-3-18-1-fbc-20261007202051",
+			"created_at": "2026-10-07T20:20:51Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "container-security-operator",
+			"ocp": "v4.22",
+			"name": "quay-stage-3-18-1-fbc-20261007202052",
+			"created_at": "2026-10-07T20:20:52Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "container-security-operator",
+			"ocp": "v5.0",
+			"name": "quay-stage-3-18-1-fbc-20261007202106",
+			"created_at": "2026-10-07T20:21:06Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-bridge-operator",
+			"ocp": "v4.14",
+			"name": "quay-stage-3-18-1-fbc-20261007222918",
+			"created_at": "2026-10-07T22:29:18Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-bridge-operator",
+			"ocp": "v4.15",
+			"name": "quay-stage-3-18-1-fbc-20261007215958",
+			"created_at": "2026-10-07T21:59:58Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-bridge-operator",
+			"ocp": "v4.16",
+			"name": "quay-stage-3-18-1-fbc-20261007201927",
+			"created_at": "2026-10-07T20:19:27Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-bridge-operator",
+			"ocp": "v4.17",
+			"name": "quay-stage-3-18-1-fbc-20261007201935",
+			"created_at": "2026-10-07T20:19:35Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-bridge-operator",
+			"ocp": "v4.18",
+			"name": "quay-stage-3-18-1-fbc-20261007220003",
+			"created_at": "2026-10-07T22:00:03Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-bridge-operator",
+			"ocp": "v4.19",
+			"name": "quay-stage-3-18-1-fbc-20261007202031",
+			"created_at": "2026-10-07T20:20:31Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-bridge-operator",
+			"ocp": "v4.20",
+			"name": "quay-stage-3-18-1-fbc-20261007202050",
+			"created_at": "2026-10-07T20:20:50Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-bridge-operator",
+			"ocp": "v4.21",
+			"name": "quay-stage-3-18-1-fbc-20261007202055",
+			"created_at": "2026-10-07T20:20:55Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-bridge-operator",
+			"ocp": "v4.22",
+			"name": "quay-stage-3-18-1-fbc-20261007220019",
+			"created_at": "2026-10-07T22:00:19Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-bridge-operator",
+			"ocp": "v5.0",
+			"name": "quay-stage-3-18-1-fbc-20261007202114",
+			"created_at": "2026-10-07T20:21:14Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-operator",
+			"ocp": "v4.12",
+			"name": "quay-stage-3-18-1-fbc-20261007215927",
+			"created_at": "2026-10-07T21:59:27Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-operator",
+			"ocp": "v4.14",
+			"name": "quay-stage-3-18-1-fbc-20261007215929",
+			"created_at": "2026-10-07T21:59:29Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-operator",
+			"ocp": "v4.15",
+			"name": "quay-stage-3-18-1-fbc-20261007215947",
+			"created_at": "2026-10-07T21:59:47Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-operator",
+			"ocp": "v4.16",
+			"name": "quay-stage-3-18-1-fbc-20261007201932",
+			"created_at": "2026-10-07T20:19:32Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-operator",
+			"ocp": "v4.17",
+			"name": "quay-stage-3-18-1-fbc-20261007222921",
+			"created_at": "2026-10-07T22:29:21Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-operator",
+			"ocp": "v4.18",
+			"name": "quay-stage-3-18-1-fbc-20261007202028",
+			"created_at": "2026-10-07T20:20:28Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-operator",
+			"ocp": "v4.19",
+			"name": "quay-stage-3-18-1-fbc-20261007220005",
+			"created_at": "2026-10-07T22:00:05Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-operator",
+			"ocp": "v4.20",
+			"name": "quay-stage-3-18-1-fbc-20261007202020",
+			"created_at": "2026-10-07T20:20:20Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-operator",
+			"ocp": "v4.21",
+			"name": "quay-stage-3-18-1-fbc-20261007220017",
+			"created_at": "2026-10-07T22:00:17Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-operator",
+			"ocp": "v4.22",
+			"name": "quay-stage-3-18-1-fbc-20261007202058",
+			"created_at": "2026-10-07T20:20:58Z",
+			"status": "Succeeded"
+		},
+		{
+			"version": "3.18.1",
+			"operator": "quay-operator",
+			"ocp": "v5.0",
+			"name": "quay-stage-3-18-1-fbc-20261007202107",
+			"created_at": "2026-10-07T20:21:07Z",
+			"status": "Succeeded"
+		}
+	]
+}

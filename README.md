@@ -98,6 +98,8 @@ KUBECONFIG=<path> go run ./cmd/release-readiness -addr :8088 -db /tmp/rr.db
 cd web && npm run dev
 ```
 
+Mockups of the release page redesign run on live data at `/mockups/releases/<version>` (e.g. `http://localhost:5173/mockups/releases/quay-v3.18.1`), with a switcher for each open question. The dev server always serves them; a build serves them only when made with `VITE_MOCKUPS=1 npm run build`.
+
 ### Deployment
 
 `deploy/rbac.yaml` creates the `release-readiness` ServiceAccount and a Role granting read-only access to Snapshots and Releases. The Role and RoleBinding must live in the Konflux namespace the app reads.

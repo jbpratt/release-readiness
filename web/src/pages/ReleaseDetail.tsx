@@ -546,7 +546,7 @@ function buildJQL(
 	return `project=${project} AND "Target Version"="${version}"`;
 }
 
-function IssuesCard({
+export function IssuesCard({
 	data,
 	error,
 	version,
