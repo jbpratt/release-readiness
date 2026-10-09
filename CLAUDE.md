@@ -45,7 +45,6 @@ The Vite dev server proxies `/api` requests to `localhost:8088` (the Go backend)
 - **`internal/server/`** — HTTP server using Go stdlib `net/http`. Routes registered in `routes.go`, API handlers in `handlers_api.go`. The React SPA is served from embedded `web/dist/` via `go:embed` with SPA fallback routing.
 - **`internal/db/`** — SQLite data layer (pure-Go driver `modernc.org/sqlite`, no CGO). Schema migrations in `migrations.go`. WAL mode enabled.
 - **`internal/kube/`** — Kubernetes dynamic client. Syncs Konflux Snapshots and Releases from `-namespace` (kubeconfig or in-cluster service account); `created_at` comes from `creationTimestamp`.
-- **`internal/konflux/`** — Konflux Snapshot spec types.
 - **`internal/jira/`** — JIRA REST API client. Discovers active releases, syncs issues by fixVersion.
 - **`internal/releaseview/`** — Release component set. A fixVersion maps to a Konflux application (`quay-v3.16.2` → `quay-3-16`); a release merges `fbc-quay-X-Y`, `quay-X-Y` and the `quay-X-Y-*` components of `quay-images-base`, keeping the newest image per component. Served at `/api/v1/releases/{version}/snapshots`.
 - **`internal/prow/`** — Prow periodic CI runs from public GCS, keyed by Konflux application (`-prow-jobs job=quay-3-18`). A run tests a Snapshot component only on an exact (role, digest) match (`ComponentKey`). Served at `/api/v1/releases/{version}/prow-runs` and `/api/v1/releases/{version}/snapshots/{name}/prow-runs`.
