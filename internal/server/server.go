@@ -21,6 +21,9 @@ type Server struct {
 	artBaseURL  string
 	shipped     *catalog.Shipped
 	syncStatus  *syncstatus.Registry
+	// StageReleasePlans are the exact ReleasePlan names whose Releases are
+	// STAGE; empty selects no build.
+	StageReleasePlans []string
 }
 
 // New builds the server. An empty artBaseURL leaves every component's art null;
