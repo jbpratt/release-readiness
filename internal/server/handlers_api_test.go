@@ -610,6 +610,26 @@ func TestGetReleaseReadiness(t *testing.T) {
 	}
 }
 
+func TestComputeReadiness(t *testing.T) {
+	past := time.Now().Add(-24 * time.Hour)
+	open := &model.IssueSummary{Total: 2, Open: 1}
+	for _, tc := range []struct {
+		desc           string
+		catalogShipped bool
+		want           model.ReadinessResponse
+	}{
+		{"catalog-shipped, JIRA unreleased", true, model.ReadinessResponse{Signal: "green", Message: "Shipped"}},
+		{"unshipped past due", false, model.ReadinessResponse{Signal: "red", Message: "Past due date"}},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			release := &model.ReleaseVersion{Name: "quay-v3.17.5", DueDate: &past}
+			if got := computeReadiness(release, open, true, tc.catalogShipped); got != tc.want {
+				t.Errorf("got %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestMarkNextInStream(t *testing.T) {
 	type row struct {
 		name    string
