@@ -30,6 +30,7 @@ import {
 	Tabs,
 	TabTitleText,
 	Title,
+	Tooltip,
 } from "@patternfly/react-core";
 import {
 	ColumnsIcon,
@@ -371,8 +372,25 @@ function StagedCard({ version }: { version: string }) {
 	);
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<CardTitle>
-				ART staging{data && ` for assembly ${data.assembly}`}
+			<CardTitle subtitle="The newest image and FBC builds ART has pushed to the stage advisory for this assembly — not yet the production release.">
+				ART staging
+				{data && (
+					<>
+						{" for assembly "}
+						<Tooltip
+							content={
+								<>
+									ART's pinned, release-specific build grouping for this group
+									(e.g. quay-3.18), derived here from the version. Separate from
+									the always-moving <code>stream</code> assembly used for
+									regular CI builds.
+								</>
+							}
+						>
+							<span>{data.assembly}</span>
+						</Tooltip>
+					</>
+				)}
 			</CardTitle>
 			<CardBody>
 				<HelperText style={{ marginBottom: "0.5rem" }}>
@@ -421,7 +439,26 @@ function StagedRow({
 	return (
 		<DescriptionListGroup>
 			<DescriptionListTerm>
-				{term}
+				<Tooltip
+					content={
+						kind === "image" ? (
+							<>
+								Newest Konflux Snapshot ART marked{" "}
+								<code>env=stage, kind=image</code> for this assembly — selected
+								independently of the FBC below.
+							</>
+						) : (
+							<>
+								Newest Konflux Snapshot ART marked{" "}
+								<code>env=stage, kind=fbc</code> for this assembly — the
+								file-based catalog build, selected independently of the image
+								above.
+							</>
+						)
+					}
+				>
+					<span>{term}</span>
+				</Tooltip>
 				<Popover
 					bodyContent={`Konflux stage Snapshot annotated art.redhat.com/assembly=${assembly}, art.redhat.com/kind=${kind.toLowerCase()}.`}
 				>
@@ -441,12 +478,33 @@ function StagedRow({
 						spaceItems={{ default: "spaceItemsSm" }}
 					>
 						<code>{staged.name}</code>
-						<span title={new Date(staged.created_at).toLocaleString()}>
-							{relative(staged.created_at)}
-						</span>
-						<SnapshotReleaseLabel
-							releases={staged.release ? [staged.release] : undefined}
-						/>
+						<FlexItem>
+							<Tooltip
+								content={
+									<>
+										{new Date(staged.created_at).toLocaleString()}
+										<br />
+										When this stage Snapshot was created in Konflux (hover for
+										exact local time). The Release's own start/completion times
+										are in the status popover.
+									</>
+								}
+							>
+								<span>{relative(staged.created_at)}</span>
+							</Tooltip>
+						</FlexItem>
+						<FlexItem>
+							<Tooltip
+								position="bottom"
+								content="Status of the Konflux Release that pushed this Snapshot to the stage target. Released means it reached the stage advisory/registry — not the production release."
+							>
+								<span>
+									<SnapshotReleaseLabel
+										releases={staged.release ? [staged.release] : undefined}
+									/>
+								</span>
+							</Tooltip>
+						</FlexItem>
 					</Flex>
 				) : (
 					`No staged ${kind} for ${assembly} yet.`
