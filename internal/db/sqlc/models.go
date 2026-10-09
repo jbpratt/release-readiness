@@ -166,3 +166,11 @@ type SnapshotComponent struct {
 	ImageUrl   string
 	GitUrl     string
 }
+
+type StagedSnapshot struct {
+	Name      string
+	Assembly  string
+	Kind      string
+	Env       string
+	CreatedAt string
+}

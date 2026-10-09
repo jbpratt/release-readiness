@@ -59,6 +59,7 @@ type Store interface {
 	EnsureComponent(ctx context.Context, name string) (*model.Component, error)
 	CreateSnapshotComponent(ctx context.Context, snapshotID int64, component, gitSHA, imageURL, gitURL string) error
 	UpsertKonfluxRelease(ctx context.Context, r *model.KonfluxRelease) error
+	UpsertStagedSnapshot(ctx context.Context, name, assembly, kind, env string, createdAt time.Time) error
 	ListFBCCatalogCandidates(ctx context.Context, retryBefore time.Time, limit int) ([]string, error)
 	// ReplaceFBCCatalog atomically stores the outcome of reading one catalog image.
 	ReplaceFBCCatalog(ctx context.Context, digest, state string, bundles []fbc.Bundle, checkedAt time.Time) error
@@ -184,6 +185,14 @@ func (s *Syncer) each(ctx context.Context, pass *syncstatus.Pass, gvr schema.Gro
 
 func (s *Syncer) sync(ctx context.Context, obj *unstructured.Unstructured) error {
 	name := obj.GetName()
+	// Recorded on every pass, so Snapshots stored before this table existed get theirs.
+	a := obj.GetAnnotations()
+	assembly, kind, env := a["art.redhat.com/assembly"], a["art.redhat.com/kind"], a["art.redhat.com/env"]
+	if assembly != "" && kind != "" && env != "" {
+		if err := s.store.UpsertStagedSnapshot(ctx, name, assembly, kind, env, obj.GetCreationTimestamp().UTC()); err != nil {
+			return fmt.Errorf("store staged snapshot: %w", err)
+		}
+	}
 	exists, err := s.store.SnapshotExistsByName(ctx, name)
 	if err != nil || exists {
 		return err

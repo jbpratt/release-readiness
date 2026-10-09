@@ -10,6 +10,7 @@ import type {
 	ReleaseSnapshotPage,
 	ReleaseVersion,
 	SnapshotProwRuns,
+	StagedSnapshots,
 	SyncStatus,
 } from "./types";
 
@@ -117,4 +118,8 @@ export function getBuildAttempts(version: string): Promise<BuildAttempts> {
 	return fetchJSON(
 		`${BASE}/releases/${encodeURIComponent(version)}/build-attempts`,
 	);
+}
+
+export function getStaged(version: string): Promise<StagedSnapshots> {
+	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}/staged`);
 }

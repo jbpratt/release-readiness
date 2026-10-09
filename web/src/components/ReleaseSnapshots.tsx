@@ -533,7 +533,11 @@ function FBCCatalogLabel({ fbc }: { fbc: FBCCatalog }) {
 }
 
 /** Status of the newest Konflux Release naming the Snapshot; details in the popover. */
-function SnapshotReleaseLabel({ releases }: { releases?: KonfluxRelease[] }) {
+export function SnapshotReleaseLabel({
+	releases,
+}: {
+	releases?: KonfluxRelease[];
+}) {
 	if (!releases?.length) {
 		return (
 			<Popover

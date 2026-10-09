@@ -233,6 +233,50 @@ func TestSyncOnce(t *testing.T) {
 	}
 }
 
+func TestSyncStagedSnapshots(t *testing.T) {
+	ctx := context.Background()
+	database, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	t0 := time.Date(2026, 10, 7, 20, 0, 0, 0, time.UTC)
+	annotated := func(name string, created time.Time, env string) *unstructured.Unstructured {
+		u := snapshot(name, "quay-3-18", created)
+		u.SetAnnotations(map[string]string{
+			"art.redhat.com/assembly": "3.18.1",
+			"art.redhat.com/kind":     "image",
+			"art.redhat.com/env":      env,
+		})
+		return u
+	}
+	// Newer Snapshots that are not staged must not be picked.
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{snapshotGVR: "SnapshotList", releaseGVR: "ReleaseList"},
+		annotated("quay-stage-3-18-1-image", t0, "stage"),
+		annotated("quay-prod-3-18-1-image", t0.Add(time.Hour), "prod"),
+		snapshot("quay-3-18-build", "quay-3-18", t0.Add(2*time.Hour)),
+	)
+	// Stored before staged Snapshots were recorded: the sync still records it.
+	if _, err := database.CreateSnapshot(ctx, "quay-3-18", "quay-stage-3-18-1-image", t0); err != nil {
+		t.Fatal(err)
+	}
+	withTx := func(ctx context.Context, fn func(Store) error) error {
+		return database.InTx(ctx, func(tx *db.DB) error { return fn(tx) })
+	}
+	NewSyncer(client, testNamespace, database, withTx, slog.New(slog.NewTextHandler(io.Discard, nil))).SyncOnce(ctx)
+
+	got, err := database.LatestStagedSnapshot(ctx, "3.18.1", "image")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := model.StagedSnapshot{Name: "quay-stage-3-18-1-image", Assembly: "3.18.1", Kind: "image", CreatedAt: t0}
+	if got == nil || *got != want {
+		t.Errorf("staged = %+v, want %+v", got, want)
+	}
+}
+
 // fakeCatalogs serves bundles per image, fails images without any, and
 // records each read.
 type fakeCatalogs struct {
