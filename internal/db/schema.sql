@@ -193,3 +193,15 @@ CREATE TABLE IF NOT EXISTS fbc_catalog_bundles (
     bundle_digest  TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (catalog_digest, channel, bundle_name)
 );
+
+-- ART assembly annotations (art.redhat.com/assembly, kind, env) of a Konflux
+-- Snapshot, for Snapshots that carry all three.
+CREATE TABLE IF NOT EXISTS staged_snapshots (
+    name       TEXT PRIMARY KEY,
+    assembly   TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    env        TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_staged_snapshots_assembly ON staged_snapshots(assembly, env, kind, created_at);

@@ -310,6 +310,28 @@ func (s *Server) handleListBuildAttempts(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// handleGetStaged returns the newest image and FBC Snapshots ART staged for
+// the release's assembly: version quay-v3.18.1 is assembly 3.18.1.
+func (s *Server) handleGetStaged(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	version := r.PathValue("version")
+	release, err := s.db.GetReleaseVersion(ctx, version)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
+		return
+	}
+	resp := model.StagedSnapshots{Assembly: strings.TrimPrefix(release.Name, "quay-v")}
+	if resp.Image, err = s.db.LatestStagedSnapshot(ctx, resp.Assembly, "image"); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if resp.FBC, err = s.db.LatestStagedSnapshot(ctx, resp.Assembly, "fbc"); err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
 func (s *Server) releaseComponents(ctx context.Context, release *model.ReleaseVersion) (model.ReleaseComponents, error) {
 	candidates, err := s.db.ListComponentCandidates(ctx, releaseview.Applications(release.KonfluxApplication))
 	if err != nil {

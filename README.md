@@ -44,6 +44,8 @@ Each JIRA release maps to a Konflux application by major.minor version: fixVersi
 
 A Quay release's components come from three applications: `fbc-quay-X-Y` (the shipped FBC, 3.16+ only), `quay-X-Y`, and the `quay-X-Y-*` base image components of `quay-images-base`. `/api/v1/releases/{version}/snapshots` pages through the release's snapshots, newest first (`limit`, `offset`, `application`, `with_release=true`), and `/api/v1/releases/{version}/snapshots/{name}` returns one snapshot's components, each with any newer ART build still running (`pending_art_build`), and for a Quay snapshot whether the FBC catalog carries its operator bundle (`fbc_catalog`: `current`, `behind` or `unknown`). `/api/v1/releases/{version}/build-attempts` returns the release's ART image-build attempts, newest first, within the span ART history was read without a gap; `covered_from` and `covered_to` are null when the stream was never read.
 
+`/api/v1/releases/{version}/staged` returns the newest Snapshot ART staged for the version's assembly (`quay-v3.18.1` is assembly `3.18.1`) of each kind, `staged_image` and `staged_fbc`, each with the newest Konflux Release that names it (`release`, null when none does). A staged Snapshot is one annotated `art.redhat.com/assembly`, `art.redhat.com/kind` (`image` or `fbc`) and `art.redhat.com/env=stage`. Each is null when ART staged none; neither claims to be the build that ships.
+
 ## JIRA expectations
 
 - **Release discovery** — searches for issues where `component = "-area/release"` and status is not Closed/Done

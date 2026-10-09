@@ -493,6 +493,57 @@ func TestListBuildAttempts(t *testing.T) {
 	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/build-attempts", http.StatusNotFound, nil)
 }
 
+func TestGetStaged(t *testing.T) {
+	srv := setupTestServer(t)
+	ctx := t.Context()
+	t0 := time.Date(2026, 10, 7, 20, 0, 0, 0, time.UTC)
+	// Two z-versions of one application each select their own assembly's Snapshots.
+	for _, v := range []string{"quay-v3.18.1", "quay-v3.18.2", "quay-v3.18.3"} {
+		if err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{Name: v, KonfluxApplication: "quay-3-18"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, s := range []struct{ name, assembly, kind string }{
+		{"quay-stage-3-18-1-image", "3.18.1", "image"},
+		{"quay-stage-3-18-1-fbc", "3.18.1", "fbc"},
+		{"quay-stage-3-18-2-image", "3.18.2", "image"},
+	} {
+		if err := srv.db.UpsertStagedSnapshot(ctx, s.name, s.assembly, s.kind, "stage", t0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := srv.db.UpsertKonfluxRelease(ctx, &model.KonfluxRelease{
+		Name: "quay-stage-3-18-1-image", Application: "quay-3-18", Snapshot: "quay-stage-3-18-1-image",
+		ReleasedStatus: "False", ReleasedReason: "Failed", FailedTask: "verify-conforma", CreatedAt: t0,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var got model.StagedSnapshots
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/staged", http.StatusOK, &got)
+	if got.Assembly != "3.18.1" || got.Image == nil || got.Image.Name != "quay-stage-3-18-1-image" ||
+		got.Image.Release == nil || got.Image.Release.ReleasedReason != "Failed" || got.Image.Release.FailedTask != "verify-conforma" ||
+		got.FBC == nil || got.FBC.Name != "quay-stage-3-18-1-fbc" || got.FBC.Release != nil {
+		t.Errorf("3.18.1: got %+v", got)
+	}
+
+	got = model.StagedSnapshots{}
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.2/staged", http.StatusOK, &got)
+	if got.Assembly != "3.18.2" || got.Image == nil || got.Image.Name != "quay-stage-3-18-2-image" || got.FBC != nil {
+		t.Errorf("3.18.2: got %+v", got)
+	}
+
+	var raw map[string]any
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.3/staged", http.StatusOK, &raw)
+	if v, ok := raw["staged_image"]; !ok || v != nil {
+		t.Errorf("3.18.3 staged_image = %v (present %v), want null", v, ok)
+	}
+	if v, ok := raw["staged_fbc"]; !ok || v != nil {
+		t.Errorf("3.18.3 staged_fbc = %v (present %v), want null", v, ok)
+	}
+	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/staged", http.StatusNotFound, nil)
+}
+
 func TestReleasesOverview(t *testing.T) {
 	srv := setupTestServer(t)
 	ctx := t.Context()

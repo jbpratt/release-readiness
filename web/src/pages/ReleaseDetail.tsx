@@ -6,6 +6,10 @@ import {
 	Card,
 	CardBody,
 	CardTitle,
+	DescriptionList,
+	DescriptionListDescription,
+	DescriptionListGroup,
+	DescriptionListTerm,
 	EmptyState,
 	EmptyStateBody,
 	Flex,
@@ -41,6 +45,7 @@ import {
 	getRelease,
 	getReleaseIssueSummary,
 	getReleaseReadiness,
+	getStaged,
 	listReleaseIssues,
 } from "../api/client";
 import type {
@@ -49,11 +54,13 @@ import type {
 	JiraIssue,
 	ReadinessResponse,
 	ReleaseVersion,
+	StagedSnapshot,
 } from "../api/types";
 import BuildAttempts from "../components/BuildAttempts";
 import PriorityLabel from "../components/PriorityLabel";
 import {
 	LatestSnapshot,
+	SnapshotReleaseLabel,
 	useLatestSnapshot,
 } from "../components/ReleaseSnapshots";
 import StatusLabel from "../components/StatusLabel";
@@ -161,6 +168,8 @@ export default function ReleaseDetail() {
 					state={latest}
 					issueSummary={issueSummary ?? null}
 				/>
+
+				<StagedCard version={version!} />
 
 				<BuildAttempts version={version!} />
 
@@ -338,6 +347,90 @@ function pipelineSteps(
 			? step("Released", "success")
 			: step("Released", "pending", "Not marked released in JIRA"),
 	];
+}
+
+/** The newest image and FBC Snapshots ART staged for the version's assembly. */
+function StagedCard({ version }: { version: string }) {
+	const { data, error } = useCachedFetch(`staged:${version}`, () =>
+		getStaged(version),
+	);
+	return (
+		<Card isCompact style={{ marginBottom: "1rem" }}>
+			<CardTitle>Staged by ART</CardTitle>
+			<CardBody>
+				{error ? (
+					error.message
+				) : !data ? (
+					<Spinner size="md" />
+				) : (
+					<DescriptionList
+						isCompact
+						isHorizontal
+						horizontalTermWidthModifier={{ default: "14rem" }}
+					>
+						<StagedRow
+							kind="image"
+							assembly={data.assembly}
+							staged={data.staged_image}
+						/>
+						<StagedRow
+							kind="FBC"
+							assembly={data.assembly}
+							staged={data.staged_fbc}
+						/>
+					</DescriptionList>
+				)}
+			</CardBody>
+		</Card>
+	);
+}
+
+function StagedRow({
+	kind,
+	assembly,
+	staged,
+}: {
+	kind: string;
+	assembly: string;
+	staged: StagedSnapshot | null;
+}) {
+	const term = `Latest staged ${kind}`;
+	return (
+		<DescriptionListGroup>
+			<DescriptionListTerm>
+				{term}
+				<Popover
+					bodyContent={`Konflux stage Snapshot annotated art.redhat.com/assembly=${assembly}, art.redhat.com/kind=${kind.toLowerCase()}.`}
+				>
+					<Button
+						variant="plain"
+						aria-label={`Where ${term.toLowerCase()} comes from`}
+						style={{ padding: "0 0 0 0.25rem" }}
+					>
+						<OutlinedQuestionCircleIcon />
+					</Button>
+				</Popover>
+			</DescriptionListTerm>
+			<DescriptionListDescription>
+				{staged ? (
+					<Flex
+						alignItems={{ default: "alignItemsCenter" }}
+						spaceItems={{ default: "spaceItemsSm" }}
+					>
+						<code>{staged.name}</code>
+						<span title={new Date(staged.created_at).toLocaleString()}>
+							{relative(staged.created_at)}
+						</span>
+						<SnapshotReleaseLabel
+							releases={staged.release ? [staged.release] : undefined}
+						/>
+					</Flex>
+				) : (
+					`No staged ${kind} for ${assembly} yet.`
+				)}
+			</DescriptionListDescription>
+		</DescriptionListGroup>
+	);
 }
 
 const ISSUES_COLUMNS: ColumnDef[] = [
