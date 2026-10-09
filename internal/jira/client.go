@@ -119,7 +119,6 @@ type ResField struct {
 
 type searchResponse struct {
 	NextPageToken string  `json:"nextPageToken,omitempty"`
-	MaxResults    int     `json:"maxResults"`
 	Issues        []Issue `json:"issues"`
 }
 

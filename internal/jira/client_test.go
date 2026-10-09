@@ -41,8 +41,7 @@ func TestSearchIssues(t *testing.T) {
 		}
 
 		resp := searchResponse{
-			MaxResults: 100,
-			Issues:     issues,
+			Issues: issues,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
@@ -122,7 +121,6 @@ func TestSearchIssuesPagination(t *testing.T) {
 		var resp searchResponse
 		if token == "" {
 			resp = searchResponse{
-				MaxResults:    2,
 				NextPageToken: "page2",
 				Issues: []Issue{
 					{Key: "PROJ-1"},
@@ -131,7 +129,6 @@ func TestSearchIssuesPagination(t *testing.T) {
 			}
 		} else {
 			resp = searchResponse{
-				MaxResults: 2,
 				Issues: []Issue{
 					{Key: "PROJ-3"},
 				},
@@ -168,7 +165,6 @@ func TestDiscoverActiveReleases(t *testing.T) {
 		}
 
 		resp := searchResponse{
-			MaxResults: 100,
 			Issues: []Issue{
 				{
 					Key: "PROJQUAY-10276",
@@ -322,8 +318,7 @@ func TestSearchIssuesTargetVersion(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedJQL = r.URL.Query().Get("jql")
 		resp := searchResponse{
-			MaxResults: 100,
-			Issues:     []Issue{{Key: "PROJQUAY-10157"}},
+			Issues: []Issue{{Key: "PROJQUAY-10157"}},
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
@@ -361,8 +356,7 @@ func TestRateLimitRetry(t *testing.T) {
 			return
 		}
 		resp := searchResponse{
-			MaxResults: 100,
-			Issues:     []Issue{{Key: "PROJ-1"}},
+			Issues: []Issue{{Key: "PROJ-1"}},
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(resp)
@@ -387,7 +381,7 @@ func TestRateLimitRetry(t *testing.T) {
 func TestAnonymousFallbackIsAuthError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Seraph-LoginReason", "AUTHENTICATED_FAILED")
-		_ = json.NewEncoder(w).Encode(searchResponse{MaxResults: 100})
+		_ = json.NewEncoder(w).Encode(searchResponse{})
 	}))
 	defer srv.Close()
 
