@@ -12,9 +12,7 @@ CREATE TABLE IF NOT EXISTS snapshot_components (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     snapshot_id INTEGER NOT NULL REFERENCES snapshots(id) ON DELETE CASCADE,
     component   TEXT NOT NULL,
-    git_sha     TEXT NOT NULL DEFAULT '',
-    image_url   TEXT NOT NULL DEFAULT '',
-    git_url     TEXT NOT NULL DEFAULT ''
+    image_url   TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_snapshot_components_snapshot ON snapshot_components(snapshot_id);

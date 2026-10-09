@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -23,19 +24,15 @@ func TestSnapshotsOrderedByCreatedAt(t *testing.T) {
 		}
 	}
 
-	want := []string{"newest", "middle", "oldest"}
-	for _, app := range []string{"", "quay-3-18"} {
-		snaps, err := d.ListSnapshots(ctx, app, 10, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(snaps) != len(want) {
-			t.Fatalf("ListSnapshots(%q) returned %d snapshots, want %d", app, len(snaps), len(want))
-		}
-		for i, s := range snaps {
-			if s.Name != want[i] {
-				t.Errorf("ListSnapshots(%q)[%d] = %q, want %q", app, i, s.Name, want[i])
-			}
-		}
+	snaps, err := d.ListReleaseSnapshots(ctx, "quay-3-18", []string{"quay-3-18"}, false, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, s := range snaps {
+		got = append(got, s.Name)
+	}
+	if want := []string{"newest", "middle", "oldest"}; !slices.Equal(got, want) {
+		t.Errorf("snapshots = %v, want %v", got, want)
 	}
 }

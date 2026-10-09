@@ -93,12 +93,12 @@ func TestSyncStatus(t *testing.T) {
 // seedSnapshot creates a snapshot whose components are named comps.
 func seedSnapshot(t *testing.T, srv *Server, app, name string, created time.Time, comps ...string) {
 	t.Helper()
-	snap, err := srv.db.CreateSnapshot(t.Context(), app, name, created)
+	id, err := srv.db.CreateSnapshot(t.Context(), app, name, created)
 	if err != nil {
 		t.Fatalf("create snapshot %s: %v", name, err)
 	}
 	for _, c := range comps {
-		if err := srv.db.CreateSnapshotComponent(t.Context(), snap.ID, c, "sha-"+name, "quay.io/x/"+c+"@"+name, ""); err != nil {
+		if err := srv.db.CreateSnapshotComponent(t.Context(), id, c, "quay.io/x/"+c+"@"+name); err != nil {
 			t.Fatalf("create component %s: %v", c, err)
 		}
 	}
@@ -335,11 +335,11 @@ func TestFBCCatalogStatus(t *testing.T) {
 			}
 			add := func(app, name string, created time.Time, component, image string) {
 				t.Helper()
-				snap, err := srv.db.CreateSnapshot(ctx, app, name, created)
+				id, err := srv.db.CreateSnapshot(ctx, app, name, created)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if err := srv.db.CreateSnapshotComponent(ctx, snap.ID, component, "", image, ""); err != nil {
+				if err := srv.db.CreateSnapshotComponent(ctx, id, component, image); err != nil {
 					t.Fatal(err)
 				}
 			}

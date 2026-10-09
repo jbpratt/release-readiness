@@ -26,12 +26,12 @@ func TestArtBuildCache(t *testing.T) {
 	// held by both applications.
 	apps := []string{"quay-3-16", "quay-3-18"}
 	for i, imgs := range [][]string{{imgA}, {imgA, imgB}} {
-		snap, err := d.CreateSnapshot(ctx, apps[i], "snap-"+string(rune('a'+i)), t0.Add(time.Duration(i)*time.Hour))
+		id, err := d.CreateSnapshot(ctx, apps[i], "snap-"+string(rune('a'+i)), t0.Add(time.Duration(i)*time.Hour))
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, img := range imgs {
-			if err := d.CreateSnapshotComponent(ctx, snap.ID, "quay-3-18-"+img[len(img)-4:], "", img, ""); err != nil {
+			if err := d.CreateSnapshotComponent(ctx, id, "quay-3-18-"+img[len(img)-4:], img); err != nil {
 				t.Fatal(err)
 			}
 		}

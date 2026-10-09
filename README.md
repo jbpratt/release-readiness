@@ -18,7 +18,7 @@ The Go backend runs background sync loops that pull data into a local SQLite dat
 
 ### Konflux sync (default: every 30s)
 
-Lists `Snapshot` and `Release` resources (`appstudio.redhat.com/v1alpha1`) in the `-namespace` Konflux namespace through the Kubernetes API, using `-kubeconfig`/`KUBECONFIG` or, when unset, the in-cluster service account. New snapshots are stored with their components (git SHA, image); releases are upserted and served with the snapshots they name. Each record's `created_at` is the resource's `creationTimestamp`.
+Lists `Snapshot` and `Release` resources (`appstudio.redhat.com/v1alpha1`) in the `-namespace` Konflux namespace through the Kubernetes API, using `-kubeconfig`/`KUBECONFIG` or, when unset, the in-cluster service account. New snapshots are stored with their component images; releases are upserted and served with the snapshots they name. Each record's `created_at` is the resource's `creationTimestamp`.
 
 Each pass also reads the file-based catalog of the newest quay-operator FBC images not yet read, pulled anonymously from the image's registry (registry v2 API), to check whether a Quay Snapshot's operator bundle is in the catalog.
 

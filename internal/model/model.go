@@ -4,17 +4,7 @@ import "time"
 
 type ComponentRecord struct {
 	Component string `json:"component"`
-	GitSHA    string `json:"git_sha"`
 	ImageURL  string `json:"image_url"`
-	GitURL    string `json:"git_url"`
-}
-
-type SnapshotRecord struct {
-	ID          int64             `json:"id"`
-	Application string            `json:"application"`
-	Name        string            `json:"name"`
-	CreatedAt   time.Time         `json:"created_at"`
-	Components  []ComponentRecord `json:"components,omitempty"`
 }
 
 // JiraIssueRecord represents a JIRA issue cached in the database.

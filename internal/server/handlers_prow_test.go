@@ -22,12 +22,12 @@ func TestProwRunEndpoints(t *testing.T) {
 	}
 	snapshot := func(app, name string, comps map[string]string) {
 		t.Helper()
-		snap, err := srv.db.CreateSnapshot(ctx, app, name, t0)
+		id, err := srv.db.CreateSnapshot(ctx, app, name, t0)
 		if err != nil {
 			t.Fatal(err)
 		}
 		for comp, digest := range comps {
-			if err := srv.db.CreateSnapshotComponent(ctx, snap.ID, comp, "", "quay.io/x/art-images@"+digest, ""); err != nil {
+			if err := srv.db.CreateSnapshotComponent(ctx, id, comp, "quay.io/x/art-images@"+digest); err != nil {
 				t.Fatal(err)
 			}
 		}
