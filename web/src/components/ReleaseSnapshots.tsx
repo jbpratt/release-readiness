@@ -37,12 +37,13 @@ import {
 } from "../api/client";
 import type {
 	FBCCatalog,
+	IssueSummary,
 	KonfluxRelease,
 	ReleaseSnapshot,
 	ReleaseVersion,
-	SnapshotImage,
 } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
+import { changedFields } from "../utils/componentDiff";
 import { relative } from "../utils/format";
 import {
 	latestReleased,
@@ -95,9 +96,11 @@ type LatestSnapshotState = ReturnType<typeof useLatestSnapshot>;
 export function LatestSnapshot({
 	version,
 	state,
+	issueSummary,
 }: {
 	version: string;
 	state: LatestSnapshotState;
+	issueSummary: IssueSummary | null;
 }) {
 	const { application, snapshot: latest } = state;
 	const [view, setView] = useState<"unreleased" | "released">("unreleased");
@@ -124,13 +127,11 @@ export function LatestSnapshot({
 			: null,
 		() => getReleaseSnapshot(version, released!.name),
 	);
-	const changedNames = changedSince(
-		state.detail.data?.components,
-		releasedDetail.data?.components,
-	);
+	const current = state.detail.data?.components;
+	const shipped = releasedDetail.data?.components;
 	const changed =
-		released && changedNames
-			? { since: released.name, names: changedNames }
+		released && current && shipped
+			? { since: released.name, fields: changedFields(current, shipped) }
 			: undefined;
 	const loading = state.loading || (!releasedList.data && !releasedList.error);
 	const error = state.error ?? releasedList.error;
@@ -159,6 +160,7 @@ export function LatestSnapshot({
 				<CardTitle>Latest snapshot</CardTitle>
 			</CardHeader>
 			<CardBody>
+				{issueSummary && <ReleaseIssueSummary summary={issueSummary} />}
 				{loading ? (
 					<Spinner size="md" />
 				) : error ? (
@@ -216,12 +218,15 @@ export function LatestSnapshot({
 	);
 }
 
-/** Names of the components whose image is not the released one. */
-function changedSince(current?: SnapshotImage[], released?: SnapshotImage[]) {
-	if (!current || !released) return undefined;
-	const shipped = new Map(released.map((c) => [c.name, c.image]));
-	return new Set(
-		current.filter((c) => shipped.get(c.name) !== c.image).map((c) => c.name),
+/** JIRA counts for the whole release; issues are not mapped to components. */
+function ReleaseIssueSummary({ summary }: { summary: IssueSummary }) {
+	return (
+		<HelperText style={{ marginBottom: "0.5rem" }}>
+			<HelperTextItem>
+				Release-level issues, not tied to any component: {summary.open} open of{" "}
+				{summary.total} ({summary.cves} CVEs, {summary.bugs} bugs)
+			</HelperTextItem>
+		</HelperText>
 	);
 }
 
@@ -261,8 +266,8 @@ function SnapshotSummary({
 			</Flex>
 			{changed && fetched?.data?.components && (
 				<Content component="p" style={{ marginBottom: "0.5rem" }}>
-					{changedDot} {changed.names.size} of {fetched.data.components.length}{" "}
-					images changed since <code>{changed.since}</code>
+					{changedDot} {changed.fields.size} of {fetched.data.components.length}{" "}
+					images changed vs <code>{changed.since}</code>, last released
 				</Content>
 			)}
 			<SnapshotDetail
