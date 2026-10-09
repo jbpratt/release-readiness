@@ -306,6 +306,28 @@ func (s *Server) handleGetStaged(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// handleGetSelectedBuild returns the release's selected STAGE build, or
+// {selected_build: null, reason} when none can be selected.
+func (s *Server) handleGetSelectedBuild(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	version := r.PathValue("version")
+	release, err := s.db.GetReleaseVersion(ctx, version)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
+		return
+	}
+	builds, err := s.db.SelectedStageBuilds(ctx, release, s.StageReleasePlans)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if builds.Selected == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"selected_build": nil, "reason": builds.Reason})
+		return
+	}
+	writeJSON(w, http.StatusOK, builds.Selected)
+}
+
 // componentSet counts the release's newest image per component across its
 // applications and returns when the newest of them was built. The images may
 // come from different snapshots, so they are not one coherent build.
