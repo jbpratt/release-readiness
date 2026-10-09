@@ -30,7 +30,7 @@ func (d *DB) LatestStagedSnapshot(ctx context.Context, assembly, kind string) (*
 	if err != nil {
 		return nil, err
 	}
-	s := &model.StagedSnapshot{Name: row.Name, Assembly: row.Assembly, Kind: row.Kind, CreatedAt: parseTime(row.CreatedAt)}
+	s := &model.StagedSnapshot{Name: row.Name, CreatedAt: parseTime(row.CreatedAt)}
 	releases, err := d.queries().ListKonfluxReleasesBySnapshots(ctx, []string{row.Name})
 	if err != nil {
 		return nil, err

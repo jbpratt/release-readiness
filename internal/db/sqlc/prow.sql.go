@@ -24,18 +24,15 @@ func (q *Queries) DeleteProwRunImages(ctx context.Context, arg DeleteProwRunImag
 }
 
 const insertProwRunImage = `-- name: InsertProwRunImage :exec
-INSERT INTO prow_run_images (job_name, build_id, role, source, requested_ref, digest, image_id)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO prow_run_images (job_name, build_id, role, digest)
+VALUES (?, ?, ?, ?)
 `
 
 type InsertProwRunImageParams struct {
-	JobName      string
-	BuildID      string
-	Role         string
-	Source       string
-	RequestedRef string
-	Digest       string
-	ImageID      string
+	JobName string
+	BuildID string
+	Role    string
+	Digest  string
 }
 
 func (q *Queries) InsertProwRunImage(ctx context.Context, arg InsertProwRunImageParams) error {
@@ -43,10 +40,7 @@ func (q *Queries) InsertProwRunImage(ctx context.Context, arg InsertProwRunImage
 		arg.JobName,
 		arg.BuildID,
 		arg.Role,
-		arg.Source,
-		arg.RequestedRef,
 		arg.Digest,
-		arg.ImageID,
 	)
 	return err
 }
@@ -79,7 +73,7 @@ func (q *Queries) ListFinishedProwBuildIDs(ctx context.Context, jobName string) 
 }
 
 const listProwRunImages = `-- name: ListProwRunImages :many
-SELECT role, source, requested_ref, digest, image_id
+SELECT role, digest
 FROM prow_run_images
 WHERE job_name = ? AND build_id = ?
 ORDER BY id
@@ -91,11 +85,8 @@ type ListProwRunImagesParams struct {
 }
 
 type ListProwRunImagesRow struct {
-	Role         string
-	Source       string
-	RequestedRef string
-	Digest       string
-	ImageID      string
+	Role   string
+	Digest string
 }
 
 func (q *Queries) ListProwRunImages(ctx context.Context, arg ListProwRunImagesParams) ([]ListProwRunImagesRow, error) {
@@ -107,13 +98,7 @@ func (q *Queries) ListProwRunImages(ctx context.Context, arg ListProwRunImagesPa
 	var items []ListProwRunImagesRow
 	for rows.Next() {
 		var i ListProwRunImagesRow
-		if err := rows.Scan(
-			&i.Role,
-			&i.Source,
-			&i.RequestedRef,
-			&i.Digest,
-			&i.ImageID,
-		); err != nil {
+		if err := rows.Scan(&i.Role, &i.Digest); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

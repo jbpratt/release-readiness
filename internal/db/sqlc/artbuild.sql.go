@@ -20,19 +20,14 @@ func (q *Queries) DeleteArtPendingBuilds(ctx context.Context, groupName string) 
 }
 
 const getArtBuildCoverage = `-- name: GetArtBuildCoverage :one
-SELECT covered_from, covered_to FROM art_build_coverage WHERE group_name = ?
+SELECT covered_from FROM art_build_coverage WHERE group_name = ?
 `
 
-type GetArtBuildCoverageRow struct {
-	CoveredFrom string
-	CoveredTo   string
-}
-
-func (q *Queries) GetArtBuildCoverage(ctx context.Context, groupName string) (GetArtBuildCoverageRow, error) {
+func (q *Queries) GetArtBuildCoverage(ctx context.Context, groupName string) (string, error) {
 	row := q.db.QueryRowContext(ctx, getArtBuildCoverage, groupName)
-	var i GetArtBuildCoverageRow
-	err := row.Scan(&i.CoveredFrom, &i.CoveredTo)
-	return i, err
+	var covered_from string
+	err := row.Scan(&covered_from)
+	return covered_from, err
 }
 
 const insertArtPendingBuild = `-- name: InsertArtPendingBuild :exec
@@ -269,7 +264,7 @@ func (q *Queries) ListArtPendingBuilds(ctx context.Context, arg ListArtPendingBu
 }
 
 const listResolvedArtBuilds = `-- name: ListResolvedArtBuilds :many
-SELECT digest, state, nvr, record_id, upstream_repo, upstream_sha, pipeline_url, checked_at
+SELECT digest, state, nvr, record_id, upstream_repo, upstream_sha, checked_at
 FROM art_builds
 WHERE state = 'resolved' AND digest IN (/*SLICE:digests*/?)
 `
@@ -300,7 +295,6 @@ func (q *Queries) ListResolvedArtBuilds(ctx context.Context, digests []string) (
 			&i.RecordID,
 			&i.UpstreamRepo,
 			&i.UpstreamSha,
-			&i.PipelineUrl,
 			&i.CheckedAt,
 		); err != nil {
 			return nil, err
@@ -317,15 +311,14 @@ func (q *Queries) ListResolvedArtBuilds(ctx context.Context, digests []string) (
 }
 
 const upsertArtBuild = `-- name: UpsertArtBuild :exec
-INSERT INTO art_builds (digest, state, nvr, record_id, upstream_repo, upstream_sha, pipeline_url, checked_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO art_builds (digest, state, nvr, record_id, upstream_repo, upstream_sha, checked_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(digest) DO UPDATE SET
     state = excluded.state,
     nvr = excluded.nvr,
     record_id = excluded.record_id,
     upstream_repo = excluded.upstream_repo,
     upstream_sha = excluded.upstream_sha,
-    pipeline_url = excluded.pipeline_url,
     checked_at = excluded.checked_at
 `
 
@@ -336,7 +329,6 @@ type UpsertArtBuildParams struct {
 	RecordID     string
 	UpstreamRepo string
 	UpstreamSha  string
-	PipelineUrl  string
 	CheckedAt    string
 }
 
@@ -348,7 +340,6 @@ func (q *Queries) UpsertArtBuild(ctx context.Context, arg UpsertArtBuildParams) 
 		arg.RecordID,
 		arg.UpstreamRepo,
 		arg.UpstreamSha,
-		arg.PipelineUrl,
 		arg.CheckedAt,
 	)
 	return err

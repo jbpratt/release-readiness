@@ -44,8 +44,8 @@ type Bundle struct {
 // Catalog is the stored read of the newest FBC Snapshot's catalog image. State
 // is empty while unread; Bundles holds one channel's entries.
 type Catalog struct {
-	Snapshot, Image, State string
-	Bundles                []Bundle
+	Snapshot, State string
+	Bundles         []Bundle
 }
 
 // ParseCatalog returns every channel entry of a multi-document file-based

@@ -29,10 +29,8 @@ CREATE TABLE IF NOT EXISTS jira_issues (
     fix_version TEXT NOT NULL DEFAULT '',
     assignee    TEXT NOT NULL DEFAULT '',
     issue_type  TEXT NOT NULL DEFAULT '',
-    resolution  TEXT NOT NULL DEFAULT '',
     link        TEXT NOT NULL DEFAULT '',
-    qa_contact  TEXT NOT NULL DEFAULT '',
-    updated_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
+    qa_contact  TEXT NOT NULL DEFAULT ''
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jira_issues_key_version ON jira_issues(key, fix_version);
@@ -42,7 +40,6 @@ CREATE INDEX IF NOT EXISTS idx_jira_issues_fix_version ON jira_issues(fix_versio
 CREATE TABLE IF NOT EXISTS release_versions (
     id                 INTEGER PRIMARY KEY AUTOINCREMENT,
     name               TEXT NOT NULL UNIQUE,
-    description        TEXT NOT NULL DEFAULT '',
     release_date       TEXT NOT NULL DEFAULT '',
     released           INTEGER NOT NULL DEFAULT 0,
     archived           INTEGER NOT NULL DEFAULT 0,
@@ -58,7 +55,6 @@ CREATE TABLE IF NOT EXISTS konflux_releases (
     application     TEXT NOT NULL DEFAULT '',
     snapshot        TEXT NOT NULL DEFAULT '',
     release_plan    TEXT NOT NULL DEFAULT '',
-    target          TEXT NOT NULL DEFAULT '',
     released_status TEXT NOT NULL DEFAULT '',
     released_reason TEXT NOT NULL DEFAULT '',
     -- Task and step of the last managed pipeline attempt when Released reason=Failed.
@@ -80,7 +76,6 @@ CREATE TABLE IF NOT EXISTS art_builds (
     record_id     TEXT NOT NULL DEFAULT '',
     upstream_repo TEXT NOT NULL DEFAULT '',
     upstream_sha  TEXT NOT NULL DEFAULT '',
-    pipeline_url  TEXT NOT NULL DEFAULT '',
     checked_at    TEXT NOT NULL
 );
 
@@ -107,10 +102,7 @@ CREATE TABLE IF NOT EXISTS prow_run_images (
     job_name      TEXT NOT NULL,
     build_id      TEXT NOT NULL,
     role          TEXT NOT NULL,
-    source        TEXT NOT NULL DEFAULT '',
-    requested_ref TEXT NOT NULL DEFAULT '',
     digest        TEXT NOT NULL DEFAULT '',
-    image_id      TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (job_name, build_id) REFERENCES prow_runs(job_name, build_id) ON DELETE CASCADE
 );
 

@@ -66,15 +66,13 @@ type Issue struct {
 
 // IssueFields holds the fields we care about from a JIRA issue.
 type IssueFields struct {
-	Summary    string        `json:"summary"`
-	Status     StatusField   `json:"status"`
-	Priority   PriorityField `json:"priority"`
-	Labels     []string      `json:"labels"`
-	Assignee   *UserField    `json:"assignee"`
-	IssueType  TypeField     `json:"issuetype"`
-	Resolution *ResField     `json:"resolution"`
-	Updated    string        `json:"updated"`
-	DueDate    string        `json:"duedate"`
+	Summary   string        `json:"summary"`
+	Status    StatusField   `json:"status"`
+	Priority  PriorityField `json:"priority"`
+	Labels    []string      `json:"labels"`
+	Assignee  *UserField    `json:"assignee"`
+	IssueType TypeField     `json:"issuetype"`
+	DueDate   string        `json:"duedate"`
 
 	Raw map[string]json.RawMessage `json:"-"`
 }
@@ -99,7 +97,6 @@ type PriorityField struct {
 
 type VersionField struct {
 	Name        string `json:"name"`
-	Description string `json:"description"`
 	ReleaseDate string `json:"releaseDate"`
 	Released    bool   `json:"released"`
 	Archived    bool   `json:"archived"`
@@ -110,10 +107,6 @@ type UserField struct {
 }
 
 type TypeField struct {
-	Name string `json:"name"`
-}
-
-type ResField struct {
 	Name string `json:"name"`
 }
 
@@ -243,7 +236,7 @@ func (c *Client) buildSearchJQL(version string) string {
 // It handles pagination automatically and respects rate limits.
 func (c *Client) SearchIssues(ctx context.Context, fixVersion string) ([]Issue, error) {
 	jql := c.buildSearchJQL(fixVersion)
-	fields := "summary,status,priority,labels,assignee,issuetype,resolution,updated"
+	fields := "summary,status,priority,labels,assignee,issuetype"
 	if c.qaContactField != "" {
 		fields += "," + c.qaContactField
 	}

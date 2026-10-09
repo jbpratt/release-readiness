@@ -20,7 +20,7 @@ func TestUpsertProwRunPendingToTerminal(t *testing.T) {
 	run := &prow.Run{
 		JobName: "job", BuildID: "1", Application: "quay-3-18",
 		State: "pending", StartedAt: &started, ArtifactState: prow.ArtifactMissing,
-		FetchedAt: started, Images: []prow.Image{},
+		FetchedAt: started,
 	}
 	if err := d.UpsertProwRun(ctx, run); err != nil {
 		t.Fatal(err)
@@ -32,10 +32,7 @@ func TestUpsertProwRunPendingToTerminal(t *testing.T) {
 	completed := started.Add(2 * time.Hour)
 	run.State, run.CompletedAt, run.ArtifactState = "success", &completed, prow.ArtifactPresent
 	run.CatalogRef = "quay.io/x/art-fbc@sha256:aaa"
-	run.Images = []prow.Image{
-		{Role: "catalog", Source: "catalog", RequestedRef: run.CatalogRef, Digest: "sha256:aaa"},
-		{Role: "quay", Source: "pod", RequestedRef: "registry.redhat.io/quay/quay-rhel9@sha256:bbb", Digest: "sha256:bbb", ImageID: "x@sha256:ccc"},
-	}
+	run.Images = []prow.Image{{Role: "catalog", Digest: "sha256:aaa"}, {Role: "quay", Digest: "sha256:bbb"}}
 	// Upserting twice must not duplicate images.
 	for range 2 {
 		if err := d.UpsertProwRun(ctx, run); err != nil {
