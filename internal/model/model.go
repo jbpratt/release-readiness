@@ -204,3 +204,21 @@ type KonfluxRelease struct {
 	StartTime      *time.Time `json:"start_time,omitempty"`
 	CompletionTime *time.Time `json:"completion_time,omitempty"`
 }
+
+// StagedSnapshots is the newest Konflux Snapshot of each kind that ART staged
+// for a release's assembly. Each is null when ART staged none.
+type StagedSnapshots struct {
+	Assembly string          `json:"assembly"`
+	Image    *StagedSnapshot `json:"staged_image"`
+	FBC      *StagedSnapshot `json:"staged_fbc"`
+}
+
+// StagedSnapshot is a Snapshot annotated art.redhat.com/env=stage with the
+// newest Konflux Release that names it, or null when none does.
+type StagedSnapshot struct {
+	Name      string          `json:"name"`
+	Assembly  string          `json:"assembly"`
+	Kind      string          `json:"kind"`
+	CreatedAt time.Time       `json:"created_at"`
+	Release   *KonfluxRelease `json:"release"`
+}

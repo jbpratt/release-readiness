@@ -86,6 +86,21 @@ export interface KonfluxRelease {
 	completion_time?: string;
 }
 
+/** A Snapshot annotated art.redhat.com/env=stage, with the newest Release naming it. */
+export interface StagedSnapshot {
+	name: string;
+	assembly: string;
+	kind: "image" | "fbc";
+	created_at: string;
+	release: KonfluxRelease | null;
+}
+
+export interface StagedSnapshots {
+	assembly: string;
+	staged_image: StagedSnapshot | null;
+	staged_fbc: StagedSnapshot | null;
+}
+
 export interface JiraIssue {
 	key: string;
 	summary: string;
