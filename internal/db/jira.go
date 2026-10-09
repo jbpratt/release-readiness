@@ -26,28 +26,12 @@ func (d *DB) UpsertJiraIssue(ctx context.Context, issue *model.JiraIssueRecord) 
 	})
 }
 
-// ListJiraIssues returns issues for a fixVersion with optional filters.
-// Stays hand-written due to dynamic WHERE clause construction.
-func (d *DB) ListJiraIssues(ctx context.Context, fixVersion string, issueType, status, label string) ([]model.JiraIssueRecord, error) {
+// ListJiraIssues returns issues for a fixVersion.
+func (d *DB) ListJiraIssues(ctx context.Context, fixVersion string) ([]model.JiraIssueRecord, error) {
 	query := `SELECT id, key, summary, status, priority, labels, fix_version, assignee, issue_type, resolution, link, qa_contact, updated_at
-		FROM jira_issues WHERE fix_version = ?`
-	args := []interface{}{fixVersion}
+		FROM jira_issues WHERE fix_version = ? ORDER BY key`
 
-	if issueType != "" {
-		query += ` AND issue_type = ?`
-		args = append(args, issueType)
-	}
-	if status != "" {
-		query += ` AND status = ?`
-		args = append(args, status)
-	}
-	if label != "" {
-		query += ` AND labels LIKE ?`
-		args = append(args, "%"+label+"%")
-	}
-	query += ` ORDER BY key`
-
-	rows, err := d.dbtx.QueryContext(ctx, query, args...)
+	rows, err := d.dbtx.QueryContext(ctx, query, fixVersion)
 	if err != nil {
 		return nil, err
 	}

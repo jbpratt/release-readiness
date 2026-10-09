@@ -13,11 +13,11 @@ const BaseImagesApp = "quay-images-base"
 
 var quayApp = regexp.MustCompile(`^quay-\d+-\d+$`)
 
-// Component is one component image from a snapshot, with its provenance.
+// Component is one component image from a snapshot.
 type Component struct {
-	Name, Image, GitSHA, GitURL, Application, Snapshot string
-	CreatedAt                                          time.Time
-	SnapshotID, RowID                                  int64
+	Name, Image, Application string
+	CreatedAt                time.Time
+	SnapshotID, RowID        int64
 }
 
 // Applications returns the Konflux applications that make up a release.
