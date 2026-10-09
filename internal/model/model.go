@@ -3,8 +3,7 @@ package model
 import "time"
 
 type ComponentRecord struct {
-	Component string `json:"component"`
-	ImageURL  string `json:"image_url"`
+	Component, ImageURL string
 }
 
 // JiraIssueRecord represents a JIRA issue cached in the database.
