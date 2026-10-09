@@ -39,7 +39,6 @@ import {
 } from "../api/client";
 import type {
 	FBCCatalog,
-	IssueSummary,
 	KonfluxRelease,
 	ReleaseSnapshot,
 	ReleaseVersion,
@@ -98,11 +97,9 @@ type LatestSnapshotState = ReturnType<typeof useLatestSnapshot>;
 export function LatestSnapshot({
 	version,
 	state,
-	issueSummary,
 }: {
 	version: string;
 	state: LatestSnapshotState;
-	issueSummary: IssueSummary | null;
 }) {
 	const { application, snapshot: latest } = state;
 	const [selected, setView] = useState<"unreleased" | "released">();
@@ -170,10 +167,11 @@ export function LatestSnapshot({
 					),
 				}}
 			>
-				<CardTitle>Latest snapshot</CardTitle>
+				<CardTitle>
+					Quay stream snapshot {application && <code>{application}</code>}
+				</CardTitle>
 			</CardHeader>
 			<CardBody>
-				{issueSummary && <ReleaseIssueSummary summary={issueSummary} />}
 				{loading ? (
 					<Spinner size="md" />
 				) : error ? (
@@ -260,18 +258,6 @@ function unreleasedReason(snapshot?: ReleaseSnapshot, hasReleased?: boolean) {
 	const newest = snapshot.releases?.[0];
 	if (!newest) return "No Konflux Release names this snapshot yet.";
 	return `Its newest Konflux Release: ${releaseStatus(newest).text}.`;
-}
-
-/** JIRA counts for the whole release; issues are not mapped to components. */
-function ReleaseIssueSummary({ summary }: { summary: IssueSummary }) {
-	return (
-		<HelperText style={{ marginBottom: "0.5rem" }}>
-			<HelperTextItem>
-				Release-level issues, not tied to any component: {summary.open} open of{" "}
-				{summary.total} ({summary.cves} CVEs, {summary.bugs} bugs)
-			</HelperTextItem>
-		</HelperText>
-	);
 }
 
 function SnapshotSummary({

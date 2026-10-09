@@ -14,6 +14,8 @@ import {
 	EmptyStateBody,
 	Flex,
 	FlexItem,
+	HelperText,
+	HelperTextItem,
 	Label,
 	MenuToggle,
 	PageSection,
@@ -24,6 +26,9 @@ import {
 	SelectList,
 	SelectOption,
 	Spinner,
+	Tab,
+	Tabs,
+	TabTitleText,
 	Title,
 } from "@patternfly/react-core";
 import {
@@ -163,15 +168,25 @@ export default function ReleaseDetail() {
 					latest={latest}
 				/>
 
-				<LatestSnapshot
-					version={version!}
-					state={latest}
-					issueSummary={issueSummary ?? null}
-				/>
-
-				<StagedCard version={version!} />
-
-				<BuildAttempts version={version!} />
+				<Tabs defaultActiveKey="snapshot" aria-label="Release builds">
+					<Tab
+						eventKey="snapshot"
+						title={<TabTitleText>Snapshot &amp; ART staging</TabTitleText>}
+					>
+						<div style={{ paddingTop: "1rem" }}>
+							<LatestSnapshot version={version!} state={latest} />
+							<StagedCard version={version!} />
+						</div>
+					</Tab>
+					<Tab
+						eventKey="builds"
+						title={<TabTitleText>ART image builds</TabTitleText>}
+					>
+						<div style={{ paddingTop: "1rem" }}>
+							<BuildAttempts version={version!} />
+						</div>
+					</Tab>
+				</Tabs>
 
 				<IssuesCard
 					issues={issues}
@@ -356,8 +371,16 @@ function StagedCard({ version }: { version: string }) {
 	);
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<CardTitle>Staged by ART</CardTitle>
+			<CardTitle>
+				ART staging{data && ` for assembly ${data.assembly}`}
+			</CardTitle>
 			<CardBody>
+				<HelperText style={{ marginBottom: "0.5rem" }}>
+					<HelperTextItem>
+						These ART stage snapshots are selected separately and can differ
+						from the stream snapshot above.
+					</HelperTextItem>
+				</HelperText>
 				{error ? (
 					error.message
 				) : !data ? (
