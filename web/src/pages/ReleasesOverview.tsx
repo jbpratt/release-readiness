@@ -159,7 +159,6 @@ export default function ReleasesOverview() {
 						release={ov.release}
 						issueSummary={ov.issue_summary}
 						readinessSignal={ov.readiness}
-						componentCount={ov.component_count}
 						latestBuild={ov.latest_build}
 						shipped={ov.shipped}
 						viewMode={viewMode}
@@ -175,7 +174,6 @@ function ReleaseCard({
 	release,
 	issueSummary,
 	readinessSignal,
-	componentCount,
 	latestBuild,
 	shipped,
 	viewMode,
@@ -184,7 +182,6 @@ function ReleaseCard({
 	release: ReleaseVersion;
 	issueSummary?: IssueSummary;
 	readinessSignal?: ReadinessResponse;
-	componentCount: number;
 	latestBuild?: string;
 	shipped: boolean;
 	viewMode: ViewMode;
@@ -211,10 +208,13 @@ function ReleaseCard({
 			? Math.round((issueSummary.verified / issueSummary.total) * 100)
 			: 0;
 
-	const builds =
-		componentCount > 0
-			? `${componentCount} ${componentCount === 1 ? "component" : "components"}${latestBuild ? `, stream snapshot ${new Date(latestBuild).toLocaleDateString()}` : ""}`
-			: "None yet";
+	const lastBuild = latestBuild ? (
+		<Tooltip content="Newest Konflux snapshot for this version's applications.">
+			<span>{new Date(latestBuild).toLocaleDateString()}</span>
+		</Tooltip>
+	) : (
+		"None yet"
+	);
 
 	const navigate = useNavigate();
 	const displayName = formatReleaseName(release.name);
@@ -284,8 +284,10 @@ function ReleaseCard({
 							</DescriptionListGroup>
 						)}
 						<DescriptionListGroup>
-							<DescriptionListTerm>Builds</DescriptionListTerm>
-							<DescriptionListDescription>{builds}</DescriptionListDescription>
+							<DescriptionListTerm>Last build</DescriptionListTerm>
+							<DescriptionListDescription>
+								{lastBuild}
+							</DescriptionListDescription>
 						</DescriptionListGroup>
 						{release.release_ticket_key && (
 							<DescriptionListGroup>
@@ -335,8 +337,8 @@ function ReleaseCard({
 									</FlexItem>
 								)}
 								<FlexItem>
-									<span className="rr-label">Builds</span>
-									<div>{builds}</div>
+									<span className="rr-label">Last build</span>
+									<div>{lastBuild}</div>
 								</FlexItem>
 								{issueSummary && issueSummary.cves > 0 && (
 									<FlexItem>
