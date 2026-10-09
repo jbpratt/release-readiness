@@ -4,9 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"net/url"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 
@@ -49,37 +47,14 @@ func (d *DB) LatestStagedSnapshot(ctx context.Context, assembly, kind string) (*
 var (
 	concreteVersion = regexp.MustCompile(`^quay-v((\d+)\.(\d+)\.\d+)$`)
 	imageDigest     = regexp.MustCompile(`@(sha256:[0-9a-f]{64})$`)
-	fullSHA         = regexp.MustCompile(`^[0-9a-f]{40}$`)
 )
 
-// SelectedStageBuilds returns the two newest image Snapshots staged for
-// release's concrete version whose Konflux Release succeeded through a
-// ReleasePlan matching plans for the version's X-Y stream, ranked by that
-// Release's completion time, so a newer pending or failed Release never
-// displaces the last success.
-func (d *DB) SelectedStageBuilds(ctx context.Context, release *model.ReleaseVersion, plans *regexp.Regexp) (model.StageBuilds, error) {
-	builds, reason, err := d.stageBuilds(ctx, release, plans, 2)
-	if err != nil || len(builds) == 0 {
-		return model.StageBuilds{Reason: reason}, err
-	}
-	sb := model.StageBuilds{Selected: builds[0]}
-	if len(builds) == 2 {
-		sb.Previous = builds[1]
-	}
-	return sb, nil
-}
-
-// StageBuildHistory returns every successful STAGE build of release in the
-// order SelectedStageBuilds ranks them, newest first; each build's base is
-// the one after it.
-func (d *DB) StageBuildHistory(ctx context.Context, release *model.ReleaseVersion, plans *regexp.Regexp) ([]*model.SelectedBuild, error) {
-	builds, _, err := d.stageBuilds(ctx, release, plans, 0)
-	return builds, err
-}
-
-// stageBuilds returns up to limit (0 for all) ranked STAGE builds, with the
-// reason when there are none.
-func (d *DB) stageBuilds(ctx context.Context, release *model.ReleaseVersion, plans *regexp.Regexp, limit int) ([]*model.SelectedBuild, string, error) {
+// SelectedStageBuild returns the newest image Snapshot staged for release's
+// concrete version whose Konflux Release succeeded through a ReleasePlan
+// matching plans for the version's X-Y stream, ranked by that Release's
+// completion time, so a newer pending or failed Release never displaces the
+// last success. It returns nil and the reason when there is none.
+func (d *DB) SelectedStageBuild(ctx context.Context, release *model.ReleaseVersion, plans *regexp.Regexp) (*model.SelectedBuild, string, error) {
 	m := concreteVersion.FindStringSubmatch(release.Name)
 	if m == nil {
 		return nil, "not a concrete quay-vX.Y.Z version", nil
@@ -95,67 +70,39 @@ func (d *DB) stageBuilds(ctx context.Context, release *model.ReleaseVersion, pla
 		return nil, "", err
 	}
 	stream := "-" + m[2] + "-" + m[3]
-	var builds []*model.SelectedBuild
 	for _, r := range rows {
-		if limit > 0 && len(builds) == limit {
-			break
+		if plans.MatchString(r.ReleasePlan) && strings.HasSuffix(r.ReleasePlan, stream) {
+			b, err := d.selectedBuild(ctx, r)
+			return b, "", err
 		}
-		if !plans.MatchString(r.ReleasePlan) || !strings.HasSuffix(r.ReleasePlan, stream) {
-			continue
-		}
-		// A Snapshot released again ranks by its newest success only.
-		if slices.ContainsFunc(builds, func(b *model.SelectedBuild) bool { return b.SnapshotName == r.SnapshotName }) {
-			continue
-		}
-		b, err := d.selectedBuild(ctx, release.Name, r)
-		if err != nil {
-			return nil, "", err
-		}
-		builds = append(builds, b)
 	}
-	if len(builds) == 0 {
-		return nil, "no successful stage release of a staged image snapshot", nil
-	}
-	return builds, "", nil
+	return nil, "no successful stage release of a staged image snapshot", nil
 }
 
-func (d *DB) selectedBuild(ctx context.Context, version string, r dbsqlc.ListSuccessfulStageReleasesRow) (*model.SelectedBuild, error) {
+func (d *DB) selectedBuild(ctx context.Context, r dbsqlc.ListSuccessfulStageReleasesRow) (*model.SelectedBuild, error) {
 	components, err := d.listSnapshotComponents(ctx, r.SnapshotID)
 	if err != nil {
 		return nil, err
 	}
 	b := &model.SelectedBuild{
-		Version:           version,
-		Stage:             "stage",
-		SelectedAt:        parseTime(r.CompletionTime),
-		ReleaseName:       r.ReleaseName,
-		ReleasePlan:       r.ReleasePlan,
-		SnapshotName:      r.SnapshotName,
-		SnapshotCreatedAt: parseTime(r.SnapshotCreatedAt),
-		Components:        make([]model.SelectedBuildComponent, len(components)),
-		RRURL:             "/releases/" + version + "/snapshots?snapshot=" + url.QueryEscape(r.SnapshotName),
+		SnapshotName: r.SnapshotName,
+		CompletedAt:  parseTime(r.CompletionTime),
+		Components:   make([]model.SelectedBuildComponent, len(components)),
 	}
-	var digests []string
+	digests := make([]string, len(components))
 	for i, c := range components {
-		b.Components[i] = model.SelectedBuildComponent{Name: c.Component, ProvenanceState: "unknown"}
+		b.Components[i].Name = c.Component
 		if m := imageDigest.FindStringSubmatch(c.ImageURL); m != nil {
-			b.Components[i].ImageDigest = m[1]
-			digests = append(digests, m[1])
+			digests[i] = m[1]
 		}
 	}
 	art, err := d.ResolvedArtBuilds(ctx, digests)
 	if err != nil {
 		return nil, err
 	}
-	for i := range b.Components {
-		c := &b.Components[i]
-		a, ok := art[c.ImageDigest]
-		if !ok {
-			continue
-		}
-		c.UpstreamRepo, c.UpstreamSHA = a.UpstreamRepo, a.UpstreamSHA
-		if a.UpstreamRepo != "" && fullSHA.MatchString(a.UpstreamSHA) {
-			c.ProvenanceState = "resolved"
+	for i, digest := range digests {
+		if a, ok := art[digest]; ok {
+			b.Components[i].UpstreamRepo, b.Components[i].UpstreamSHA = a.UpstreamRepo, a.UpstreamSHA
 		}
 	}
 	return b, nil

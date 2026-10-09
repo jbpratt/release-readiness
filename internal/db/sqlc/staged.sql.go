@@ -36,8 +36,7 @@ func (q *Queries) LatestStagedSnapshot(ctx context.Context, arg LatestStagedSnap
 }
 
 const listSuccessfulStageReleases = `-- name: ListSuccessfulStageReleases :many
-SELECT kr.name AS release_name, kr.release_plan, kr.completion_time,
-       s.id AS snapshot_id, s.name AS snapshot_name, s.created_at AS snapshot_created_at
+SELECT kr.release_plan, kr.completion_time, s.id AS snapshot_id, s.name AS snapshot_name
 FROM staged_snapshots ss
 JOIN snapshots s ON s.name = ss.name
 JOIN konflux_releases kr ON kr.snapshot = s.name AND kr.application = s.application
@@ -53,12 +52,10 @@ type ListSuccessfulStageReleasesParams struct {
 }
 
 type ListSuccessfulStageReleasesRow struct {
-	ReleaseName       string
-	ReleasePlan       string
-	CompletionTime    string
-	SnapshotID        int64
-	SnapshotName      string
-	SnapshotCreatedAt string
+	ReleasePlan    string
+	CompletionTime string
+	SnapshotID     int64
+	SnapshotName   string
 }
 
 func (q *Queries) ListSuccessfulStageReleases(ctx context.Context, arg ListSuccessfulStageReleasesParams) ([]ListSuccessfulStageReleasesRow, error) {
@@ -71,12 +68,10 @@ func (q *Queries) ListSuccessfulStageReleases(ctx context.Context, arg ListSucce
 	for rows.Next() {
 		var i ListSuccessfulStageReleasesRow
 		if err := rows.Scan(
-			&i.ReleaseName,
 			&i.ReleasePlan,
 			&i.CompletionTime,
 			&i.SnapshotID,
 			&i.SnapshotName,
-			&i.SnapshotCreatedAt,
 		); err != nil {
 			return nil, err
 		}

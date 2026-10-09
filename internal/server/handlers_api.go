@@ -16,6 +16,8 @@ import (
 
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/fbc"
+	"github.com/quay/release-readiness/internal/github"
+	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/releaseview"
 	"github.com/quay/release-readiness/internal/syncstatus"
@@ -302,6 +304,63 @@ func (s *Server) handleGetStaged(w http.ResponseWriter, r *http.Request) {
 	if resp.FBC, err = s.db.LatestStagedSnapshot(ctx, resp.Assembly, "fbc"); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleGetBuildTickets lists the release's Target Version tickets, then the
+// tickets of its .z stream that a commit of its selected STAGE build names,
+// each with the build commits naming it. A ticket under both Target Versions
+// is listed once, as the release's own.
+func (s *Server) handleGetBuildTickets(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	version := r.PathValue("version")
+	release, err := s.db.GetReleaseVersion(ctx, version)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
+		return
+	}
+	build, reason, err := s.db.SelectedStageBuild(ctx, release, s.StageReleasePlanPattern)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	resp := model.BuildTickets{Build: build, Reason: reason, NotCompared: []model.NotCompared{}, Tickets: []model.BuildTicket{}}
+	var found map[string][]model.BuildCommit
+	if build != nil {
+		found, resp.NotCompared = s.Scanner.Tickets(build)
+		// The scanner skips released and archived versions, so "not scanned
+		// yet" would never change for them.
+		for i, c := range resp.NotCompared {
+			if c.Reason == github.ReasonNotScanned && (release.Released || release.Archived) {
+				resp.NotCompared[i].Reason = "version is released or archived"
+			}
+		}
+	}
+	issues, err := s.db.ListJiraIssues(ctx, release.Name)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if z := jira.StreamVersion(release.Name); z != "" {
+		stream, err := s.db.ListJiraIssues(ctx, z)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		for _, i := range stream {
+			listed := slices.ContainsFunc(issues, func(c model.JiraIssueRecord) bool { return c.Key == i.Key })
+			if _, ok := found[i.Key]; ok && !listed {
+				issues = append(issues, i)
+			}
+		}
+	}
+	for _, i := range issues {
+		inBuild := found[i.Key]
+		if inBuild == nil {
+			inBuild = []model.BuildCommit{}
+		}
+		resp.Tickets = append(resp.Tickets, model.BuildTicket{JiraIssueRecord: i, InBuild: inBuild})
 	}
 	writeJSON(w, http.StatusOK, resp)
 }

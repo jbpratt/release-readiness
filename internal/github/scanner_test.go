@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
@@ -20,55 +21,30 @@ import (
 )
 
 type fakeStore struct {
-	builds []*model.SelectedBuild
-	scans  map[[3]string]Scan
+	build *model.SelectedBuild
 }
 
 func (f *fakeStore) ListAllReleaseVersions(context.Context) ([]model.ReleaseVersion, error) {
-	return []model.ReleaseVersion{{Name: "quay-v3.18.1"}, {Name: "quay-v3.17.9", Released: true}}, nil
+	return []model.ReleaseVersion{{Name: "quay-v3.18.1"}, {Name: "quay-v3.17.9", Released: true}, {Name: "quay-v3.16.9", Archived: true}}, nil
 }
 
-func (f *fakeStore) StageBuildHistory(_ context.Context, r *model.ReleaseVersion, _ *regexp.Regexp) ([]*model.SelectedBuild, error) {
+func (f *fakeStore) SelectedStageBuild(_ context.Context, r *model.ReleaseVersion, _ *regexp.Regexp) (*model.SelectedBuild, string, error) {
 	if r.Name != "quay-v3.18.1" {
-		return nil, fmt.Errorf("scanned released version %s", r.Name)
+		return nil, "", fmt.Errorf("scanned inactive version %s", r.Name)
 	}
-	return f.builds, nil
-}
-
-func (f *fakeStore) ListEvidenceScans(_ context.Context, snapshot string) ([]Scan, error) {
-	var out []Scan
-	for k, s := range f.scans {
-		if k[0] == snapshot {
-			out = append(out, s)
-		}
-	}
-	return out, nil
-}
-
-func (f *fakeStore) CompleteScan(_ context.Context, repo, base, head string) (*Scan, error) {
-	for _, s := range f.scans {
-		if s.State == StateComplete && s.Repo == repo && s.BaseSHA == base && s.HeadSHA == head {
-			return &s, nil
-		}
-	}
-	return nil, nil
-}
-
-func (f *fakeStore) StoreEvidenceScan(_ context.Context, s Scan) error {
-	f.scans[[3]string{s.Snapshot, s.Component, s.ImageDigest}] = s
-	return nil
+	return f.build, "", nil
 }
 
 const repoURL = "https://github.com/quay/quay"
 
-var (
-	baseSHA = strings.Repeat("a", 40)
-	headSHA = strings.Repeat("b", 40)
-)
+var headSHA = strings.Repeat("b", 40)
 
-func build(snapshot, repo, sha string) *model.SelectedBuild {
-	return &model.SelectedBuild{SnapshotName: snapshot, Components: []model.SelectedBuildComponent{
-		{Name: "quay", ImageDigest: "sha256:" + snapshot, UpstreamRepo: repo, UpstreamSHA: sha},
+// build is a STAGE build of two components from one commit, as an operator
+// and its bundle are.
+func build(repo, sha string) *model.SelectedBuild {
+	return &model.SelectedBuild{SnapshotName: "snap", Components: []model.SelectedBuildComponent{
+		{Name: "operator", UpstreamRepo: repo, UpstreamSHA: sha},
+		{Name: "operator-bundle", UpstreamRepo: repo, UpstreamSHA: sha},
 	}}
 }
 
@@ -90,19 +66,11 @@ func commits(n int, msg func(i int) string) []commitJSON {
 	return out
 }
 
-// compareHandler serves base...head as status with all, paginated, and
-// answers every commit's pulls lookup with a merged PR named after it.
-func compareHandler(status string, behind, total int, all []commitJSON) http.HandlerFunc {
+// compareHandler serves HEAD...headSHA as a build branch that diverged from
+// the default branch, with total commits of which all are paginated.
+func compareHandler(total int, all []commitJSON) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/pulls") {
-			sha := strings.Split(r.URL.Path, "/")[5]
-			_ = json.NewEncoder(w).Encode([]map[string]any{
-				{"html_url": "https://github.com/quay/quay/pull/open", "merged_at": nil},
-				{"html_url": "https://github.com/quay/quay/pull/" + sha[38:], "merged_at": "2026-10-01T00:00:00Z"},
-			})
-			return
-		}
-		if r.URL.Path != "/repos/quay/quay/compare/"+baseSHA+"..."+headSHA {
+		if r.URL.Path != "/repos/quay/quay/compare/HEAD..."+headSHA {
 			http.NotFound(w, r)
 			return
 		}
@@ -110,14 +78,31 @@ func compareHandler(status string, behind, total int, all []commitJSON) http.Han
 		per, _ := strconv.Atoi(r.URL.Query().Get("per_page"))
 		lo, hi := min((page-1)*per, len(all)), min(page*per, len(all))
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"status": status, "ahead_by": total, "behind_by": behind, "total_commits": total, "commits": all[lo:hi],
+			"status": "diverged", "ahead_by": total, "behind_by": 5, "total_commits": total, "commits": all[lo:hi],
 		})
 	}
 }
 
+// in is the given commits of the compare, as each of build's components
+// carries them.
+func in(commits ...int) []model.BuildCommit {
+	var out []model.BuildCommit
+	for _, name := range []string{"operator", "operator-bundle"} {
+		for _, i := range commits {
+			sha := fmt.Sprintf("%040x", i)
+			out = append(out, model.BuildCommit{Component: name, CommitSHA: sha, CommitURL: "https://github.com/quay/quay/commit/" + sha})
+		}
+	}
+	return out
+}
+
+func newScanner(url string, hc *http.Client, store Store) *Scanner {
+	return NewScanner(NewClient(url, "", hc), store, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
 func TestScanOnce(t *testing.T) {
 	linear := commits(3, func(i int) string {
-		return []string{"PROJQUAY-101: fix\n\nAlso PROJQUAY-101 and PROJQUAY-7.", "NO-ISSUE: chore XPROJQUAY-9", "deps"}[i]
+		return []string{"PROJQUAY-101: fix\n\nAlso PROJQUAY-101 and PROJQUAY-7.", "NO-ISSUE: chore XPROJQUAY-9", "PROJQUAY-7: follow-up"}[i]
 	})
 	long := commits(150, func(i int) string {
 		if i == 140 {
@@ -125,87 +110,60 @@ func TestScanOnce(t *testing.T) {
 		}
 		return "NO-ISSUE"
 	})
-	ev := func(key string, i int, pr string) Evidence {
-		sha := fmt.Sprintf("%040x", i)
-		return Evidence{Key: key, CommitSHA: sha, CommitURL: "https://github.com/quay/quay/commit/" + sha, PRURL: "https://github.com/quay/quay/pull/" + pr, Source: SourceCompare}
-	}
 	for _, tc := range []struct {
 		name     string
-		builds   []*model.SelectedBuild
+		repo     string
+		sha      string
 		handler  http.HandlerFunc
-		stored   []Scan
-		state    string
+		found    map[string][]model.BuildCommit
 		reason   string
-		evidence []Evidence
 		requests int
 		failed   bool
 	}{
 		{
-			name:     "linear range with keys",
-			builds:   []*model.SelectedBuild{build("new", repoURL, headSHA), build("old", repoURL, baseSHA)},
-			handler:  compareHandler("ahead", 0, 3, linear),
-			state:    StateComplete,
-			evidence: []Evidence{ev("PROJQUAY-101", 1, "01"), ev("PROJQUAY-7", 1, "01")},
-			requests: 2,
+			name:     "keys in commit messages",
+			repo:     repoURL,
+			sha:      headSHA,
+			handler:  compareHandler(3, linear),
+			found:    map[string][]model.BuildCommit{"PROJQUAY-101": in(1), "PROJQUAY-7": in(1, 3)},
+			requests: 1,
 		},
 		{
 			name:     "paginated compare",
-			builds:   []*model.SelectedBuild{build("new", repoURL, headSHA), build("old", repoURL, baseSHA)},
-			handler:  compareHandler("ahead", 0, 150, long),
-			state:    StateComplete,
-			evidence: []Evidence{ev("PROJQUAY-140", 141, "8d")},
-			requests: 3,
+			repo:     repoURL,
+			sha:      headSHA,
+			handler:  compareHandler(150, long),
+			found:    map[string][]model.BuildCommit{"PROJQUAY-140": in(141)},
+			requests: 2,
 		},
 		{
 			name:     "truncated compare",
-			builds:   []*model.SelectedBuild{build("new", repoURL, headSHA), build("old", repoURL, baseSHA)},
-			handler:  compareHandler("ahead", 0, 151, long),
-			state:    StateUnknown,
+			repo:     repoURL,
+			sha:      headSHA,
+			handler:  compareHandler(151, long),
 			reason:   ReasonTruncated,
 			requests: 2,
 		},
 		{
-			name:     "diverged",
-			builds:   []*model.SelectedBuild{build("new", repoURL, headSHA), build("old", repoURL, baseSHA)},
-			handler:  compareHandler("diverged", 2, 3, linear),
-			state:    StateUnknown,
-			reason:   ReasonDiverged,
-			requests: 1,
-		},
-		{
-			name:   "repo changed",
-			builds: []*model.SelectedBuild{build("new", repoURL, headSHA), build("old", "https://github.com/quay/quay-operator", baseSHA)},
-			state:  StateUnknown,
-			reason: ReasonRepoChanged,
-		},
-		{
-			name:   "no baseline",
-			builds: []*model.SelectedBuild{build("new", repoURL, headSHA)},
-			state:  StateUnknown,
-			reason: ReasonNoBaseline,
-		},
-		{
-			name:   "short sha",
-			builds: []*model.SelectedBuild{build("new", repoURL, "bbbbbbb"), build("old", repoURL, baseSHA)},
-			state:  StateUnknown,
-			reason: ReasonNoProvenance,
-		},
-		{
 			name:     "api 5xx",
-			builds:   []*model.SelectedBuild{build("new", repoURL, headSHA), build("old", repoURL, baseSHA)},
+			repo:     repoURL,
+			sha:      headSHA,
 			handler:  func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusBadGateway) },
-			state:    StateUnknown,
 			reason:   ReasonAPIError,
 			requests: 1,
 			failed:   true,
 		},
 		{
-			name:   "cache hit on another snapshot",
-			builds: []*model.SelectedBuild{build("new", repoURL, headSHA), build("old", repoURL, baseSHA)},
-			stored: []Scan{{Snapshot: "rebuilt", Component: "quay", ImageDigest: "sha256:rebuilt", Repo: repoURL, BaseSHA: baseSHA, HeadSHA: headSHA,
-				State: StateComplete, Evidence: []Evidence{ev("PROJQUAY-5", 5, "5")}}},
-			state:    StateComplete,
-			evidence: []Evidence{ev("PROJQUAY-5", 5, "5")},
+			name:   "short sha",
+			repo:   repoURL,
+			sha:    "bbbbbbb",
+			reason: ReasonNoProvenance,
+		},
+		{
+			name:   "not on github.com",
+			repo:   "https://gitlab.com/quay/quay",
+			sha:    headSHA,
+			reason: ReasonNotGitHub,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -219,35 +177,70 @@ func TestScanOnce(t *testing.T) {
 				tc.handler(w, r)
 			}))
 			defer srv.Close()
-			store := &fakeStore{builds: tc.builds, scans: map[[3]string]Scan{}}
-			for _, s := range tc.stored {
-				store.scans[[3]string{s.Snapshot, s.Component, s.ImageDigest}] = s
-			}
-			s := NewScanner(NewClient(srv.URL, "", srv.Client()), store, regexp.MustCompile(`.`), slog.New(slog.NewTextHandler(io.Discard, nil)))
+			b := build(tc.repo, tc.sha)
+			s := newScanner(srv.URL, srv.Client(), &fakeStore{build: b})
 			reg := syncstatus.New()
 			s.Status = reg.Track("github-evidence", 0)
 			s.ScanOnce(context.Background())
 			if failed := len(reg.Problems(time.Now())) > 0; failed != tc.failed {
 				t.Errorf("pass failed = %v, want %v", failed, tc.failed)
 			}
-			got, ok := store.scans[[3]string{"new", "quay", "sha256:new"}]
-			if !ok {
-				t.Fatalf("no scan stored for new; scans = %+v", store.scans)
-			}
-			if got.State != tc.state || got.Reason != tc.reason || !slices.Equal(got.Evidence, tc.evidence) {
-				t.Errorf("scan = %s %q %+v, want %s %q %+v", got.State, got.Reason, got.Evidence, tc.state, tc.reason, tc.evidence)
-			}
 			if requests != tc.requests {
 				t.Errorf("requests = %d, want %d", requests, tc.requests)
 			}
+			found, notCompared := s.Tickets(b)
+			wantNotCompared := []model.NotCompared{}
+			if tc.reason != "" {
+				wantNotCompared = []model.NotCompared{{Component: "operator", Reason: tc.reason}, {Component: "operator-bundle", Reason: tc.reason}}
+			}
+			if !maps.EqualFunc(found, tc.found, slices.Equal) || !slices.Equal(notCompared, wantNotCompared) {
+				t.Errorf("Tickets = %+v, %+v; want %+v, %+v", found, notCompared, tc.found, wantNotCompared)
+			}
 
-			// A second pass re-reads nothing: complete and immutable outcomes
-			// stand, and an API error waits out retryAfter.
+			// A second pass reuses every outcome; an API error waits out
+			// retryAfter.
 			requests = 0
 			s.ScanOnce(context.Background())
 			if requests != 0 {
 				t.Errorf("second pass requests = %d, want 0", requests)
 			}
 		})
+	}
+}
+
+// An API error is compared again once retryAfter has passed, and an outcome
+// no selected build uses is forgotten.
+func TestScanOnceRetryAndForget(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requests++
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+	store := &fakeStore{build: build(repoURL, headSHA)}
+	s := newScanner(srv.URL, srv.Client(), store)
+	s.ScanOnce(context.Background())
+	for id, r := range s.results {
+		r.checked = r.checked.Add(-retryAfter)
+		s.results[id] = r
+	}
+	s.ScanOnce(context.Background())
+	if requests != 2 {
+		t.Errorf("requests = %d, want 2", requests)
+	}
+
+	store.build = nil
+	s.ScanOnce(context.Background())
+	if len(s.results) != 0 {
+		t.Errorf("results = %+v, want none", s.results)
+	}
+}
+
+func TestTicketsNotScanned(t *testing.T) {
+	var s *Scanner
+	found, notCompared := s.Tickets(build(repoURL, headSHA))
+	want := []model.NotCompared{{Component: "operator", Reason: ReasonNotScanned}, {Component: "operator-bundle", Reason: ReasonNotScanned}}
+	if len(found) != 0 || !slices.Equal(notCompared, want) {
+		t.Errorf("nil Scanner Tickets = %+v, %+v; want none, %+v", found, notCompared, want)
 	}
 }

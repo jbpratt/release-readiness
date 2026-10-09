@@ -1,8 +1,8 @@
 import type {
 	BuildAttempts,
+	BuildTickets,
 	DashboardConfig,
 	IssueSummary,
-	JiraIssue,
 	ProwRunsResponse,
 	ReadinessResponse,
 	ReleaseOverview,
@@ -88,8 +88,10 @@ export function getReleaseSnapshot(
 	);
 }
 
-export function listReleaseIssues(version: string): Promise<JiraIssue[]> {
-	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}/issues`);
+export function getBuildTickets(version: string): Promise<BuildTickets> {
+	return fetchJSON(
+		`${BASE}/releases/${encodeURIComponent(version)}/build-tickets`,
+	);
 }
 
 export function getReleaseIssueSummary(version: string): Promise<IssueSummary> {

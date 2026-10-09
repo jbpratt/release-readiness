@@ -10,6 +10,7 @@ import (
 
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
+	"github.com/quay/release-readiness/internal/github"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
@@ -25,6 +26,9 @@ type Server struct {
 	// StageReleasePlanPattern matches the ReleasePlan names whose Releases
 	// are image STAGE; nil selects no build.
 	StageReleasePlanPattern *regexp.Regexp
+	// Scanner holds the GitHub compares of the selected STAGE builds; nil
+	// has compared nothing.
+	Scanner *github.Scanner
 }
 
 // New builds the server. An empty artBaseURL leaves every component's art null;

@@ -164,37 +164,45 @@ type StagedSnapshot struct {
 	Release   *KonfluxRelease `json:"release"`
 }
 
-// StageBuilds is the selected STAGE build of a concrete release version and
-// the successful STAGE build before it. Selected is nil with Reason set when
-// none can be selected; Previous is nil when there is no earlier build.
-type StageBuilds struct {
-	Selected *SelectedBuild
-	Previous *SelectedBuild
-	Reason   string
-}
-
 // SelectedBuild is a staged image Snapshot of a concrete version whose
 // Konflux Release through a STAGE ReleasePlan succeeded.
-// SelectedAt is that Release's completion time.
+// CompletedAt is that Release's completion time.
 type SelectedBuild struct {
-	Version           string                   `json:"version"`
-	Stage             string                   `json:"stage"`
-	SelectedAt        time.Time                `json:"selected_at"`
-	ReleaseName       string                   `json:"release_name"`
-	ReleasePlan       string                   `json:"release_plan"`
-	SnapshotName      string                   `json:"snapshot_name"`
-	SnapshotCreatedAt time.Time                `json:"snapshot_created_at"`
-	Components        []SelectedBuildComponent `json:"components"`
-	RRURL             string                   `json:"rr_url"`
+	SnapshotName string                   `json:"snapshot"`
+	CompletedAt  time.Time                `json:"completed_at"`
+	Components   []SelectedBuildComponent `json:"-"`
 }
 
-// SelectedBuildComponent is one image of a selected build. ProvenanceState is
-// "resolved" when ART resolved its exact digest to an upstream repo and full
-// 40-hex commit, else "unknown".
+// SelectedBuildComponent is one image of a selected build with the upstream
+// commit ART built it from; both are empty when ART has not resolved it.
 type SelectedBuildComponent struct {
-	Name            string `json:"name"`
-	ImageDigest     string `json:"image_digest"`
-	UpstreamRepo    string `json:"upstream_repo"`
-	UpstreamSHA     string `json:"upstream_sha"`
-	ProvenanceState string `json:"provenance_state"`
+	Name, UpstreamRepo, UpstreamSHA string
+}
+
+// BuildTickets is a release's tickets with the commits of its selected STAGE
+// build that name each. Build is nil with Reason set when none is selected.
+type BuildTickets struct {
+	Build       *SelectedBuild `json:"build"`
+	Reason      string         `json:"reason,omitempty"`
+	NotCompared []NotCompared  `json:"not_compared"`
+	Tickets     []BuildTicket  `json:"tickets"`
+}
+
+// NotCompared is a selected build component whose commits were not read.
+type NotCompared struct {
+	Component string `json:"component"`
+	Reason    string `json:"reason"`
+}
+
+// BuildTicket is a JIRA issue with the build commits whose message names it.
+type BuildTicket struct {
+	JiraIssueRecord
+	InBuild []BuildCommit `json:"in_build"`
+}
+
+// BuildCommit is an upstream commit in one component of a build.
+type BuildCommit struct {
+	Component string `json:"component"`
+	CommitSHA string `json:"commit_sha"`
+	CommitURL string `json:"commit_url"`
 }
