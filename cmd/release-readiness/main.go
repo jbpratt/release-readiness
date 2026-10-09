@@ -49,7 +49,6 @@ func main() {
 
 	// Prow flags
 	prowJobs := flag.String("prow-jobs", os.Getenv("PROW_JOBS"), "periodic Prow jobs to ingest, as job_name=konflux_application[,...] (e.g. ...-aws-s3-nightly=quay-3-18)")
-	prowRehearsals := flag.String("prow-rehearsals", "", "rehearsal GCS prefixes to ingest, as gcs-prefix=konflux_application[,...]")
 	prowInterval := flag.Duration("prow-interval", 15*time.Minute, "Prow sync poll interval")
 
 	flag.Parse()
@@ -57,14 +56,9 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	slog.SetDefault(logger)
 
-	periodics, err := prow.ParseJobs(*prowJobs, prow.KindPeriodic)
+	prowJobList, err := prow.ParseJobs(*prowJobs)
 	if err != nil {
 		logger.Error("parse -prow-jobs", "error", err)
-		os.Exit(1)
-	}
-	rehearsals, err := prow.ParseJobs(*prowRehearsals, prow.KindRehearsal)
-	if err != nil {
-		logger.Error("parse -prow-rehearsals", "error", err)
 		os.Exit(1)
 	}
 
@@ -158,7 +152,7 @@ func main() {
 		}()
 	}
 
-	if prowJobList := append(periodics, rehearsals...); len(prowJobList) > 0 {
+	if len(prowJobList) > 0 {
 		logger.Info("prow sync enabled", "jobs", len(prowJobList), "interval", *prowInterval)
 		syncer := prow.NewSyncer(prow.NewClient(prow.DefaultBaseURL), database, prowJobList, *prowInterval, logger.With("component", "prow-sync"))
 		syncer.Status = status.Track("prow", *prowInterval)

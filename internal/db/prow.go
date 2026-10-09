@@ -15,7 +15,6 @@ func (d *DB) UpsertProwRun(ctx context.Context, r *prow.Run) error {
 		if err := q.UpsertProwRun(ctx, dbsqlc.UpsertProwRunParams{
 			JobName:       r.JobName,
 			BuildID:       r.BuildID,
-			Kind:          r.Kind,
 			Application:   r.Application,
 			State:         r.State,
 			StartedAt:     formatOptionalTime(r.StartedAt),
@@ -71,7 +70,6 @@ func (d *DB) toProwRuns(ctx context.Context, rows []dbsqlc.ProwRun) ([]prow.Run,
 		runs[i] = prow.Run{
 			JobName:       r.JobName,
 			BuildID:       r.BuildID,
-			Kind:          r.Kind,
 			Application:   r.Application,
 			State:         r.State,
 			StartedAt:     parseOptionalTime(r.StartedAt),

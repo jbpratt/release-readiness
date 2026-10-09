@@ -35,11 +35,11 @@ func TestProwRunEndpoints(t *testing.T) {
 	snapshot("quay-3-18", "quay-a", map[string]string{"quay-3-18-quay-quay": "sha256:aaa", "quay-3-18-quay-clair": "sha256:ccc"})
 	snapshot("fbc-quay-3-18", "fbc-a", map[string]string{"fbc-quay-3-18-quay-operator": "sha256:fff"})
 
-	seed := func(app, id, kind string, images ...prow.Image) {
+	seed := func(app, id string, images ...prow.Image) {
 		t.Helper()
 		started := t0.Add(time.Duration(id[0]-'0') * time.Hour) // newer ids start later
 		run := &prow.Run{
-			JobName: "job-" + app, BuildID: id, Kind: kind, Application: app, State: "success",
+			JobName: "job-" + app, BuildID: id, Application: app, State: "success",
 			StartedAt: &started, ArtifactState: prow.ArtifactPresent, FetchedAt: started, Images: images,
 		}
 		if len(images) == 0 {
@@ -50,12 +50,12 @@ func TestProwRunEndpoints(t *testing.T) {
 		}
 	}
 	img := func(role, digest string) prow.Image { return prow.Image{Role: role, Digest: digest} }
-	seed("quay-3-18", "1", prow.KindPeriodic, img("quay", "sha256:aaa"), img("quay", "sha256:aaa"))
-	seed("quay-3-18", "2", prow.KindPeriodic, img("quay", "sha256:old"))
-	seed("quay-3-18", "3", prow.KindRehearsal, img("catalog", "sha256:fff"))
-	seed("quay-3-18", "4", prow.KindPeriodic)
-	seed("quay-3-18", "5", prow.KindPeriodic, img("clair", "sha256:aaa")) // right digest, wrong role
-	seed("quay-3-17", "6", prow.KindPeriodic, img("quay", "sha256:aaa"))
+	seed("quay-3-18", "1", img("quay", "sha256:aaa"), img("quay", "sha256:aaa"))
+	seed("quay-3-18", "2", img("quay", "sha256:old"))
+	seed("quay-3-18", "3", img("catalog", "sha256:fff"))
+	seed("quay-3-18", "4")
+	seed("quay-3-18", "5", img("clair", "sha256:aaa")) // right digest, wrong role
+	seed("quay-3-17", "6", img("quay", "sha256:aaa"))
 	for _, st := range []prow.SyncState{
 		{JobName: "job-quay-3-18", Application: "quay-3-18", Interval: 15 * time.Minute, LastSuccessfulSync: time.Now().UTC().Add(-time.Minute)},
 		{JobName: "job-quay-3-17", Application: "quay-3-17", Interval: 15 * time.Minute, LastSuccessfulSync: t0},

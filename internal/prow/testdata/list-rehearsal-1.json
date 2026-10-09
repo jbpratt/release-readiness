@@ -1,8 +1,0 @@
-{
-  "kind": "storage#objects",
-  "nextPageToken": "CpABcHItbG9ncy9wdWxsL29wZW5zaGlmdF9yZWxlYXNlLzg2MjcwL3JlaGVhcnNlLTg2MjcwLXBlcmlvZGljLWNpLXF1YXktcXVheS1yZWRoYXQtMy4xNy1hd3Mtb2NwNDIyLWUyZS1pbnN0YWxsLWF3cy1zMy1uaWdodGx5LzIxMDgxNjg1MTExODMzOTI3Njgv",
-  "prefixes": [
-    "pr-logs/pull/openshift_release/86270/rehearse-86270-periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly/2105463438045089792/",
-    "pr-logs/pull/openshift_release/86270/rehearse-86270-periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly/2108168511183392768/"
-  ]
-}

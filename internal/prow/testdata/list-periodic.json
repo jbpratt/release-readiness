@@ -1,5 +1,6 @@
 {
   "kind": "storage#objects",
+  "nextPageToken": "page-2",
   "prefixes": [
     "logs/periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly/2100388335968063488/"
   ]

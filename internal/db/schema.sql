@@ -87,6 +87,7 @@ CREATE TABLE IF NOT EXISTS art_builds (
 CREATE TABLE IF NOT EXISTS prow_runs (
     job_name        TEXT NOT NULL,
     build_id        TEXT NOT NULL,
+    -- Unused; still set on insert: old databases have it NOT NULL, no default.
     kind            TEXT NOT NULL,
     application     TEXT NOT NULL,
     state           TEXT NOT NULL DEFAULT '',
