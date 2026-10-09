@@ -302,6 +302,7 @@ func TestArtBuildLinks(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := &model.ArtBuild{
+		NVR:          "clair-1",
 		BuildURL:     "https://art.example/build?nvr=clair-1&record_id=rec-1",
 		LogsURL:      "https://art.example/logs?nvr=clair-1&record_id=rec-1",
 		PipelineURL:  "https://konflux/plr",

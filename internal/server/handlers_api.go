@@ -242,6 +242,7 @@ func (s *Server) attachArtBuilds(ctx context.Context, snap *model.ReleaseSnapsho
 		}
 		c := &snap.Components[i]
 		c.Art = &model.ArtBuild{
+			NVR:          b.NVR,
 			BuildURL:     artbuild.PageURL(s.artBaseURL, "build", b.NVR, b.RecordID),
 			LogsURL:      artbuild.PageURL(s.artBaseURL, "logs", b.NVR, b.RecordID),
 			PipelineURL:  b.PipelineURL,

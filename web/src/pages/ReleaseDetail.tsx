@@ -155,7 +155,11 @@ export default function ReleaseDetail() {
 					latest={latest}
 				/>
 
-				<LatestSnapshot version={version!} state={latest} />
+				<LatestSnapshot
+					version={version!}
+					state={latest}
+					issueSummary={issueSummary ?? null}
+				/>
 
 				<IssuesCard
 					issues={issues}

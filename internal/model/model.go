@@ -134,6 +134,7 @@ type SnapshotImage struct {
 // ArtBuild links a component image to its ART build history record and the
 // upstream commit it was built from.
 type ArtBuild struct {
+	NVR          string `json:"nvr"`
 	BuildURL     string `json:"build_url"`
 	LogsURL      string `json:"logs_url"`
 	PipelineURL  string `json:"pipeline_url"`

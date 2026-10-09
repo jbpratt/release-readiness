@@ -1,4 +1,8 @@
-import { ClipboardCopy, Tooltip } from "@patternfly/react-core";
+import {
+	ClipboardCopy,
+	clipboardCopyFunc,
+	Tooltip,
+} from "@patternfly/react-core";
 import {
 	CircleIcon,
 	ExternalLinkAltIcon,
@@ -11,6 +15,7 @@ import type {
 	SnapshotImage,
 	SnapshotProwRuns,
 } from "../api/types";
+import { type ComponentField, componentFields } from "../utils/componentDiff";
 import { quayManifestUrl, upstreamCommitUrl } from "../utils/links";
 import { ProwRunBadge } from "./ProwRuns";
 
@@ -20,8 +25,11 @@ const linkIcon = (
 	<ExternalLinkAltIcon style={{ fontSize: "0.75em", marginLeft: "0.25rem" }} />
 );
 
-/** Images that differ from the last released snapshot, named by `since`. */
-export type ChangedSince = { since: string; names: Set<string> };
+/** Changed fields per component vs the last released snapshot, named by `since`. */
+export type ChangedSince = {
+	since: string;
+	fields: Map<string, ComponentField[]>;
+};
 
 export const changedDot = (
 	<CircleIcon
@@ -32,33 +40,57 @@ export const changedDot = (
 	/>
 );
 
-function NoArtRecord() {
+function Unknown({ why }: { why: string }) {
 	return (
-		<Tooltip content="No ART build record found">
-			<span>-</span>
+		<Tooltip content={why}>
+			<span>unknown</span>
 		</Tooltip>
 	);
 }
 
-/** Upstream commit the image was built from, per its ART build record. */
-function UpstreamCommitLink({ art }: { art: ArtBuild | null }) {
-	if (!art) return <NoArtRecord />;
-	const url = upstreamCommitUrl(art.upstream_repo, art.upstream_sha);
-	if (!url) return <>-</>;
+const noArtRecord = <Unknown why="No ART build record found" />;
+
+/** A commit, linked when its repo is on github.com. */
+function CommitLink({ repo, sha }: { repo: string; sha: string }) {
+	if (!sha) return <Unknown why="No commit recorded" />;
+	const url = upstreamCommitUrl(repo, sha);
+	const text = (
+		<code style={{ fontSize: "0.85em" }}>{sha.substring(0, 12)}</code>
+	);
 	return (
-		<Tooltip content={`${art.upstream_repo} ${art.upstream_sha}`}>
-			<a href={url} {...external}>
-				<code style={{ fontSize: "0.85em" }}>
-					{art.upstream_sha.substring(0, 12)}
-				</code>
-			</a>
+		<Tooltip content={`${repo} ${sha}`}>
+			{url ? (
+				<a href={url} {...external}>
+					{text}
+				</a>
+			) : (
+				text
+			)}
+		</Tooltip>
+	);
+}
+
+// The build repo is ART's private mirror, so its sha is copyable rather than linked.
+function BuildSha({ repo, sha }: { repo: string; sha: string }) {
+	if (!sha) return <Unknown why="No commit recorded" />;
+	return (
+		<Tooltip content={`Build repo commit in ${repo}`}>
+			<span>
+				<ClipboardCopy
+					variant="inline-compact"
+					isCode
+					onCopy={(e) => clipboardCopyFunc(e, sha)}
+				>
+					{sha.substring(0, 12)}
+				</ClipboardCopy>
+			</span>
 		</Tooltip>
 	);
 }
 
 /** The image's ART build record; that page links its logs and pipeline run. */
 function ArtBuildLink({ art }: { art: ArtBuild | null }) {
-	if (!art) return <NoArtRecord />;
+	if (!art) return noArtRecord;
 	return (
 		<Tooltip content="Opens ART build history: the build record, its logs and pipeline run">
 			<a href={art.build_url} {...external}>
@@ -126,72 +158,104 @@ export default function SnapshotComponentsTable({
 		<Table variant="compact" aria-label="Snapshot components">
 			<Thead>
 				<Tr>
-					<Th width={30}>Component</Th>
-					<Th width={20}>Image</Th>
+					<Th width={20}>Component</Th>
+					<Th width={25}>NVR</Th>
+					<Th width={15}>Image</Th>
 					<Th
-						width={15}
+						width={10}
+						modifier="nowrap"
+						info={{ tooltip: "Commit in the build repo Konflux built from" }}
+					>
+						Build SHA
+					</Th>
+					<Th
+						width={10}
 						modifier="nowrap"
 						info={{ tooltip: "Commit in the public upstream repo" }}
 					>
-						Upstream
+						Upstream SHA
 					</Th>
-					<Th width={15}>ART</Th>
+					<Th width={10}>ART</Th>
 					{ci && <Th modifier="fitContent">Periodic CI</Th>}
 				</Tr>
 			</Thead>
 			<Tbody>
-				{components.map((c) => (
-					<Tr key={c.name}>
-						<Td>
-							{changed && (
-								<span style={{ display: "inline-block", width: "1rem" }}>
-									{changed.names.has(c.name) && (
-										<Tooltip
-											content={`Differs from last released ${changed.since}`}
-										>
-											<span
-												role="img"
-												aria-label={`Differs from last released ${changed.since}`}
-											>
-												{changedDot}
-											</span>
-										</Tooltip>
-									)}
-								</span>
-							)}
-							{c.name}
-						</Td>
-						<Td>
-							<ImageDigestLink image={c.image} />
-							<ClipboardCopy
-								variant="inline-compact"
-								isCode
-								truncation
-								hoverTip="Copy pullspec"
-								clickTip="Copied"
-							>
-								{c.image}
-							</ClipboardCopy>
-						</Td>
-						<Td>
-							<UpstreamCommitLink art={c.art} />
-						</Td>
-						<Td>
-							<ArtBuildLink art={c.art} />
-							<PendingArtBuildLink pending={c.pending_art_build} />
-						</Td>
-						{ci && (
-							<Td modifier="fitContent">
-								<ProwRunBadge
-									component={c.name}
-									image={c.image}
-									runs={ci.components[c.name] ?? []}
-									sync={ci}
-								/>
+				{components.map((c) => {
+					const fields = changed?.fields.get(c.name) ?? [];
+					const mark = (f: ComponentField) =>
+						fields.includes(f) && <>{changedDot} </>;
+					const what = `Changed vs ${changed?.since}, last released: ${fields.map((f) => componentFields[f]).join(", ")}`;
+					return (
+						<Tr key={c.name}>
+							<Td>
+								{changed && (
+									<span style={{ display: "inline-block", width: "1rem" }}>
+										{fields.length > 0 && (
+											<Tooltip content={what}>
+												<span role="img" aria-label={what}>
+													{changedDot}
+												</span>
+											</Tooltip>
+										)}
+									</span>
+								)}
+								{c.name}
 							</Td>
-						)}
-					</Tr>
-				))}
+							<Td>
+								{mark("nvr")}
+								{!c.art ? (
+									noArtRecord
+								) : c.art.nvr ? (
+									<code style={{ fontSize: "0.85em" }}>{c.art.nvr}</code>
+								) : (
+									<Unknown why="ART build record has no NVR" />
+								)}
+							</Td>
+							<Td>
+								{mark("digest")}
+								<ImageDigestLink image={c.image} />
+								<ClipboardCopy
+									variant="inline-compact"
+									isCode
+									truncation
+									hoverTip="Copy pullspec"
+									clickTip="Copied"
+								>
+									{c.image}
+								</ClipboardCopy>
+							</Td>
+							<Td>
+								{mark("build")}
+								<BuildSha repo={c.git_url} sha={c.git_sha} />
+							</Td>
+							<Td>
+								{mark("upstream")}
+								{c.art ? (
+									<CommitLink
+										repo={c.art.upstream_repo}
+										sha={c.art.upstream_sha}
+									/>
+								) : (
+									noArtRecord
+								)}
+							</Td>
+							<Td>
+								<ArtBuildLink art={c.art} />
+								<PendingArtBuildLink pending={c.pending_art_build} />
+							</Td>
+							{ci && (
+								<Td modifier="fitContent">
+									<ProwRunBadge
+										component={c.name}
+										image={c.image}
+										runs={ci.components[c.name] ?? []}
+										sync={ci}
+									/>
+								</Td>
+							)}
+						</Tr>
+					);
+				})}
 			</Tbody>
 		</Table>
 	);
