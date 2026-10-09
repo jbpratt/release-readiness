@@ -49,7 +49,9 @@ WITH candidates AS (
       AND NOT EXISTS (SELECT 1 FROM snapshots s WHERE s.name = r.snapshot)
     GROUP BY r.application, r.snapshot
 )
-SELECT name, application, created_at, component_count, missing
-FROM candidates
-ORDER BY created_at DESC, name DESC
+SELECT c.name, c.application, c.created_at, c.component_count, c.missing,
+       COALESCE(ss.kind, '') AS art_kind
+FROM candidates c
+LEFT JOIN staged_snapshots ss ON ss.name = c.name
+ORDER BY c.created_at DESC, c.name DESC
 LIMIT ? OFFSET ?;

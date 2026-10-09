@@ -42,6 +42,8 @@ export interface ReleaseSnapshot {
 	component_count: number;
 	/** A Konflux Release names this Snapshot, but it is no longer stored. */
 	missing?: boolean;
+	/** Set in lists on a Snapshot ART built for an assembly: "image" or "fbc". */
+	art_kind?: string;
 	releases?: KonfluxRelease[];
 	components?: SnapshotImage[];
 	/** Set on a Quay snapshot detail carrying the quay-operator bundle. */
