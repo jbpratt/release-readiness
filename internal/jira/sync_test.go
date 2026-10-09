@@ -44,7 +44,7 @@ func (d *deleteRecorder) UpsertReleaseVersion(context.Context, *model.ReleaseVer
 	return nil
 }
 
-func (d *deleteRecorder) ListActiveReleaseVersions(context.Context) ([]model.ReleaseVersion, error) {
+func (d *deleteRecorder) ListAllReleaseVersions(context.Context) ([]model.ReleaseVersion, error) {
 	return nil, nil
 }
 
@@ -87,5 +87,64 @@ func TestSyncOnceRejectedTokenDeletesNothing(t *testing.T) {
 	p := reg.Problems(time.Now())
 	if len(p) != 1 || !strings.HasPrefix(p[0].Message, "JIRA authentication failed: search issues") || strings.Contains(p[0].Message, "errors this pass") {
 		t.Fatalf("problems = %+v, want one jira auth failure from search", p)
+	}
+}
+
+type versionStore struct {
+	Store
+	versions []model.ReleaseVersion
+	synced   []string
+}
+
+func (v *versionStore) UpsertReleaseVersion(context.Context, *model.ReleaseVersion) error {
+	return nil
+}
+
+func (v *versionStore) ListAllReleaseVersions(context.Context) ([]model.ReleaseVersion, error) {
+	return v.versions, nil
+}
+
+func (v *versionStore) UpsertJiraIssue(context.Context, *model.JiraIssueRecord) error {
+	return nil
+}
+
+func (v *versionStore) DeleteJiraIssuesNotIn(_ context.Context, fixVersion string, _ []string) error {
+	v.synced = append(v.synced, fixVersion)
+	return nil
+}
+
+func TestSyncOnceSyncsShippedUnarchivedVersions(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Query().Get("jql"), "-area/release"):
+			_ = json.NewEncoder(w).Encode(searchResponse{})
+		case r.URL.Path == "/rest/api/3/search/jql":
+			_ = json.NewEncoder(w).Encode(searchResponse{})
+		case r.URL.Path == "/rest/api/3/project/PROJQUAY/versions":
+			_ = json.NewEncoder(w).Encode([]VersionField{
+				{Name: "quay-v3.17.4", Released: true},
+				{Name: "quay-v3.17.5"},
+				{Name: "quay-v3.10.1", Released: true, Archived: true},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	client := New(Config{BaseURL: srv.URL, Token: "t", Project: "PROJQUAY"})
+	client.minDelay = 0
+	store := &versionStore{versions: []model.ReleaseVersion{
+		{Name: "quay-v3.10.1", Released: true, Archived: true},
+		{Name: "quay-v3.17.4", Released: true},
+		{Name: "quay-v3.17.5"},
+	}}
+	withTx := func(ctx context.Context, fn func(Store) error) error { return fn(store) }
+	s := NewSyncer(client, store, withTx, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	s.SyncOnce(context.Background())
+
+	if strings.Join(store.synced, ",") != "quay-v3.17.4,quay-v3.17.5" {
+		t.Errorf("synced = %v, want [quay-v3.17.4 quay-v3.17.5]", store.synced)
 	}
 }

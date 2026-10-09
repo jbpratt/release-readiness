@@ -40,12 +40,6 @@ ON CONFLICT(name) DO UPDATE SET
 SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
 FROM release_versions WHERE name = ?;
 
--- name: ListActiveReleaseVersions :many
-SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
-FROM release_versions
-WHERE released = 0 AND archived = 0
-ORDER BY name;
-
 -- name: ListAllReleaseVersions :many
 SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
 FROM release_versions
