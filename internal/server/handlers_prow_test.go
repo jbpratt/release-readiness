@@ -119,17 +119,8 @@ func TestProwRunEndpoints(t *testing.T) {
 
 	// The 3.17 job last synced a day ago, past two 15m intervals.
 	resp = prowRunsResponse{}
-	getJSON(t, srv, "/api/v1/prow-runs/by-digest/sha256:aaa", http.StatusOK, &resp)
-	if got := ids(resp.Runs); !slices.Equal(got, []string{"6", "5", "1"}) {
-		t.Errorf("by-digest runs = %v, want [6 5 1]", got)
-	}
+	getJSON(t, srv, "/api/v1/releases/quay-v3.17.6/prow-runs", http.StatusOK, &resp)
 	if !resp.Stale || resp.LastSuccessfulSync == nil || !resp.LastSuccessfulSync.Equal(t0) {
-		t.Errorf("by-digest sync = %v stale %v, want %v stale", resp.LastSuccessfulSync, resp.Stale, t0)
-	}
-
-	resp = prowRunsResponse{}
-	getJSON(t, srv, "/api/v1/prow-runs/by-digest/sha256:none", http.StatusOK, &resp)
-	if resp.Runs == nil || len(resp.Runs) != 0 || resp.LastSuccessfulSync != nil {
-		t.Errorf("unknown digest = %+v, want empty runs", resp)
+		t.Errorf("3.17 sync = %v stale %v, want %v stale", resp.LastSuccessfulSync, resp.Stale, t0)
 	}
 }

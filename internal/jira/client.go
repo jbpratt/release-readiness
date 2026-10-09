@@ -66,17 +66,15 @@ type Issue struct {
 
 // IssueFields holds the fields we care about from a JIRA issue.
 type IssueFields struct {
-	Summary     string           `json:"summary"`
-	Status      StatusField      `json:"status"`
-	Priority    PriorityField    `json:"priority"`
-	Labels      []string         `json:"labels"`
-	FixVersions []VersionField   `json:"fixVersions"`
-	Assignee    *UserField       `json:"assignee"`
-	IssueType   TypeField        `json:"issuetype"`
-	Resolution  *ResField        `json:"resolution"`
-	Updated     string           `json:"updated"`
-	DueDate     string           `json:"duedate"`
-	Components  []ComponentField `json:"components"`
+	Summary    string        `json:"summary"`
+	Status     StatusField   `json:"status"`
+	Priority   PriorityField `json:"priority"`
+	Labels     []string      `json:"labels"`
+	Assignee   *UserField    `json:"assignee"`
+	IssueType  TypeField     `json:"issuetype"`
+	Resolution *ResField     `json:"resolution"`
+	Updated    string        `json:"updated"`
+	DueDate    string        `json:"duedate"`
 
 	Raw map[string]json.RawMessage `json:"-"`
 }
@@ -116,10 +114,6 @@ type TypeField struct {
 }
 
 type ResField struct {
-	Name string `json:"name"`
-}
-
-type ComponentField struct {
 	Name string `json:"name"`
 }
 
@@ -171,7 +165,7 @@ func (c *Client) DiscoverActiveReleases(ctx context.Context) ([]ActiveRelease, e
 		`project=%s AND component="-area/release" AND status NOT IN (Closed, Done)`,
 		c.project,
 	)
-	fields := "summary,status,fixVersions,duedate,components,assignee"
+	fields := "summary,status,duedate,assignee"
 
 	var allIssues []Issue
 	nextPageToken := ""
@@ -215,11 +209,6 @@ func (c *Client) DiscoverActiveReleases(ctx context.Context) ([]ActiveRelease, e
 		// JIRA fixVersions always use "{product}-v{version}" format (e.g. "quay-v3.16.2", "omr-v2.0.10")
 		fixVersion := product + "-v" + version
 
-		konfluxApp := FixVersionToKonfluxApp(fixVersion)
-		if konfluxApp == "" {
-			continue
-		}
-
 		assignee := ""
 		if issue.Fields.Assignee != nil {
 			assignee = issue.Fields.Assignee.DisplayName
@@ -229,7 +218,7 @@ func (c *Client) DiscoverActiveReleases(ctx context.Context) ([]ActiveRelease, e
 			FixVersion:         fixVersion,
 			ReleaseTicketKey:   issue.Key,
 			Assignee:           assignee,
-			KonfluxApplication: konfluxApp,
+			KonfluxApplication: FixVersionToKonfluxApp(fixVersion),
 		}
 
 		if issue.Fields.DueDate != "" {
@@ -440,12 +429,9 @@ func parseRetryAfter(err error) time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
-// FixVersionToKonfluxApp maps a JIRA fixVersion to its Konflux application name.
-// It handles two formats:
-//   - Plain semver: "3.16.3" → "quay-3-16" (defaults to "quay" product)
-//   - Prefixed:     "omr-v2.0.10" → "omr-2-0" (product parsed from prefix)
+// FixVersionToKonfluxApp maps a "{product}-v{version}" JIRA fixVersion to its
+// Konflux application name, e.g. "omr-v2.0.10" → "omr-2-0".
 func FixVersionToKonfluxApp(fixVersion string) string {
-	// Check for "{product}-v{version}" format (e.g. "omr-v2.0.10")
 	if idx := strings.Index(fixVersion, "-v"); idx > 0 {
 		product := fixVersion[:idx]
 		version := fixVersion[idx+2:] // skip "-v"
@@ -453,13 +439,6 @@ func FixVersionToKonfluxApp(fixVersion string) string {
 		if len(parts) >= 2 {
 			return fmt.Sprintf("%s-%s-%s", product, parts[0], parts[1])
 		}
-		return ""
-	}
-
-	// Plain semver: "3.16.3" → "quay-3-16"
-	parts := strings.Split(fixVersion, ".")
-	if len(parts) >= 2 {
-		return fmt.Sprintf("quay-%s-%s", parts[0], parts[1])
 	}
 	return ""
 }

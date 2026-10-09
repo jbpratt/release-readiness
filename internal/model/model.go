@@ -68,27 +68,6 @@ type ReleaseOverview struct {
 	NextInStream bool `json:"next_in_stream"`
 }
 
-// ReleaseComponents is the newest image per component across a release's
-// Konflux applications. The images may come from different snapshots, so
-// together they are a candidate set, not one coherent build.
-type ReleaseComponents struct {
-	Release    string             `json:"release"`
-	AsOf       *time.Time         `json:"as_of,omitempty"`
-	Components []ReleaseComponent `json:"components"`
-}
-
-// ReleaseComponent is one component image with the snapshot it came from.
-type ReleaseComponent struct {
-	Name        string    `json:"name"`
-	Image       string    `json:"image"`
-	GitSHA      string    `json:"git_sha"`
-	GitURL      string    `json:"git_url"`
-	Application string    `json:"application"`
-	Snapshot    string    `json:"snapshot"`
-	CreatedAt   time.Time `json:"created_at"`
-	Art         *ArtBuild `json:"art"`
-}
-
 // ReleaseSnapshotPage is one newest-first page of a release's Snapshots.
 type ReleaseSnapshotPage struct {
 	Snapshots []ReleaseSnapshot `json:"snapshots"`

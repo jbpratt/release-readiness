@@ -115,7 +115,6 @@ func (d *DB) ArtPendingBuilds(ctx context.Context, versions []string, checkedSin
 	builds := make([]artbuild.PendingBuild, len(rows))
 	for i, r := range rows {
 		builds[i] = artbuild.PendingBuild{
-			Group:        r.GroupName,
 			Version:      r.ReleaseVersion,
 			Name:         r.Component,
 			NVR:          r.Nvr,
@@ -179,7 +178,7 @@ func (d *DB) ArtBuildAttempts(ctx context.Context, group, version string) ([]art
 	attempts := make([]artbuild.Attempt, len(rows))
 	for i, r := range rows {
 		attempts[i] = artbuild.Attempt{
-			Group: group, Version: version, Name: r.Component, NVR: r.Nvr,
+			Version: version, Name: r.Component, NVR: r.Nvr,
 			RecordID: r.RecordID, Outcome: r.Outcome, StartedAt: parseTime(r.StartTime),
 		}
 	}

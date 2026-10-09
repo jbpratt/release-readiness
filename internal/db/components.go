@@ -7,18 +7,6 @@ import (
 	"github.com/quay/release-readiness/internal/model"
 )
 
-func (d *DB) ListComponents(ctx context.Context) ([]model.Component, error) {
-	rows, err := d.queries().ListComponents(ctx)
-	if err != nil {
-		return nil, err
-	}
-	components := make([]model.Component, len(rows))
-	for i, r := range rows {
-		components[i] = toComponent(r)
-	}
-	return components, nil
-}
-
 func (d *DB) CreateComponent(ctx context.Context, name, description string) (*model.Component, error) {
 	id, err := d.queries().CreateComponent(ctx, dbsqlc.CreateComponentParams{
 		Name:        name,

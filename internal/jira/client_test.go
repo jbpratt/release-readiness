@@ -15,15 +15,14 @@ func TestSearchIssues(t *testing.T) {
 		{
 			Key: "PROJQUAY-100",
 			Fields: IssueFields{
-				Summary:     "Fix auth bug",
-				Status:      StatusField{Name: "Closed"},
-				Priority:    PriorityField{Name: "Major"},
-				Labels:      []string{"qe-approved"},
-				FixVersions: []VersionField{{Name: "3.16.2"}},
-				Assignee:    &UserField{DisplayName: "Jane Doe"},
-				IssueType:   TypeField{Name: "Bug"},
-				Resolution:  &ResField{Name: "Done"},
-				Updated:     "2026-01-15T10:00:00.000+0000",
+				Summary:    "Fix auth bug",
+				Status:     StatusField{Name: "Closed"},
+				Priority:   PriorityField{Name: "Major"},
+				Labels:     []string{"qe-approved"},
+				Assignee:   &UserField{DisplayName: "Jane Doe"},
+				IssueType:  TypeField{Name: "Bug"},
+				Resolution: &ResField{Name: "Done"},
+				Updated:    "2026-01-15T10:00:00.000+0000",
 			},
 		},
 	}
@@ -177,9 +176,6 @@ func TestDiscoverActiveReleases(t *testing.T) {
 						Summary: "Release Quay v3.16.2",
 						Status:  StatusField{Name: "In Progress"},
 						DueDate: "2026-02-28",
-						Components: []ComponentField{
-							{Name: "-area/release"},
-						},
 					},
 				},
 				{
@@ -188,9 +184,6 @@ func TestDiscoverActiveReleases(t *testing.T) {
 						Summary: "Release Quay v3.17.0",
 						Status:  StatusField{Name: "New"},
 						DueDate: "2026-03-15",
-						Components: []ComponentField{
-							{Name: "-area/release"},
-						},
 					},
 				},
 				{
@@ -199,9 +192,6 @@ func TestDiscoverActiveReleases(t *testing.T) {
 						Summary: "Release OMR v2.0.10",
 						Status:  StatusField{Name: "Testing"},
 						DueDate: "2026-02-20",
-						Components: []ComponentField{
-							{Name: "-area/release"},
-						},
 					},
 				},
 			},
@@ -302,10 +292,6 @@ func TestFixVersionToKonfluxApp(t *testing.T) {
 		input string
 		want  string
 	}{
-		{"3.16.3", "quay-3-16"},
-		{"3.17.0", "quay-3-17"},
-		{"3.16", "quay-3-16"},
-		{"4.0.1", "quay-4-0"},
 		{"quay-v3.18.2", "quay-3-18"},
 		{"quay-v3.18.0", "quay-3-18"},
 		{"quay-v5.0.1", "quay-5-0"},

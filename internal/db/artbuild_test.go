@@ -95,12 +95,12 @@ func TestArtPendingBuilds(t *testing.T) {
 	ctx := t.Context()
 
 	t0 := time.Date(2026, 10, 8, 18, 0, 0, 0, time.UTC)
-	build := func(group, version, name, rec string) artbuild.PendingBuild {
-		return artbuild.PendingBuild{Group: group, Version: version, Name: name, NVR: name + "-" + version + "-1", RecordID: rec, UpstreamSHA: "sha-" + rec, StartedAt: t0}
+	build := func(version, name, rec string) artbuild.PendingBuild {
+		return artbuild.PendingBuild{Version: version, Name: name, NVR: name + "-" + version + "-1", RecordID: rec, UpstreamSHA: "sha-" + rec, StartedAt: t0}
 	}
-	quay := build("quay-3.18", "3.18.1", "quay-quay-container", "a")
-	clair := build("quay-3.18", "3.18.1", "quay-clair-container", "b")
-	old := build("quay-3.16", "3.16.3", "quay-quay-container", "c")
+	quay := build("3.18.1", "quay-quay-container", "a")
+	clair := build("3.18.1", "quay-clair-container", "b")
+	old := build("3.16.3", "quay-quay-container", "c")
 	for group, builds := range map[string][]artbuild.PendingBuild{"quay-3.18": {quay, clair}, "quay-3.16": {old}} {
 		if err := d.ReplaceArtPendingBuilds(ctx, group, builds, t0); err != nil {
 			t.Fatal(err)
@@ -141,7 +141,7 @@ func TestArtBuildAttempts(t *testing.T) {
 	t0 := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	attempt := func(nvr, rec, outcome, digest string, started time.Time) artbuild.Attempt {
 		name, version := artbuild.SplitNVR(nvr)
-		return artbuild.Attempt{Group: group, Version: version, Name: name, NVR: nvr, RecordID: rec, Outcome: outcome, ImageDigest: digest, StartedAt: started}
+		return artbuild.Attempt{Version: version, Name: name, NVR: nvr, RecordID: rec, Outcome: outcome, ImageDigest: digest, StartedAt: started}
 	}
 	store := func(from, to time.Time, attempts ...artbuild.Attempt) {
 		t.Helper()

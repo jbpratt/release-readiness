@@ -43,7 +43,7 @@ type Build struct {
 // version in a group. Pending builds have no image yet, so they are keyed by
 // what they will be, not by digest.
 type PendingBuild struct {
-	Group, Version, Name      string
+	Version, Name             string
 	NVR, RecordID             string
 	UpstreamRepo, UpstreamSHA string
 	StartedAt                 time.Time
@@ -53,10 +53,10 @@ type PendingBuild struct {
 // finished build as another record of its NVR and leaves the pending one.
 // ImageDigest is empty until a build succeeds.
 type Attempt struct {
-	Group, Version, Name, NVR string
-	RecordID, Outcome         string
-	ImageDigest               string
-	StartedAt                 time.Time
+	Version, Name, NVR string
+	RecordID, Outcome  string
+	ImageDigest        string
+	StartedAt          time.Time
 }
 
 // Candidate is a stored component image to look up. Applications holds every
@@ -190,11 +190,11 @@ func (r *Resolver) refreshPending(ctx context.Context, now time.Time, pace <-cha
 		// Stamp the search time, not the pass start: the candidate phase can
 		// take minutes and the API hides rows checked too long ago.
 		searched := time.Now().UTC()
-		if err := r.store.ReplaceArtPendingBuilds(ctx, g, pendingBuilds(g, builds), searched); err != nil {
+		if err := r.store.ReplaceArtPendingBuilds(ctx, g, pendingBuilds(builds), searched); err != nil {
 			r.logger.Error("store pending", "group", g, "error", err)
 			pass.Add(fmt.Errorf("store pending %s: %w", g, err))
 		}
-		attempts := imageAttempts(g, builds)
+		attempts := imageAttempts(builds)
 		// A capped answer dropped its oldest rows, so it covers only from
 		// the oldest row it kept.
 		if len(builds) >= searchCap {
@@ -213,7 +213,7 @@ func (r *Resolver) refreshPending(ctx context.Context, now time.Time, pace <-cha
 }
 
 // imageAttempts returns the image-build records of a search.
-func imageAttempts(group string, builds []searchBuild) []Attempt {
+func imageAttempts(builds []searchBuild) []Attempt {
 	var out []Attempt
 	for _, sb := range builds {
 		name, version := SplitNVR(sb.NVR)
@@ -223,7 +223,7 @@ func imageAttempts(group string, builds []searchBuild) []Attempt {
 		}
 		_, digest, _ := strings.Cut(sb.ImagePullspec, "@")
 		out = append(out, Attempt{
-			Group: group, Version: version, Name: name, NVR: sb.NVR,
+			Version: version, Name: name, NVR: sb.NVR,
 			RecordID: sb.RecordID, Outcome: sb.Outcome, ImageDigest: digest,
 			StartedAt: started.UTC(),
 		})
@@ -235,7 +235,7 @@ func imageAttempts(group string, builds []searchBuild) []Attempt {
 // is still running, the later record id breaking a start time tie. ART adds a
 // finished build's outcome as another row of its NVR and leaves the pending
 // row, so a build runs while its NVR has only pending rows.
-func pendingBuilds(group string, builds []searchBuild) []PendingBuild {
+func pendingBuilds(builds []searchBuild) []PendingBuild {
 	finished := map[string]bool{}
 	newest := map[[2]string]PendingBuild{}
 	for _, sb := range builds {
@@ -251,7 +251,7 @@ func pendingBuilds(group string, builds []searchBuild) []PendingBuild {
 			continue
 		}
 		p := PendingBuild{
-			Group: group, Version: version, Name: name,
+			Version: version, Name: name,
 			NVR: sb.NVR, RecordID: sb.RecordID,
 			UpstreamRepo: sb.SourceRepo, UpstreamSHA: sb.Commitish,
 			StartedAt: started.UTC(),

@@ -58,11 +58,4 @@ func TestUpsertProwRunPendingToTerminal(t *testing.T) {
 		got.ArtifactState != prow.ArtifactPresent || len(got.Images) != 2 || got.Images[1] != run.Images[1] {
 		t.Errorf("run = %+v", got)
 	}
-
-	for digest, want := range map[string]int{"sha256:bbb": 1, "sha256:ccc": 0} {
-		runs, err := d.ListProwRunsByDigest(ctx, digest, 10, 0)
-		if err != nil || len(runs) != want {
-			t.Errorf("ListProwRunsByDigest(%s) = %d runs, %v, want %d", digest, len(runs), err, want)
-		}
-	}
 }

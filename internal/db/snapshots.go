@@ -34,15 +34,6 @@ func (d *DB) SnapshotExistsByName(ctx context.Context, name string) (bool, error
 	return count > 0, nil
 }
 
-func (d *DB) GetSnapshotByID(ctx context.Context, id int64) (*model.SnapshotRecord, error) {
-	row, err := d.queries().GetSnapshotByID(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	s := toSnapshotRecord(row)
-	return &s, nil
-}
-
 func (d *DB) GetSnapshotByName(ctx context.Context, name string) (*model.SnapshotRecord, error) {
 	row, err := d.queries().GetSnapshotRow(ctx, name)
 	if err != nil {
@@ -125,10 +116,7 @@ func (d *DB) ListComponentCandidates(ctx context.Context, applications []string)
 		components[i] = releaseview.Component{
 			Name:        r.Component,
 			Image:       r.ImageUrl,
-			GitSHA:      r.GitSha,
-			GitURL:      r.GitUrl,
 			Application: r.Application,
-			Snapshot:    r.Snapshot,
 			CreatedAt:   parseTime(r.CreatedAt),
 			SnapshotID:  r.SnapshotID,
 			RowID:       r.ID,

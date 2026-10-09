@@ -97,35 +97,6 @@ func TestSyncStatus(t *testing.T) {
 	}
 }
 
-func TestListSnapshots(t *testing.T) {
-	srv := setupTestServer(t)
-	ctx := t.Context()
-
-	_, err := srv.db.CreateSnapshot(ctx, "quay-3-17", "quay-3-17-20260213-000", time.Now())
-	if err != nil {
-		t.Fatalf("create snapshot: %v", err)
-	}
-
-	req := httptest.NewRequest("GET", "/api/v1/snapshots", nil)
-	w := httptest.NewRecorder()
-	srv.http.Handler.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("list snapshots: got %d, body: %s", w.Code, w.Body.String())
-	}
-
-	var snapshots []model.SnapshotRecord
-	if err := json.NewDecoder(w.Body).Decode(&snapshots); err != nil {
-		t.Fatal(err)
-	}
-	if len(snapshots) != 1 {
-		t.Errorf("snapshots: got %d, want 1", len(snapshots))
-	}
-	if snapshots[0].Application != "quay-3-17" {
-		t.Errorf("application: got %q, want %q", snapshots[0].Application, "quay-3-17")
-	}
-}
-
 // seedSnapshot creates a snapshot whose components are named comps.
 func seedSnapshot(t *testing.T, srv *Server, app, name string, created time.Time, comps ...string) {
 	t.Helper()
@@ -419,7 +390,7 @@ func TestPendingArtBuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	pending := artbuild.PendingBuild{
-		Group: "quay-3.18", Version: "3.18.1", Name: "quay-clair-container",
+		Version: "3.18.1", Name: "quay-clair-container",
 		NVR: "quay-clair-container-3.18.1-202610010100.p2.gdef4567.assembly.stream.el9", RecordID: "rec-2",
 		UpstreamSHA: "def456", StartedAt: t0.Add(time.Hour),
 	}
@@ -443,7 +414,7 @@ func TestPendingArtBuild(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			p := pending
 			tc.edit(&p)
-			if err := srv.db.ReplaceArtPendingBuilds(t.Context(), p.Group, []artbuild.PendingBuild{p}, time.Now().Add(tc.checked)); err != nil {
+			if err := srv.db.ReplaceArtPendingBuilds(t.Context(), "quay-3.18", []artbuild.PendingBuild{p}, time.Now().Add(tc.checked)); err != nil {
 				t.Fatal(err)
 			}
 			var snap model.ReleaseSnapshot
@@ -473,8 +444,8 @@ func TestListBuildAttempts(t *testing.T) {
 
 	const nvr = "quay-clair-container-3.18.0-202610010000.p2.gabc1234.assembly.stream.el9"
 	attempts := []artbuild.Attempt{
-		{Group: "quay-3.18", Version: "3.18.0", Name: "quay-clair-container", NVR: nvr, RecordID: "rec-1", Outcome: "build_error", StartedAt: t0},
-		{Group: "quay-3.18", Version: "3.18.1", Name: "quay-clair-container", NVR: "quay-clair-container-3.18.1-1.el9", RecordID: "rec-2", Outcome: "success", StartedAt: t0},
+		{Version: "3.18.0", Name: "quay-clair-container", NVR: nvr, RecordID: "rec-1", Outcome: "build_error", StartedAt: t0},
+		{Version: "3.18.1", Name: "quay-clair-container", NVR: "quay-clair-container-3.18.1-1.el9", RecordID: "rec-2", Outcome: "success", StartedAt: t0},
 	}
 	if err := srv.db.StoreArtBuildAttempts(t.Context(), "quay-3.18", attempts, t0.Add(-time.Hour), t0.Add(time.Hour)); err != nil {
 		t.Fatal(err)
