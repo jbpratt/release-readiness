@@ -112,6 +112,7 @@ export interface ReleaseOverview {
 	issue_summary?: IssueSummary;
 	readiness: ReadinessResponse;
 	component_count: number;
+	// Newest snapshot in the version's Konflux applications, not bound to this version.
 	latest_build?: string;
 	shipped: boolean;
 	shipped_source: "catalog" | "jira" | "";
