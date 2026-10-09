@@ -6,6 +6,7 @@ import {
 	Card,
 	CardBody,
 	CardTitle,
+	Content,
 	DescriptionList,
 	DescriptionListDescription,
 	DescriptionListGroup,
@@ -51,7 +52,9 @@ import {
 	getRelease,
 	getReleaseIssueSummary,
 	getReleaseReadiness,
+	getSelectedBuild,
 	getStaged,
+	getTicketMembership,
 	listReleaseIssues,
 } from "../api/client";
 import type {
@@ -60,7 +63,9 @@ import type {
 	JiraIssue,
 	ReadinessResponse,
 	ReleaseVersion,
+	SelectedBuild,
 	StagedSnapshot,
+	TicketMembership,
 } from "../api/types";
 import BuildAttempts from "../components/BuildAttempts";
 import PriorityLabel from "../components/PriorityLabel";
@@ -70,6 +75,7 @@ import {
 	useLatestSnapshot,
 } from "../components/ReleaseSnapshots";
 import StatusLabel from "../components/StatusLabel";
+import TicketTable from "../components/TicketTable";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import {
 	type ColumnDef,
@@ -77,7 +83,11 @@ import {
 } from "../hooks/useColumnManagement";
 import { useConfig } from "../hooks/useConfig";
 import { relative } from "../utils/format";
-import { formatReleaseName, jiraIssueUrl } from "../utils/links";
+import {
+	formatReleaseName,
+	jiraIssueUrl,
+	upstreamCommitUrl,
+} from "../utils/links";
 
 export default function ReleaseDetail() {
 	const { version } = useParams<{ version: string }>();
@@ -189,6 +199,8 @@ export default function ReleaseDetail() {
 					</Tab>
 				</Tabs>
 
+				<SelectedBuildCard version={version!} />
+				<TicketMembershipCard version={version!} />
 				<IssuesCard
 					issues={issues}
 					error={issuesError}
@@ -514,6 +526,187 @@ function StagedRow({
 	);
 }
 
+/** The release's selected STAGE build: the image Snapshot its newest successful STAGE Release shipped to stage. */
+function SelectedBuildCard({ version }: { version: string }) {
+	const { data, error } = useCachedFetch(`selectedBuild:${version}`, () =>
+		getSelectedBuild(version),
+	);
+	return (
+		<Card isCompact style={{ marginBottom: "1rem" }}>
+			<CardTitle>Selected STAGE build</CardTitle>
+			<CardBody>
+				{error ? (
+					error.message
+				) : !data ? (
+					<Spinner size="md" />
+				) : "snapshot_name" in data ? (
+					<SelectedBuildDetail build={data} />
+				) : (
+					<Content component="p">No selected build: {data.reason}</Content>
+				)}
+			</CardBody>
+		</Card>
+	);
+}
+
+function SelectedBuildDetail({ build }: { build: SelectedBuild }) {
+	return (
+		<>
+			<DescriptionList
+				isCompact
+				isHorizontal
+				horizontalTermWidthModifier={{ default: "10rem" }}
+			>
+				<DescriptionListGroup>
+					<DescriptionListTerm>Snapshot</DescriptionListTerm>
+					<DescriptionListDescription>
+						<Link to={build.rr_url}>
+							<code>{build.snapshot_name}</code>
+						</Link>{" "}
+						built {new Date(build.snapshot_created_at).toLocaleString()}
+					</DescriptionListDescription>
+				</DescriptionListGroup>
+				<DescriptionListGroup>
+					<DescriptionListTerm>Release CR</DescriptionListTerm>
+					<DescriptionListDescription>
+						<code>{build.release_name}</code>
+					</DescriptionListDescription>
+				</DescriptionListGroup>
+				<DescriptionListGroup>
+					<DescriptionListTerm>Release plan</DescriptionListTerm>
+					<DescriptionListDescription>
+						<code>{build.release_plan}</code>
+					</DescriptionListDescription>
+				</DescriptionListGroup>
+				<DescriptionListGroup>
+					<DescriptionListTerm>Completed</DescriptionListTerm>
+					<DescriptionListDescription>
+						{new Date(build.selected_at).toLocaleString()} (
+						{relative(build.selected_at)})
+					</DescriptionListDescription>
+				</DescriptionListGroup>
+			</DescriptionList>
+			<Table variant="compact" aria-label="Selected build components">
+				<Thead>
+					<Tr>
+						<Th>Component</Th>
+						<Th>Image digest</Th>
+						<Th>Upstream commit</Th>
+						<Th>Provenance</Th>
+					</Tr>
+				</Thead>
+				<Tbody>
+					{build.components.map((c) => {
+						const url = upstreamCommitUrl(c.upstream_repo, c.upstream_sha);
+						return (
+							<Tr key={c.name}>
+								<Td>{c.name}</Td>
+								<Td>
+									{c.image_digest ? (
+										<code style={{ wordBreak: "break-all" }}>
+											{c.image_digest}
+										</code>
+									) : (
+										"unknown"
+									)}
+								</Td>
+								<Td>
+									{!c.upstream_sha ? (
+										"unknown"
+									) : url ? (
+										<a href={url} target="_blank" rel="noopener noreferrer">
+											<code>{c.upstream_sha.substring(0, 12)}</code>
+										</a>
+									) : (
+										<code>{c.upstream_sha}</code>
+									)}
+								</Td>
+								<Td>
+									<Label
+										color={
+											c.provenance_state === "resolved" ? "green" : "orange"
+										}
+										isCompact
+									>
+										{c.provenance_state}
+									</Label>
+								</Td>
+							</Tr>
+						);
+					})}
+				</Tbody>
+			</Table>
+		</>
+	);
+}
+
+const BUCKETS: [keyof TicketMembership["buckets"], string][] = [
+	["in_selected_build", "In selected build"],
+	["carried_forward", "Carried forward"],
+	["planned_patch_pending", "Planned / patch pending"],
+	["needs_review", "Needs review"],
+];
+
+/** Candidate tickets bucketed by what the selected STAGE build is proven to contain. */
+function TicketMembershipCard({ version }: { version: string }) {
+	const { data, error } = useCachedFetch(`ticketMembership:${version}`, () =>
+		getTicketMembership(version),
+	);
+	const unknownEvidence =
+		data &&
+		Object.values(data.buckets).some((rows) =>
+			rows.some((r) => r.evidence_state === "unknown"),
+		);
+	// Empty membership buckets are unknown, not empty, until evidence is complete.
+	const emptyText = (bucket: string) =>
+		bucket !== "in_selected_build" && bucket !== "carried_forward"
+			? "None."
+			: !data?.selected_build
+				? "Unknown: no selected build."
+				: unknownEvidence
+					? "None proven: evidence is unknown for some tickets (see Needs review)."
+					: "None.";
+	return (
+		<Card isCompact style={{ marginBottom: "1rem" }}>
+			<CardTitle>Ticket membership</CardTitle>
+			<CardBody>
+				<HelperText style={{ marginBottom: "0.5rem" }}>
+					<HelperTextItem>
+						Membership is proven from upstream commits in the selected STAGE
+						build's component ranges, never from Jira Target Version.
+					</HelperTextItem>
+				</HelperText>
+				{error ? (
+					error.message
+				) : !data ? (
+					<Spinner size="md" />
+				) : (
+					<>
+						{!data.selected_build && (
+							<Content component="p">No selected build: {data.reason}</Content>
+						)}
+						{BUCKETS.map(([bucket, title]) => {
+							const rows = data.buckets[bucket];
+							return (
+								<div key={bucket} style={{ marginTop: "1rem" }}>
+									<Title headingLevel="h3" size="md">
+										{title} ({rows.length})
+									</Title>
+									{rows.length ? (
+										<TicketTable rows={rows} label={title} />
+									) : (
+										<Content component="p">{emptyText(bucket)}</Content>
+									)}
+								</div>
+							);
+						})}
+					</>
+				)}
+			</CardBody>
+		</Card>
+	);
+}
+
 const ISSUES_COLUMNS: ColumnDef[] = [
 	{ key: "key", label: "Key" },
 	{ key: "type", label: "Type" },
@@ -580,9 +773,8 @@ function IssuesCard({
 					alignItems={{ default: "alignItemsCenter" }}
 				>
 					<FlexItem>
-						{hasIssues
-							? `Linked Issues (${filteredIssues.length})`
-							: "Linked Issues"}
+						Planned for {formatReleaseName(version)} (Jira Target Version)
+						{hasIssues && ` (${filteredIssues.length})`}
 						{jql && (
 							<Popover headerContent="JQL Query" bodyContent={jql}>
 								<Button
@@ -644,6 +836,12 @@ function IssuesCard({
 				</Flex>
 			</CardTitle>
 			<CardBody>
+				<HelperText style={{ marginBottom: "0.5rem" }}>
+					<HelperTextItem>
+						Release intent from Jira, not the verified contents of any build.
+						See Ticket membership for what the selected build contains.
+					</HelperTextItem>
+				</HelperText>
 				{hasIssues ? (
 					<IssuesTable issues={filteredIssues} columnMgmt={columnMgmt} />
 				) : error ? (
@@ -653,7 +851,7 @@ function IssuesCard({
 				) : config?.jira_enabled === false ? (
 					"JIRA sync is not configured on this server, so linked tickets are not shown."
 				) : (
-					"No tickets linked to this release."
+					"No tickets have this Target Version."
 				)}
 			</CardBody>
 		</Card>
