@@ -16,6 +16,7 @@ export interface PendingArtBuild {
 }
 
 export interface ArtBuild {
+	nvr: string;
 	build_url: string;
 	logs_url: string;
 	pipeline_url: string;
