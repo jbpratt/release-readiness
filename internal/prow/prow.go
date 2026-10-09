@@ -1,19 +1,15 @@
-// Package prow ingests Quay periodic and rehearsal CI runs from the public
+// Package prow ingests Quay periodic CI runs from the public
 // OpenShift CI GCS bucket.
 package prow
 
 import (
 	"encoding/json"
 	"fmt"
-	"path"
 	"strings"
 	"time"
 )
 
 const (
-	KindPeriodic  = "periodic"
-	KindRehearsal = "rehearsal"
-
 	ArtifactPresent = "present"
 	ArtifactMissing = "missing"
 	ArtifactInvalid = "invalid"
@@ -23,7 +19,6 @@ const (
 type Run struct {
 	JobName       string     `json:"job_name"`
 	BuildID       string     `json:"build_id"`
-	Kind          string     `json:"kind"`
 	Application   string     `json:"application"`
 	State         string     `json:"state"`
 	StartedAt     *time.Time `json:"started_at"`
@@ -59,13 +54,10 @@ type Job struct {
 	Name        string
 	Prefix      string
 	Application string
-	Kind        string
 }
 
-// ParseJobs parses "key=application[,key=application...]". For
-// periodics the key is a job name under logs/; for rehearsals it is a full
-// GCS prefix.
-func ParseJobs(spec, kind string) ([]Job, error) {
+// ParseJobs parses "job_name=application[,job_name=application...]".
+func ParseJobs(spec string) ([]Job, error) {
 	var jobs []Job
 	for entry := range strings.SplitSeq(spec, ",") {
 		entry = strings.TrimSpace(entry)
@@ -73,15 +65,11 @@ func ParseJobs(spec, kind string) ([]Job, error) {
 			continue
 		}
 		key, app, ok := strings.Cut(entry, "=")
-		key, app = strings.Trim(strings.TrimSpace(key), "/"), strings.TrimSpace(app)
+		key, app = strings.TrimSpace(key), strings.TrimSpace(app)
 		if !ok || key == "" || app == "" {
-			return nil, fmt.Errorf("invalid %s entry %q, want key=application", kind, entry)
+			return nil, fmt.Errorf("invalid entry %q, want job_name=application", entry)
 		}
-		prefix := key + "/"
-		if kind == KindPeriodic {
-			prefix = "logs/" + prefix
-		}
-		jobs = append(jobs, Job{Name: path.Base(key), Prefix: prefix, Application: app, Kind: kind})
+		jobs = append(jobs, Job{Name: key, Prefix: "logs/" + key + "/", Application: app})
 	}
 	return jobs, nil
 }
@@ -146,7 +134,6 @@ func parseRun(job Job, buildID string, pjData, finData []byte) (*Run, string, er
 	r := &Run{
 		JobName:       job.Name,
 		BuildID:       buildID,
-		Kind:          job.Kind,
 		Application:   job.Application,
 		State:         pj.Status.State,
 		StartedAt:     pj.Status.StartTime,

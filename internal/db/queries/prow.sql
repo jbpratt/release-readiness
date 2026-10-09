@@ -1,8 +1,7 @@
 -- name: UpsertProwRun :exec
 INSERT INTO prow_runs (job_name, build_id, kind, application, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+VALUES (?, ?, 'periodic', ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(job_name, build_id) DO UPDATE SET
-    kind=excluded.kind,
     application=excluded.application,
     state=excluded.state,
     started_at=excluded.started_at,
