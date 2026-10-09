@@ -174,7 +174,7 @@ type StageBuilds struct {
 }
 
 // SelectedBuild is a staged image Snapshot of a concrete version whose
-// Konflux Release through an allowlisted STAGE ReleasePlan succeeded.
+// Konflux Release through a STAGE ReleasePlan succeeded.
 // SelectedAt is that Release's completion time.
 type SelectedBuild struct {
 	Version           string                   `json:"version"`
