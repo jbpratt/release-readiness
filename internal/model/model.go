@@ -163,3 +163,38 @@ type StagedSnapshot struct {
 	CreatedAt time.Time       `json:"created_at"`
 	Release   *KonfluxRelease `json:"release"`
 }
+
+// StageBuilds is the selected STAGE build of a concrete release version and
+// the successful STAGE build before it. Selected is nil with Reason set when
+// none can be selected; Previous is nil when there is no earlier build.
+type StageBuilds struct {
+	Selected *SelectedBuild
+	Previous *SelectedBuild
+	Reason   string
+}
+
+// SelectedBuild is a staged image Snapshot of a concrete version whose
+// Konflux Release through an allowlisted STAGE ReleasePlan succeeded.
+// SelectedAt is that Release's completion time.
+type SelectedBuild struct {
+	Version           string                   `json:"version"`
+	Stage             string                   `json:"stage"`
+	SelectedAt        time.Time                `json:"selected_at"`
+	ReleaseName       string                   `json:"release_name"`
+	ReleasePlan       string                   `json:"release_plan"`
+	SnapshotName      string                   `json:"snapshot_name"`
+	SnapshotCreatedAt time.Time                `json:"snapshot_created_at"`
+	Components        []SelectedBuildComponent `json:"components"`
+	RRURL             string                   `json:"rr_url"`
+}
+
+// SelectedBuildComponent is one image of a selected build. ProvenanceState is
+// "resolved" when ART resolved its exact digest to an upstream repo and full
+// 40-hex commit, else "unknown".
+type SelectedBuildComponent struct {
+	Name            string `json:"name"`
+	ImageDigest     string `json:"image_digest"`
+	UpstreamRepo    string `json:"upstream_repo"`
+	UpstreamSHA     string `json:"upstream_sha"`
+	ProvenanceState string `json:"provenance_state"`
+}

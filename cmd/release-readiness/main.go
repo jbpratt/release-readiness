@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -50,6 +51,9 @@ func main() {
 	// Prow flags
 	prowJobs := flag.String("prow-jobs", os.Getenv("PROW_JOBS"), "periodic Prow jobs to ingest, as job_name=konflux_application[,...] (e.g. ...-aws-s3-nightly=quay-3-18)")
 	prowInterval := flag.Duration("prow-interval", 15*time.Minute, "Prow sync poll interval")
+
+	// Selected STAGE build flags
+	stagePlans := flag.String("stage-release-plans", os.Getenv("STAGE_RELEASE_PLANS"), "exact Konflux ReleasePlan names whose Releases are STAGE, comma-separated (empty selects no build)")
 
 	flag.Parse()
 
@@ -164,6 +168,11 @@ func main() {
 	}
 
 	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, shipped, status, logger)
+	for _, p := range strings.Split(*stagePlans, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			srv.StageReleasePlans = append(srv.StageReleasePlans, p)
+		}
+	}
 	if err := srv.Run(ctx); err != nil {
 		logger.Error("server", "error", err)
 		os.Exit(1)

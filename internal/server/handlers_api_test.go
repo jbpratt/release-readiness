@@ -760,3 +760,37 @@ func TestReleasesOverviewShipped(t *testing.T) {
 		t.Errorf("overviews: got %d, want %d", len(overviews), len(want))
 	}
 }
+
+func TestSelectedBuild(t *testing.T) {
+	srv := setupTestServer(t)
+	ctx := t.Context()
+	completed := time.Date(2026, 10, 7, 21, 0, 0, 0, time.UTC)
+	if err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}); err != nil {
+		t.Fatal(err)
+	}
+	seedSnapshot(t, srv, "quay-3-18", "snap-a", completed.Add(-time.Hour), "quay-3-18-quay")
+	if err := srv.db.UpsertStagedSnapshot(ctx, "snap-a", "3.18.1", "image", "stage", completed.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.db.UpsertKonfluxRelease(ctx, &model.KonfluxRelease{
+		Name: "rel-a", Application: "quay-3-18", Snapshot: "snap-a", ReleasePlan: "stage-plan",
+		ReleasedStatus: "True", ReleasedReason: "Succeeded", CreatedAt: completed, CompletionTime: &completed,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	var none map[string]any
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/selected-build", http.StatusOK, &none)
+	if none["selected_build"] != nil || none["reason"] != "stage release plan not configured" {
+		t.Errorf("without plans = %v, want selected_build null with reason", none)
+	}
+
+	srv.StageReleasePlans = []string{"stage-plan"}
+	var got model.SelectedBuild
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/selected-build", http.StatusOK, &got)
+	if got.Version != "quay-v3.18.1" || got.Stage != "stage" || got.ReleaseName != "rel-a" || got.SnapshotName != "snap-a" ||
+		got.RRURL != "/releases/quay-v3.18.1/snapshots?snapshot=snap-a" || len(got.Components) != 1 || got.Components[0].ProvenanceState != "unknown" {
+		t.Errorf("selected build = %+v", got)
+	}
+	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/selected-build", http.StatusNotFound, nil)
+}
