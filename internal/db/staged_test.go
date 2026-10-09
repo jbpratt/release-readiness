@@ -155,6 +155,18 @@ func TestSelectedStageBuilds(t *testing.T) {
 		t.Errorf("components = %+v, want %+v", sel.Components, want)
 	}
 
+	history, err := d.StageBuildHistory(ctx, v, plans)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var names []string
+	for _, b := range history {
+		names = append(names, b.SnapshotName)
+	}
+	if !slices.Equal(names, []string{"snap-b", "snap-a"}) {
+		t.Errorf("history = %v, want [snap-b snap-a]", names)
+	}
+
 	for _, tc := range []struct {
 		name    string
 		version string
