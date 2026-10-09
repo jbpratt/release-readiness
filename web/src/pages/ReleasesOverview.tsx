@@ -298,6 +298,7 @@ function ReleaseCard({
 											href={ticketLink}
 											target="_blank"
 											rel="noopener noreferrer"
+											style={{ textDecoration: "none" }}
 										>
 											{release.release_ticket_key}
 										</a>
@@ -327,6 +328,7 @@ function ReleaseCard({
 													href={ticketLink}
 													target="_blank"
 													rel="noopener noreferrer"
+													style={{ textDecoration: "none" }}
 												>
 													{release.release_ticket_key}
 												</a>
