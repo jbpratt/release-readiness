@@ -335,7 +335,14 @@ func (s *Server) handleGetReleaseReadiness(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	writeJSON(w, http.StatusOK, computeReadiness(release, issueSummary, len(components.Components) > 0))
+	writeJSON(w, http.StatusOK, computeReadiness(release, issueSummary, len(components.Components) > 0, s.catalogShipped(release.Name)))
+}
+
+// catalogShipped reports whether the catalog publishes the fixVersion, e.g.
+// quay-v3.17.5 as quay 3.17.5.
+func (s *Server) catalogShipped(name string) bool {
+	product, version, _ := strings.Cut(name, "-v")
+	return s.shipped.Has(product, version)
 }
 
 func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) {
@@ -374,16 +381,16 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 	for i, rel := range releases {
 		summary := issueSummaries[rel.Name]
 		components := toReleaseComponents(&rel, candidates)
+		catalogShipped := s.catalogShipped(rel.Name)
 		overviews[i] = model.ReleaseOverview{
 			Release:        rel,
 			IssueSummary:   summary,
-			Readiness:      computeReadiness(&rel, summary, len(components.Components) > 0),
+			Readiness:      computeReadiness(&rel, summary, len(components.Components) > 0, catalogShipped),
 			ComponentCount: len(components.Components),
 			LatestBuild:    components.AsOf,
 		}
-		product, version, _ := strings.Cut(rel.Name, "-v")
 		switch {
-		case s.shipped.Has(product, version):
+		case catalogShipped:
 			overviews[i].Shipped, overviews[i].ShippedSource = true, "catalog"
 		case rel.Released:
 			overviews[i].Shipped, overviews[i].ShippedSource = true, "jira"
@@ -421,10 +428,14 @@ func markNextInStream(overviews []model.ReleaseOverview) {
 }
 
 // computeReadiness derives a readiness signal from release metadata,
-// issue summary, and whether a build snapshot exists.
-func computeReadiness(release *model.ReleaseVersion, issueSummary *model.IssueSummary, hasSnapshot bool) model.ReadinessResponse {
+// issue summary, whether a build snapshot exists, and whether the catalog
+// already publishes it (JIRA can lag a shipped release).
+func computeReadiness(release *model.ReleaseVersion, issueSummary *model.IssueSummary, hasSnapshot, catalogShipped bool) model.ReadinessResponse {
 	if release.Released {
 		return model.ReadinessResponse{Signal: "green", Message: "Released"}
+	}
+	if catalogShipped {
+		return model.ReadinessResponse{Signal: "green", Message: "Shipped"}
 	}
 
 	now := time.Now()
