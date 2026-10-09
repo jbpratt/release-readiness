@@ -61,19 +61,6 @@ func (d *DB) ListProwRunsByApplication(ctx context.Context, application string) 
 	return d.toProwRuns(ctx, rows)
 }
 
-// ListProwRunsByDigest returns runs that tested digest, newest first.
-func (d *DB) ListProwRunsByDigest(ctx context.Context, digest string, limit, offset int) ([]prow.Run, error) {
-	rows, err := d.queries().ListProwRunsByDigest(ctx, dbsqlc.ListProwRunsByDigestParams{
-		Digest: digest,
-		Limit:  int64(limit),
-		Offset: int64(offset),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return d.toProwRuns(ctx, rows)
-}
-
 func (d *DB) toProwRuns(ctx context.Context, rows []dbsqlc.ProwRun) ([]prow.Run, error) {
 	runs := make([]prow.Run, len(rows))
 	for i, r := range rows {

@@ -49,23 +49,6 @@ func (s *Server) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
 	}{s.syncStatus.Problems(now), s.syncStatus.Sources(now)})
 }
 
-// --- Snapshots ---
-
-func (s *Server) handleListSnapshots(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	limit, _ := strconv.Atoi(q.Get("limit"))
-	offset, _ := strconv.Atoi(q.Get("offset"))
-	if limit <= 0 {
-		limit = 50
-	}
-	snapshots, err := s.db.ListSnapshots(r.Context(), q.Get("application"), limit, offset)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, snapshots)
-}
-
 // --- Releases (version-centric) ---
 
 func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {
@@ -332,38 +315,22 @@ func (s *Server) handleGetStaged(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (s *Server) releaseComponents(ctx context.Context, release *model.ReleaseVersion) (model.ReleaseComponents, error) {
-	candidates, err := s.db.ListComponentCandidates(ctx, releaseview.Applications(release.KonfluxApplication))
-	if err != nil {
-		return model.ReleaseComponents{}, err
-	}
-	return toReleaseComponents(release, candidates), nil
-}
-
-func toReleaseComponents(release *model.ReleaseVersion, candidates []releaseview.Component) model.ReleaseComponents {
+// componentSet counts the release's newest image per component across its
+// applications and returns when the newest of them was built. The images may
+// come from different snapshots, so they are not one coherent build.
+func componentSet(release *model.ReleaseVersion, candidates []releaseview.Component) (count int, latest *time.Time) {
 	selected := releaseview.Select(release.KonfluxApplication, candidates)
-	rc := model.ReleaseComponents{Release: release.Name, Components: make([]model.ReleaseComponent, len(selected))}
-	for i, c := range selected {
-		rc.Components[i] = model.ReleaseComponent{
-			Name:        c.Name,
-			Image:       c.Image,
-			GitSHA:      c.GitSHA,
-			GitURL:      c.GitURL,
-			Application: c.Application,
-			Snapshot:    c.Snapshot,
-			CreatedAt:   c.CreatedAt,
-		}
-		if rc.AsOf == nil || c.CreatedAt.After(*rc.AsOf) {
-			rc.AsOf = &c.CreatedAt
+	for _, c := range selected {
+		if latest == nil || c.CreatedAt.After(*latest) {
+			latest = &c.CreatedAt
 		}
 	}
-	return rc
+	return len(selected), latest
 }
 
 func (s *Server) handleListReleaseIssues(w http.ResponseWriter, r *http.Request) {
 	version := r.PathValue("version")
-	q := r.URL.Query()
-	issues, err := s.db.ListJiraIssues(r.Context(), version, q.Get("type"), q.Get("status"), q.Get("label"))
+	issues, err := s.db.ListJiraIssues(r.Context(), version)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -396,13 +363,14 @@ func (s *Server) handleGetReleaseReadiness(w http.ResponseWriter, r *http.Reques
 
 	issueSummary, _ := s.db.GetIssueSummary(ctx, version)
 
-	components, err := s.releaseComponents(ctx, release)
+	candidates, err := s.db.ListComponentCandidates(ctx, releaseview.Applications(release.KonfluxApplication))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+	count, _ := componentSet(release, candidates)
 
-	writeJSON(w, http.StatusOK, computeReadiness(release, issueSummary, len(components.Components) > 0, s.catalogShipped(release.Name)))
+	writeJSON(w, http.StatusOK, computeReadiness(release, issueSummary, count > 0, s.catalogShipped(release.Name)))
 }
 
 // catalogShipped reports whether the catalog publishes the fixVersion, e.g.
@@ -447,14 +415,14 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 	overviews := make([]model.ReleaseOverview, len(releases))
 	for i, rel := range releases {
 		summary := issueSummaries[rel.Name]
-		components := toReleaseComponents(&rel, candidates)
+		count, latest := componentSet(&rel, candidates)
 		catalogShipped := s.catalogShipped(rel.Name)
 		overviews[i] = model.ReleaseOverview{
 			Release:        rel,
 			IssueSummary:   summary,
-			Readiness:      computeReadiness(&rel, summary, len(components.Components) > 0, catalogShipped),
-			ComponentCount: len(components.Components),
-			LatestBuild:    components.AsOf,
+			Readiness:      computeReadiness(&rel, summary, count > 0, catalogShipped),
+			ComponentCount: count,
+			LatestBuild:    latest,
 		}
 		switch {
 		case catalogShipped:

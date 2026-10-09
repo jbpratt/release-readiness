@@ -219,13 +219,13 @@ func TestRefreshPending(t *testing.T) {
 	}
 	want := []PendingBuild{
 		{
-			Group: "quay-3.18", Version: "3.18.1", Name: "quay-quay-container",
+			Version: "3.18.1", Name: "quay-quay-container",
 			NVR: "quay-quay-container-3.18.1-202610081800.p2.gbbbbbbb.assembly.stream.el9", RecordID: "rec-newer",
 			UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			StartedAt: time.Date(2026, 10, 8, 18, 0, 0, 0, time.UTC),
 		},
 		{
-			Group: "quay-3.18", Version: "3.18.2", Name: "quay-quay-container",
+			Version: "3.18.2", Name: "quay-quay-container",
 			NVR: "quay-quay-container-3.18.2-202610081700.p2.gccccccc.assembly.stream.el9", RecordID: "rec-z2",
 			UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: "cccccccccccccccccccccccccccccccccccccccc",
 			StartedAt: time.Date(2026, 10, 8, 17, 0, 0, 0, time.UTC),
@@ -256,7 +256,7 @@ func TestRefreshAttempts(t *testing.T) {
 		t.Fatalf("attempts: got %d, want the 8 image records", len(store.attempts))
 	}
 	want := Attempt{
-		Group: "quay-3.18", Version: "3.18.1", Name: "quay-operator-container",
+		Version: "3.18.1", Name: "quay-operator-container",
 		NVR: "quay-operator-container-3.18.1-202609300827.p2.g35cf767.assembly.stream.el9", RecordID: "7f4d8117-35dc-6c01-1e27-3b3d32a2fa8f",
 		Outcome: "success", ImageDigest: "sha256:bfd08ada78f2c19d7dc773f42fc53f5ceb649ff1c34da95e62fb73f0a15a6563",
 		StartedAt: time.Date(2026, 9, 30, 8, 36, 21, 0, time.UTC),

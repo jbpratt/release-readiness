@@ -58,10 +58,16 @@ func (s *Server) handleListReleaseProwRuns(w http.ResponseWriter, r *http.Reques
 		}
 		runs = slices.DeleteFunc(runs, func(run prow.Run) bool { return run.Tested(keys) })
 	}
+	syncs, err := s.db.ListProwSyncs(ctx)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
 	limit, offset := prowPage(r)
 	start := min(offset, len(runs))
-	runs = runs[start:min(start+limit, len(runs))]
-	s.writeProwRuns(w, r, runs, func(st prow.SyncState) bool { return st.Application == app })
+	resp := prowRunsResponse{Runs: runs[start:min(start+limit, len(runs))]}
+	resp.LastSuccessfulSync, resp.Stale = syncSummary(syncs, app)
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // handleListSnapshotProwRuns serves, per component of one release Snapshot,
@@ -84,7 +90,7 @@ func (s *Server) handleListSnapshotProwRuns(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	resp := snapshotProwRunsResponse{Components: map[string][]prow.Run{}}
-	resp.LastSuccessfulSync, resp.Stale = syncSummary(syncs, func(st prow.SyncState) bool { return st.Application == app })
+	resp.LastSuccessfulSync, resp.Stale = syncSummary(syncs, app)
 	for _, c := range snap.Components {
 		matched := []prow.Run{}
 		if k := prow.ComponentKey(snap.Application, c.Name, c.Image); k != "" {
@@ -100,34 +106,11 @@ func (s *Server) handleListSnapshotProwRuns(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (s *Server) handleListProwRunsByDigest(w http.ResponseWriter, r *http.Request) {
-	limit, offset := prowPage(r)
-	runs, err := s.db.ListProwRunsByDigest(r.Context(), r.PathValue("digest"), limit, offset)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	s.writeProwRuns(w, r, runs, func(st prow.SyncState) bool {
-		return slices.ContainsFunc(runs, func(run prow.Run) bool { return run.JobName == st.JobName })
-	})
-}
-
-func (s *Server) writeProwRuns(w http.ResponseWriter, r *http.Request, runs []prow.Run, include func(prow.SyncState) bool) {
-	syncs, err := s.db.ListProwSyncs(r.Context())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	resp := prowRunsResponse{Runs: runs}
-	resp.LastSuccessfulSync, resp.Stale = syncSummary(syncs, include)
-	writeJSON(w, http.StatusOK, resp)
-}
-
-// syncSummary returns the oldest last sync of the included jobs and whether
-// any of them has missed two poll intervals.
-func syncSummary(syncs []prow.SyncState, include func(prow.SyncState) bool) (last *time.Time, stale bool) {
+// syncSummary returns the oldest last sync of app's jobs and whether any of
+// them has missed two poll intervals.
+func syncSummary(syncs []prow.SyncState, app string) (last *time.Time, stale bool) {
 	for _, st := range syncs {
-		if !include(st) {
+		if st.Application != app {
 			continue
 		}
 		if last == nil || st.LastSuccessfulSync.Before(*last) {
