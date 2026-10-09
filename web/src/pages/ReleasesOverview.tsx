@@ -213,7 +213,7 @@ function ReleaseCard({
 
 	const builds =
 		componentCount > 0
-			? `${componentCount} components${latestBuild ? `, latest ${new Date(latestBuild).toLocaleDateString()}` : ""}`
+			? `${componentCount} ${componentCount === 1 ? "component" : "components"}${latestBuild ? `, stream snapshot ${new Date(latestBuild).toLocaleDateString()}` : ""}`
 			: "None yet";
 
 	const navigate = useNavigate();
