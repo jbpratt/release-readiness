@@ -56,7 +56,6 @@ func NewClient(kubeconfig string) (dynamic.Interface, error) {
 type Store interface {
 	SnapshotExistsByName(ctx context.Context, name string) (bool, error)
 	CreateSnapshot(ctx context.Context, application, name string, createdAt time.Time) (*model.SnapshotRecord, error)
-	EnsureComponent(ctx context.Context, name string) (*model.Component, error)
 	CreateSnapshotComponent(ctx context.Context, snapshotID int64, component, gitSHA, imageURL, gitURL string) error
 	UpsertKonfluxRelease(ctx context.Context, r *model.KonfluxRelease) error
 	UpsertStagedSnapshot(ctx context.Context, name, assembly, kind, env string, createdAt time.Time) error
@@ -220,9 +219,6 @@ func (s *Syncer) sync(ctx context.Context, obj *unstructured.Unstructured) error
 			return fmt.Errorf("create snapshot: %w", err)
 		}
 		for _, c := range snap.Components {
-			if _, err := tx.EnsureComponent(ctx, c.Name); err != nil {
-				return fmt.Errorf("ensure component %s: %w", c.Name, err)
-			}
 			if err := tx.CreateSnapshotComponent(ctx, rec.ID, c.Name, c.GitRevision, c.ContainerImage, c.GitURL); err != nil {
 				return fmt.Errorf("create snapshot component %s: %w", c.Name, err)
 			}

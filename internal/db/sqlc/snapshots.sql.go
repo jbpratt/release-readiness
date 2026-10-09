@@ -53,23 +53,6 @@ func (q *Queries) CreateSnapshotComponent(ctx context.Context, arg CreateSnapsho
 	return err
 }
 
-const getSnapshotByID = `-- name: GetSnapshotByID :one
-SELECT id, application, name, created_at
-FROM snapshots WHERE id = ?
-`
-
-func (q *Queries) GetSnapshotByID(ctx context.Context, id int64) (Snapshot, error) {
-	row := q.db.QueryRowContext(ctx, getSnapshotByID, id)
-	var i Snapshot
-	err := row.Scan(
-		&i.ID,
-		&i.Application,
-		&i.Name,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
 const getSnapshotRow = `-- name: GetSnapshotRow :one
 SELECT id, application, name, created_at
 FROM snapshots WHERE name = ?
@@ -127,8 +110,8 @@ func (q *Queries) ListAllSnapshots(ctx context.Context, arg ListAllSnapshotsPara
 }
 
 const listComponentCandidates = `-- name: ListComponentCandidates :many
-SELECT sc.id, sc.component, sc.git_sha, sc.image_url, sc.git_url,
-       s.id AS snapshot_id, s.application, s.name AS snapshot, s.created_at
+SELECT sc.id, sc.component, sc.image_url,
+       s.id AS snapshot_id, s.application, s.created_at
 FROM snapshot_components sc
 JOIN snapshots s ON s.id = sc.snapshot_id
 WHERE s.application IN (/*SLICE:applications*/?)
@@ -137,12 +120,9 @@ WHERE s.application IN (/*SLICE:applications*/?)
 type ListComponentCandidatesRow struct {
 	ID          int64
 	Component   string
-	GitSha      string
 	ImageUrl    string
-	GitUrl      string
 	SnapshotID  int64
 	Application string
-	Snapshot    string
 	CreatedAt   string
 }
 
@@ -168,12 +148,9 @@ func (q *Queries) ListComponentCandidates(ctx context.Context, applications []st
 		if err := rows.Scan(
 			&i.ID,
 			&i.Component,
-			&i.GitSha,
 			&i.ImageUrl,
-			&i.GitUrl,
 			&i.SnapshotID,
 			&i.Application,
-			&i.Snapshot,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

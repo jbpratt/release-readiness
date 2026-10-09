@@ -169,57 +169,6 @@ func (q *Queries) ListProwRunsByApplication(ctx context.Context, application str
 	return items, nil
 }
 
-const listProwRunsByDigest = `-- name: ListProwRunsByDigest :many
-SELECT job_name, build_id, kind, application, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at
-FROM prow_runs r
-WHERE EXISTS (
-    SELECT 1 FROM prow_run_images i
-    WHERE i.job_name = r.job_name AND i.build_id = r.build_id AND i.digest = ?
-)
-ORDER BY started_at DESC, build_id DESC LIMIT ? OFFSET ?
-`
-
-type ListProwRunsByDigestParams struct {
-	Digest string
-	Limit  int64
-	Offset int64
-}
-
-func (q *Queries) ListProwRunsByDigest(ctx context.Context, arg ListProwRunsByDigestParams) ([]ProwRun, error) {
-	rows, err := q.db.QueryContext(ctx, listProwRunsByDigest, arg.Digest, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ProwRun
-	for rows.Next() {
-		var i ProwRun
-		if err := rows.Scan(
-			&i.JobName,
-			&i.BuildID,
-			&i.Kind,
-			&i.Application,
-			&i.State,
-			&i.StartedAt,
-			&i.CompletedAt,
-			&i.ProwUrl,
-			&i.ArtifactState,
-			&i.CatalogRef,
-			&i.FetchedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listProwSyncs = `-- name: ListProwSyncs :many
 SELECT job_name, application, interval_seconds, last_successful_sync FROM prow_syncs
 `
