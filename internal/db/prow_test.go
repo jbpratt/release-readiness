@@ -18,7 +18,7 @@ func TestUpsertProwRunPendingToTerminal(t *testing.T) {
 
 	started := time.Date(2026, 10, 8, 16, 31, 9, 0, time.UTC)
 	run := &prow.Run{
-		JobName: "job", BuildID: "1", Kind: prow.KindPeriodic, Application: "quay-3-18",
+		JobName: "job", BuildID: "1", Application: "quay-3-18",
 		State: "pending", StartedAt: &started, ArtifactState: prow.ArtifactMissing,
 		FetchedAt: started, Images: []prow.Image{},
 	}

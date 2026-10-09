@@ -34,14 +34,6 @@ function When({ iso }: { iso: string | null }) {
 	);
 }
 
-function RehearsalLabel() {
-	return (
-		<Label color="purple" isCompact>
-			Rehearsal
-		</Label>
-	);
-}
-
 /** When the run's jobs were last listed, flagged once two polls were missed. */
 function ProwSyncNote({
 	sync,
@@ -89,7 +81,7 @@ function TestedImage({ run, digest }: { run: ProwRun; digest?: string }) {
 	);
 }
 
-/** Run history: date, job, kind, result, tested digest and Prow link. */
+/** Run history: date, job, result, tested digest and Prow link. */
 function ProwRunsTable({ runs, digest }: { runs: ProwRun[]; digest?: string }) {
 	return (
 		<Table variant="compact" aria-label="Prow runs">
@@ -97,7 +89,6 @@ function ProwRunsTable({ runs, digest }: { runs: ProwRun[]; digest?: string }) {
 				<Tr>
 					<Th>Date</Th>
 					<Th>Job</Th>
-					<Th>Kind</Th>
 					<Th>Result</Th>
 					<Th>{digest ? "Tested digest" : "Tested catalog"}</Th>
 					<Th screenReaderText="Prow link" />
@@ -110,7 +101,6 @@ function ProwRunsTable({ runs, digest }: { runs: ProwRun[]; digest?: string }) {
 							<When iso={runDate(r)} />
 						</Td>
 						<Td modifier="breakWord">{r.job_name}</Td>
-						<Td>{r.kind === "rehearsal" ? <RehearsalLabel /> : "Periodic"}</Td>
 						<Td>
 							<StatusLabel status={r.state || "unknown"} />
 						</Td>
@@ -131,10 +121,7 @@ function ProwRunsTable({ runs, digest }: { runs: ProwRun[]; digest?: string }) {
 	);
 }
 
-/**
- * Newest run that tested this exact image, opening its run history. A
- * rehearsal stands in only when no periodic run matched.
- */
+/** Newest run that tested this exact image, opening its run history. */
 export function ProwRunBadge({
 	component,
 	image,
@@ -147,7 +134,7 @@ export function ProwRunBadge({
 	sync: Pick<ProwRunsResponse, "last_successful_sync" | "stale">;
 }) {
 	const [open, setOpen] = useState(false);
-	const run = runs.find((r) => r.kind === "periodic") ?? runs[0];
+	const run = runs[0];
 	if (!run) {
 		return (
 			<span style={{ color: "var(--pf-t--global--text--color--subtle)" }}>
@@ -161,7 +148,6 @@ export function ProwRunBadge({
 			<Button variant="link" isInline onClick={() => setOpen(true)}>
 				<span style={{ whiteSpace: "nowrap" }}>
 					<StatusLabel status={run.state || "unknown"} />{" "}
-					{run.kind === "rehearsal" && <RehearsalLabel />}{" "}
 					{relative(runDate(run) ?? run.fetched_at)}
 				</span>
 			</Button>

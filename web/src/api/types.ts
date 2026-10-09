@@ -182,7 +182,6 @@ interface ProwImage {
 export interface ProwRun {
 	job_name: string;
 	build_id: string;
-	kind: "periodic" | "rehearsal";
 	application: string;
 	state: string;
 	started_at: string | null;
