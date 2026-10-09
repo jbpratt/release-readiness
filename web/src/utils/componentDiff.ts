@@ -3,7 +3,6 @@ import type { SnapshotImage } from "../api/types.ts";
 export const componentFields = {
 	nvr: "NVR",
 	digest: "digest",
-	build: "build SHA",
 	upstream: "upstream SHA",
 } as const;
 
@@ -14,7 +13,6 @@ function componentValues(c: SnapshotImage): Record<ComponentField, string> {
 	return {
 		nvr: c.art?.nvr ?? "",
 		digest: c.image.split("@")[1] ?? "",
-		build: c.git_sha,
 		upstream: c.art?.upstream_sha ?? "",
 	};
 }
