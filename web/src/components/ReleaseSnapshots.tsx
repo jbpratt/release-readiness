@@ -168,7 +168,7 @@ export function LatestSnapshot({
 				}}
 			>
 				<CardTitle>
-					Quay stream snapshot {application && <code>{application}</code>}
+					Stream snapshot {application && <code>{application}</code>}
 				</CardTitle>
 			</CardHeader>
 			<CardBody>
