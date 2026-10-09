@@ -148,8 +148,8 @@ type KonfluxRelease struct {
 	CompletionTime *time.Time `json:"completion_time,omitempty"`
 }
 
-// StagedSnapshots is the newest Konflux Snapshot of each kind that ART staged
-// for a release's assembly. Each is null when ART staged none.
+// StagedSnapshots is the newest image and quay-operator FBC Konflux Snapshot
+// that ART staged for a release's assembly. Each is null when ART staged none.
 type StagedSnapshots struct {
 	Assembly string          `json:"assembly"`
 	Image    *StagedSnapshot `json:"staged_image"`

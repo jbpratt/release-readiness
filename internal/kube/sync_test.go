@@ -110,7 +110,7 @@ func TestSyncReleases(t *testing.T) {
 	if err := database.UpsertStagedSnapshot(ctx, "unlabelled-r1-snap", "3.18.1", "image", "stage", created); err != nil {
 		t.Fatal(err)
 	}
-	if staged, err := database.LatestStagedSnapshot(ctx, "3.18.1", "image"); err != nil || staged.Release == nil || staged.Release.Name != "unlabelled-r1" {
+	if staged, err := database.LatestStagedSnapshot(ctx, "3.18.1", "image", ""); err != nil || staged.Release == nil || staged.Release.Name != "unlabelled-r1" {
 		t.Errorf("staged = %+v, %v; want Release unlabelled-r1", staged, err)
 	}
 
@@ -274,7 +274,7 @@ func TestSyncStagedSnapshots(t *testing.T) {
 	}
 	NewSyncer(client, testNamespace, database, withTx, slog.New(slog.NewTextHandler(io.Discard, nil))).SyncOnce(ctx)
 
-	got, err := database.LatestStagedSnapshot(ctx, "3.18.1", "image")
+	got, err := database.LatestStagedSnapshot(ctx, "3.18.1", "image", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,11 +312,19 @@ func TestSyncCatalogs(t *testing.T) {
 		newest = "quay.io/x/art-fbc@sha256:2e3"
 		cso    = "quay.io/x/art-fbc@sha256:c50"
 		failed = "quay.io/x/art-fbc@sha256:bad"
+		staged = "quay.io/x/art-fbc@sha256:5f0"
 	)
 	t0 := time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC)
 	operator := func(app, image string) map[string]any {
 		return component(app+"-quay-operator", image)
 	}
+	// Newer than fbc-3-18-new, but ART's stage fragment of the quay-operator catalog.
+	fragment := snapshot("quay-stage-3-18-1-fbc", "fbc-quay-3-18", t0.Add(90*time.Minute), operator("fbc-quay-3-18", staged))
+	fragment.SetAnnotations(map[string]string{
+		"art.redhat.com/assembly": "3.18.1",
+		"art.redhat.com/kind":     "fbc",
+		"art.redhat.com/env":      "stage",
+	})
 	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
 		map[schema.GroupVersionResource]string{snapshotGVR: "SnapshotList", releaseGVR: "ReleaseList"},
 		snapshot("fbc-3-18-old", "fbc-quay-3-18", t0, operator("fbc-quay-3-18", old)),
@@ -325,6 +333,7 @@ func TestSyncCatalogs(t *testing.T) {
 		snapshot("fbc-3-18-cso", "fbc-quay-3-18", t0.Add(2*time.Hour),
 			component("fbc-quay-3-18-container-security-operator", cso)),
 		snapshot("fbc-3-17-new", "fbc-quay-3-17", t0, operator("fbc-quay-3-17", failed)),
+		fragment,
 	)
 	bundle := fbc.Bundle{Package: fbc.Package, Channel: "stable-3.18", Name: "quay-operator.v3.18.1",
 		Image: "registry.redhat.io/quay/quay-operator-bundle@sha256:b24", Digest: "sha256:b24"}

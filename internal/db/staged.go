@@ -23,9 +23,10 @@ func (d *DB) UpsertStagedSnapshot(ctx context.Context, name, assembly, kind, env
 }
 
 // LatestStagedSnapshot returns the newest stage Snapshot of kind for assembly
-// with the newest Release naming it, or nil when there is none.
-func (d *DB) LatestStagedSnapshot(ctx context.Context, assembly, kind string) (*model.StagedSnapshot, error) {
-	row, err := d.queries().LatestStagedSnapshot(ctx, dbsqlc.LatestStagedSnapshotParams{Assembly: assembly, Kind: kind})
+// holding component, or of any component when it is empty, with the newest
+// Release naming it, or nil when there is none.
+func (d *DB) LatestStagedSnapshot(ctx context.Context, assembly, kind, component string) (*model.StagedSnapshot, error) {
+	row, err := d.queries().LatestStagedSnapshot(ctx, dbsqlc.LatestStagedSnapshotParams{Assembly: assembly, Kind: kind, Component: component})
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
