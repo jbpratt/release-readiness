@@ -44,7 +44,8 @@ func (s *Server) handleListReleaseProwRuns(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if r.URL.Query().Get("unlinked") == "true" {
+	q := r.URL.Query()
+	if q.Get("unlinked") == "true" {
 		candidates, err := s.db.ListComponentCandidates(ctx, releaseview.Applications(app))
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err)
@@ -63,9 +64,13 @@ func (s *Server) handleListReleaseProwRuns(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	limit, offset := prowPage(r)
-	start := min(offset, len(runs))
-	resp := prowRunsResponse{Runs: runs[start:min(start+limit, len(runs))]}
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 {
+		limit = 50
+	}
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	start := min(max(offset, 0), len(runs))
+	resp := prowRunsResponse{Runs: runs[start:min(start+min(limit, 200), len(runs))]}
 	resp.LastSuccessfulSync, resp.Stale = syncSummary(syncs, app)
 	writeJSON(w, http.StatusOK, resp)
 }
@@ -121,14 +126,4 @@ func syncSummary(syncs []prow.SyncState, app string) (last *time.Time, stale boo
 		}
 	}
 	return last, stale
-}
-
-func prowPage(r *http.Request) (limit, offset int) {
-	q := r.URL.Query()
-	limit, _ = strconv.Atoi(q.Get("limit"))
-	offset, _ = strconv.Atoi(q.Get("offset"))
-	if limit <= 0 {
-		limit = 50
-	}
-	return min(limit, 200), max(offset, 0)
 }
