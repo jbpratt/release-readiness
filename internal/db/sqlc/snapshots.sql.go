@@ -30,26 +30,18 @@ func (q *Queries) CreateSnapshot(ctx context.Context, arg CreateSnapshotParams) 
 }
 
 const createSnapshotComponent = `-- name: CreateSnapshotComponent :exec
-INSERT INTO snapshot_components (snapshot_id, component, git_sha, image_url, git_url)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO snapshot_components (snapshot_id, component, image_url)
+VALUES (?, ?, ?)
 `
 
 type CreateSnapshotComponentParams struct {
 	SnapshotID int64
 	Component  string
-	GitSha     string
 	ImageUrl   string
-	GitUrl     string
 }
 
 func (q *Queries) CreateSnapshotComponent(ctx context.Context, arg CreateSnapshotComponentParams) error {
-	_, err := q.db.ExecContext(ctx, createSnapshotComponent,
-		arg.SnapshotID,
-		arg.Component,
-		arg.GitSha,
-		arg.ImageUrl,
-		arg.GitUrl,
-	)
+	_, err := q.db.ExecContext(ctx, createSnapshotComponent, arg.SnapshotID, arg.Component, arg.ImageUrl)
 	return err
 }
 
@@ -68,45 +60,6 @@ func (q *Queries) GetSnapshotRow(ctx context.Context, name string) (Snapshot, er
 		&i.CreatedAt,
 	)
 	return i, err
-}
-
-const listAllSnapshots = `-- name: ListAllSnapshots :many
-SELECT id, application, name, created_at
-FROM snapshots
-ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
-`
-
-type ListAllSnapshotsParams struct {
-	Limit  int64
-	Offset int64
-}
-
-func (q *Queries) ListAllSnapshots(ctx context.Context, arg ListAllSnapshotsParams) ([]Snapshot, error) {
-	rows, err := q.db.QueryContext(ctx, listAllSnapshots, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Snapshot
-	for rows.Next() {
-		var i Snapshot
-		if err := rows.Scan(
-			&i.ID,
-			&i.Application,
-			&i.Name,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const listComponentCandidates = `-- name: ListComponentCandidates :many
@@ -266,7 +219,7 @@ func (q *Queries) ListReleaseSnapshots(ctx context.Context, arg ListReleaseSnaps
 }
 
 const listSnapshotComponents = `-- name: ListSnapshotComponents :many
-SELECT id, snapshot_id, component, git_sha, image_url, git_url
+SELECT id, snapshot_id, component, image_url
 FROM snapshot_components
 WHERE snapshot_id = ?
 ORDER BY component
@@ -285,50 +238,7 @@ func (q *Queries) ListSnapshotComponents(ctx context.Context, snapshotID int64) 
 			&i.ID,
 			&i.SnapshotID,
 			&i.Component,
-			&i.GitSha,
 			&i.ImageUrl,
-			&i.GitUrl,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSnapshotsByApplication = `-- name: ListSnapshotsByApplication :many
-SELECT id, application, name, created_at
-FROM snapshots
-WHERE application = ?
-ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?
-`
-
-type ListSnapshotsByApplicationParams struct {
-	Application string
-	Limit       int64
-	Offset      int64
-}
-
-func (q *Queries) ListSnapshotsByApplication(ctx context.Context, arg ListSnapshotsByApplicationParams) ([]Snapshot, error) {
-	rows, err := q.db.QueryContext(ctx, listSnapshotsByApplication, arg.Application, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Snapshot
-	for rows.Next() {
-		var i Snapshot
-		if err := rows.Scan(
-			&i.ID,
-			&i.Application,
-			&i.Name,
-			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

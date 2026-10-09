@@ -17,7 +17,6 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 
 	"github.com/quay/release-readiness/internal/fbc"
-	"github.com/quay/release-readiness/internal/konflux"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
@@ -55,8 +54,8 @@ func NewClient(kubeconfig string) (dynamic.Interface, error) {
 // Store is the subset of the database layer needed by the Konflux syncer.
 type Store interface {
 	SnapshotExistsByName(ctx context.Context, name string) (bool, error)
-	CreateSnapshot(ctx context.Context, application, name string, createdAt time.Time) (*model.SnapshotRecord, error)
-	CreateSnapshotComponent(ctx context.Context, snapshotID int64, component, gitSHA, imageURL, gitURL string) error
+	CreateSnapshot(ctx context.Context, application, name string, createdAt time.Time) (id int64, err error)
+	CreateSnapshotComponent(ctx context.Context, snapshotID int64, component, imageURL string) error
 	UpsertKonfluxRelease(ctx context.Context, r *model.KonfluxRelease) error
 	UpsertStagedSnapshot(ctx context.Context, name, assembly, kind, env string, createdAt time.Time) error
 	ListFBCCatalogCandidates(ctx context.Context, retryBefore time.Time, limit int) ([]string, error)
@@ -201,7 +200,13 @@ func (s *Syncer) sync(ctx context.Context, obj *unstructured.Unstructured) error
 	if err != nil {
 		return fmt.Errorf("read spec: %w", err)
 	}
-	var spec konflux.SnapshotSpec
+	var spec struct {
+		Application string `json:"application"`
+		Components  []struct {
+			Name           string `json:"name"`
+			ContainerImage string `json:"containerImage"`
+		} `json:"components"`
+	}
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(specMap, &spec); err != nil {
 		return fmt.Errorf("decode spec: %w", err)
 	}
@@ -210,16 +215,15 @@ func (s *Syncer) sync(ctx context.Context, obj *unstructured.Unstructured) error
 		return nil
 	}
 
-	snap := konflux.Convert(spec, name)
-	s.logger.Info("new snapshot", "snapshot", name, "application", snap.Application)
+	s.logger.Info("new snapshot", "snapshot", name, "application", spec.Application)
 
 	return s.withTx(ctx, func(tx Store) error {
-		rec, err := tx.CreateSnapshot(ctx, snap.Application, snap.Snapshot, obj.GetCreationTimestamp().UTC())
+		id, err := tx.CreateSnapshot(ctx, spec.Application, name, obj.GetCreationTimestamp().UTC())
 		if err != nil {
 			return fmt.Errorf("create snapshot: %w", err)
 		}
-		for _, c := range snap.Components {
-			if err := tx.CreateSnapshotComponent(ctx, rec.ID, c.Name, c.GitRevision, c.ContainerImage, c.GitURL); err != nil {
+		for _, c := range spec.Components {
+			if err := tx.CreateSnapshotComponent(ctx, id, c.Name, c.ContainerImage); err != nil {
 				return fmt.Errorf("create snapshot component %s: %w", c.Name, err)
 			}
 		}

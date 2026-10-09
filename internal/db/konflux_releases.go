@@ -24,31 +24,6 @@ func (d *DB) UpsertKonfluxRelease(ctx context.Context, r *model.KonfluxRelease) 
 	})
 }
 
-func (d *DB) ListKonfluxReleases(ctx context.Context, application string, limit, offset int) ([]model.KonfluxRelease, error) {
-	var rows []dbsqlc.KonfluxRelease
-	var err error
-	if application != "" {
-		rows, err = d.queries().ListKonfluxReleasesByApplication(ctx, dbsqlc.ListKonfluxReleasesByApplicationParams{
-			Application: application,
-			Limit:       int64(limit),
-			Offset:      int64(offset),
-		})
-	} else {
-		rows, err = d.queries().ListAllKonfluxReleases(ctx, dbsqlc.ListAllKonfluxReleasesParams{
-			Limit:  int64(limit),
-			Offset: int64(offset),
-		})
-	}
-	if err != nil {
-		return nil, err
-	}
-	releases := make([]model.KonfluxRelease, len(rows))
-	for i, r := range rows {
-		releases[i] = toKonfluxRelease(r)
-	}
-	return releases, nil
-}
-
 func toKonfluxRelease(r dbsqlc.KonfluxRelease) model.KonfluxRelease {
 	return model.KonfluxRelease{
 		Name:           r.Name,

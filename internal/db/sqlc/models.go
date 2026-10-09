@@ -139,9 +139,7 @@ type SnapshotComponent struct {
 	ID         int64
 	SnapshotID int64
 	Component  string
-	GitSha     string
 	ImageUrl   string
-	GitUrl     string
 }
 
 type StagedSnapshot struct {

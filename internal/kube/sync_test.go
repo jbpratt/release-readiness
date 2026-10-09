@@ -40,12 +40,8 @@ func snapshot(name, application string, created time.Time, components ...map[str
 	return u
 }
 
-func component(name, image, url, revision string) map[string]any {
-	return map[string]any{
-		"name":           name,
-		"containerImage": image,
-		"source":         map[string]any{"git": map[string]any{"url": url, "revision": revision}},
-	}
+func component(name, image string) map[string]any {
+	return map[string]any{"name": name, "containerImage": image}
 }
 
 func release(name, application string, created time.Time, released map[string]any) *unstructured.Unstructured {
@@ -66,6 +62,21 @@ func release(name, application string, created time.Time, released map[string]an
 	return u
 }
 
+// releases returns the Releases the release view serves with application's
+// Snapshots, newest first.
+func releases(t *testing.T, d *db.DB, application string) []model.KonfluxRelease {
+	t.Helper()
+	snaps, err := d.ListReleaseSnapshots(context.Background(), application, []string{application}, false, 10, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []model.KonfluxRelease
+	for _, s := range snaps {
+		out = append(out, s.Releases...)
+	}
+	return out
+}
+
 func TestSyncReleases(t *testing.T) {
 	ctx := context.Background()
 	created := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
@@ -83,10 +94,7 @@ func TestSyncReleases(t *testing.T) {
 	s := NewSyncer(client, testNamespace, database, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	s.SyncOnce(ctx)
 
-	got, err := database.ListKonfluxReleases(ctx, "fbc-quay-3-18", 10, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := releases(t, database, "fbc-quay-3-18")
 	want := model.KonfluxRelease{
 		Name: "fbc-quay-3-18-r1", Application: "fbc-quay-3-18", Snapshot: "fbc-quay-3-18-r1-snap", ReleasePlan: "plan",
 		ReleasedStatus: "Unknown", ReleasedReason: "Progressing", CreatedAt: created,
@@ -98,8 +106,12 @@ func TestSyncReleases(t *testing.T) {
 	if got[0] != want {
 		t.Errorf("release = %+v, want %+v", got[0], want)
 	}
-	if unlabelled, _ := database.ListKonfluxReleases(ctx, "", 10, 0); len(unlabelled) != 2 {
-		t.Errorf("all releases = %d, want 2", len(unlabelled))
+	// The staged view finds a Release by Snapshot name alone, so an unlabelled one is stored too.
+	if err := database.UpsertStagedSnapshot(ctx, "unlabelled-r1-snap", "3.18.1", "image", "stage", created); err != nil {
+		t.Fatal(err)
+	}
+	if staged, err := database.LatestStagedSnapshot(ctx, "3.18.1", "image"); err != nil || staged.Release == nil || staged.Release.Name != "unlabelled-r1" {
+		t.Errorf("staged = %+v, %v; want Release unlabelled-r1", staged, err)
 	}
 
 	done := release("fbc-quay-3-18-r1", "fbc-quay-3-18", created,
@@ -111,10 +123,7 @@ func TestSyncReleases(t *testing.T) {
 	}
 	s.SyncOnce(ctx)
 
-	got, err = database.ListKonfluxReleases(ctx, "fbc-quay-3-18", 10, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got = releases(t, database, "fbc-quay-3-18")
 	if len(got) != 1 || got[0].ReleasedStatus != "True" || got[0].ReleasedReason != "Succeeded" ||
 		got[0].CompletionTime == nil || !got[0].CompletionTime.Equal(completed) {
 		t.Errorf("after update = %+v", got)
@@ -155,9 +164,9 @@ func TestSyncReleaseFailedTask(t *testing.T) {
 				map[schema.GroupVersionResource]string{snapshotGVR: "SnapshotList", releaseGVR: "ReleaseList"}, r)
 			NewSyncer(client, testNamespace, database, nil, slog.New(slog.NewTextHandler(io.Discard, nil))).SyncOnce(ctx)
 
-			got, err := database.ListKonfluxReleases(ctx, "quay-3-18", 10, 0)
-			if err != nil || len(got) != 1 {
-				t.Fatalf("releases = %+v, %v", got, err)
+			got := releases(t, database, "quay-3-18")
+			if len(got) != 1 {
+				t.Fatalf("releases = %+v", got)
 			}
 			if got[0].FailedTask != tc.task || got[0].FailedStep != tc.step {
 				t.Errorf("failed = %q/%q, want %q/%q", got[0].FailedTask, got[0].FailedStep, tc.task, tc.step)
@@ -179,10 +188,10 @@ func TestSyncOnce(t *testing.T) {
 	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
 		map[schema.GroupVersionResource]string{snapshotGVR: "SnapshotList", releaseGVR: "ReleaseList"},
 		snapshot("quay-3-18-abc", "quay-3-18", created1,
-			component("quay", "quay.io/quay/quay@sha256:1", "https://github.com/quay/quay", "aaa"),
-			component("clair", "quay.io/quay/clair@sha256:2", "https://github.com/quay/clair", "bbb")),
+			component("quay", "quay.io/quay/quay@sha256:1"),
+			component("clair", "quay.io/quay/clair@sha256:2")),
 		snapshot("fbc-quay-3-18-def", "fbc-quay-3-18", created2,
-			component("fbc", "quay.io/quay/fbc@sha256:3", "https://github.com/quay/fbc", "ccc")),
+			component("fbc", "quay.io/quay/fbc@sha256:3")),
 		snapshot("orphan", "", created2),
 	)
 
@@ -192,22 +201,22 @@ func TestSyncOnce(t *testing.T) {
 	s := NewSyncer(client, testNamespace, database, withTx, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	s.SyncOnce(ctx)
 
-	got, err := database.GetSnapshotByName(ctx, "quay-3-18-abc")
+	got, err := database.GetReleaseSnapshot(ctx, "quay-3-18-abc")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Application != "quay-3-18" || !got.CreatedAt.Equal(created1) {
 		t.Errorf("quay-3-18-abc = app %q created %v", got.Application, got.CreatedAt)
 	}
-	shas := map[string]string{}
+	images := map[string]string{}
 	for _, c := range got.Components {
-		shas[c.Component] = c.GitSHA
+		images[c.Name] = c.Image
 	}
-	if len(shas) != 2 || shas["quay"] != "aaa" || shas["clair"] != "bbb" {
+	if len(images) != 2 || images["quay"] != "quay.io/quay/quay@sha256:1" || images["clair"] != "quay.io/quay/clair@sha256:2" {
 		t.Errorf("components = %+v", got.Components)
 	}
 
-	got, err = database.GetSnapshotByName(ctx, "fbc-quay-3-18-def")
+	got, err = database.GetReleaseSnapshot(ctx, "fbc-quay-3-18-def")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +230,7 @@ func TestSyncOnce(t *testing.T) {
 
 	s.SyncOnce(ctx)
 	for _, app := range []string{"quay-3-18", "fbc-quay-3-18"} {
-		snaps, err := database.ListSnapshots(ctx, app, 10, 0)
+		snaps, err := database.ListReleaseSnapshots(ctx, app, []string{app}, false, 10, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -306,7 +315,7 @@ func TestSyncCatalogs(t *testing.T) {
 	)
 	t0 := time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC)
 	operator := func(app, image string) map[string]any {
-		return component(app+"-quay-operator", image, "https://github.com/quay/quay-operator", "abc")
+		return component(app+"-quay-operator", image)
 	}
 	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
 		map[schema.GroupVersionResource]string{snapshotGVR: "SnapshotList", releaseGVR: "ReleaseList"},
@@ -314,7 +323,7 @@ func TestSyncCatalogs(t *testing.T) {
 		snapshot("fbc-3-18-new", "fbc-quay-3-18", t0.Add(time.Hour), operator("fbc-quay-3-18", newest)),
 		// The newest FBC Snapshot overall is another operator's.
 		snapshot("fbc-3-18-cso", "fbc-quay-3-18", t0.Add(2*time.Hour),
-			component("fbc-quay-3-18-container-security-operator", cso, "", "")),
+			component("fbc-quay-3-18-container-security-operator", cso)),
 		snapshot("fbc-3-17-new", "fbc-quay-3-17", t0, operator("fbc-quay-3-17", failed)),
 	)
 	bundle := fbc.Bundle{Package: fbc.Package, Channel: "stable-3.18", Name: "quay-operator.v3.18.1",

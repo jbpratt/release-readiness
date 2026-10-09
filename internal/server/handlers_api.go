@@ -225,7 +225,6 @@ func (s *Server) attachArtBuilds(ctx context.Context, snap *model.ReleaseSnapsho
 			UpstreamRepo: b.UpstreamRepo,
 			UpstreamSHA:  b.UpstreamSHA,
 		}
-		// Compare upstream commits: git_sha is ART's rebase-fork commit.
 		name, version := artbuild.SplitNVR(b.NVR)
 		j := slices.IndexFunc(pending, func(p artbuild.PendingBuild) bool { return p.Name == name && p.Version == version })
 		if j < 0 || b.UpstreamSHA == "" {

@@ -10,25 +10,14 @@ SELECT id, application, name, created_at
 FROM snapshots WHERE name = ?;
 
 -- name: CreateSnapshotComponent :exec
-INSERT INTO snapshot_components (snapshot_id, component, git_sha, image_url, git_url)
-VALUES (?, ?, ?, ?, ?);
+INSERT INTO snapshot_components (snapshot_id, component, image_url)
+VALUES (?, ?, ?);
 
 -- name: ListSnapshotComponents :many
-SELECT id, snapshot_id, component, git_sha, image_url, git_url
+SELECT id, snapshot_id, component, image_url
 FROM snapshot_components
 WHERE snapshot_id = ?
 ORDER BY component;
-
--- name: ListAllSnapshots :many
-SELECT id, application, name, created_at
-FROM snapshots
-ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?;
-
--- name: ListSnapshotsByApplication :many
-SELECT id, application, name, created_at
-FROM snapshots
-WHERE application = ?
-ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?;
 
 -- name: ListComponentCandidates :many
 SELECT sc.id, sc.component, sc.image_url,
