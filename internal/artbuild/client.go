@@ -29,7 +29,6 @@ type searchBuild struct {
 	Name          string `json:"name"`
 	Outcome       string `json:"outcome"`
 	Commitish     string `json:"commitish"`
-	SourceRepo    string `json:"source_repo"`
 	StartTime     string `json:"start_time"`
 	Type          string `json:"type"`
 }
@@ -41,8 +40,6 @@ type record struct {
 	ImagePullspec    string `json:"image_pullspec"`
 	Commitish        string `json:"commitish"`
 	SourceRepo       string `json:"source_repo"`
-	RebaseCommitish  string `json:"rebase_commitish"`
-	RebaseRepoURL    string `json:"rebase_repo_url"`
 	BuildPipelineURL string `json:"build_pipeline_url"`
 }
 

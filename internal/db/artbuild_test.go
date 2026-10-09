@@ -133,15 +133,14 @@ func TestArtBuildAttempts(t *testing.T) {
 	ctx := t.Context()
 
 	const (
-		group  = "quay-3.18"
-		quay   = "quay-quay-container-3.18.1-202610010000.p2.gaaaaaaa.assembly.stream.el9"
-		clair  = "quay-clair-container-3.18.1-202610020000.p2.gbbbbbbb.assembly.stream.el9"
-		digest = "sha256:aaaa"
+		group = "quay-3.18"
+		quay  = "quay-quay-container-3.18.1-202610010000.p2.gaaaaaaa.assembly.stream.el9"
+		clair = "quay-clair-container-3.18.1-202610020000.p2.gbbbbbbb.assembly.stream.el9"
 	)
 	t0 := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
-	attempt := func(nvr, rec, outcome, digest string, started time.Time) artbuild.Attempt {
+	attempt := func(nvr, rec, outcome string, started time.Time) artbuild.Attempt {
 		name, version := artbuild.SplitNVR(nvr)
-		return artbuild.Attempt{Version: version, Name: name, NVR: nvr, RecordID: rec, Outcome: outcome, ImageDigest: digest, StartedAt: started}
+		return artbuild.Attempt{Version: version, Name: name, NVR: nvr, RecordID: rec, Outcome: outcome, StartedAt: started}
 	}
 	store := func(from, to time.Time, attempts ...artbuild.Attempt) {
 		t.Helper()
@@ -169,15 +168,15 @@ func TestArtBuildAttempts(t *testing.T) {
 	// clair's pending record is updated in place; quay's finishes as a
 	// second record of its NVR, which replaces the pending one.
 	store(t0.Add(-7*24*time.Hour), t0.Add(time.Hour),
-		attempt(quay, "q-pending", "pending", "", t0),
-		attempt(clair, "c-1", "pending", "", t0.Add(30*time.Minute)))
+		attempt(quay, "q-pending", "pending", t0),
+		attempt(clair, "c-1", "pending", t0.Add(30*time.Minute)))
 	if got, want := list(), []string{"c-1:pending", "q-pending:pending"}; !slices.Equal(got, want) {
 		t.Errorf("first pass: got %v, want %v", got, want)
 	}
 	store(t0.Add(-6*24*time.Hour), t0.Add(2*time.Hour),
-		attempt(quay, "q-pending", "pending", "", t0),
-		attempt(quay, "q-done", "success", digest, t0.Add(time.Minute)),
-		attempt(clair, "c-1", "build_error", "", t0.Add(30*time.Minute)))
+		attempt(quay, "q-pending", "pending", t0),
+		attempt(quay, "q-done", "success", t0.Add(time.Minute)),
+		attempt(clair, "c-1", "build_error", t0.Add(30*time.Minute)))
 	if got, want := list(), []string{"c-1:build_error", "q-done:success"}; !slices.Equal(got, want) {
 		t.Errorf("second pass: got %v, want %v", got, want)
 	}
@@ -189,7 +188,7 @@ func TestArtBuildAttempts(t *testing.T) {
 	// A window starting after the covered span ends leaves a gap: the span
 	// restarts, and attempts before it are no longer known complete.
 	gapFrom := t0.Add(10 * 24 * time.Hour)
-	store(gapFrom, gapFrom.Add(7*24*time.Hour), attempt(quay, "q-late", "build_error", "", gapFrom.Add(time.Hour)))
+	store(gapFrom, gapFrom.Add(7*24*time.Hour), attempt(quay, "q-late", "build_error", gapFrom.Add(time.Hour)))
 	if from, _, _, _ := d.ArtBuildCoverage(ctx, group); !from.Equal(gapFrom) {
 		t.Errorf("coverage after a gap starts %v, want %v", from, gapFrom)
 	}

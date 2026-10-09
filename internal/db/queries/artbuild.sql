@@ -1,14 +1,12 @@
 -- name: UpsertArtBuild :exec
-INSERT INTO art_builds (digest, state, nvr, record_id, upstream_repo, upstream_sha, rebase_repo, rebase_sha, pipeline_url, checked_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO art_builds (digest, state, nvr, record_id, upstream_repo, upstream_sha, pipeline_url, checked_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(digest) DO UPDATE SET
     state = excluded.state,
     nvr = excluded.nvr,
     record_id = excluded.record_id,
     upstream_repo = excluded.upstream_repo,
     upstream_sha = excluded.upstream_sha,
-    rebase_repo = excluded.rebase_repo,
-    rebase_sha = excluded.rebase_sha,
     pipeline_url = excluded.pipeline_url,
     checked_at = excluded.checked_at;
 
@@ -32,7 +30,7 @@ ORDER BY last_seen DESC
 LIMIT ?;
 
 -- name: ListResolvedArtBuilds :many
-SELECT digest, state, nvr, record_id, upstream_repo, upstream_sha, rebase_repo, rebase_sha, pipeline_url, checked_at
+SELECT digest, state, nvr, record_id, upstream_repo, upstream_sha, pipeline_url, checked_at
 FROM art_builds
 WHERE state = 'resolved' AND digest IN (sqlc.slice('digests'));
 
@@ -46,22 +44,21 @@ ORDER BY konflux_application;
 DELETE FROM art_pending_builds WHERE group_name = ?;
 
 -- name: InsertArtPendingBuild :exec
-INSERT INTO art_pending_builds (group_name, release_version, component, nvr, record_id, upstream_sha, upstream_repo, started_at, checked_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO art_pending_builds (group_name, release_version, component, nvr, record_id, upstream_sha, started_at, checked_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: ListArtPendingBuilds :many
 -- Pending builds of the given versions from a search no older than checked_at.
-SELECT group_name, release_version, component, nvr, record_id, upstream_sha, upstream_repo, started_at, checked_at
+SELECT group_name, release_version, component, nvr, record_id, upstream_sha, started_at, checked_at
 FROM art_pending_builds
 WHERE checked_at >= ? AND release_version IN (sqlc.slice('versions'));
 
 -- name: UpsertArtBuildAttempt :exec
-INSERT INTO art_build_attempts (group_name, record_id, release_version, component, nvr, outcome, start_time, image_digest, first_seen, last_seen)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO art_build_attempts (group_name, record_id, release_version, component, nvr, outcome, start_time, first_seen, last_seen)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(group_name, record_id) DO UPDATE SET
     outcome = excluded.outcome,
     start_time = excluded.start_time,
-    image_digest = excluded.image_digest,
     last_seen = excluded.last_seen;
 
 -- name: UpsertArtBuildCoverage :exec

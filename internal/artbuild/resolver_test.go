@@ -117,8 +117,6 @@ func TestResolveMatch(t *testing.T) {
 		RecordID:     "7f4d8117-35dc-6c01-1e27-3b3d32a2fa8f",
 		UpstreamRepo: "https://github.com/quay/quay-operator",
 		UpstreamSHA:  "35cf767efc3b4e7bebc7802afcf12b60cd343bc0",
-		RebaseRepo:   "https://github.com/openshift-priv/quay-quay-operator",
-		RebaseSHA:    "0395c7827e3d5a47b3757abc376275e2139923cf",
 		PipelineURL:  "https://konflux-ui.apps.kflux-ocp-p01.7ayg.p1.openshiftapps.com/ns/art-quay-tenant/applications/quay-3-18/pipelineruns/quay-3-18-quay-operator-sjpkg",
 	}
 	b.CheckedAt = time.Time{}
@@ -221,14 +219,14 @@ func TestRefreshPending(t *testing.T) {
 		{
 			Version: "3.18.1", Name: "quay-quay-container",
 			NVR: "quay-quay-container-3.18.1-202610081800.p2.gbbbbbbb.assembly.stream.el9", RecordID: "rec-newer",
-			UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-			StartedAt: time.Date(2026, 10, 8, 18, 0, 0, 0, time.UTC),
+			UpstreamSHA: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			StartedAt:   time.Date(2026, 10, 8, 18, 0, 0, 0, time.UTC),
 		},
 		{
 			Version: "3.18.2", Name: "quay-quay-container",
 			NVR: "quay-quay-container-3.18.2-202610081700.p2.gccccccc.assembly.stream.el9", RecordID: "rec-z2",
-			UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: "cccccccccccccccccccccccccccccccccccccccc",
-			StartedAt: time.Date(2026, 10, 8, 17, 0, 0, 0, time.UTC),
+			UpstreamSHA: "cccccccccccccccccccccccccccccccccccccccc",
+			StartedAt:   time.Date(2026, 10, 8, 17, 0, 0, 0, time.UTC),
 		},
 	}
 	if got, ok := store.pending["quay-3.18"]; !ok || !slices.Equal(got, want) {
@@ -258,7 +256,7 @@ func TestRefreshAttempts(t *testing.T) {
 	want := Attempt{
 		Version: "3.18.1", Name: "quay-operator-container",
 		NVR: "quay-operator-container-3.18.1-202609300827.p2.g35cf767.assembly.stream.el9", RecordID: "7f4d8117-35dc-6c01-1e27-3b3d32a2fa8f",
-		Outcome: "success", ImageDigest: "sha256:bfd08ada78f2c19d7dc773f42fc53f5ceb649ff1c34da95e62fb73f0a15a6563",
+		Outcome:   "success",
 		StartedAt: time.Date(2026, 9, 30, 8, 36, 21, 0, time.UTC),
 	}
 	if !slices.Contains(store.attempts, want) {

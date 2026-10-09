@@ -28,15 +28,6 @@ FROM prow_runs
 WHERE application = ?
 ORDER BY started_at DESC, build_id DESC;
 
--- name: ListProwRunsByDigest :many
-SELECT job_name, build_id, kind, application, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at
-FROM prow_runs r
-WHERE EXISTS (
-    SELECT 1 FROM prow_run_images i
-    WHERE i.job_name = r.job_name AND i.build_id = r.build_id AND i.digest = ?
-)
-ORDER BY started_at DESC, build_id DESC LIMIT ? OFFSET ?;
-
 -- name: ListProwRunImages :many
 SELECT role, source, requested_ref, digest, image_id
 FROM prow_run_images
