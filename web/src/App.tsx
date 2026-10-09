@@ -110,12 +110,15 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 					<ToolbarContent>
 						<ToolbarItem align={{ default: "alignEnd" }}>
 							<SyncStatusWarning />
+						</ToolbarItem>
+						<ToolbarItem>
 							<Button
 								component="a"
-								variant="link"
+								variant="plain"
 								href={ART_PIPELINES_HEALTH_URL}
 								target="_blank"
 								rel="noopener noreferrer"
+								aria-label="ART pipelines health (opens in a new tab)"
 								icon={<ExternalLinkAltIcon />}
 								iconPosition="end"
 							>
