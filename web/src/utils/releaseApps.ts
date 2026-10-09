@@ -23,10 +23,15 @@ export function snapshotFilters(konfluxApp?: string): SnapshotFilter[] {
 	];
 }
 
-/** The Snapshot named by the newest succeeded Konflux Release among snapshots. */
+/**
+ * The ART image build named by the newest succeeded Konflux Release among
+ * snapshots. ART also releases an operator bundle's related images
+ * (fbc-ri-stage-*) through the builds' stage plan; those are not a build.
+ */
 export function latestReleased(snapshots: ReleaseSnapshot[]) {
 	let newest: { snapshot: ReleaseSnapshot; at: string } | undefined;
 	for (const snapshot of snapshots) {
+		if (snapshot.art_kind !== "image") continue;
 		for (const r of snapshot.releases ?? []) {
 			if (r.released_status === "True" && (!newest || r.created_at > newest.at))
 				newest = { snapshot, at: r.created_at };

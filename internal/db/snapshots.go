@@ -98,6 +98,7 @@ func (d *DB) ListReleaseSnapshots(ctx context.Context, konfluxApp string, apps [
 			CreatedAt:      parseTime(r.CreatedAt),
 			ComponentCount: int(r.ComponentCount),
 			Missing:        r.Missing == 1,
+			ArtKind:        r.ArtKind,
 		}
 	}
 	if err := d.attachKonfluxReleases(ctx, snapshots); err != nil {

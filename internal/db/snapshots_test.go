@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestSnapshotsOrderedByCreatedAt(t *testing.T) {
+func TestListReleaseSnapshots(t *testing.T) {
 	d, err := Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -23,6 +23,9 @@ func TestSnapshotsOrderedByCreatedAt(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if err := d.UpsertStagedSnapshot(ctx, "middle", "3.18.1", "image", "stage", base); err != nil {
+		t.Fatal(err)
+	}
 
 	snaps, err := d.ListReleaseSnapshots(ctx, "quay-3-18", []string{"quay-3-18"}, false, 10, 0)
 	if err != nil {
@@ -30,9 +33,9 @@ func TestSnapshotsOrderedByCreatedAt(t *testing.T) {
 	}
 	var got []string
 	for _, s := range snaps {
-		got = append(got, s.Name)
+		got = append(got, s.Name+":"+s.ArtKind)
 	}
-	if want := []string{"newest", "middle", "oldest"}; !slices.Equal(got, want) {
+	if want := []string{"newest:", "middle:image", "oldest:"}; !slices.Equal(got, want) {
 		t.Errorf("snapshots = %v, want %v", got, want)
 	}
 }

@@ -50,13 +50,16 @@ type ReleaseSnapshotPage struct {
 
 // ReleaseSnapshot is one Konflux Snapshot of a release's applications with the
 // Konflux Releases that name it. Missing marks a Snapshot a Release names that
-// is no longer stored; its CreatedAt is then the oldest Release's.
+// is no longer stored; its CreatedAt is then the oldest Release's. ArtKind is
+// the art.redhat.com/kind (image or fbc) of a Snapshot ART built for an
+// assembly; only lists set it.
 type ReleaseSnapshot struct {
 	Application    string           `json:"-"`
 	Name           string           `json:"name"`
 	CreatedAt      time.Time        `json:"created_at"`
 	ComponentCount int              `json:"component_count"`
 	Missing        bool             `json:"missing,omitempty"`
+	ArtKind        string           `json:"art_kind,omitempty"`
 	Releases       []KonfluxRelease `json:"releases,omitempty"`
 	Components     []SnapshotImage  `json:"components,omitempty"`
 	FBCCatalog     *FBCCatalog      `json:"fbc_catalog,omitempty"`
