@@ -35,7 +35,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
 	getReleaseSnapshot,
 	getSnapshotProwRuns,
-	getTicketDelta,
 	listReleaseSnapshots,
 } from "../api/client";
 import type {
@@ -45,10 +44,8 @@ import type {
 	ReleaseVersion,
 } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
-import { useConfig } from "../hooks/useConfig";
 import { changedFields } from "../utils/componentDiff";
 import { relative } from "../utils/format";
-import { jiraIssueUrl } from "../utils/links";
 import {
 	latestReleased,
 	type SnapshotFilter,
@@ -59,7 +56,6 @@ import SnapshotComponentsTable, {
 	type ChangedSince,
 	changedDot,
 } from "./SnapshotComponentsTable";
-import { EvidenceList, SnapshotLink } from "./TicketTable";
 
 const PAGE_SIZE = 25;
 
@@ -314,29 +310,7 @@ function SnapshotSummary({
 	);
 }
 
-/** The 1-based page of a Snapshot in a filtered history, or null when absent. */
-async function findSnapshotPage(
-	version: string,
-	name: string,
-	opts: { application: string; withRelease: boolean },
-): Promise<number | null> {
-	const limit = 100;
-	for (let offset = 0; ; offset += limit) {
-		const page = await listReleaseSnapshots(version, {
-			...opts,
-			limit,
-			offset,
-		});
-		const i = page.snapshots.findIndex((s) => s.name === name);
-		if (i >= 0) return Math.floor((offset + i) / PAGE_SIZE) + 1;
-		if (!page.has_more) return null;
-	}
-}
-
-/**
- * Newest-first, paginated Snapshots of a release's applications.
- * ?snapshot=<name> opens that Snapshot on its page.
- */
+/** Newest-first, paginated Snapshots of a release's applications. */
 export function SnapshotHistory({
 	version,
 	konfluxApp,
@@ -350,39 +324,11 @@ export function SnapshotHistory({
 	const filter =
 		filters.find((f) => f.key === searchParams.get("app")) ?? defaultFilter;
 	const withRelease = searchParams.get("with_release") === "true";
-	const target = searchParams.get("snapshot");
-	// Unset until the user pages or filters, so a deep link opens on its page.
-	const [userPage, setPage] = useState<number>();
-	const [expanded, setExpanded] = useState<string | null>(target);
-	// A link to another Snapshot within this page changes only the query.
-	const [shownTarget, setShownTarget] = useState(target);
-	if (target !== shownTarget) {
-		setShownTarget(target);
-		setExpanded(target);
-		setPage(undefined);
-	}
+	const [page, setPage] = useState(1);
+	const [expanded, setExpanded] = useState<string | null>(null);
 
-	const located = useCachedFetch(
-		target && userPage === undefined
-			? `snapshotPage:${version}:${filter.application}:${withRelease}:${target}`
-			: null,
-		() =>
-			findSnapshotPage(version, target!, {
-				application: filter.application,
-				withRelease,
-			}),
-	);
-	const locating =
-		!!target &&
-		userPage === undefined &&
-		located.data === undefined &&
-		!located.error;
-	const page = userPage ?? located.data ?? 1;
-
-	const list = useCachedFetch(
-		locating
-			? null
-			: `releaseSnapshots:${version}:${filter.application}:${withRelease}:${page}`,
+	const { data, loading, error } = useCachedFetch(
+		`releaseSnapshots:${version}:${filter.application}:${withRelease}:${page}`,
 		() =>
 			listReleaseSnapshots(version, {
 				application: filter.application,
@@ -391,8 +337,6 @@ export function SnapshotHistory({
 				offset: (page - 1) * PAGE_SIZE,
 			}),
 	);
-	const { data, error } = list;
-	const loading = locating || list.loading;
 	const snapshots = data?.snapshots ?? [];
 
 	const setParam = (key: string, value: string | null) => {
@@ -454,13 +398,6 @@ export function SnapshotHistory({
 						Release: only snapshots a Konflux Release has used.
 					</HelperTextItem>
 				</HelperText>
-				{target && located.data === null && (
-					<HelperText style={{ marginBottom: "0.5rem" }}>
-						<HelperTextItem variant="warning">
-							Snapshot <code>{target}</code> is not in this list.
-						</HelperTextItem>
-					</HelperText>
-				)}
 
 				{loading ? (
 					<div style={{ textAlign: "center" }}>
@@ -526,15 +463,7 @@ export function SnapshotHistory({
 										<Tr isExpanded={isExpanded}>
 											<Td colSpan={5} style={{ padding: 0 }}>
 												{isExpanded && (
-													<>
-														<SnapshotDetail version={version} snapshot={s} />
-														{!s.missing && (
-															<SnapshotTicketDelta
-																version={version}
-																name={s.name}
-															/>
-														)}
-													</>
+													<SnapshotDetail version={version} snapshot={s} />
 												)}
 											</Td>
 										</Tr>
@@ -739,102 +668,5 @@ function SnapshotDetail({
 			prowRuns={prowRuns}
 			changed={changed}
 		/>
-	);
-}
-
-/** The tickets a STAGE build Snapshot adds over the STAGE build before it. */
-function SnapshotTicketDelta({
-	version,
-	name,
-}: {
-	version: string;
-	name: string;
-}) {
-	const config = useConfig();
-	const { data, error } = useCachedFetch(`ticketDelta:${version}:${name}`, () =>
-		getTicketDelta(version, name),
-	);
-	if (error)
-		return <Content component="p">Ticket delta: {error.message}</Content>;
-	if (!data) return <Spinner size="md" />;
-	const complete = data.delta_state === "complete";
-	const tickets = [
-		...data.added.map((t) => ({ ...t, change: "added" })),
-		...data.carried.map((t) => ({ ...t, change: "carried" })),
-	];
-	// Not a STAGE build: nothing was compared, so no orange delta.
-	if (!data.baseline && tickets.length === 0 && data.unknown.length === 0)
-		return <Content component="p">Ticket delta: {data.reason}</Content>;
-	const jiraBase = config?.jira_base_url || "https://redhat.atlassian.net";
-	return (
-		<div style={{ padding: "0.5rem 1rem 1rem" }}>
-			<Content component="h4">
-				Ticket delta{" "}
-				{data.baseline && (
-					<>
-						vs <SnapshotLink version={version} name={data.baseline} />{" "}
-					</>
-				)}
-				<Label color={complete ? "green" : "orange"} isCompact>
-					{data.delta_state}
-				</Label>
-			</Content>
-			{data.reason && <Content component="p">{data.reason}</Content>}
-			{tickets.length > 0 ? (
-				<Table variant="compact" aria-label="Ticket delta">
-					<Thead>
-						<Tr>
-							<Th>Key</Th>
-							<Th>Change</Th>
-							<Th>First seen</Th>
-							<Th>Commits</Th>
-						</Tr>
-					</Thead>
-					<Tbody>
-						{tickets.map((t) => (
-							<Tr key={`${t.change}/${t.key}/${t.component}/${t.commit_sha}`}>
-								<Td>
-									<a
-										href={jiraIssueUrl(t.key, jiraBase)}
-										target="_blank"
-										rel="noopener noreferrer"
-									>
-										{t.key}
-									</a>
-								</Td>
-								<Td>{t.change}</Td>
-								<Td>
-									<SnapshotLink
-										version={version}
-										name={t.first_seen_snapshot}
-									/>
-								</Td>
-								<Td>
-									<EvidenceList evidence={[t]} />
-								</Td>
-							</Tr>
-						))}
-					</Tbody>
-				</Table>
-			) : (
-				<Content component="p">
-					{complete
-						? "No tickets added or carried."
-						: "Tickets unknown: the delta is incomplete."}
-				</Content>
-			)}
-			{data.unknown.length > 0 && (
-				<HelperText style={{ marginTop: "0.5rem" }}>
-					{data.unknown.map((u) => (
-						<HelperTextItem
-							key={`${u.component}/${u.image_digest}`}
-							variant="warning"
-						>
-							<code>{u.component}</code> not compared: {u.reason}
-						</HelperTextItem>
-					))}
-				</HelperText>
-			)}
-		</div>
 	);
 }
