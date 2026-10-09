@@ -7,7 +7,6 @@ package dbsqlc
 
 import (
 	"context"
-	"database/sql"
 	"strings"
 )
 
@@ -37,8 +36,8 @@ func (q *Queries) GetArtBuildCoverage(ctx context.Context, groupName string) (Ge
 }
 
 const insertArtPendingBuild = `-- name: InsertArtPendingBuild :exec
-INSERT INTO art_pending_builds (group_name, release_version, component, nvr, record_id, upstream_sha, upstream_repo, started_at, checked_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO art_pending_builds (group_name, release_version, component, nvr, record_id, upstream_sha, started_at, checked_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertArtPendingBuildParams struct {
@@ -48,7 +47,6 @@ type InsertArtPendingBuildParams struct {
 	Nvr            string
 	RecordID       string
 	UpstreamSha    string
-	UpstreamRepo   string
 	StartedAt      string
 	CheckedAt      string
 }
@@ -61,7 +59,6 @@ func (q *Queries) InsertArtPendingBuild(ctx context.Context, arg InsertArtPendin
 		arg.Nvr,
 		arg.RecordID,
 		arg.UpstreamSha,
-		arg.UpstreamRepo,
 		arg.StartedAt,
 		arg.CheckedAt,
 	)
@@ -217,7 +214,7 @@ func (q *Queries) ListArtBuildCandidates(ctx context.Context, arg ListArtBuildCa
 }
 
 const listArtPendingBuilds = `-- name: ListArtPendingBuilds :many
-SELECT group_name, release_version, component, nvr, record_id, upstream_sha, upstream_repo, started_at, checked_at
+SELECT group_name, release_version, component, nvr, record_id, upstream_sha, started_at, checked_at
 FROM art_pending_builds
 WHERE checked_at >= ? AND release_version IN (/*SLICE:versions*/?)
 `
@@ -255,7 +252,6 @@ func (q *Queries) ListArtPendingBuilds(ctx context.Context, arg ListArtPendingBu
 			&i.Nvr,
 			&i.RecordID,
 			&i.UpstreamSha,
-			&i.UpstreamRepo,
 			&i.StartedAt,
 			&i.CheckedAt,
 		); err != nil {
@@ -273,7 +269,7 @@ func (q *Queries) ListArtPendingBuilds(ctx context.Context, arg ListArtPendingBu
 }
 
 const listResolvedArtBuilds = `-- name: ListResolvedArtBuilds :many
-SELECT digest, state, nvr, record_id, upstream_repo, upstream_sha, rebase_repo, rebase_sha, pipeline_url, checked_at
+SELECT digest, state, nvr, record_id, upstream_repo, upstream_sha, pipeline_url, checked_at
 FROM art_builds
 WHERE state = 'resolved' AND digest IN (/*SLICE:digests*/?)
 `
@@ -304,8 +300,6 @@ func (q *Queries) ListResolvedArtBuilds(ctx context.Context, digests []string) (
 			&i.RecordID,
 			&i.UpstreamRepo,
 			&i.UpstreamSha,
-			&i.RebaseRepo,
-			&i.RebaseSha,
 			&i.PipelineUrl,
 			&i.CheckedAt,
 		); err != nil {
@@ -323,16 +317,14 @@ func (q *Queries) ListResolvedArtBuilds(ctx context.Context, digests []string) (
 }
 
 const upsertArtBuild = `-- name: UpsertArtBuild :exec
-INSERT INTO art_builds (digest, state, nvr, record_id, upstream_repo, upstream_sha, rebase_repo, rebase_sha, pipeline_url, checked_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO art_builds (digest, state, nvr, record_id, upstream_repo, upstream_sha, pipeline_url, checked_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(digest) DO UPDATE SET
     state = excluded.state,
     nvr = excluded.nvr,
     record_id = excluded.record_id,
     upstream_repo = excluded.upstream_repo,
     upstream_sha = excluded.upstream_sha,
-    rebase_repo = excluded.rebase_repo,
-    rebase_sha = excluded.rebase_sha,
     pipeline_url = excluded.pipeline_url,
     checked_at = excluded.checked_at
 `
@@ -344,8 +336,6 @@ type UpsertArtBuildParams struct {
 	RecordID     string
 	UpstreamRepo string
 	UpstreamSha  string
-	RebaseRepo   string
-	RebaseSha    string
 	PipelineUrl  string
 	CheckedAt    string
 }
@@ -358,8 +348,6 @@ func (q *Queries) UpsertArtBuild(ctx context.Context, arg UpsertArtBuildParams) 
 		arg.RecordID,
 		arg.UpstreamRepo,
 		arg.UpstreamSha,
-		arg.RebaseRepo,
-		arg.RebaseSha,
 		arg.PipelineUrl,
 		arg.CheckedAt,
 	)
@@ -367,12 +355,11 @@ func (q *Queries) UpsertArtBuild(ctx context.Context, arg UpsertArtBuildParams) 
 }
 
 const upsertArtBuildAttempt = `-- name: UpsertArtBuildAttempt :exec
-INSERT INTO art_build_attempts (group_name, record_id, release_version, component, nvr, outcome, start_time, image_digest, first_seen, last_seen)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO art_build_attempts (group_name, record_id, release_version, component, nvr, outcome, start_time, first_seen, last_seen)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(group_name, record_id) DO UPDATE SET
     outcome = excluded.outcome,
     start_time = excluded.start_time,
-    image_digest = excluded.image_digest,
     last_seen = excluded.last_seen
 `
 
@@ -384,7 +371,6 @@ type UpsertArtBuildAttemptParams struct {
 	Nvr            string
 	Outcome        string
 	StartTime      string
-	ImageDigest    sql.NullString
 	FirstSeen      string
 	LastSeen       string
 }
@@ -398,7 +384,6 @@ func (q *Queries) UpsertArtBuildAttempt(ctx context.Context, arg UpsertArtBuildA
 		arg.Nvr,
 		arg.Outcome,
 		arg.StartTime,
-		arg.ImageDigest,
 		arg.FirstSeen,
 		arg.LastSeen,
 	)

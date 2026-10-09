@@ -33,29 +33,27 @@ var quayStream = regexp.MustCompile(`quay-(\d+)-(\d+)`)
 // Build is the ART build record behind one image digest. Unresolved builds
 // carry only Digest, State and CheckedAt.
 type Build struct {
-	Digest, State, NVR, RecordID       string
-	UpstreamRepo, UpstreamSHA          string
-	RebaseRepo, RebaseSHA, PipelineURL string
-	CheckedAt                          time.Time
+	Digest, State, NVR, RecordID string
+	UpstreamRepo, UpstreamSHA    string
+	PipelineURL                  string
+	CheckedAt                    time.Time
 }
 
 // PendingBuild is the newest running ART image build of one NVR name and
 // version in a group. Pending builds have no image yet, so they are keyed by
 // what they will be, not by digest.
 type PendingBuild struct {
-	Version, Name             string
-	NVR, RecordID             string
-	UpstreamRepo, UpstreamSHA string
-	StartedAt                 time.Time
+	Version, Name string
+	NVR, RecordID string
+	UpstreamSHA   string
+	StartedAt     time.Time
 }
 
 // Attempt is one image-build record of a stream search. ART records a
 // finished build as another record of its NVR and leaves the pending one.
-// ImageDigest is empty until a build succeeds.
 type Attempt struct {
 	Version, Name, NVR string
 	RecordID, Outcome  string
-	ImageDigest        string
 	StartedAt          time.Time
 }
 
@@ -221,10 +219,9 @@ func imageAttempts(builds []searchBuild) []Attempt {
 		if sb.Type != "image" || name == "" || sb.RecordID == "" || err != nil {
 			continue
 		}
-		_, digest, _ := strings.Cut(sb.ImagePullspec, "@")
 		out = append(out, Attempt{
 			Version: version, Name: name, NVR: sb.NVR,
-			RecordID: sb.RecordID, Outcome: sb.Outcome, ImageDigest: digest,
+			RecordID: sb.RecordID, Outcome: sb.Outcome,
 			StartedAt: started.UTC(),
 		})
 	}
@@ -253,8 +250,8 @@ func pendingBuilds(builds []searchBuild) []PendingBuild {
 		p := PendingBuild{
 			Version: version, Name: name,
 			NVR: sb.NVR, RecordID: sb.RecordID,
-			UpstreamRepo: sb.SourceRepo, UpstreamSHA: sb.Commitish,
-			StartedAt: started.UTC(),
+			UpstreamSHA: sb.Commitish,
+			StartedAt:   started.UTC(),
 		}
 		k := [2]string{name, version}
 		if cur, ok := newest[k]; !ok || p.StartedAt.After(cur.StartedAt) || p.StartedAt.Equal(cur.StartedAt) && p.RecordID > cur.RecordID {
@@ -343,7 +340,6 @@ func (r *Resolver) resolve(ctx context.Context, c Candidate, now time.Time, pace
 	b.State = StateResolved
 	b.NVR, b.RecordID = rec.NVR, rec.RecordID
 	b.UpstreamRepo, b.UpstreamSHA = rec.SourceRepo, rec.Commitish
-	b.RebaseRepo, b.RebaseSHA = rec.RebaseRepoURL, rec.RebaseCommitish
 	b.PipelineURL = rec.BuildPipelineURL
 	return b, nil
 }

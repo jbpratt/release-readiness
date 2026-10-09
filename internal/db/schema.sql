@@ -1,10 +1,3 @@
-CREATE TABLE IF NOT EXISTS components (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    name        TEXT NOT NULL UNIQUE,
-    description TEXT NOT NULL DEFAULT '',
-    created_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-);
-
 CREATE TABLE IF NOT EXISTS snapshots (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     application  TEXT NOT NULL,
@@ -87,8 +80,6 @@ CREATE TABLE IF NOT EXISTS art_builds (
     record_id     TEXT NOT NULL DEFAULT '',
     upstream_repo TEXT NOT NULL DEFAULT '',
     upstream_sha  TEXT NOT NULL DEFAULT '',
-    rebase_repo   TEXT NOT NULL DEFAULT '',
-    rebase_sha    TEXT NOT NULL DEFAULT '',
     pipeline_url  TEXT NOT NULL DEFAULT '',
     checked_at    TEXT NOT NULL
 );
@@ -123,7 +114,6 @@ CREATE TABLE IF NOT EXISTS prow_run_images (
 );
 
 CREATE INDEX IF NOT EXISTS idx_prow_run_images_run ON prow_run_images(job_name, build_id);
-CREATE INDEX IF NOT EXISTS idx_prow_run_images_digest ON prow_run_images(digest);
 
 CREATE TABLE IF NOT EXISTS prow_syncs (
     job_name             TEXT PRIMARY KEY,
@@ -142,7 +132,6 @@ CREATE TABLE IF NOT EXISTS art_pending_builds (
     nvr             TEXT NOT NULL,
     record_id       TEXT NOT NULL,
     upstream_sha    TEXT NOT NULL DEFAULT '',
-    upstream_repo   TEXT NOT NULL DEFAULT '',
     started_at      TEXT NOT NULL,
     checked_at      TEXT NOT NULL,
     PRIMARY KEY (group_name, release_version, component)
@@ -150,7 +139,6 @@ CREATE TABLE IF NOT EXISTS art_pending_builds (
 
 -- Every ART image-build record a group's searches returned. ART records a
 -- finished build as another record of its NVR and leaves the pending one.
--- image_digest is null until a build succeeds.
 CREATE TABLE IF NOT EXISTS art_build_attempts (
     group_name      TEXT NOT NULL,
     record_id       TEXT NOT NULL,
@@ -159,7 +147,6 @@ CREATE TABLE IF NOT EXISTS art_build_attempts (
     nvr             TEXT NOT NULL,
     outcome         TEXT NOT NULL,
     start_time      TEXT NOT NULL,
-    image_digest    TEXT,
     first_seen      TEXT NOT NULL,
     last_seen       TEXT NOT NULL,
     PRIMARY KEY (group_name, record_id)

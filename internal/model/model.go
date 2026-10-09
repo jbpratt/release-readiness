@@ -2,13 +2,6 @@ package model
 
 import "time"
 
-type Component struct {
-	ID          int64     `json:"id"`
-	Name        string    `json:"name"`
-	Description string    `json:"description"`
-	CreatedAt   time.Time `json:"created_at"`
-}
-
 type ComponentRecord struct {
 	ID         int64  `json:"id"`
 	SnapshotID int64  `json:"snapshot_id"`

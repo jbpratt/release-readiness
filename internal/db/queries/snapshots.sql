@@ -31,8 +31,8 @@ WHERE application = ?
 ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?;
 
 -- name: ListComponentCandidates :many
-SELECT sc.id, sc.component, sc.git_sha, sc.image_url, sc.git_url,
-       s.id AS snapshot_id, s.application, s.name AS snapshot, s.created_at
+SELECT sc.id, sc.component, sc.image_url,
+       s.id AS snapshot_id, s.application, s.created_at
 FROM snapshot_components sc
 JOIN snapshots s ON s.id = sc.snapshot_id
 WHERE s.application IN (sqlc.slice('applications'));
@@ -64,7 +64,3 @@ SELECT name, application, created_at, component_count, missing
 FROM candidates
 ORDER BY created_at DESC, name DESC
 LIMIT ? OFFSET ?;
-
--- name: GetSnapshotByID :one
-SELECT id, application, name, created_at
-FROM snapshots WHERE id = ?;

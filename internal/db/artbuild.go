@@ -19,8 +19,6 @@ func (d *DB) UpsertArtBuild(ctx context.Context, b artbuild.Build) error {
 		RecordID:     b.RecordID,
 		UpstreamRepo: b.UpstreamRepo,
 		UpstreamSha:  b.UpstreamSHA,
-		RebaseRepo:   b.RebaseRepo,
-		RebaseSha:    b.RebaseSHA,
 		PipelineUrl:  b.PipelineURL,
 		CheckedAt:    b.CheckedAt.UTC().Format(time.RFC3339),
 	})
@@ -61,8 +59,6 @@ func (d *DB) ResolvedArtBuilds(ctx context.Context, digests []string) (map[strin
 			RecordID:     r.RecordID,
 			UpstreamRepo: r.UpstreamRepo,
 			UpstreamSHA:  r.UpstreamSha,
-			RebaseRepo:   r.RebaseRepo,
-			RebaseSHA:    r.RebaseSha,
 			PipelineURL:  r.PipelineUrl,
 			CheckedAt:    parseTime(r.CheckedAt),
 		}
@@ -88,7 +84,6 @@ func (d *DB) ReplaceArtPendingBuilds(ctx context.Context, group string, builds [
 				Nvr:            b.NVR,
 				RecordID:       b.RecordID,
 				UpstreamSha:    b.UpstreamSHA,
-				UpstreamRepo:   b.UpstreamRepo,
 				StartedAt:      b.StartedAt.UTC().Format(time.RFC3339),
 				CheckedAt:      checkedAt.UTC().Format(time.RFC3339),
 			}); err != nil {
@@ -115,13 +110,12 @@ func (d *DB) ArtPendingBuilds(ctx context.Context, versions []string, checkedSin
 	builds := make([]artbuild.PendingBuild, len(rows))
 	for i, r := range rows {
 		builds[i] = artbuild.PendingBuild{
-			Version:      r.ReleaseVersion,
-			Name:         r.Component,
-			NVR:          r.Nvr,
-			RecordID:     r.RecordID,
-			UpstreamRepo: r.UpstreamRepo,
-			UpstreamSHA:  r.UpstreamSha,
-			StartedAt:    parseTime(r.StartedAt),
+			Version:     r.ReleaseVersion,
+			Name:        r.Component,
+			NVR:         r.Nvr,
+			RecordID:    r.RecordID,
+			UpstreamSHA: r.UpstreamSha,
+			StartedAt:   parseTime(r.StartedAt),
 		}
 	}
 	return builds, nil
@@ -140,7 +134,6 @@ func (d *DB) StoreArtBuildAttempts(ctx context.Context, group string, attempts [
 				Nvr:            a.NVR,
 				Outcome:        a.Outcome,
 				StartTime:      a.StartedAt.UTC().Format(time.RFC3339),
-				ImageDigest:    sql.NullString{String: a.ImageDigest, Valid: a.ImageDigest != ""},
 				FirstSeen:      seen,
 				LastSeen:       seen,
 			}); err != nil {

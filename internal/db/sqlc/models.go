@@ -4,10 +4,6 @@
 
 package dbsqlc
 
-import (
-	"database/sql"
-)
-
 type ArtBuild struct {
 	Digest       string
 	State        string
@@ -15,8 +11,6 @@ type ArtBuild struct {
 	RecordID     string
 	UpstreamRepo string
 	UpstreamSha  string
-	RebaseRepo   string
-	RebaseSha    string
 	PipelineUrl  string
 	CheckedAt    string
 }
@@ -29,7 +23,6 @@ type ArtBuildAttempt struct {
 	Nvr            string
 	Outcome        string
 	StartTime      string
-	ImageDigest    sql.NullString
 	FirstSeen      string
 	LastSeen       string
 }
@@ -47,16 +40,8 @@ type ArtPendingBuild struct {
 	Nvr            string
 	RecordID       string
 	UpstreamSha    string
-	UpstreamRepo   string
 	StartedAt      string
 	CheckedAt      string
-}
-
-type Component struct {
-	ID          int64
-	Name        string
-	Description string
-	CreatedAt   string
 }
 
 type FbcCatalog struct {
