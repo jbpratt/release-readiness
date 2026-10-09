@@ -55,7 +55,6 @@ func release(name, application string, created time.Time, released map[string]an
 		"metadata":   map[string]any{"name": name, "namespace": testNamespace},
 		"spec":       map[string]any{"snapshot": name + "-snap", "releasePlan": "plan"},
 		"status": map[string]any{
-			"target":     "rhtap-releng-tenant",
 			"startTime":  created.Add(time.Minute).Format(time.RFC3339),
 			"conditions": []any{map[string]any{"type": "Validated", "status": "True"}, released},
 		},
@@ -89,8 +88,7 @@ func TestSyncReleases(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := model.KonfluxRelease{
-		ID: got[0].ID, Name: "fbc-quay-3-18-r1", Application: "fbc-quay-3-18",
-		Snapshot: "fbc-quay-3-18-r1-snap", ReleasePlan: "plan", Target: "rhtap-releng-tenant",
+		Name: "fbc-quay-3-18-r1", Application: "fbc-quay-3-18", Snapshot: "fbc-quay-3-18-r1-snap", ReleasePlan: "plan",
 		ReleasedStatus: "Unknown", ReleasedReason: "Progressing", CreatedAt: created,
 	}
 	if len(got) != 1 || got[0].StartTime == nil || !got[0].StartTime.Equal(created.Add(time.Minute)) || got[0].CompletionTime != nil {
@@ -271,7 +269,7 @@ func TestSyncStagedSnapshots(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := model.StagedSnapshot{Name: "quay-stage-3-18-1-image", Assembly: "3.18.1", Kind: "image", CreatedAt: t0}
+	want := model.StagedSnapshot{Name: "quay-stage-3-18-1-image", CreatedAt: t0}
 	if got == nil || *got != want {
 		t.Errorf("staged = %+v, want %+v", got, want)
 	}

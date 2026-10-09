@@ -91,7 +91,7 @@ func TestParseRun(t *testing.T) {
 
 func TestApplyArtifact(t *testing.T) {
 	job := testJobs(t)[0]
-	r := &Run{Images: []Image{}}
+	r := &Run{}
 	r.applyArtifact(runFixture(t, job, periodicRun, "artifacts/aws-s3-nightly/quay-gather/artifacts/tested-images.json"))
 	if r.ArtifactState != ArtifactPresent {
 		t.Fatalf("artifact state = %q, want present", r.ArtifactState)
@@ -120,11 +120,8 @@ func TestApplyArtifact(t *testing.T) {
 			t.Errorf("%s digest = %q, want %q", role, got, want)
 		}
 	}
-	if c := byRole["clair"]; c.Source != "pod" || !strings.HasSuffix(c.ImageID, "@sha256:a227858e891a176be8b46cd90d2f4392e5fdccc46dbfc30567cd8c10049e36d2") {
-		t.Errorf("clair image = %+v", c)
-	}
 
-	r = &Run{Images: []Image{}}
+	r = &Run{}
 	r.applyArtifact([]byte(`{"schema_version": 1, "images": [{"role": "quay",`))
 	if r.ArtifactState != ArtifactInvalid || len(r.Images) != 0 {
 		t.Errorf("truncated artifact: state %q, %d images", r.ArtifactState, len(r.Images))

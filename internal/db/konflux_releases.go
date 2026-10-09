@@ -14,7 +14,6 @@ func (d *DB) UpsertKonfluxRelease(ctx context.Context, r *model.KonfluxRelease) 
 		Application:    r.Application,
 		Snapshot:       r.Snapshot,
 		ReleasePlan:    r.ReleasePlan,
-		Target:         r.Target,
 		ReleasedStatus: r.ReleasedStatus,
 		ReleasedReason: r.ReleasedReason,
 		FailedTask:     r.FailedTask,
@@ -52,12 +51,10 @@ func (d *DB) ListKonfluxReleases(ctx context.Context, application string, limit,
 
 func toKonfluxRelease(r dbsqlc.KonfluxRelease) model.KonfluxRelease {
 	return model.KonfluxRelease{
-		ID:             r.ID,
 		Name:           r.Name,
 		Application:    r.Application,
 		Snapshot:       r.Snapshot,
 		ReleasePlan:    r.ReleasePlan,
-		Target:         r.Target,
 		ReleasedStatus: r.ReleasedStatus,
 		ReleasedReason: r.ReleasedReason,
 		FailedTask:     r.FailedTask,

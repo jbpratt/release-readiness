@@ -117,7 +117,6 @@ func TestResolveMatch(t *testing.T) {
 		RecordID:     "7f4d8117-35dc-6c01-1e27-3b3d32a2fa8f",
 		UpstreamRepo: "https://github.com/quay/quay-operator",
 		UpstreamSHA:  "35cf767efc3b4e7bebc7802afcf12b60cd343bc0",
-		PipelineURL:  "https://konflux-ui.apps.kflux-ocp-p01.7ayg.p1.openshiftapps.com/ns/art-quay-tenant/applications/quay-3-18/pipelineruns/quay-3-18-quay-operator-sjpkg",
 	}
 	b.CheckedAt = time.Time{}
 	if b != want {

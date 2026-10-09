@@ -63,7 +63,7 @@ func (d *DB) LatestFBCCatalog(ctx context.Context, application, component, chann
 	if err != nil {
 		return nil, err
 	}
-	cat := &fbc.Catalog{Snapshot: row.Name, Image: row.ImageUrl}
+	cat := &fbc.Catalog{Snapshot: row.Name}
 	_, digest, _ := strings.Cut(row.ImageUrl, "@")
 	cat.State, err = q.GetFBCCatalogState(ctx, digest)
 	if errors.Is(err, sql.ErrNoRows) {

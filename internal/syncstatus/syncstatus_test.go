@@ -26,7 +26,7 @@ func TestFailureStreak(t *testing.T) {
 	if len(p) != 1 {
 		t.Fatalf("problems = %+v, want one", p)
 	}
-	if p[0].Message != "second" || !p[0].Since.Equal(t0) || !p[0].LastErrorAt.Equal(now) || p[0].LastSuccess != nil {
+	if p[0].Message != "second" || !p[0].Since.Equal(t0) || p[0].LastSuccess != nil {
 		t.Errorf("problem = %+v, want message second since %v", p[0], t0)
 	}
 

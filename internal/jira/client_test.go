@@ -15,14 +15,12 @@ func TestSearchIssues(t *testing.T) {
 		{
 			Key: "PROJQUAY-100",
 			Fields: IssueFields{
-				Summary:    "Fix auth bug",
-				Status:     StatusField{Name: "Closed"},
-				Priority:   PriorityField{Name: "Major"},
-				Labels:     []string{"qe-approved"},
-				Assignee:   &UserField{DisplayName: "Jane Doe"},
-				IssueType:  TypeField{Name: "Bug"},
-				Resolution: &ResField{Name: "Done"},
-				Updated:    "2026-01-15T10:00:00.000+0000",
+				Summary:   "Fix auth bug",
+				Status:    StatusField{Name: "Closed"},
+				Priority:  PriorityField{Name: "Major"},
+				Labels:    []string{"qe-approved"},
+				Assignee:  &UserField{DisplayName: "Jane Doe"},
+				IssueType: TypeField{Name: "Bug"},
 			},
 		},
 	}
@@ -74,7 +72,7 @@ func TestSearchIssues(t *testing.T) {
 func TestGetVersion(t *testing.T) {
 	versions := []VersionField{
 		{Name: "3.16.1", Released: true},
-		{Name: "3.16.2", Description: "z-stream", ReleaseDate: "2026-02-20", Released: false},
+		{Name: "3.16.2", ReleaseDate: "2026-02-20", Released: false},
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
