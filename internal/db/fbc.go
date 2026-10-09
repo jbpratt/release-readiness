@@ -12,8 +12,8 @@ import (
 )
 
 // ListFBCCatalogCandidates returns up to limit quay-operator FBC images, one
-// per FBC application's newest Snapshot, whose catalog is unread or failed
-// before retryBefore.
+// per FBC application's newest Snapshot that ART did not stage, whose catalog
+// is unread or failed before retryBefore.
 func (d *DB) ListFBCCatalogCandidates(ctx context.Context, retryBefore time.Time, limit int) ([]string, error) {
 	return d.queries().ListFBCCatalogCandidates(ctx, dbsqlc.ListFBCCatalogCandidatesParams{
 		CheckedAt: retryBefore.UTC().Format(time.RFC3339),
@@ -52,8 +52,8 @@ func (d *DB) ReplaceFBCCatalog(ctx context.Context, digest, state string, bundle
 }
 
 // LatestFBCCatalog returns the newest Snapshot of application holding
-// component, with the quay-operator entries of channel in its catalog, or nil
-// if no Snapshot holds component.
+// component that ART did not stage, with the quay-operator entries of channel
+// in its catalog, or nil if there is none.
 func (d *DB) LatestFBCCatalog(ctx context.Context, application, component, channel string) (*fbc.Catalog, error) {
 	q := d.queries()
 	row, err := q.GetLatestSnapshotImage(ctx, dbsqlc.GetLatestSnapshotImageParams{Application: application, Component: component})

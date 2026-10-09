@@ -47,21 +47,21 @@ func TestLatestStagedSnapshot(t *testing.T) {
 		}
 	}
 
-	img, err := d.LatestStagedSnapshot(ctx, "3.18.1", "image")
+	img, err := d.LatestStagedSnapshot(ctx, "3.18.1", "image", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if img == nil || img.Name != "image-new" || !img.CreatedAt.Equal(t0.Add(time.Hour)) || img.Release == nil || img.Release.Name != "image-new-r2" {
 		t.Errorf("image = %+v, want image-new with Release image-new-r2", img)
 	}
-	fbc, err := d.LatestStagedSnapshot(ctx, "3.18.1", "fbc")
+	fbc, err := d.LatestStagedSnapshot(ctx, "3.18.1", "fbc", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if fbc == nil || fbc.Name != "fbc-new" || fbc.Release != nil {
 		t.Errorf("fbc = %+v, want fbc-new without a Release", fbc)
 	}
-	if none, err := d.LatestStagedSnapshot(ctx, "3.17.6", "image"); none != nil || err != nil {
+	if none, err := d.LatestStagedSnapshot(ctx, "3.17.6", "image", ""); none != nil || err != nil {
 		t.Errorf("3.17.6 = %+v, %v; want nil", none, err)
 	}
 }
