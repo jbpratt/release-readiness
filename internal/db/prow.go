@@ -31,13 +31,10 @@ func (d *DB) UpsertProwRun(ctx context.Context, r *prow.Run) error {
 		}
 		for _, img := range r.Images {
 			if err := q.InsertProwRunImage(ctx, dbsqlc.InsertProwRunImageParams{
-				JobName:      r.JobName,
-				BuildID:      r.BuildID,
-				Role:         img.Role,
-				Source:       img.Source,
-				RequestedRef: img.RequestedRef,
-				Digest:       img.Digest,
-				ImageID:      img.ImageID,
+				JobName: r.JobName,
+				BuildID: r.BuildID,
+				Role:    img.Role,
+				Digest:  img.Digest,
 			}); err != nil {
 				return err
 			}
@@ -81,13 +78,7 @@ func (d *DB) toProwRuns(ctx context.Context, rows []dbsqlc.ProwRun) ([]prow.Run,
 			Images:        make([]prow.Image, len(imgs)),
 		}
 		for j, img := range imgs {
-			runs[i].Images[j] = prow.Image{
-				Role:         img.Role,
-				Source:       img.Source,
-				RequestedRef: img.RequestedRef,
-				Digest:       img.Digest,
-				ImageID:      img.ImageID,
-			}
+			runs[i].Images[j] = prow.Image{Role: img.Role, Digest: img.Digest}
 		}
 	}
 	return runs, nil

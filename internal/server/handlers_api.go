@@ -23,13 +23,10 @@ import (
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
 	// The JIRA sync is tracked only when the server was started with a token.
-	jiraEnabled := slices.ContainsFunc(s.syncStatus.Sources(time.Now()), func(st syncstatus.Status) bool {
-		return st.Source == "jira"
-	})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"jira_base_url": s.jiraBaseURL,
 		"jira_project":  s.jiraProject,
-		"jira_enabled":  jiraEnabled,
+		"jira_enabled":  s.syncStatus.Tracks("jira"),
 	})
 }
 
@@ -42,11 +39,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
-	now := time.Now()
 	writeJSON(w, http.StatusOK, struct {
 		Problems []syncstatus.Problem `json:"problems"`
-		Sources  []syncstatus.Status  `json:"sources"`
-	}{s.syncStatus.Problems(now), s.syncStatus.Sources(now)})
+	}{s.syncStatus.Problems(time.Now())})
 }
 
 // --- Releases (version-centric) ---
@@ -134,7 +129,7 @@ func (s *Server) attachFBCCatalog(ctx context.Context, release *model.ReleaseVer
 	if err != nil || cat == nil {
 		return err
 	}
-	fc.CatalogSnapshot, fc.CatalogImage = cat.Snapshot, cat.Image
+	fc.CatalogSnapshot = cat.Snapshot
 	_, want, _ := strings.Cut(fc.SnapshotBundleImage, "@")
 	if cat.State != fbc.StateParsed || len(cat.Bundles) == 0 || !strings.HasPrefix(want, "sha256:") {
 		return nil
@@ -226,9 +221,7 @@ func (s *Server) attachArtBuilds(ctx context.Context, snap *model.ReleaseSnapsho
 		c := &snap.Components[i]
 		c.Art = &model.ArtBuild{
 			NVR:          b.NVR,
-			BuildURL:     artbuild.PageURL(s.artBaseURL, "build", b.NVR, b.RecordID),
-			LogsURL:      artbuild.PageURL(s.artBaseURL, "logs", b.NVR, b.RecordID),
-			PipelineURL:  b.PipelineURL,
+			BuildURL:     artbuild.PageURL(s.artBaseURL, b.NVR, b.RecordID),
 			UpstreamRepo: b.UpstreamRepo,
 			UpstreamSHA:  b.UpstreamSHA,
 		}
@@ -240,7 +233,7 @@ func (s *Server) attachArtBuilds(ctx context.Context, snap *model.ReleaseSnapsho
 		}
 		if p := pending[j]; p.UpstreamSHA != b.UpstreamSHA && p.StartedAt.After(snap.CreatedAt) {
 			c.PendingArtBuild = &model.PendingArtBuild{
-				BuildURL:    artbuild.PageURL(s.artBaseURL, "build", p.NVR, p.RecordID),
+				BuildURL:    artbuild.PageURL(s.artBaseURL, p.NVR, p.RecordID),
 				UpstreamSHA: p.UpstreamSHA,
 				StartedAt:   p.StartedAt,
 			}
@@ -266,7 +259,7 @@ func (s *Server) handleListBuildAttempts(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	group := "quay-" + m[1] + "." + m[2]
-	from, to, ok, err := s.db.ArtBuildCoverage(ctx, group)
+	from, ok, err := s.db.ArtBuildCoverage(ctx, group)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -275,7 +268,7 @@ func (s *Server) handleListBuildAttempts(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusOK, resp)
 		return
 	}
-	resp.CoveredFrom, resp.CoveredTo = &from, &to
+	resp.CoveredFrom = &from
 	attempts, err := s.db.ArtBuildAttempts(ctx, group, strings.TrimPrefix(release.Name, "quay-v"))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
@@ -284,10 +277,9 @@ func (s *Server) handleListBuildAttempts(w http.ResponseWriter, r *http.Request)
 	for _, a := range attempts {
 		resp.Attempts = append(resp.Attempts, model.BuildAttempt{
 			Component: a.Name,
-			NVR:       a.NVR,
 			Outcome:   a.Outcome,
 			StartedAt: a.StartedAt,
-			BuildURL:  artbuild.PageURL(s.artBaseURL, "build", a.NVR, a.RecordID),
+			BuildURL:  artbuild.PageURL(s.artBaseURL, a.NVR, a.RecordID),
 		})
 	}
 	writeJSON(w, http.StatusOK, resp)
@@ -418,17 +410,11 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 		count, latest := componentSet(&rel, candidates)
 		catalogShipped := s.catalogShipped(rel.Name)
 		overviews[i] = model.ReleaseOverview{
-			Release:        rel,
-			IssueSummary:   summary,
-			Readiness:      computeReadiness(&rel, summary, count > 0, catalogShipped),
-			ComponentCount: count,
-			LatestBuild:    latest,
-		}
-		switch {
-		case catalogShipped:
-			overviews[i].Shipped, overviews[i].ShippedSource = true, "catalog"
-		case rel.Released:
-			overviews[i].Shipped, overviews[i].ShippedSource = true, "jira"
+			Release:      rel,
+			IssueSummary: summary,
+			Readiness:    computeReadiness(&rel, summary, count > 0, catalogShipped),
+			LatestBuild:  latest,
+			Shipped:      catalogShipped || rel.Released,
 		}
 	}
 	markNextInStream(overviews)

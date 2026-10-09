@@ -161,7 +161,7 @@ func TestArtBuildAttempts(t *testing.T) {
 		return got
 	}
 
-	if _, _, ok, err := d.ArtBuildCoverage(ctx, group); ok || err != nil {
+	if _, ok, err := d.ArtBuildCoverage(ctx, group); ok || err != nil {
 		t.Fatalf("coverage before any search: ok %v, err %v; want none", ok, err)
 	}
 
@@ -180,16 +180,16 @@ func TestArtBuildAttempts(t *testing.T) {
 	if got, want := list(), []string{"c-1:build_error", "q-done:success"}; !slices.Equal(got, want) {
 		t.Errorf("second pass: got %v, want %v", got, want)
 	}
-	from, to, ok, err := d.ArtBuildCoverage(ctx, group)
-	if err != nil || !ok || !from.Equal(t0.Add(-7*24*time.Hour)) || !to.Equal(t0.Add(2*time.Hour)) {
-		t.Errorf("coverage: [%v, %v] ok %v err %v; want both windows joined", from, to, ok, err)
+	from, ok, err := d.ArtBuildCoverage(ctx, group)
+	if err != nil || !ok || !from.Equal(t0.Add(-7*24*time.Hour)) {
+		t.Errorf("coverage: from %v ok %v err %v; want both windows joined", from, ok, err)
 	}
 
 	// A window starting after the covered span ends leaves a gap: the span
 	// restarts, and attempts before it are no longer known complete.
 	gapFrom := t0.Add(10 * 24 * time.Hour)
 	store(gapFrom, gapFrom.Add(7*24*time.Hour), attempt(quay, "q-late", "build_error", gapFrom.Add(time.Hour)))
-	if from, _, _, _ := d.ArtBuildCoverage(ctx, group); !from.Equal(gapFrom) {
+	if from, _, _ := d.ArtBuildCoverage(ctx, group); !from.Equal(gapFrom) {
 		t.Errorf("coverage after a gap starts %v, want %v", from, gapFrom)
 	}
 	if got, want := list(), []string{"q-late:build_error"}; !slices.Equal(got, want) {

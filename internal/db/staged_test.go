@@ -53,7 +53,7 @@ func TestLatestStagedSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fbc == nil || fbc.Name != "fbc-new" || fbc.Kind != "fbc" || fbc.Release != nil {
+	if fbc == nil || fbc.Name != "fbc-new" || fbc.Release != nil {
 		t.Errorf("fbc = %+v, want fbc-new without a Release", fbc)
 	}
 	if none, err := d.LatestStagedSnapshot(ctx, "3.17.6", "image"); none != nil || err != nil {

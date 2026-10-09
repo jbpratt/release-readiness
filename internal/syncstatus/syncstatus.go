@@ -31,7 +31,6 @@ type Source struct {
 	interval     time.Duration
 	started      time.Time
 	lastSuccess  time.Time
-	lastErrorAt  time.Time
 	lastError    string
 	failingSince time.Time
 }
@@ -42,14 +41,6 @@ type Problem struct {
 	Message     string     `json:"message"`
 	Since       *time.Time `json:"since"`
 	LastSuccess *time.Time `json:"last_success"`
-	LastErrorAt *time.Time `json:"last_error_at"`
-}
-
-// Status is the health of one source.
-type Status struct {
-	Source      string     `json:"source"`
-	LastSuccess *time.Time `json:"last_success"`
-	OK          bool       `json:"ok"`
 }
 
 func New() *Registry {
@@ -81,7 +72,7 @@ func (s *Source) Report(err error) {
 		s.failingSince = time.Time{}
 		return
 	}
-	s.lastError, s.lastErrorAt = err.Error(), now
+	s.lastError = err.Error()
 	if s.failingSince.IsZero() {
 		s.failingSince = now
 	}
@@ -100,20 +91,15 @@ func (r *Registry) Problems(now time.Time) []Problem {
 	return problems
 }
 
-// Sources lists every tracked source, sorted by source.
-func (r *Registry) Sources(now time.Time) []Status {
+// Tracks reports whether source is tracked.
+func (r *Registry) Tracks(source string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	statuses := []Status{}
-	for _, s := range r.sources {
-		_, bad := s.problem(now)
-		statuses = append(statuses, Status{Source: s.name, LastSuccess: ptr(s.lastSuccess), OK: !bad})
-	}
-	return statuses
+	return slices.ContainsFunc(r.sources, func(s *Source) bool { return s.name == source })
 }
 
 func (s *Source) problem(now time.Time) (Problem, bool) {
-	p := Problem{Source: s.name, Since: ptr(s.failingSince), LastSuccess: ptr(s.lastSuccess), LastErrorAt: ptr(s.lastErrorAt)}
+	p := Problem{Source: s.name, Since: ptr(s.failingSince), LastSuccess: ptr(s.lastSuccess)}
 	if !s.failingSince.IsZero() {
 		p.Message = s.lastError
 		return p, true

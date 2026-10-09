@@ -11,7 +11,6 @@ type ArtBuild struct {
 	RecordID     string
 	UpstreamRepo string
 	UpstreamSha  string
-	PipelineUrl  string
 	CheckedAt    string
 }
 
@@ -69,10 +68,8 @@ type JiraIssue struct {
 	FixVersion string
 	Assignee   string
 	IssueType  string
-	Resolution string
 	Link       string
 	QaContact  string
-	UpdatedAt  string
 }
 
 type KonfluxRelease struct {
@@ -81,7 +78,6 @@ type KonfluxRelease struct {
 	Application    string
 	Snapshot       string
 	ReleasePlan    string
-	Target         string
 	ReleasedStatus string
 	ReleasedReason string
 	FailedTask     string
@@ -106,14 +102,11 @@ type ProwRun struct {
 }
 
 type ProwRunImage struct {
-	ID           int64
-	JobName      string
-	BuildID      string
-	Role         string
-	Source       string
-	RequestedRef string
-	Digest       string
-	ImageID      string
+	ID      int64
+	JobName string
+	BuildID string
+	Role    string
+	Digest  string
 }
 
 type ProwSync struct {
@@ -126,7 +119,6 @@ type ProwSync struct {
 type ReleaseVersion struct {
 	ID                    int64
 	Name                  string
-	Description           string
 	ReleaseDate           string
 	Released              int64
 	Archived              int64

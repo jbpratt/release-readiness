@@ -9,7 +9,6 @@ const attempt = (
 	started_at: string,
 ): BuildAttempt => ({
 	component,
-	nvr: `${component}-3.18.1-${started_at}`,
 	outcome,
 	started_at,
 	build_url: "",

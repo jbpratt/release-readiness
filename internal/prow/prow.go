@@ -19,7 +19,7 @@ const (
 type Run struct {
 	JobName       string     `json:"job_name"`
 	BuildID       string     `json:"build_id"`
-	Application   string     `json:"application"`
+	Application   string     `json:"-"`
 	State         string     `json:"state"`
 	StartedAt     *time.Time `json:"started_at"`
 	CompletedAt   *time.Time `json:"completed_at"`
@@ -27,17 +27,13 @@ type Run struct {
 	ArtifactState string     `json:"artifact_state"`
 	CatalogRef    string     `json:"catalog_ref"`
 	FetchedAt     time.Time  `json:"fetched_at"`
-	Images        []Image    `json:"images"`
+	Images        []Image    `json:"-"`
 }
 
 // Image is a requested image a run tested. Digest is the join key against
-// Snapshot components; ImageID is the runtime image and diagnostic only.
+// Snapshot components.
 type Image struct {
-	Role         string `json:"role"`
-	Source       string `json:"source"`
-	RequestedRef string `json:"requested_ref"`
-	Digest       string `json:"digest"`
-	ImageID      string `json:"image_id"`
+	Role, Digest string
 }
 
 // SyncState records when a job's runs were last listed without error.
@@ -106,9 +102,7 @@ type testedImages struct {
 	} `json:"operator"`
 	Images []struct {
 		Role         string `json:"role"`
-		Source       string `json:"source"`
 		RequestedRef string `json:"requested_ref"`
-		ImageID      string `json:"image_id"`
 	} `json:"images"`
 }
 
@@ -139,7 +133,6 @@ func parseRun(job Job, buildID string, pjData, finData []byte) (*Run, string, er
 		StartedAt:     pj.Status.StartTime,
 		ProwURL:       pj.Status.URL,
 		ArtifactState: ArtifactMissing,
-		Images:        []Image{},
 	}
 	if finData != nil {
 		var fin finished
@@ -165,17 +158,17 @@ func (r *Run) applyArtifact(data []byte) {
 	}
 	r.ArtifactState = ArtifactPresent
 	r.CatalogRef = ti.Catalog.ResolvedRef
-	add := func(role, source, ref, imageID string) {
-		r.Images = append(r.Images, Image{Role: role, Source: source, RequestedRef: ref, Digest: digest(ref), ImageID: imageID})
+	add := func(role, ref string) {
+		r.Images = append(r.Images, Image{Role: role, Digest: digest(ref)})
 	}
 	if ti.Catalog.ResolvedRef != "" {
-		add("catalog", "catalog", ti.Catalog.ResolvedRef, "")
+		add("catalog", ti.Catalog.ResolvedRef)
 	}
 	if ti.Operator.BundleRef != "" {
-		add("quay-operator-bundle", "bundle", ti.Operator.BundleRef, "")
+		add("quay-operator-bundle", ti.Operator.BundleRef)
 	}
 	for _, img := range ti.Images {
-		add(img.Role, img.Source, img.RequestedRef, img.ImageID)
+		add(img.Role, img.RequestedRef)
 	}
 }
 

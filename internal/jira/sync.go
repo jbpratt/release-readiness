@@ -85,7 +85,6 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 			// A fixVersion missing from JIRA is a data problem on one ticket, not sync health.
 			s.logger.Warn("get version metadata", "version", rel.FixVersion, "error", err)
 		} else {
-			rv.Description = versionInfo.Description
 			rv.Released = versionInfo.Released
 			rv.Archived = versionInfo.Archived
 			if versionInfo.ReleaseDate != "" {
@@ -163,15 +162,6 @@ func (s *Syncer) syncVersion(ctx context.Context, fixVersion string) error {
 			if issue.Fields.Assignee != nil {
 				assignee = issue.Fields.Assignee.DisplayName
 			}
-			resolution := ""
-			if issue.Fields.Resolution != nil {
-				resolution = issue.Fields.Resolution.Name
-			}
-
-			updatedAt, _ := time.Parse("2006-01-02T15:04:05.000-0700", issue.Fields.Updated)
-			if updatedAt.IsZero() {
-				updatedAt = time.Now().UTC()
-			}
 
 			jiraURL := fmt.Sprintf("%s/browse/%s", s.client.SiteURL(), issue.Key)
 
@@ -184,10 +174,8 @@ func (s *Syncer) syncVersion(ctx context.Context, fixVersion string) error {
 				FixVersion: fixVersion,
 				Assignee:   assignee,
 				IssueType:  issue.Fields.IssueType.Name,
-				Resolution: resolution,
 				Link:       jiraURL,
 				QAContact:  issue.QAContact,
-				UpdatedAt:  updatedAt,
 			}
 
 			if err := txStore.UpsertJiraIssue(ctx, record); err != nil {

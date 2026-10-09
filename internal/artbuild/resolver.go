@@ -35,7 +35,6 @@ var quayStream = regexp.MustCompile(`quay-(\d+)-(\d+)`)
 type Build struct {
 	Digest, State, NVR, RecordID string
 	UpstreamRepo, UpstreamSHA    string
-	PipelineURL                  string
 	CheckedAt                    time.Time
 }
 
@@ -340,7 +339,6 @@ func (r *Resolver) resolve(ctx context.Context, c Candidate, now time.Time, pace
 	b.State = StateResolved
 	b.NVR, b.RecordID = rec.NVR, rec.RecordID
 	b.UpstreamRepo, b.UpstreamSHA = rec.SourceRepo, rec.Commitish
-	b.PipelineURL = rec.BuildPipelineURL
 	return b, nil
 }
 

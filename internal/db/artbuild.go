@@ -19,7 +19,6 @@ func (d *DB) UpsertArtBuild(ctx context.Context, b artbuild.Build) error {
 		RecordID:     b.RecordID,
 		UpstreamRepo: b.UpstreamRepo,
 		UpstreamSha:  b.UpstreamSHA,
-		PipelineUrl:  b.PipelineURL,
 		CheckedAt:    b.CheckedAt.UTC().Format(time.RFC3339),
 	})
 }
@@ -59,7 +58,6 @@ func (d *DB) ResolvedArtBuilds(ctx context.Context, digests []string) (map[strin
 			RecordID:     r.RecordID,
 			UpstreamRepo: r.UpstreamRepo,
 			UpstreamSHA:  r.UpstreamSha,
-			PipelineURL:  r.PipelineUrl,
 			CheckedAt:    parseTime(r.CheckedAt),
 		}
 	}
@@ -148,17 +146,17 @@ func (d *DB) StoreArtBuildAttempts(ctx context.Context, group string, attempts [
 	})
 }
 
-// ArtBuildCoverage returns the span of build start times group's searches
-// read without a gap; ok is false when it was never searched.
-func (d *DB) ArtBuildCoverage(ctx context.Context, group string) (from, to time.Time, ok bool, err error) {
-	r, err := d.queries().GetArtBuildCoverage(ctx, group)
+// ArtBuildCoverage returns when the span of build start times group's
+// searches read without a gap begins; ok is false when it was never searched.
+func (d *DB) ArtBuildCoverage(ctx context.Context, group string) (from time.Time, ok bool, err error) {
+	s, err := d.queries().GetArtBuildCoverage(ctx, group)
 	if errors.Is(err, sql.ErrNoRows) {
-		return time.Time{}, time.Time{}, false, nil
+		return time.Time{}, false, nil
 	}
 	if err != nil {
-		return time.Time{}, time.Time{}, false, err
+		return time.Time{}, false, err
 	}
-	return parseTime(r.CoveredFrom), parseTime(r.CoveredTo), true, nil
+	return parseTime(s), true, nil
 }
 
 // ArtBuildAttempts returns version's image-build attempts in group inside

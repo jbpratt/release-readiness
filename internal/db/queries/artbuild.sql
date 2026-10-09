@@ -1,13 +1,12 @@
 -- name: UpsertArtBuild :exec
-INSERT INTO art_builds (digest, state, nvr, record_id, upstream_repo, upstream_sha, pipeline_url, checked_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO art_builds (digest, state, nvr, record_id, upstream_repo, upstream_sha, checked_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(digest) DO UPDATE SET
     state = excluded.state,
     nvr = excluded.nvr,
     record_id = excluded.record_id,
     upstream_repo = excluded.upstream_repo,
     upstream_sha = excluded.upstream_sha,
-    pipeline_url = excluded.pipeline_url,
     checked_at = excluded.checked_at;
 
 -- name: ListArtBuildCandidates :many
@@ -30,7 +29,7 @@ ORDER BY last_seen DESC
 LIMIT ?;
 
 -- name: ListResolvedArtBuilds :many
-SELECT digest, state, nvr, record_id, upstream_repo, upstream_sha, pipeline_url, checked_at
+SELECT digest, state, nvr, record_id, upstream_repo, upstream_sha, checked_at
 FROM art_builds
 WHERE state = 'resolved' AND digest IN (sqlc.slice('digests'));
 
@@ -75,7 +74,7 @@ ON CONFLICT(group_name) DO UPDATE SET
     covered_to = excluded.covered_to;
 
 -- name: GetArtBuildCoverage :one
-SELECT covered_from, covered_to FROM art_build_coverage WHERE group_name = ?;
+SELECT covered_from FROM art_build_coverage WHERE group_name = ?;
 
 -- name: ListArtBuildAttempts :many
 -- A version's attempts inside its group's covered span, newest first. A

@@ -34,12 +34,11 @@ type searchBuild struct {
 
 // record is a full /build record.
 type record struct {
-	NVR              string `json:"nvr"`
-	RecordID         string `json:"record_id"`
-	ImagePullspec    string `json:"image_pullspec"`
-	Commitish        string `json:"commitish"`
-	SourceRepo       string `json:"source_repo"`
-	BuildPipelineURL string `json:"build_pipeline_url"`
+	NVR           string `json:"nvr"`
+	RecordID      string `json:"record_id"`
+	ImagePullspec string `json:"image_pullspec"`
+	Commitish     string `json:"commitish"`
+	SourceRepo    string `json:"source_repo"`
 }
 
 func (c *Client) search(ctx context.Context, q url.Values) ([]searchBuild, error) {
@@ -82,9 +81,9 @@ func (c *Client) get(ctx context.Context, path string, v any) error {
 	return json.NewDecoder(resp.Body).Decode(v)
 }
 
-// PageURL is a record's human page on the service, page "build" or "logs".
-func PageURL(baseURL, page, nvr, recordID string) string {
-	return strings.TrimRight(baseURL, "/") + "/" + page + "?" + recordQuery(nvr, recordID)
+// PageURL is a record's human build page on the service.
+func PageURL(baseURL, nvr, recordID string) string {
+	return strings.TrimRight(baseURL, "/") + "/build?" + recordQuery(nvr, recordID)
 }
 
 func recordQuery(nvr, recordID string) string {

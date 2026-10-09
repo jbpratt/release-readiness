@@ -15,8 +15,8 @@ ON CONFLICT(job_name, build_id) DO UPDATE SET
 DELETE FROM prow_run_images WHERE job_name = ? AND build_id = ?;
 
 -- name: InsertProwRunImage :exec
-INSERT INTO prow_run_images (job_name, build_id, role, source, requested_ref, digest, image_id)
-VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT INTO prow_run_images (job_name, build_id, role, digest)
+VALUES (?, ?, ?, ?);
 
 -- name: ListFinishedProwBuildIDs :many
 SELECT build_id FROM prow_runs WHERE job_name = ? AND completed_at != '';
@@ -28,7 +28,7 @@ WHERE application = ?
 ORDER BY started_at DESC, build_id DESC;
 
 -- name: ListProwRunImages :many
-SELECT role, source, requested_ref, digest, image_id
+SELECT role, digest
 FROM prow_run_images
 WHERE job_name = ? AND build_id = ?
 ORDER BY id;

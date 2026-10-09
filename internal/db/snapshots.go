@@ -182,7 +182,7 @@ func (d *DB) GetReleaseSnapshot(ctx context.Context, name string) (*model.Releas
 		Components:     make([]model.SnapshotImage, len(components)),
 	}
 	for i, c := range components {
-		snap.Components[i] = model.SnapshotImage{Name: c.Component, Image: c.ImageURL, GitSHA: c.GitSHA, GitURL: c.GitURL}
+		snap.Components[i] = model.SnapshotImage{Name: c.Component, Image: c.ImageURL}
 	}
 	snaps := []model.ReleaseSnapshot{snap}
 	if err := d.attachKonfluxReleases(ctx, snaps); err != nil {

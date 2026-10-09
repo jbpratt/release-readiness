@@ -4,12 +4,8 @@ import type { KonfluxRelease } from "../api/types.ts";
 import { releaseStatus } from "./releaseStatus.ts";
 
 const release = (r: Partial<KonfluxRelease>): KonfluxRelease => ({
-	id: 1,
 	name: "r1",
-	application: "quay-3-18",
-	snapshot: "s1",
 	release_plan: "rp",
-	target: "t",
 	released_status: "",
 	released_reason: "",
 	created_at: "2026-10-08T09:00:00Z",

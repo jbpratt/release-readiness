@@ -1,8 +1,6 @@
 export interface SnapshotImage {
 	name: string;
 	image: string;
-	git_sha: string;
-	git_url: string;
 	/** null until the image is found in ART build history. */
 	art: ArtBuild | null;
 	/** A newer ART build still running from another upstream commit. */
@@ -18,8 +16,6 @@ export interface PendingArtBuild {
 export interface ArtBuild {
 	nvr: string;
 	build_url: string;
-	logs_url: string;
-	pipeline_url: string;
 	upstream_repo: string;
 	upstream_sha: string;
 }
@@ -27,7 +23,6 @@ export interface ArtBuild {
 /** One ART image build; component is its NVR name. */
 export interface BuildAttempt {
 	component: string;
-	nvr: string;
 	/** "success", "pending", or a failure such as "build_error". */
 	outcome: string;
 	started_at: string;
@@ -38,12 +33,10 @@ export interface BuildAttempt {
 export interface BuildAttempts {
 	/** null when the stream's ART history was never read. */
 	covered_from: string | null;
-	covered_to: string | null;
 	attempts: BuildAttempt[];
 }
 
 export interface ReleaseSnapshot {
-	application: string;
 	name: string;
 	created_at: string;
 	component_count: number;
@@ -59,7 +52,6 @@ export interface ReleaseSnapshot {
 export interface FBCCatalog {
 	status: "current" | "behind" | "unknown";
 	catalog_snapshot: string;
-	catalog_image: string;
 	catalog_bundle_image: string;
 	snapshot_bundle_image: string;
 }
@@ -70,12 +62,8 @@ export interface ReleaseSnapshotPage {
 }
 
 export interface KonfluxRelease {
-	id: number;
 	name: string;
-	application: string;
-	snapshot: string;
 	release_plan: string;
-	target: string;
 	released_status: string;
 	released_reason: string;
 	/** Task and step of the last managed pipeline attempt of a failed Release. */
@@ -89,8 +77,6 @@ export interface KonfluxRelease {
 /** A Snapshot annotated art.redhat.com/env=stage, with the newest Release naming it. */
 export interface StagedSnapshot {
 	name: string;
-	assembly: string;
-	kind: "image" | "fbc";
 	created_at: string;
 	release: KonfluxRelease | null;
 }
@@ -106,14 +92,11 @@ export interface JiraIssue {
 	summary: string;
 	status: string;
 	priority: string;
-	labels: string;
 	fix_version: string;
 	assignee: string;
 	issue_type: string;
-	resolution: string;
 	link: string;
 	qa_contact: string;
-	updated_at: string;
 }
 
 export interface IssueSummary {
@@ -121,15 +104,12 @@ export interface IssueSummary {
 	verified: number;
 	open: number;
 	cves: number;
-	bugs: number;
 }
 
 export interface ReleaseVersion {
 	name: string;
-	description: string;
 	release_date?: string;
 	released: boolean;
-	archived: boolean;
 	release_ticket_key?: string;
 	release_ticket_assignee?: string;
 	konflux_application?: string;
@@ -145,11 +125,9 @@ export interface ReleaseOverview {
 	release: ReleaseVersion;
 	issue_summary?: IssueSummary;
 	readiness: ReadinessResponse;
-	component_count: number;
 	// Newest snapshot in the version's Konflux applications, not bound to this version.
 	latest_build?: string;
 	shipped: boolean;
-	shipped_source: "catalog" | "jira" | "";
 	next_in_stream: boolean;
 }
 
@@ -164,25 +142,15 @@ interface SyncProblem {
 	message: string;
 	since: string | null;
 	last_success: string | null;
-	last_error_at: string | null;
 }
 
 export interface SyncStatus {
 	problems: SyncProblem[];
 }
 
-interface ProwImage {
-	role: string;
-	source: string;
-	requested_ref: string;
-	digest: string;
-	image_id: string;
-}
-
 export interface ProwRun {
 	job_name: string;
 	build_id: string;
-	application: string;
 	state: string;
 	started_at: string | null;
 	completed_at: string | null;
@@ -191,7 +159,6 @@ export interface ProwRun {
 	artifact_state: "present" | "missing" | "invalid";
 	catalog_ref: string;
 	fetched_at: string;
-	images: ProwImage[];
 }
 
 interface ProwSync {

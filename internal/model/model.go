@@ -19,19 +19,16 @@ type SnapshotRecord struct {
 
 // JiraIssueRecord represents a JIRA issue cached in the database.
 type JiraIssueRecord struct {
-	ID         int64     `json:"id"`
-	Key        string    `json:"key"`
-	Summary    string    `json:"summary"`
-	Status     string    `json:"status"`
-	Priority   string    `json:"priority"`
-	Labels     string    `json:"labels"` // comma-separated
-	FixVersion string    `json:"fix_version"`
-	Assignee   string    `json:"assignee"`
-	IssueType  string    `json:"issue_type"`
-	Resolution string    `json:"resolution"`
-	Link       string    `json:"link"`
-	QAContact  string    `json:"qa_contact"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	Key        string `json:"key"`
+	Summary    string `json:"summary"`
+	Status     string `json:"status"`
+	Priority   string `json:"priority"`
+	Labels     string `json:"-"` // comma-separated
+	FixVersion string `json:"fix_version"`
+	Assignee   string `json:"assignee"`
+	IssueType  string `json:"issue_type"`
+	Link       string `json:"link"`
+	QAContact  string `json:"qa_contact"`
 }
 
 // IssueSummary provides aggregate counts of JIRA issues for a release.
@@ -40,21 +37,18 @@ type IssueSummary struct {
 	Verified int `json:"verified"`
 	Open     int `json:"open"`
 	CVEs     int `json:"cves"`
-	Bugs     int `json:"bugs"`
 }
 
 // ReleaseOverview is a combined view of a release with its issue summary,
-// readiness signal, and the size and age of its current component set.
+// readiness signal, and the age of its current component set.
 type ReleaseOverview struct {
-	Release        ReleaseVersion    `json:"release"`
-	IssueSummary   *IssueSummary     `json:"issue_summary,omitempty"`
-	Readiness      ReadinessResponse `json:"readiness"`
-	ComponentCount int               `json:"component_count"`
-	LatestBuild    *time.Time        `json:"latest_build,omitempty"`
-	// Shipped is set when the catalog published the version's tag
-	// (ShippedSource "catalog") or JIRA marks it released ("jira").
-	Shipped       bool   `json:"shipped"`
-	ShippedSource string `json:"shipped_source"`
+	Release      ReleaseVersion    `json:"release"`
+	IssueSummary *IssueSummary     `json:"issue_summary,omitempty"`
+	Readiness    ReadinessResponse `json:"readiness"`
+	LatestBuild  *time.Time        `json:"latest_build,omitempty"`
+	// Shipped is set when the catalog published the version's tag or JIRA
+	// marks it released.
+	Shipped bool `json:"shipped"`
 	// NextInStream marks the lowest unshipped z of its product and major.minor.
 	NextInStream bool `json:"next_in_stream"`
 }
@@ -69,7 +63,7 @@ type ReleaseSnapshotPage struct {
 // Konflux Releases that name it. Missing marks a Snapshot a Release names that
 // is no longer stored; its CreatedAt is then the oldest Release's.
 type ReleaseSnapshot struct {
-	Application    string           `json:"application"`
+	Application    string           `json:"-"`
 	Name           string           `json:"name"`
 	CreatedAt      time.Time        `json:"created_at"`
 	ComponentCount int              `json:"component_count"`
@@ -86,7 +80,6 @@ type ReleaseSnapshot struct {
 type FBCCatalog struct {
 	Status              string `json:"status"`
 	CatalogSnapshot     string `json:"catalog_snapshot"`
-	CatalogImage        string `json:"catalog_image"`
 	CatalogBundleImage  string `json:"catalog_bundle_image"`
 	SnapshotBundleImage string `json:"snapshot_bundle_image"`
 }
@@ -95,8 +88,6 @@ type FBCCatalog struct {
 type SnapshotImage struct {
 	Name            string           `json:"name"`
 	Image           string           `json:"image"`
-	GitSHA          string           `json:"git_sha"`
-	GitURL          string           `json:"git_url"`
 	Art             *ArtBuild        `json:"art"`
 	PendingArtBuild *PendingArtBuild `json:"pending_art_build"`
 }
@@ -106,8 +97,6 @@ type SnapshotImage struct {
 type ArtBuild struct {
 	NVR          string `json:"nvr"`
 	BuildURL     string `json:"build_url"`
-	LogsURL      string `json:"logs_url"`
-	PipelineURL  string `json:"pipeline_url"`
 	UpstreamRepo string `json:"upstream_repo"`
 	UpstreamSHA  string `json:"upstream_sha"`
 }
@@ -122,17 +111,15 @@ type PendingArtBuild struct {
 
 // BuildAttempts is a release's ART image-build attempts whose start time
 // falls in the span ART history was read without a gap, newest first.
-// CoveredFrom and CoveredTo are null when it was never read.
+// CoveredFrom is null when it was never read.
 type BuildAttempts struct {
 	CoveredFrom *time.Time     `json:"covered_from"`
-	CoveredTo   *time.Time     `json:"covered_to"`
 	Attempts    []BuildAttempt `json:"attempts"`
 }
 
 // BuildAttempt is one ART image build. Component is its NVR name.
 type BuildAttempt struct {
 	Component string    `json:"component"`
-	NVR       string    `json:"nvr"`
 	Outcome   string    `json:"outcome"`
 	StartedAt time.Time `json:"started_at"`
 	BuildURL  string    `json:"build_url"`
@@ -147,10 +134,9 @@ type ReadinessResponse struct {
 // ReleaseVersion represents a JIRA fixVersion with release metadata.
 type ReleaseVersion struct {
 	Name                  string     `json:"name"`
-	Description           string     `json:"description"`
 	ReleaseDate           *time.Time `json:"release_date,omitempty"`
 	Released              bool       `json:"released"`
-	Archived              bool       `json:"archived"`
+	Archived              bool       `json:"-"`
 	ReleaseTicketKey      string     `json:"release_ticket_key,omitempty"`
 	ReleaseTicketAssignee string     `json:"release_ticket_assignee,omitempty"`
 	KonfluxApplication    string     `json:"konflux_application,omitempty"`
@@ -160,12 +146,10 @@ type ReleaseVersion struct {
 // KonfluxRelease is a Konflux Release custom resource, distinct from the JIRA
 // ReleaseVersion.
 type KonfluxRelease struct {
-	ID             int64      `json:"id"`
 	Name           string     `json:"name"`
-	Application    string     `json:"application"`
-	Snapshot       string     `json:"snapshot"`
+	Application    string     `json:"-"`
+	Snapshot       string     `json:"-"`
 	ReleasePlan    string     `json:"release_plan"`
-	Target         string     `json:"target"`
 	ReleasedStatus string     `json:"released_status"`
 	ReleasedReason string     `json:"released_reason"`
 	FailedTask     string     `json:"failed_task,omitempty"`
@@ -187,8 +171,6 @@ type StagedSnapshots struct {
 // newest Konflux Release that names it, or null when none does.
 type StagedSnapshot struct {
 	Name      string          `json:"name"`
-	Assembly  string          `json:"assembly"`
-	Kind      string          `json:"kind"`
 	CreatedAt time.Time       `json:"created_at"`
 	Release   *KonfluxRelease `json:"release"`
 }

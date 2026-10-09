@@ -75,7 +75,6 @@ func TestSyncStatus(t *testing.T) {
 
 	var got struct {
 		Problems []map[string]any `json:"problems"`
-		Sources  []map[string]any `json:"sources"`
 	}
 	getJSON(t, srv, "/api/v1/sync-status", http.StatusOK, &got)
 
@@ -86,14 +85,8 @@ func TestSyncStatus(t *testing.T) {
 	if p["source"] != "jira" || p["message"] != "JIRA authentication failed: boom" || p["last_success"] != nil {
 		t.Errorf("problem = %v", p)
 	}
-	for _, k := range []string{"since", "last_error_at"} {
-		if _, err := time.Parse(time.RFC3339, p[k].(string)); err != nil {
-			t.Errorf("%s = %v, want RFC3339", k, p[k])
-		}
-	}
-	if len(got.Sources) != 2 || got.Sources[0]["source"] != "jira" || got.Sources[0]["ok"] != false ||
-		got.Sources[1]["source"] != "konflux" || got.Sources[1]["ok"] != true || got.Sources[1]["last_success"] == nil {
-		t.Errorf("sources = %v, want jira failing then konflux ok", got.Sources)
+	if _, err := time.Parse(time.RFC3339, p["since"].(string)); err != nil {
+		t.Errorf("since = %v, want RFC3339", p["since"])
 	}
 }
 
@@ -241,7 +234,7 @@ func TestGetReleaseSnapshot(t *testing.T) {
 
 	var snap model.ReleaseSnapshot
 	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/fbc-quay-3-18-a", http.StatusOK, &snap)
-	wantImages := []model.SnapshotImage{{Name: "fbc-quay-3-18-index", Image: "quay.io/x/fbc-quay-3-18-index@fbc-quay-3-18-a", GitSHA: "sha-fbc-quay-3-18-a"}}
+	wantImages := []model.SnapshotImage{{Name: "fbc-quay-3-18-index", Image: "quay.io/x/fbc-quay-3-18-index@fbc-quay-3-18-a"}}
 	if !slices.Equal(snap.Components, wantImages) || len(snap.Releases) != 2 || snap.Releases[1].Name != "fbc-release" {
 		t.Fatalf("snapshot: got %+v", snap)
 	}
@@ -265,7 +258,7 @@ func TestArtBuildLinks(t *testing.T) {
 	// seedSnapshot pins each image to the digest "@<snapshot name>".
 	if err := srv.db.UpsertArtBuild(t.Context(), artbuild.Build{
 		Digest: "quay-3-18-b", State: artbuild.StateResolved, NVR: "clair-1", RecordID: "rec-1",
-		UpstreamRepo: "https://github.com/quay/clair", UpstreamSHA: "abc123", PipelineURL: "https://konflux/plr", CheckedAt: time.Now(),
+		UpstreamRepo: "https://github.com/quay/clair", UpstreamSHA: "abc123", CheckedAt: time.Now(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -275,8 +268,6 @@ func TestArtBuildLinks(t *testing.T) {
 	want := &model.ArtBuild{
 		NVR:          "clair-1",
 		BuildURL:     "https://art.example/build?nvr=clair-1&record_id=rec-1",
-		LogsURL:      "https://art.example/logs?nvr=clair-1&record_id=rec-1",
-		PipelineURL:  "https://konflux/plr",
 		UpstreamRepo: "https://github.com/quay/clair",
 		UpstreamSHA:  "abc123",
 	}
@@ -365,7 +356,7 @@ func TestFBCCatalogStatus(t *testing.T) {
 			var snap model.ReleaseSnapshot
 			getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/snapshots/quay-3-18-a", http.StatusOK, &snap)
 			want := tc.want
-			want.CatalogSnapshot, want.CatalogImage, want.SnapshotBundleImage = "fbc-3-18-op", catImage, tc.snapshotImage
+			want.CatalogSnapshot, want.SnapshotBundleImage = "fbc-3-18-op", tc.snapshotImage
 			if snap.FBCCatalog == nil || *snap.FBCCatalog != want {
 				t.Errorf("fbc_catalog = %+v, want %+v", snap.FBCCatalog, want)
 			}
@@ -438,7 +429,7 @@ func TestListBuildAttempts(t *testing.T) {
 	const url = "/api/v1/releases/quay-v3.18.0/build-attempts"
 	var resp model.BuildAttempts
 	getJSON(t, srv, url, http.StatusOK, &resp)
-	if resp.CoveredFrom != nil || resp.CoveredTo != nil || resp.Attempts == nil || len(resp.Attempts) != 0 {
+	if resp.CoveredFrom != nil || resp.Attempts == nil || len(resp.Attempts) != 0 {
 		t.Errorf("before any search: got %+v, want null coverage and no attempts", resp)
 	}
 
@@ -451,11 +442,11 @@ func TestListBuildAttempts(t *testing.T) {
 		t.Fatal(err)
 	}
 	getJSON(t, srv, url, http.StatusOK, &resp)
-	if resp.CoveredFrom == nil || !resp.CoveredFrom.Equal(t0.Add(-time.Hour)) || resp.CoveredTo == nil || !resp.CoveredTo.Equal(t0.Add(time.Hour)) {
-		t.Errorf("coverage: got [%v, %v]", resp.CoveredFrom, resp.CoveredTo)
+	if resp.CoveredFrom == nil || !resp.CoveredFrom.Equal(t0.Add(-time.Hour)) {
+		t.Errorf("coverage: got from %v", resp.CoveredFrom)
 	}
 	want := model.BuildAttempt{
-		Component: "quay-clair-container", NVR: nvr, Outcome: "build_error", StartedAt: t0,
+		Component: "quay-clair-container", Outcome: "build_error", StartedAt: t0,
 		BuildURL: "https://art.example/build?nvr=" + nvr + "&record_id=rec-1",
 	}
 	if len(resp.Attempts) != 1 || resp.Attempts[0] != want {
@@ -535,7 +526,7 @@ func TestReleasesOverview(t *testing.T) {
 	err = srv.db.UpsertJiraIssue(ctx, &model.JiraIssueRecord{
 		Key: "PROJQUAY-1", Summary: "fix bug", Status: "Open",
 		Priority: "Major", FixVersion: "3.16.3", IssueType: "Bug",
-		Link: "https://redhat.atlassian.net/browse/PROJQUAY-1", UpdatedAt: time.Now(),
+		Link: "https://redhat.atlassian.net/browse/PROJQUAY-1",
 	})
 	if err != nil {
 		t.Fatalf("upsert issue: %v", err)
@@ -568,11 +559,11 @@ func TestReleasesOverview(t *testing.T) {
 	if ov.IssueSummary == nil {
 		t.Fatal("issue_summary: got nil")
 	}
-	if ov.IssueSummary.Total != 1 || ov.IssueSummary.Bugs != 1 {
-		t.Errorf("issue_summary: got total=%d bugs=%d, want 1/1", ov.IssueSummary.Total, ov.IssueSummary.Bugs)
+	if ov.IssueSummary.Total != 1 {
+		t.Errorf("issue_summary: got total=%d, want 1", ov.IssueSummary.Total)
 	}
-	if ov.ComponentCount != 1 || ov.LatestBuild == nil || !ov.LatestBuild.Equal(built) {
-		t.Errorf("components: got count=%d latest_build=%v, want 1/%v", ov.ComponentCount, ov.LatestBuild, built)
+	if ov.LatestBuild == nil || !ov.LatestBuild.Equal(built) {
+		t.Errorf("latest_build: got %v, want %v", ov.LatestBuild, built)
 	}
 	if ov.Readiness.Signal != "yellow" {
 		t.Errorf("readiness: got %q, want yellow (open issues remain)", ov.Readiness.Signal)
@@ -584,9 +575,9 @@ func TestGetIssueSummariesBatch(t *testing.T) {
 	ctx := t.Context()
 
 	issues := []model.JiraIssueRecord{
-		{Key: "Q-1", Summary: "bug1", Status: "Open", Priority: "Major", FixVersion: "3.16.3", IssueType: "Bug", UpdatedAt: time.Now()},
-		{Key: "Q-2", Summary: "cve1", Status: "Closed", Priority: "Critical", FixVersion: "3.16.3", IssueType: "Vulnerability", UpdatedAt: time.Now()},
-		{Key: "Q-3", Summary: "task1", Status: "Verified", Priority: "Minor", FixVersion: "3.17.0", IssueType: "Story", UpdatedAt: time.Now()},
+		{Key: "Q-1", Summary: "bug1", Status: "Open", Priority: "Major", FixVersion: "3.16.3", IssueType: "Bug"},
+		{Key: "Q-2", Summary: "cve1", Status: "Closed", Priority: "Critical", FixVersion: "3.16.3", IssueType: "Vulnerability"},
+		{Key: "Q-3", Summary: "task1", Status: "Verified", Priority: "Minor", FixVersion: "3.17.0", IssueType: "Story"},
 	}
 	for _, issue := range issues {
 		if err := srv.db.UpsertJiraIssue(ctx, &issue); err != nil {
@@ -605,9 +596,6 @@ func TestGetIssueSummariesBatch(t *testing.T) {
 	}
 	if s163.Total != 2 {
 		t.Errorf("3.16.3 total: got %d, want 2", s163.Total)
-	}
-	if s163.Bugs != 1 {
-		t.Errorf("3.16.3 bugs: got %d, want 1", s163.Bugs)
 	}
 	if s163.CVEs != 1 {
 		t.Errorf("3.16.3 cves: got %d, want 1", s163.CVEs)
@@ -755,19 +743,15 @@ func TestReleasesOverviewShipped(t *testing.T) {
 	if err := json.NewDecoder(w.Body).Decode(&overviews); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	type flags struct {
-		shipped bool
-		source  string
-		next    bool
-	}
+	type flags struct{ shipped, next bool }
 	want := map[string]flags{
-		"quay-v3.17.5": {true, "catalog", false},
-		"quay-v3.17.6": {false, "", true},
-		"quay-v3.18.0": {true, "jira", false},
-		"quay-v3.18.1": {false, "", true},
+		"quay-v3.17.5": {true, false},
+		"quay-v3.17.6": {false, true},
+		"quay-v3.18.0": {true, false},
+		"quay-v3.18.1": {false, true},
 	}
 	for _, ov := range overviews {
-		got := flags{ov.Shipped, ov.ShippedSource, ov.NextInStream}
+		got := flags{ov.Shipped, ov.NextInStream}
 		if got != want[ov.Release.Name] {
 			t.Errorf("%s: got %+v, want %+v", ov.Release.Name, got, want[ov.Release.Name])
 		}
