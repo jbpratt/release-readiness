@@ -9,12 +9,9 @@ import type {
 	ReleaseSnapshot,
 	ReleaseSnapshotPage,
 	ReleaseVersion,
-	SelectedBuildResponse,
 	SnapshotProwRuns,
 	StagedSnapshots,
 	SyncStatus,
-	TicketDelta,
-	TicketMembership,
 } from "./types";
 
 const BASE = "/api/v1";
@@ -115,29 +112,4 @@ export function getBuildAttempts(version: string): Promise<BuildAttempts> {
 
 export function getStaged(version: string): Promise<StagedSnapshots> {
 	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}/staged`);
-}
-
-export function getSelectedBuild(
-	version: string,
-): Promise<SelectedBuildResponse> {
-	return fetchJSON(
-		`${BASE}/releases/${encodeURIComponent(version)}/selected-build`,
-	);
-}
-
-export function getTicketMembership(
-	version: string,
-): Promise<TicketMembership> {
-	return fetchJSON(
-		`${BASE}/releases/${encodeURIComponent(version)}/ticket-membership`,
-	);
-}
-
-export function getTicketDelta(
-	version: string,
-	name: string,
-): Promise<TicketDelta> {
-	return fetchJSON(
-		`${BASE}/releases/${encodeURIComponent(version)}/snapshots/${encodeURIComponent(name)}/ticket-delta`,
-	);
 }
