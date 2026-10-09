@@ -8,9 +8,15 @@ ON CONFLICT(name) DO UPDATE SET
     created_at=excluded.created_at;
 
 -- name: LatestStagedSnapshot :one
+-- An empty component matches any Snapshot.
 SELECT name, assembly, kind, env, created_at
-FROM staged_snapshots
-WHERE assembly = ? AND kind = ? AND env = 'stage'
+FROM staged_snapshots ss
+WHERE assembly = sqlc.arg(assembly) AND kind = sqlc.arg(kind) AND env = 'stage'
+  AND (CAST(sqlc.arg(component) AS TEXT) = '' OR EXISTS (
+      SELECT 1
+      FROM snapshots s
+      JOIN snapshot_components sc ON sc.snapshot_id = s.id
+      WHERE s.name = ss.name AND sc.component = sqlc.arg(component)))
 ORDER BY created_at DESC, name DESC
 LIMIT 1;
 

@@ -34,6 +34,7 @@ SELECT s.name, sc.image_url
 FROM snapshots s
 JOIN snapshot_components sc ON sc.snapshot_id = s.id
 WHERE s.application = ? AND sc.component = ?
+  AND NOT EXISTS (SELECT 1 FROM staged_snapshots ss WHERE ss.name = s.name)
 ORDER BY s.created_at DESC, s.id DESC
 LIMIT 1
 `
@@ -48,7 +49,8 @@ type GetLatestSnapshotImageRow struct {
 	ImageUrl string
 }
 
-// The newest Snapshot of an application holding a component, with its image.
+// The newest Snapshot of an application holding a component, with its image,
+// skipping the Snapshots ART staged.
 func (q *Queries) GetLatestSnapshotImage(ctx context.Context, arg GetLatestSnapshotImageParams) (GetLatestSnapshotImageRow, error) {
 	row := q.db.QueryRowContext(ctx, getLatestSnapshotImage, arg.Application, arg.Component)
 	var i GetLatestSnapshotImageRow
@@ -144,6 +146,7 @@ WHERE s.application LIKE 'fbc-%'
               FROM snapshots s2
               JOIN snapshot_components sc2 ON sc2.snapshot_id = s2.id
               WHERE s2.application = s.application AND sc2.component = sc.component
+                AND NOT EXISTS (SELECT 1 FROM staged_snapshots ss WHERE ss.name = s2.name)
               ORDER BY s2.created_at DESC, s2.id DESC
               LIMIT 1)
   AND (c.digest IS NULL OR (c.state = 'failed' AND c.checked_at < ?))
@@ -158,6 +161,8 @@ type ListFBCCatalogCandidatesParams struct {
 
 // The quay-operator image of each FBC application's newest Snapshot holding
 // one, when its catalog is unread or its last read failed before the cutoff.
+// Snapshots ART staged share the application and component but are not the
+// stream's builds, so they are skipped.
 func (q *Queries) ListFBCCatalogCandidates(ctx context.Context, arg ListFBCCatalogCandidatesParams) ([]string, error) {
 	rows, err := q.db.QueryContext(ctx, listFBCCatalogCandidates, arg.CheckedAt, arg.Limit)
 	if err != nil {

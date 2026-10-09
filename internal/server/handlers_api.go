@@ -286,8 +286,9 @@ func (s *Server) handleListBuildAttempts(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// handleGetStaged returns the newest image and FBC Snapshots ART staged for
-// the release's assembly: version quay-v3.18.1 is assembly 3.18.1.
+// handleGetStaged returns the newest image and quay-operator FBC Snapshots ART
+// staged for the release's assembly: version quay-v3.18.1 is assembly 3.18.1.
+// ART stages one FBC per operator and OCP version.
 func (s *Server) handleGetStaged(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	version := r.PathValue("version")
@@ -297,11 +298,11 @@ func (s *Server) handleGetStaged(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp := model.StagedSnapshots{Assembly: strings.TrimPrefix(release.Name, "quay-v")}
-	if resp.Image, err = s.db.LatestStagedSnapshot(ctx, resp.Assembly, "image"); err != nil {
+	if resp.Image, err = s.db.LatestStagedSnapshot(ctx, resp.Assembly, "image", ""); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if resp.FBC, err = s.db.LatestStagedSnapshot(ctx, resp.Assembly, "fbc"); err != nil {
+	if resp.FBC, err = s.db.LatestStagedSnapshot(ctx, resp.Assembly, "fbc", "fbc-"+release.KonfluxApplication+"-quay-operator"); err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}

@@ -351,6 +351,11 @@ func TestFBCCatalogStatus(t *testing.T) {
 			// Newer, but not the quay-operator catalog.
 			add("fbc-quay-3-18", "fbc-3-18-cso", t0.Add(time.Hour), "fbc-quay-3-18-container-security-operator", "quay.io/x/art-fbc@sha256:c50")
 			add("quay-3-18", "quay-3-18-a", t0.Add(2*time.Hour), "quay-3-18-quay-operator-bundle", tc.snapshotImage)
+			// Newer, but ART's stage fragment of the quay-operator catalog.
+			add("fbc-quay-3-18", "quay-stage-3-18-1-fbc", t0.Add(3*time.Hour), "fbc-quay-3-18-quay-operator", "quay.io/x/art-fbc@sha256:5f0")
+			if err := srv.db.UpsertStagedSnapshot(ctx, "quay-stage-3-18-1-fbc", "3.18.1", "fbc", "stage", t0.Add(3*time.Hour)); err != nil {
+				t.Fatal(err)
+			}
 			if tc.catalog != nil {
 				if err := srv.db.ReplaceFBCCatalog(ctx, "sha256:fbc", tc.state, *tc.catalog, t0); err != nil {
 					t.Fatal(err)
@@ -469,12 +474,25 @@ func TestGetStaged(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for _, s := range []struct{ name, assembly, kind string }{
-		{"quay-stage-3-18-1-image", "3.18.1", "image"},
-		{"quay-stage-3-18-1-fbc", "3.18.1", "fbc"},
-		{"quay-stage-3-18-2-image", "3.18.2", "image"},
+	for i, s := range []struct{ name, assembly, kind, component string }{
+		{"quay-stage-3-18-1-image", "3.18.1", "image", ""},
+		{"quay-stage-3-18-1-fbc", "3.18.1", "fbc", "fbc-quay-3-18-quay-operator"},
+		// Staged later, but the container-security-operator catalog.
+		{"quay-stage-3-18-1-fbc-cso", "3.18.1", "fbc", "fbc-quay-3-18-container-security-operator"},
+		{"quay-stage-3-18-2-image", "3.18.2", "image", ""},
 	} {
-		if err := srv.db.UpsertStagedSnapshot(ctx, s.name, s.assembly, s.kind, "stage", t0); err != nil {
+		created := t0.Add(time.Duration(i) * time.Minute)
+		if err := srv.db.UpsertStagedSnapshot(ctx, s.name, s.assembly, s.kind, "stage", created); err != nil {
+			t.Fatal(err)
+		}
+		if s.component == "" {
+			continue
+		}
+		id, err := srv.db.CreateSnapshot(ctx, "fbc-quay-3-18", s.name, created)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := srv.db.CreateSnapshotComponent(ctx, id, s.component, ""); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -488,9 +506,11 @@ func TestGetStaged(t *testing.T) {
 	var got model.StagedSnapshots
 	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/staged", http.StatusOK, &got)
 	if got.Assembly != "3.18.1" || got.Image == nil || got.Image.Name != "quay-stage-3-18-1-image" ||
-		got.Image.Release == nil || got.Image.Release.ReleasedReason != "Failed" || got.Image.Release.FailedTask != "verify-conforma" ||
-		got.FBC == nil || got.FBC.Name != "quay-stage-3-18-1-fbc" || got.FBC.Release != nil {
+		got.Image.Release == nil || got.Image.Release.ReleasedReason != "Failed" || got.Image.Release.FailedTask != "verify-conforma" {
 		t.Errorf("3.18.1: got %+v", got)
+	}
+	if got.FBC == nil || got.FBC.Name != "quay-stage-3-18-1-fbc" || got.FBC.Release != nil {
+		t.Errorf("3.18.1 staged_fbc = %+v, want quay-stage-3-18-1-fbc without a Release", got.FBC)
 	}
 
 	got = model.StagedSnapshots{}

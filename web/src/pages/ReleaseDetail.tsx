@@ -452,10 +452,10 @@ function StagedRow({
 							</>
 						) : (
 							<>
-								Newest Konflux Snapshot ART marked{" "}
-								<code>env=stage, kind=fbc</code> for this assembly — the
-								file-based catalog build, selected independently of the image
-								above.
+								Newest quay-operator catalog Snapshot ART marked{" "}
+								<code>env=stage, kind=fbc</code> for this assembly. ART stages
+								one file-based catalog per operator and OCP version. Selected
+								independently of the image above.
 							</>
 						)
 					}
