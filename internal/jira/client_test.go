@@ -302,6 +302,20 @@ func TestFixVersionToKonfluxApp(t *testing.T) {
 	}
 }
 
+func TestStreamVersion(t *testing.T) {
+	for in, want := range map[string]string{
+		"quay-v3.16.2":  "quay-v3.16.z",
+		"omr-v2.0.10":   "omr-v2.0.z",
+		"quay-v3.16.z":  "",
+		"3.16.2":        "",
+		"quay-v3.16.2x": "",
+	} {
+		if got := StreamVersion(in); got != want {
+			t.Errorf("StreamVersion(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestBuildSearchJQL(t *testing.T) {
 	client := New(Config{Project: "PROJQUAY"})
 	got := client.buildSearchJQL("quay-v3.16.2")

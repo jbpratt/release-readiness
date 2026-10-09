@@ -421,6 +421,18 @@ func parseRetryAfter(err error) time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
+var streamVersion = regexp.MustCompile(`^([a-z]+-v\d+\.\d+)\.\d+$`)
+
+// StreamVersion returns the generic Target Version of fixVersion's stream,
+// "quay-v3.16.2" → "quay-v3.16.z", or "" when fixVersion is not product-vX.Y.Z.
+func StreamVersion(fixVersion string) string {
+	m := streamVersion.FindStringSubmatch(fixVersion)
+	if m == nil {
+		return ""
+	}
+	return m[1] + ".z"
+}
+
 // FixVersionToKonfluxApp maps a "{product}-v{version}" JIRA fixVersion to its
 // Konflux application name, e.g. "omr-v2.0.10" → "omr-2-0".
 func FixVersionToKonfluxApp(fixVersion string) string {
