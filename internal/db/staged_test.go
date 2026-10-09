@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -101,20 +102,24 @@ func TestSelectedStageBuilds(t *testing.T) {
 		}
 	}
 	stage("snap-a", 0, "quay.io/x/a@"+digest('a'))
-	release("rel-a", "snap-a", "stage-plan", "True", "Succeeded", at(10))
+	release("rel-a", "snap-a", "quay-advisory-stage-3-18", "True", "Succeeded", at(10))
 	stage("snap-b", 60,
 		"quay.io/x/full@"+digest('1'),
 		"quay.io/x/short@"+digest('2'),
 		"quay.io/x/unresolved@"+digest('3'),
 		"quay.io/x/tag:v1")
-	release("rel-b-old", "snap-b", "stage-plan", "True", "Succeeded", at(65))
-	release("rel-b", "snap-b", "stage-plan", "True", "Succeeded", at(70))
+	release("rel-b-old", "snap-b", "quay-advisory-stage-3-18", "True", "Succeeded", at(65))
+	release("rel-b", "snap-b", "quay-advisory-stage-3-18", "True", "Succeeded", at(70))
 	stage("snap-pending", 120)
-	release("rel-pending", "snap-pending", "stage-plan", "Unknown", "Progressing", nil)
+	release("rel-pending", "snap-pending", "quay-advisory-stage-3-18", "Unknown", "Progressing", nil)
 	stage("snap-failed", 180)
-	release("rel-failed", "snap-failed", "stage-plan", "False", "Failed", at(190))
+	release("rel-failed", "snap-failed", "quay-advisory-stage-3-18", "False", "Failed", at(190))
 	stage("snap-prod", 240)
-	release("rel-prod", "snap-prod", "prod-plan", "True", "Succeeded", at(250))
+	release("rel-prod", "snap-prod", "quay-advisory-prod-3-18", "True", "Succeeded", at(250))
+	stage("snap-fbc", 300)
+	release("rel-fbc", "snap-fbc", "quay-fbc-stage-3-18", "True", "Succeeded", at(310))
+	stage("snap-3-17", 360)
+	release("rel-3-17", "snap-3-17", "quay-advisory-stage-3-17", "True", "Succeeded", at(370))
 	for _, b := range []artbuild.Build{
 		{Digest: digest('1'), State: artbuild.StateResolved, UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: strings.Repeat("f", 40)},
 		{Digest: digest('2'), State: artbuild.StateResolved, UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: "abc123"},
@@ -126,8 +131,9 @@ func TestSelectedStageBuilds(t *testing.T) {
 		}
 	}
 
+	plans := regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
 	v := &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}
-	got, err := d.SelectedStageBuilds(ctx, v, []string{"stage-plan"})
+	got, err := d.SelectedStageBuilds(ctx, v, plans)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,12 +158,11 @@ func TestSelectedStageBuilds(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		version string
-		plans   []string
+		plans   *regexp.Regexp
 		reason  string
 	}{
 		{"empty plan config", "quay-v3.18.1", nil, "stage release plan not configured"},
-		{"plan substring", "quay-v3.18.1", []string{"stage"}, "no successful stage release of a staged image snapshot"},
-		{"non-concrete version", "quay-v3.18.z", []string{"stage-plan"}, "not a concrete quay-vX.Y.Z version"},
+		{"non-concrete version", "quay-v3.18.z", plans, "not a concrete quay-vX.Y.Z version"},
 	} {
 		got, err := d.SelectedStageBuilds(ctx, &model.ReleaseVersion{Name: tc.version, KonfluxApplication: "quay-3-18"}, tc.plans)
 		if err != nil || got.Selected != nil || got.Reason != tc.reason {

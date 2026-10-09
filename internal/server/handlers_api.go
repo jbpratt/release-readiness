@@ -316,7 +316,7 @@ func (s *Server) handleGetSelectedBuild(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
 		return
 	}
-	builds, err := s.db.SelectedStageBuilds(ctx, release, s.StageReleasePlans)
+	builds, err := s.db.SelectedStageBuilds(ctx, release, s.StageReleasePlanPattern)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return

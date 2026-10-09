@@ -7,7 +7,6 @@ package dbsqlc
 
 import (
 	"context"
-	"strings"
 )
 
 const latestStagedSnapshot = `-- name: LatestStagedSnapshot :one
@@ -44,15 +43,13 @@ JOIN snapshots s ON s.name = ss.name
 JOIN konflux_releases kr ON kr.snapshot = s.name AND kr.application = s.application
 WHERE ss.assembly = ?1 AND ss.kind = 'image' AND ss.env = 'stage'
   AND s.application = ?2
-  AND kr.release_plan IN (/*SLICE:release_plans*/?)
   AND kr.released_status = 'True' AND kr.released_reason = 'Succeeded' AND kr.completion_time != ''
 ORDER BY kr.completion_time DESC, kr.created_at DESC, kr.name DESC
 `
 
 type ListSuccessfulStageReleasesParams struct {
-	Assembly     string
-	Application  string
-	ReleasePlans []string
+	Assembly    string
+	Application string
 }
 
 type ListSuccessfulStageReleasesRow struct {
@@ -65,19 +62,7 @@ type ListSuccessfulStageReleasesRow struct {
 }
 
 func (q *Queries) ListSuccessfulStageReleases(ctx context.Context, arg ListSuccessfulStageReleasesParams) ([]ListSuccessfulStageReleasesRow, error) {
-	query := listSuccessfulStageReleases
-	var queryParams []interface{}
-	queryParams = append(queryParams, arg.Assembly)
-	queryParams = append(queryParams, arg.Application)
-	if len(arg.ReleasePlans) > 0 {
-		for _, v := range arg.ReleasePlans {
-			queryParams = append(queryParams, v)
-		}
-		query = strings.Replace(query, "/*SLICE:release_plans*/?", strings.Repeat(",?", len(arg.ReleasePlans))[1:], 1)
-	} else {
-		query = strings.Replace(query, "/*SLICE:release_plans*/?", "NULL", 1)
-	}
-	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	rows, err := q.db.QueryContext(ctx, listSuccessfulStageReleases, arg.Assembly, arg.Application)
 	if err != nil {
 		return nil, err
 	}
