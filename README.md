@@ -12,7 +12,7 @@ flowchart LR
     App -->|serves| SPA[React SPA]
 ```
 
-The Go backend runs two background sync loops that pull data into a local SQLite database. The React SPA is embedded into the binary and served directly by the backend.
+The Go backend runs background sync loops that pull data into a local SQLite database. The React SPA is embedded into the binary and served directly by the backend.
 
 ## Syncing
 
@@ -26,7 +26,7 @@ Test results are not ingested.
 
 ### JIRA sync (default: every 5m)
 
-Discovers active releases by querying for JIRA issues with the `-area/release` component that are not Closed/Done. Parses the version from the ticket summary (e.g. "Release Quay v3.16.2") and syncs all issues matching that `fixVersion` (and optionally the Target Version custom field).
+Discovers active releases by querying for JIRA issues with the `-area/release` component that are not Closed/Done. Parses the version from the ticket summary (e.g. "Release Quay v3.16.2") and syncs all issues whose Target Version equals the release version (e.g. `quay-v3.16.2`).
 
 ### Prow sync (default: every 15m, only when jobs are configured)
 
@@ -40,7 +40,7 @@ A run counts as testing a Snapshot component only on an exact (role, manifest di
 
 ## Release view
 
-Each JIRA release maps to a Konflux application by major.minor version: fixVersion `quay-v3.16.2` (or plain `3.16.2`) maps to `quay-3-16`, and `omr-v2.0.10` to `omr-2-0`.
+Each JIRA release maps to a Konflux application by major.minor version: fixVersion `quay-v3.16.2` maps to `quay-3-16`, and `omr-v2.0.10` to `omr-2-0`.
 
 A Quay release's components come from three applications: `fbc-quay-X-Y` (the shipped FBC, 3.16+ only), `quay-X-Y`, and the `quay-X-Y-*` base image components of `quay-images-base`. `/api/v1/releases/{version}/snapshots` pages through the release's snapshots, newest first (`limit`, `offset`, `application`, `with_release=true`), and `/api/v1/releases/{version}/snapshots/{name}` returns one snapshot's components, each with any newer ART build still running (`pending_art_build`), and for a Quay snapshot whether the FBC catalog carries its operator bundle (`fbc_catalog`: `current`, `behind` or `unknown`). `/api/v1/releases/{version}/build-attempts` returns the release's ART image-build attempts, newest first, within the span ART history was read without a gap; `covered_from` and `covered_to` are null when the stream was never read.
 
@@ -50,8 +50,7 @@ A Quay release's components come from three applications: `fbc-quay-X-Y` (the sh
 
 - **Release discovery** — searches for issues where `component = "-area/release"` and status is not Closed/Done
 - **Version parsing** — extracts the product and version from the ticket summary (e.g. "Release Quay v3.16.2")
-- **Issue sync** — fetches all issues matching the discovered `fixVersion` (format: `{product}-v{version}`, e.g. `quay-v3.16.2`)
-- **Target Version** — optionally reads a custom field (`customfield_12319940` by default) for additional version targeting
+- **Issue sync** — fetches all issues whose Target Version equals the release version (format: `{product}-v{version}`, e.g. `quay-v3.16.2`)
 
 ## Running the application
 
@@ -80,7 +79,6 @@ cd web && npm install && npm run build
 | `-jira-email` | `JIRA_EMAIL` | — | JIRA Cloud account email for API token auth |
 | `-jira-token` | `JIRA_TOKEN` | — | JIRA Cloud API token (required to enable JIRA sync) |
 | `-jira-project` | `JIRA_PROJECT` | `PROJQUAY` | JIRA project key |
-| `-jira-target-version-field` | `JIRA_TARGET_VERSION_FIELD` | `customfield_12319940` | JIRA custom field for Target Version |
 | `-jira-poll-interval` | — | `5m` | JIRA sync poll interval |
 | `-prow-jobs` | `PROW_JOBS` | — | Periodic Prow jobs to ingest, as `job_name=konflux_application[,...]`, e.g. `periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly=quay-3-18` |
 | `-prow-rehearsals` | — | — | Rehearsal GCS prefixes to ingest, as `gcs-prefix=konflux_application[,...]`; their runs are labelled Rehearsal |
