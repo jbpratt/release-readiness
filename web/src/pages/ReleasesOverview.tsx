@@ -73,7 +73,7 @@ export default function ReleasesOverview() {
 	const setParam = (key: string, value: string) => {
 		setSearchParams((prev) => {
 			const next = new URLSearchParams(prev);
-			if (value && value !== "all" && value !== "compact") {
+			if (value && value !== "compact") {
 				next.set(key, value);
 			} else {
 				next.delete(key);
