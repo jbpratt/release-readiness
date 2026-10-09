@@ -58,24 +58,46 @@ var (
 // Release's completion time, so a newer pending or failed Release never
 // displaces the last success.
 func (d *DB) SelectedStageBuilds(ctx context.Context, release *model.ReleaseVersion, plans *regexp.Regexp) (model.StageBuilds, error) {
+	builds, reason, err := d.stageBuilds(ctx, release, plans, 2)
+	if err != nil || len(builds) == 0 {
+		return model.StageBuilds{Reason: reason}, err
+	}
+	sb := model.StageBuilds{Selected: builds[0]}
+	if len(builds) == 2 {
+		sb.Previous = builds[1]
+	}
+	return sb, nil
+}
+
+// StageBuildHistory returns every successful STAGE build of release in the
+// order SelectedStageBuilds ranks them, newest first; each build's base is
+// the one after it.
+func (d *DB) StageBuildHistory(ctx context.Context, release *model.ReleaseVersion, plans *regexp.Regexp) ([]*model.SelectedBuild, error) {
+	builds, _, err := d.stageBuilds(ctx, release, plans, 0)
+	return builds, err
+}
+
+// stageBuilds returns up to limit (0 for all) ranked STAGE builds, with the
+// reason when there are none.
+func (d *DB) stageBuilds(ctx context.Context, release *model.ReleaseVersion, plans *regexp.Regexp, limit int) ([]*model.SelectedBuild, string, error) {
 	m := concreteVersion.FindStringSubmatch(release.Name)
 	if m == nil {
-		return model.StageBuilds{Reason: "not a concrete quay-vX.Y.Z version"}, nil
+		return nil, "not a concrete quay-vX.Y.Z version", nil
 	}
 	if plans == nil {
-		return model.StageBuilds{Reason: "stage release plan not configured"}, nil
+		return nil, "stage release plan not configured", nil
 	}
 	rows, err := d.queries().ListSuccessfulStageReleases(ctx, dbsqlc.ListSuccessfulStageReleasesParams{
 		Assembly:    m[1],
 		Application: release.KonfluxApplication,
 	})
 	if err != nil {
-		return model.StageBuilds{}, err
+		return nil, "", err
 	}
 	stream := "-" + m[2] + "-" + m[3]
 	var builds []*model.SelectedBuild
 	for _, r := range rows {
-		if len(builds) == 2 {
+		if limit > 0 && len(builds) == limit {
 			break
 		}
 		if !plans.MatchString(r.ReleasePlan) || !strings.HasSuffix(r.ReleasePlan, stream) {
@@ -87,18 +109,14 @@ func (d *DB) SelectedStageBuilds(ctx context.Context, release *model.ReleaseVers
 		}
 		b, err := d.selectedBuild(ctx, release.Name, r)
 		if err != nil {
-			return model.StageBuilds{}, err
+			return nil, "", err
 		}
 		builds = append(builds, b)
 	}
 	if len(builds) == 0 {
-		return model.StageBuilds{Reason: "no successful stage release of a staged image snapshot"}, nil
+		return nil, "no successful stage release of a staged image snapshot", nil
 	}
-	sb := model.StageBuilds{Selected: builds[0]}
-	if len(builds) == 2 {
-		sb.Previous = builds[1]
-	}
-	return sb, nil
+	return builds, "", nil
 }
 
 func (d *DB) selectedBuild(ctx context.Context, version string, r dbsqlc.ListSuccessfulStageReleasesRow) (*model.SelectedBuild, error) {
