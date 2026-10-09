@@ -198,3 +198,84 @@ type SelectedBuildComponent struct {
 	UpstreamSHA     string `json:"upstream_sha"`
 	ProvenanceState string `json:"provenance_state"`
 }
+
+// TicketMembership sorts a concrete version's candidate tickets by what its
+// selected STAGE build is proven to contain. SelectedBuild is nil with Reason
+// set when no build is selected.
+type TicketMembership struct {
+	SelectedBuild *SelectedBuild `json:"selected_build"`
+	Reason        string         `json:"reason,omitempty"`
+	Buckets       TicketBuckets  `json:"buckets"`
+}
+
+// TicketBuckets holds one row per ticket key, each in exactly one bucket.
+type TicketBuckets struct {
+	InSelectedBuild     []TicketRow `json:"in_selected_build"`
+	CarriedForward      []TicketRow `json:"carried_forward"`
+	PlannedPatchPending []TicketRow `json:"planned_patch_pending"`
+	NeedsReview         []TicketRow `json:"needs_review"`
+}
+
+// TicketRow is one ticket's membership. TargetVersion is the Target Version
+// it was found under, "" when it was only found in commits. EvidenceState is
+// "complete" when a build's inclusion of it is proven, "none" when every range
+// back through the selected build's history was compared without finding it,
+// else "unknown".
+// JiraAction is display only: nothing is written to Jira.
+type TicketRow struct {
+	Key               string           `json:"key"`
+	Link              string           `json:"link"`
+	Summary           string           `json:"summary"`
+	Status            string           `json:"status"`
+	TargetVersion     string           `json:"target_version"`
+	ConcreteVersion   string           `json:"concrete_version"`
+	Bucket            string           `json:"bucket"`
+	EvidenceState     string           `json:"evidence_state"`
+	EvidenceReason    string           `json:"evidence_reason,omitempty"`
+	FirstSeenSnapshot string           `json:"first_seen_snapshot,omitempty"`
+	CurrentSnapshot   string           `json:"current_snapshot,omitempty"`
+	Evidence          []TicketEvidence `json:"evidence"`
+	JiraAction        string           `json:"jira_action"`
+	JiraActionReason  string           `json:"jira_action_reason,omitempty"`
+}
+
+// TicketEvidence is a commit naming a ticket in the upstream range of one
+// component image of a STAGE build Snapshot.
+type TicketEvidence struct {
+	Snapshot    string `json:"snapshot"`
+	Component   string `json:"component"`
+	ImageDigest string `json:"image_digest"`
+	CommitSHA   string `json:"commit_sha"`
+	CommitURL   string `json:"commit_url"`
+	PRURL       string `json:"pr_url"`
+}
+
+// TicketDelta is the tickets a STAGE build Snapshot adds over the STAGE build
+// before it (Baseline). DeltaState is "complete" only when the Snapshot is a
+// STAGE build with a baseline and every component range back through its
+// history was compared.
+type TicketDelta struct {
+	Snapshot   string        `json:"snapshot"`
+	Baseline   string        `json:"baseline"`
+	DeltaState string        `json:"delta_state"`
+	Reason     string        `json:"reason,omitempty"`
+	Added      []DeltaTicket `json:"added"`
+	Carried    []DeltaTicket `json:"carried"`
+	Unknown    []UnknownSpan `json:"unknown"`
+}
+
+// DeltaTicket is a ticket proven in a STAGE build Snapshot: the delta's own
+// for an added ticket, an earlier one for a carried ticket, whose every later
+// range of that component was compared.
+type DeltaTicket struct {
+	Key               string `json:"key"`
+	FirstSeenSnapshot string `json:"first_seen_snapshot"`
+	TicketEvidence
+}
+
+// UnknownSpan is a component whose range in a Snapshot was not compared.
+type UnknownSpan struct {
+	Component   string `json:"component"`
+	ImageDigest string `json:"image_digest"`
+	Reason      string `json:"reason"`
+}

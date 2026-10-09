@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +20,7 @@ import (
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
 	"github.com/quay/release-readiness/internal/fbc"
+	"github.com/quay/release-readiness/internal/github"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
@@ -794,4 +798,196 @@ func TestSelectedBuild(t *testing.T) {
 		t.Errorf("selected build = %+v", got)
 	}
 	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/selected-build", http.StatusNotFound, nil)
+}
+
+// seedTicketBuilds seeds three successful STAGE builds of quay-v3.18.1,
+// snap-1 to snap-3, with quay and op components, their evidence scans, and
+// concrete and .z Target Version issues.
+func seedTicketBuilds(t *testing.T) *Server {
+	t.Helper()
+	srv := setupTestServer(t)
+	ctx := t.Context()
+	t0 := time.Date(2026, 10, 7, 20, 0, 0, 0, time.UTC)
+	if err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}); err != nil {
+		t.Fatal(err)
+	}
+	digest := func(snap int, comp string) string { return fmt.Sprintf("sha256:%063d%d", len(comp), snap) }
+	for n := 1; n <= 3; n++ {
+		name, at := fmt.Sprintf("snap-%d", n), t0.Add(time.Duration(n)*time.Hour)
+		id, err := srv.db.CreateSnapshot(ctx, "quay-3-18", name, at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range []string{"quay", "op"} {
+			if err := srv.db.CreateSnapshotComponent(ctx, id, c, "quay.io/x/"+c+"@"+digest(n, c)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := srv.db.UpsertStagedSnapshot(ctx, name, "3.18.1", "image", "stage", at); err != nil {
+			t.Fatal(err)
+		}
+		done := at.Add(time.Minute)
+		if err := srv.db.UpsertKonfluxRelease(ctx, &model.KonfluxRelease{
+			Name: "rel-" + name, Application: "quay-3-18", Snapshot: name, ReleasePlan: "quay-advisory-stage-3-18",
+			ReleasedStatus: "True", ReleasedReason: "Succeeded", CreatedAt: at, CompletionTime: &done,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seedSnapshot(t, srv, "quay-3-18", "snap-unstaged", t0, "quay")
+
+	ev := func(keys ...string) []github.Evidence {
+		var e []github.Evidence
+		for _, k := range keys {
+			e = append(e, github.Evidence{Key: k, CommitSHA: "c-" + k, CommitURL: "https://github.com/quay/quay/commit/c-" + k, Source: github.SourceCompare})
+		}
+		return e
+	}
+	for _, sc := range []github.Scan{
+		{Snapshot: "snap-1", Component: "quay", State: github.StateUnknown, Reason: github.ReasonNoBaseline},
+		{Snapshot: "snap-1", Component: "op", State: github.StateUnknown, Reason: github.ReasonNoBaseline},
+		{Snapshot: "snap-2", Component: "quay", State: github.StateComplete, Evidence: ev("PROJQUAY-1")},
+		{Snapshot: "snap-2", Component: "op", State: github.StateComplete, Evidence: ev("PROJQUAY-6")},
+		{Snapshot: "snap-3", Component: "quay", State: github.StateComplete, Evidence: ev("PROJQUAY-2", "PROJQUAY-3", "PROJQUAY-4", "PROJQUAY-5")},
+		{Snapshot: "snap-3", Component: "op", State: github.StateUnknown, Reason: github.ReasonAPIError},
+	} {
+		n, _ := strconv.Atoi(strings.TrimPrefix(sc.Snapshot, "snap-"))
+		sc.ImageDigest, sc.CheckedAt = digest(n, sc.Component), t0
+		if err := srv.db.StoreEvidenceScan(ctx, sc); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, i := range []model.JiraIssueRecord{
+		{Key: "PROJQUAY-1", Status: "ON_QA", FixVersion: "quay-v3.18.1"},
+		{Key: "PROJQUAY-2", Status: "Verified", FixVersion: "quay-v3.18.1"},
+		{Key: "PROJQUAY-3", Status: "Release Pending", FixVersion: "quay-v3.18.1"},
+		{Key: "PROJQUAY-6", Status: "Verified", FixVersion: "quay-v3.18.1"},
+		{Key: "PROJQUAY-7", Status: "New", FixVersion: "quay-v3.18.1"},
+		{Key: "PROJQUAY-8", Status: "New", FixVersion: "quay-v3.18.1"},
+		{Key: "PROJQUAY-4", Status: "Verified", FixVersion: "quay-v3.18.z"},
+		{Key: "PROJQUAY-8", Status: "New", FixVersion: "quay-v3.18.z"},
+		{Key: "PROJQUAY-9", Status: "New", FixVersion: "quay-v3.18.z"},
+	} {
+		if err := srv.db.UpsertJiraIssue(ctx, &i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return srv
+}
+
+func TestTicketMembership(t *testing.T) {
+	srv := seedTicketBuilds(t)
+	const url = "/api/v1/releases/quay-v3.18.1/ticket-membership"
+	type row struct{ key, bucket, state, reason, first, action, actionReason string }
+	rows := func(m model.TicketMembership) []row {
+		var got []row
+		for _, b := range [][]model.TicketRow{m.Buckets.InSelectedBuild, m.Buckets.CarriedForward, m.Buckets.PlannedPatchPending, m.Buckets.NeedsReview} {
+			for _, r := range b {
+				got = append(got, row{r.Key, r.Bucket, r.EvidenceState, r.EvidenceReason, r.FirstSeenSnapshot, r.JiraAction, r.JiraActionReason})
+			}
+		}
+		return got
+	}
+
+	var none model.TicketMembership
+	getJSON(t, srv, url, http.StatusOK, &none)
+	if none.SelectedBuild != nil || none.Reason != "stage release plan not configured" ||
+		len(none.Buckets.NeedsReview) != 6 || len(none.Buckets.PlannedPatchPending) != 2 || none.Buckets.NeedsReview[0].EvidenceReason != reasonNoSelectedBuild {
+		t.Errorf("without a selected build = %+v, want concrete tickets in needs_review and .z ones planned", none)
+	}
+
+	srv.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
+	var got model.TicketMembership
+	getJSON(t, srv, url, http.StatusOK, &got)
+	if got.SelectedBuild == nil || got.SelectedBuild.SnapshotName != "snap-3" {
+		t.Fatalf("selected build = %+v, want snap-3", got.SelectedBuild)
+	}
+	want := []row{
+		{"PROJQUAY-2", "in_selected_build", "complete", "", "snap-3", "would_move_to_release_pending", ""},
+		{"PROJQUAY-3", "in_selected_build", "complete", "", "snap-3", "none", ""},
+		{"PROJQUAY-1", "carried_forward", "complete", "", "snap-2", "skipped", "status_not_verified"},
+		{"PROJQUAY-4", "planned_patch_pending", "complete", "", "snap-3", "skipped", reasonNoConcrete},
+		{"PROJQUAY-9", "planned_patch_pending", "unknown", reasonScanIncomplete, "", "skipped", reasonNoConcrete},
+		{"PROJQUAY-5", "needs_review", "complete", reasonOutsideTarget, "snap-3", "skipped", reasonOutsideTarget},
+		{"PROJQUAY-6", "needs_review", "unknown", reasonNotCarried, "", "skipped", reasonNotCarried},
+		{"PROJQUAY-7", "needs_review", "unknown", reasonScanIncomplete, "", "skipped", reasonScanIncomplete},
+		{"PROJQUAY-8", "needs_review", "unknown", reasonScanIncomplete, "", "skipped", reasonScanIncomplete},
+	}
+	if g := rows(got); !slices.Equal(g, want) {
+		t.Errorf("rows =\n%v\nwant\n%v", g, want)
+	}
+	p8 := got.Buckets.NeedsReview[3]
+	if p8.TargetVersion != "quay-v3.18.1" || p8.CurrentSnapshot != "snap-3" {
+		t.Errorf("PROJQUAY-8 = %+v, want the concrete Target Version over .z", p8)
+	}
+	p6 := got.Buckets.NeedsReview[1]
+	if len(p6.Evidence) != 1 || p6.Evidence[0].Snapshot != "snap-2" || p6.Evidence[0].Component != "op" {
+		t.Errorf("PROJQUAY-6 evidence = %+v, want the snap-2 op candidate", p6.Evidence)
+	}
+	if p5 := got.Buckets.NeedsReview[0]; p5.TargetVersion != "" || p5.Link != "https://redhat.atlassian.net/browse/PROJQUAY-5" {
+		t.Errorf("PROJQUAY-5 = %+v, want no target version and a browse link", p5)
+	}
+
+	// With snap-3 fully compared, snap-1 still has no baseline: a ticket it
+	// shipped would be carried forward unseen, so absence is not proven.
+	if err := srv.db.StoreEvidenceScan(t.Context(), github.Scan{Snapshot: "snap-3", Component: "op", ImageDigest: fmt.Sprintf("sha256:%063d3", 2), State: github.StateComplete}); err != nil {
+		t.Fatal(err)
+	}
+	getJSON(t, srv, url, http.StatusOK, &got)
+	for _, r := range rows(got) {
+		if r.key == "PROJQUAY-7" && (r.state != "unknown" || r.reason != reasonEarlierRange) {
+			t.Errorf("PROJQUAY-7 = %+v, want unknown: %s", r, reasonEarlierRange)
+		}
+	}
+	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/ticket-membership", http.StatusNotFound, nil)
+}
+
+func TestTicketDelta(t *testing.T) {
+	srv := seedTicketBuilds(t)
+	srv.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
+	delta := func(snap string) model.TicketDelta {
+		t.Helper()
+		var d model.TicketDelta
+		getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/snapshots/"+snap+"/ticket-delta", http.StatusOK, &d)
+		return d
+	}
+	keys := func(ts []model.DeltaTicket) string {
+		var k []string
+		for _, t := range ts {
+			k = append(k, t.Key+"@"+t.FirstSeenSnapshot)
+		}
+		return strings.Join(k, ",")
+	}
+
+	d2 := delta("snap-2")
+	if d2.DeltaState != "unknown" || d2.Baseline != "snap-1" || keys(d2.Added) != "PROJQUAY-1@snap-2,PROJQUAY-6@snap-2" || len(d2.Carried) != 0 ||
+		len(d2.Unknown) != 2 || d2.Unknown[0].Reason != reasonEarlierRange {
+		t.Errorf("snap-2 delta = %+v, want unknown: snap-1 was never compared", d2)
+	}
+	d3 := delta("snap-3")
+	if d3.DeltaState != "unknown" || d3.Baseline != "snap-2" ||
+		keys(d3.Added) != "PROJQUAY-2@snap-3,PROJQUAY-3@snap-3,PROJQUAY-4@snap-3,PROJQUAY-5@snap-3" || keys(d3.Carried) != "PROJQUAY-1@snap-2" ||
+		len(d3.Unknown) != 2 || d3.Unknown[0].Component != "op" || d3.Unknown[0].Reason != github.ReasonAPIError || d3.Unknown[1].Reason != reasonEarlierRange {
+		t.Errorf("snap-3 delta = %+v", d3)
+	}
+	if d1 := delta("snap-1"); d1.DeltaState != "unknown" || d1.Baseline != "" || d1.Reason != "no previous stage build" || len(d1.Unknown) != 2 {
+		t.Errorf("snap-1 delta = %+v, want unknown without a baseline", d1)
+	}
+	if du := delta("snap-unstaged"); du.DeltaState != "unknown" || du.Reason != "not a successful stage build of this version" || len(du.Added) != 0 {
+		t.Errorf("unstaged delta = %+v, want unknown", du)
+	}
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/snapshots/nope/ticket-delta", http.StatusNotFound, nil)
+
+	// A complete scan of a range snap-2 no longer covers proves nothing.
+	for _, stale := range []github.Scan{{HeadSHA: "stale"}, {BaseSHA: "stale"}} {
+		stale.Snapshot, stale.Component, stale.ImageDigest, stale.State = "snap-2", "quay", fmt.Sprintf("sha256:%063d2", 4), github.StateComplete
+		stale.Evidence = []github.Evidence{{Key: "PROJQUAY-1", CommitSHA: "c-PROJQUAY-1", Source: github.SourceCompare}}
+		if err := srv.db.StoreEvidenceScan(t.Context(), stale); err != nil {
+			t.Fatal(err)
+		}
+		if d2 := delta("snap-2"); keys(d2.Added) != "PROJQUAY-6@snap-2" ||
+			!slices.Contains(d2.Unknown, model.UnknownSpan{Component: "quay", ImageDigest: fmt.Sprintf("sha256:%063d2", 4), Reason: reasonNotScanned}) {
+			t.Errorf("snap-2 delta with stale head %q base %q = %+v, want quay not scanned", stale.HeadSHA, stale.BaseSHA, d2)
+		}
+	}
 }
