@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
+	"regexp"
 	"sync"
 	"syscall"
 	"time"
@@ -53,7 +53,7 @@ func main() {
 	prowInterval := flag.Duration("prow-interval", 15*time.Minute, "Prow sync poll interval")
 
 	// Selected STAGE build flags
-	stagePlans := flag.String("stage-release-plans", os.Getenv("STAGE_RELEASE_PLANS"), "exact Konflux ReleasePlan names whose Releases are STAGE, comma-separated (empty selects no build)")
+	stagePlanPattern := flag.String("stage-release-plan-pattern", envOrDefault("STAGE_RELEASE_PLAN_PATTERN", `^quay-advisory-stage-\d+-\d+$`), "regexp matching the Konflux ReleasePlan names whose Releases are image STAGE (empty selects no build)")
 
 	flag.Parse()
 
@@ -64,6 +64,13 @@ func main() {
 	if err != nil {
 		logger.Error("parse -prow-jobs", "error", err)
 		os.Exit(1)
+	}
+	var stagePlans *regexp.Regexp
+	if *stagePlanPattern != "" {
+		if stagePlans, err = regexp.Compile(*stagePlanPattern); err != nil {
+			logger.Error("parse -stage-release-plan-pattern", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -168,11 +175,7 @@ func main() {
 	}
 
 	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, shipped, status, logger)
-	for _, p := range strings.Split(*stagePlans, ",") {
-		if p = strings.TrimSpace(p); p != "" {
-			srv.StageReleasePlans = append(srv.StageReleasePlans, p)
-		}
-	}
+	srv.StageReleasePlanPattern = stagePlans
 	if err := srv.Run(ctx); err != nil {
 		logger.Error("server", "error", err)
 		os.Exit(1)

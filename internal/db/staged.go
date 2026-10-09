@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"regexp"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/quay/release-readiness/internal/db/sqlc"
@@ -46,36 +47,39 @@ func (d *DB) LatestStagedSnapshot(ctx context.Context, assembly, kind string) (*
 }
 
 var (
-	concreteVersion = regexp.MustCompile(`^quay-v(\d+\.\d+\.\d+)$`)
+	concreteVersion = regexp.MustCompile(`^quay-v((\d+)\.(\d+)\.\d+)$`)
 	imageDigest     = regexp.MustCompile(`@(sha256:[0-9a-f]{64})$`)
 	fullSHA         = regexp.MustCompile(`^[0-9a-f]{40}$`)
 )
 
 // SelectedStageBuilds returns the two newest image Snapshots staged for
-// release's concrete version whose Konflux Release through one of plans
-// succeeded, ranked by that Release's completion time. Only an exact
-// ReleasePlan name in plans counts as STAGE, so a newer pending or failed
-// Release never displaces the last success.
-func (d *DB) SelectedStageBuilds(ctx context.Context, release *model.ReleaseVersion, plans []string) (model.StageBuilds, error) {
+// release's concrete version whose Konflux Release succeeded through a
+// ReleasePlan matching plans for the version's X-Y stream, ranked by that
+// Release's completion time, so a newer pending or failed Release never
+// displaces the last success.
+func (d *DB) SelectedStageBuilds(ctx context.Context, release *model.ReleaseVersion, plans *regexp.Regexp) (model.StageBuilds, error) {
 	m := concreteVersion.FindStringSubmatch(release.Name)
 	if m == nil {
 		return model.StageBuilds{Reason: "not a concrete quay-vX.Y.Z version"}, nil
 	}
-	if len(plans) == 0 {
+	if plans == nil {
 		return model.StageBuilds{Reason: "stage release plan not configured"}, nil
 	}
 	rows, err := d.queries().ListSuccessfulStageReleases(ctx, dbsqlc.ListSuccessfulStageReleasesParams{
-		Assembly:     m[1],
-		Application:  release.KonfluxApplication,
-		ReleasePlans: plans,
+		Assembly:    m[1],
+		Application: release.KonfluxApplication,
 	})
 	if err != nil {
 		return model.StageBuilds{}, err
 	}
+	stream := "-" + m[2] + "-" + m[3]
 	var builds []*model.SelectedBuild
 	for _, r := range rows {
 		if len(builds) == 2 {
 			break
+		}
+		if !plans.MatchString(r.ReleasePlan) || !strings.HasSuffix(r.ReleasePlan, stream) {
+			continue
 		}
 		// A Snapshot released again ranks by its newest success only.
 		if slices.ContainsFunc(builds, func(b *model.SelectedBuild) bool { return b.SnapshotName == r.SnapshotName }) {

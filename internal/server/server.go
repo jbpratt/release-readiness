@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"time"
 
 	"github.com/quay/release-readiness/internal/catalog"
@@ -21,9 +22,9 @@ type Server struct {
 	artBaseURL  string
 	shipped     *catalog.Shipped
 	syncStatus  *syncstatus.Registry
-	// StageReleasePlans are the exact ReleasePlan names whose Releases are
-	// STAGE; empty selects no build.
-	StageReleasePlans []string
+	// StageReleasePlanPattern matches the ReleasePlan names whose Releases
+	// are image STAGE; nil selects no build.
+	StageReleasePlanPattern *regexp.Regexp
 }
 
 // New builds the server. An empty artBaseURL leaves every component's art null;

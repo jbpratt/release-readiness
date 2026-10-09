@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"testing"
 	"time"
@@ -773,7 +774,7 @@ func TestSelectedBuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := srv.db.UpsertKonfluxRelease(ctx, &model.KonfluxRelease{
-		Name: "rel-a", Application: "quay-3-18", Snapshot: "snap-a", ReleasePlan: "stage-plan",
+		Name: "rel-a", Application: "quay-3-18", Snapshot: "snap-a", ReleasePlan: "quay-advisory-stage-3-18",
 		ReleasedStatus: "True", ReleasedReason: "Succeeded", CreatedAt: completed, CompletionTime: &completed,
 	}); err != nil {
 		t.Fatal(err)
@@ -785,7 +786,7 @@ func TestSelectedBuild(t *testing.T) {
 		t.Errorf("without plans = %v, want selected_build null with reason", none)
 	}
 
-	srv.StageReleasePlans = []string{"stage-plan"}
+	srv.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
 	var got model.SelectedBuild
 	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/selected-build", http.StatusOK, &got)
 	if got.Version != "quay-v3.18.1" || got.Stage != "stage" || got.ReleaseName != "rel-a" || got.SnapshotName != "snap-a" ||

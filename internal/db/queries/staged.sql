@@ -22,6 +22,5 @@ JOIN snapshots s ON s.name = ss.name
 JOIN konflux_releases kr ON kr.snapshot = s.name AND kr.application = s.application
 WHERE ss.assembly = sqlc.arg(assembly) AND ss.kind = 'image' AND ss.env = 'stage'
   AND s.application = sqlc.arg(application)
-  AND kr.release_plan IN (sqlc.slice('release_plans'))
   AND kr.released_status = 'True' AND kr.released_reason = 'Succeeded' AND kr.completion_time != ''
 ORDER BY kr.completion_time DESC, kr.created_at DESC, kr.name DESC;
