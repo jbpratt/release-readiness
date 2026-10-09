@@ -530,7 +530,6 @@ const priorityWeight: Record<string, number> = {
 	major: 2,
 	normal: 3,
 	minor: 4,
-	undefined: 5,
 };
 
 function buildJQL(

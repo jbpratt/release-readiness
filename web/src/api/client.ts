@@ -16,7 +16,7 @@ import type {
 
 const BASE = "/api/v1";
 
-export async function fetchJSON<T>(url: string): Promise<T> {
+async function fetchJSON<T>(url: string): Promise<T> {
 	const res = await fetch(url);
 	if (!res.ok) {
 		throw new Error(`${res.status} ${res.statusText}`);
@@ -88,18 +88,8 @@ export function getReleaseSnapshot(
 	);
 }
 
-export function listReleaseIssues(
-	version: string,
-	filters?: { label?: string; status?: string; type?: string },
-): Promise<JiraIssue[]> {
-	const params = new URLSearchParams();
-	if (filters?.label) params.set("label", filters.label);
-	if (filters?.status) params.set("status", filters.status);
-	if (filters?.type) params.set("type", filters.type);
-	const qs = params.toString();
-	return fetchJSON(
-		`${BASE}/releases/${encodeURIComponent(version)}/issues${qs ? `?${qs}` : ""}`,
-	);
+export function listReleaseIssues(version: string): Promise<JiraIssue[]> {
+	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}/issues`);
 }
 
 export function getReleaseIssueSummary(version: string): Promise<IssueSummary> {
