@@ -276,6 +276,7 @@ func TestParseVersionFromSummary(t *testing.T) {
 		{"Release Quay v3.15.4", "quay", "3.15.4", true},
 		{"Release Quay v3.12.14", "quay", "3.12.14", true},
 		{"no version here", "", "", false},
+		{"Investigate why PROJQUAY-10909 fix was not included in 3.17.3 advisory and release notes", "", "", false},
 	}
 
 	for _, tc := range tests {

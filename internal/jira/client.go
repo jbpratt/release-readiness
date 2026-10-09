@@ -143,12 +143,13 @@ func (c *Client) SiteURL() string {
 	return c.siteURL
 }
 
-// versionRe matches version patterns like "v3.16.2", "v2.0.10", "3.16.2" in release ticket summaries.
+// versionRe matches a known product followed by a version in release ticket summaries.
+// A version without a known product, e.g. "fix was not included in 3.17.3", does not match.
 // Examples:
 //   - "Release Quay v3.16.2"       → product="quay", version="3.16.2"
 //   - "Release OMR v2.0.10"        → product="omr", version="2.0.10"
 //   - "⦗konflux⦘ Quay v3.15.3"    → product="quay", version="3.15.3"
-var versionRe = regexp.MustCompile(`(?i)(?:(\w+)\s+)?v?(\d+\.\d+(?:\.\d+)?)`)
+var versionRe = regexp.MustCompile(`(?i)\b(quay|omr)\s+v?(\d+\.\d+(?:\.\d+)?)`)
 
 // ParseVersionFromSummary extracts the product and version from a release ticket summary.
 // Returns product (lowercased), version string, and whether a match was found.
@@ -212,10 +213,7 @@ func (c *Client) DiscoverActiveReleases(ctx context.Context) ([]ActiveRelease, e
 		}
 
 		// JIRA fixVersions always use "{product}-v{version}" format (e.g. "quay-v3.16.2", "omr-v2.0.10")
-		fixVersion := version
-		if product != "" && product != "release" {
-			fixVersion = product + "-v" + version
-		}
+		fixVersion := product + "-v" + version
 
 		konfluxApp := FixVersionToKonfluxApp(fixVersion)
 		if konfluxApp == "" {
