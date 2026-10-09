@@ -53,5 +53,4 @@ test("jiraIssueUrl", () => {
 test("formatReleaseName", () => {
 	assert.equal(formatReleaseName("quay-v3.18.0"), "Quay v3.18.0");
 	assert.equal(formatReleaseName("omr-v2.0.10"), "OMR v2.0.10");
-	assert.equal(formatReleaseName("3.14.6"), "Quay v3.14.6");
 });

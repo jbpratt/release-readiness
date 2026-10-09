@@ -26,7 +26,6 @@ export function quayManifestUrl(image: string): string | null {
  *
  * `quay-v3.14.6` -> `Quay v3.14.6`
  * `omr-v2.0.10`  -> `OMR v2.0.10`
- * `3.14.6`       -> `Quay v3.14.6` (bare version)
  */
 export function formatReleaseName(name: string): string {
 	// Pattern: product-vX.Y.Z
@@ -37,10 +36,6 @@ export function formatReleaseName(name: string): string {
 		const label =
 			product.toLowerCase() === "quay" ? "Quay" : product.toUpperCase();
 		return `${label} v${version}`;
-	}
-	// Bare version number (e.g. "3.14.6")
-	if (/^\d/.test(name)) {
-		return `Quay v${name}`;
 	}
 	return name;
 }

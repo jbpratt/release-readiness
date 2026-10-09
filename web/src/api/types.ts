@@ -159,7 +159,7 @@ export interface DashboardConfig {
 	jira_enabled: boolean;
 }
 
-export interface SyncProblem {
+interface SyncProblem {
 	source: string;
 	message: string;
 	since: string | null;
@@ -171,7 +171,7 @@ export interface SyncStatus {
 	problems: SyncProblem[];
 }
 
-export interface ProwImage {
+interface ProwImage {
 	role: string;
 	source: string;
 	requested_ref: string;

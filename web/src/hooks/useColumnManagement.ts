@@ -4,7 +4,6 @@ import { useCallback, useMemo, useState } from "react";
 export interface ColumnDef {
 	key: string;
 	label: string;
-	defaultVisible?: boolean;
 }
 
 function loadVisibility(
@@ -45,12 +44,8 @@ export function useColumnManagement(storageKey: string, columns: ColumnDef[]) {
 	const [isModalOpen, setIsModalOpen] = useState(false);
 
 	const isColumnVisible = useCallback(
-		(key: string) => {
-			if (key in overrides) return overrides[key];
-			const col = columns.find((c) => c.key === key);
-			return col ? col.defaultVisible !== false : true;
-		},
-		[overrides, columns],
+		(key: string) => overrides[key] ?? true,
+		[overrides],
 	);
 
 	const visibleColumns = useMemo(
@@ -63,7 +58,7 @@ export function useColumnManagement(storageKey: string, columns: ColumnDef[]) {
 			columns.map((col) => ({
 				key: col.key,
 				title: col.label,
-				isShownByDefault: col.defaultVisible !== false,
+				isShownByDefault: true,
 				isShown: isColumnVisible(col.key),
 			})),
 		[columns, isColumnVisible],
