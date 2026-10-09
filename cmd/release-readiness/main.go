@@ -17,6 +17,7 @@ import (
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
 	"github.com/quay/release-readiness/internal/fbc"
+	"github.com/quay/release-readiness/internal/github"
 	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/kube"
 	"github.com/quay/release-readiness/internal/prow"
@@ -54,6 +55,10 @@ func main() {
 
 	// Selected STAGE build flags
 	stagePlanPattern := flag.String("stage-release-plan-pattern", envOrDefault("STAGE_RELEASE_PLAN_PATTERN", `^quay-advisory-stage-\d+-\d+$`), "regexp matching the Konflux ReleasePlan names whose Releases are image STAGE (empty selects no build)")
+
+	// GitHub ticket evidence flags
+	githubAPIURL := flag.String("github-api-url", "https://api.github.com", "GitHub REST API URL for comparing STAGE build upstream commits")
+	githubToken := flag.String("github-token", os.Getenv("GITHUB_TOKEN"), "read-only GitHub token (optional; raises the rate limit)")
 
 	flag.Parse()
 
@@ -171,6 +176,17 @@ func main() {
 		go func() {
 			defer wg.Done()
 			syncer.Run(ctx)
+		}()
+	}
+
+	if stagePlans != nil {
+		logger.Info("github evidence scan enabled", "url", *githubAPIURL, "token", *githubToken != "")
+		scanner := github.NewScanner(github.NewClient(*githubAPIURL, *githubToken, &http.Client{Timeout: time.Minute}), database, stagePlans, logger.With("component", "github-evidence"))
+		scanner.Status = status.Track("github-evidence", 10*time.Minute)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			scanner.Run(ctx, 10*time.Minute)
 		}()
 	}
 
