@@ -68,12 +68,10 @@ func (d *DB) listSnapshotComponents(ctx context.Context, snapshotID int64) ([]mo
 	components := make([]model.ComponentRecord, len(rows))
 	for i, r := range rows {
 		components[i] = model.ComponentRecord{
-			ID:         r.ID,
-			SnapshotID: r.SnapshotID,
-			Component:  r.Component,
-			GitSHA:     r.GitSha,
-			ImageURL:   r.ImageUrl,
-			GitURL:     r.GitUrl,
+			Component: r.Component,
+			GitSHA:    r.GitSha,
+			ImageURL:  r.ImageUrl,
+			GitURL:    r.GitUrl,
 		}
 	}
 	return components, nil

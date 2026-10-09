@@ -3,12 +3,10 @@ package model
 import "time"
 
 type ComponentRecord struct {
-	ID         int64  `json:"id"`
-	SnapshotID int64  `json:"snapshot_id"`
-	Component  string `json:"component"`
-	GitSHA     string `json:"git_sha"`
-	ImageURL   string `json:"image_url"`
-	GitURL     string `json:"git_url"`
+	Component string `json:"component"`
+	GitSHA    string `json:"git_sha"`
+	ImageURL  string `json:"image_url"`
+	GitURL    string `json:"git_url"`
 }
 
 type SnapshotRecord struct {
