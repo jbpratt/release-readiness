@@ -66,7 +66,7 @@ func TestLatestStagedSnapshot(t *testing.T) {
 	}
 }
 
-func TestSelectedStageBuilds(t *testing.T) {
+func TestSelectedStageBuild(t *testing.T) {
 	d, err := Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -133,38 +133,21 @@ func TestSelectedStageBuilds(t *testing.T) {
 
 	plans := regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
 	v := &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}
-	got, err := d.SelectedStageBuilds(ctx, v, plans)
+	sel, reason, err := d.SelectedStageBuild(ctx, v, plans)
 	if err != nil {
 		t.Fatal(err)
 	}
-	sel := got.Selected
-	if sel == nil || sel.SnapshotName != "snap-b" || sel.ReleaseName != "rel-b" || !sel.SelectedAt.Equal(*at(70)) ||
-		sel.RRURL != "/releases/quay-v3.18.1/snapshots?snapshot=snap-b" {
-		t.Fatalf("selected = %+v, want snap-b by rel-b", sel)
-	}
-	if got.Previous == nil || got.Previous.SnapshotName != "snap-a" {
-		t.Errorf("previous = %+v, want snap-a", got.Previous)
+	if sel == nil || sel.SnapshotName != "snap-b" || !sel.CompletedAt.Equal(*at(70)) || reason != "" {
+		t.Fatalf("selected = %+v, %q; want snap-b completed by rel-b", sel, reason)
 	}
 	want := []model.SelectedBuildComponent{
-		{Name: "c0", ImageDigest: digest('1'), UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: strings.Repeat("f", 40), ProvenanceState: "resolved"},
-		{Name: "c1", ImageDigest: digest('2'), UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: "abc123", ProvenanceState: "unknown"},
-		{Name: "c2", ImageDigest: digest('3'), ProvenanceState: "unknown"},
-		{Name: "c3", ProvenanceState: "unknown"},
+		{Name: "c0", UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: strings.Repeat("f", 40)},
+		{Name: "c1", UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: "abc123"},
+		{Name: "c2"},
+		{Name: "c3"},
 	}
 	if !slices.Equal(sel.Components, want) {
 		t.Errorf("components = %+v, want %+v", sel.Components, want)
-	}
-
-	history, err := d.StageBuildHistory(ctx, v, plans)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var names []string
-	for _, b := range history {
-		names = append(names, b.SnapshotName)
-	}
-	if !slices.Equal(names, []string{"snap-b", "snap-a"}) {
-		t.Errorf("history = %v, want [snap-b snap-a]", names)
 	}
 
 	for _, tc := range []struct {
@@ -176,9 +159,9 @@ func TestSelectedStageBuilds(t *testing.T) {
 		{"empty plan config", "quay-v3.18.1", nil, "stage release plan not configured"},
 		{"non-concrete version", "quay-v3.18.z", plans, "not a concrete quay-vX.Y.Z version"},
 	} {
-		got, err := d.SelectedStageBuilds(ctx, &model.ReleaseVersion{Name: tc.version, KonfluxApplication: "quay-3-18"}, tc.plans)
-		if err != nil || got.Selected != nil || got.Reason != tc.reason {
-			t.Errorf("%s: got %+v, %v; want reason %q", tc.name, got, err, tc.reason)
+		got, reason, err := d.SelectedStageBuild(ctx, &model.ReleaseVersion{Name: tc.version, KonfluxApplication: "quay-3-18"}, tc.plans)
+		if err != nil || got != nil || reason != tc.reason {
+			t.Errorf("%s: got %+v, %q, %v; want reason %q", tc.name, got, reason, err, tc.reason)
 		}
 	}
 }

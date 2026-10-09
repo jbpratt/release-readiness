@@ -57,7 +57,6 @@ func main() {
 	stagePlanPattern := flag.String("stage-release-plan-pattern", envOrDefault("STAGE_RELEASE_PLAN_PATTERN", `^quay-advisory-stage-\d+-\d+$`), "regexp matching the Konflux ReleasePlan names whose Releases are image STAGE (empty selects no build)")
 
 	// GitHub ticket evidence flags
-	githubAPIURL := flag.String("github-api-url", "https://api.github.com", "GitHub REST API URL for comparing STAGE build upstream commits")
 	githubToken := flag.String("github-token", os.Getenv("GITHUB_TOKEN"), "read-only GitHub token (optional; raises the rate limit)")
 
 	flag.Parse()
@@ -179,9 +178,10 @@ func main() {
 		}()
 	}
 
+	var scanner *github.Scanner
 	if stagePlans != nil {
-		logger.Info("github evidence scan enabled", "url", *githubAPIURL, "token", *githubToken != "")
-		scanner := github.NewScanner(github.NewClient(*githubAPIURL, *githubToken, &http.Client{Timeout: time.Minute}), database, stagePlans, logger.With("component", "github-evidence"))
+		logger.Info("github evidence scan enabled", "token", *githubToken != "")
+		scanner = github.NewScanner(github.NewClient("https://api.github.com", *githubToken, &http.Client{Timeout: time.Minute}), database, stagePlans, logger.With("component", "github-evidence"))
 		scanner.Status = status.Track("github-evidence", 10*time.Minute)
 		wg.Add(1)
 		go func() {
@@ -192,6 +192,7 @@ func main() {
 
 	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, shipped, status, logger)
 	srv.StageReleasePlanPattern = stagePlans
+	srv.Scanner = scanner
 	if err := srv.Run(ctx); err != nil {
 		logger.Error("server", "error", err)
 		os.Exit(1)

@@ -43,18 +43,6 @@ type ArtPendingBuild struct {
 	CheckedAt      string
 }
 
-type BuildEvidenceScan struct {
-	SnapshotName string
-	Component    string
-	ImageDigest  string
-	UpstreamRepo string
-	BaseSha      string
-	HeadSha      string
-	State        string
-	Reason       string
-	CheckedAt    string
-}
-
 type FbcCatalog struct {
 	Digest    string
 	State     string
@@ -160,16 +148,4 @@ type StagedSnapshot struct {
 	Kind      string
 	Env       string
 	CreatedAt string
-}
-
-type TicketEvidence struct {
-	SnapshotName string
-	Component    string
-	ImageDigest  string
-	TicketKey    string
-	CommitSha    string
-	CommitUrl    string
-	PrUrl        string
-	Source       string
-	CheckedAt    string
 }
