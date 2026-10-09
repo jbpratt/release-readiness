@@ -1,8 +1,4 @@
-import {
-	ClipboardCopy,
-	clipboardCopyFunc,
-	Tooltip,
-} from "@patternfly/react-core";
+import { ClipboardCopy, Tooltip } from "@patternfly/react-core";
 import {
 	CircleIcon,
 	ExternalLinkAltIcon,
@@ -66,24 +62,6 @@ function CommitLink({ repo, sha }: { repo: string; sha: string }) {
 			) : (
 				text
 			)}
-		</Tooltip>
-	);
-}
-
-// The build repo is ART's private mirror, so its sha is copyable rather than linked.
-function BuildSha({ repo, sha }: { repo: string; sha: string }) {
-	if (!sha) return <Unknown why="No commit recorded" />;
-	return (
-		<Tooltip content={`Build repo commit in ${repo}`}>
-			<span>
-				<ClipboardCopy
-					variant="inline-compact"
-					isCode
-					onCopy={(e) => clipboardCopyFunc(e, sha)}
-				>
-					{sha.substring(0, 12)}
-				</ClipboardCopy>
-			</span>
 		</Tooltip>
 	);
 }
@@ -164,13 +142,6 @@ export default function SnapshotComponentsTable({
 					<Th
 						width={10}
 						modifier="nowrap"
-						info={{ tooltip: "Commit in the build repo Konflux built from" }}
-					>
-						Build SHA
-					</Th>
-					<Th
-						width={10}
-						modifier="nowrap"
 						info={{ tooltip: "Commit in the public upstream repo" }}
 					>
 						Upstream SHA
@@ -223,10 +194,6 @@ export default function SnapshotComponentsTable({
 								>
 									{c.image}
 								</ClipboardCopy>
-							</Td>
-							<Td>
-								{mark("build")}
-								<BuildSha repo={c.git_url} sha={c.git_sha} />
 							</Td>
 							<Td>
 								{mark("upstream")}

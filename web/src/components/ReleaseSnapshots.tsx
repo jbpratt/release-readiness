@@ -11,7 +11,9 @@ import {
 	DescriptionListGroup,
 	DescriptionListTerm,
 	EmptyState,
+	EmptyStateActions,
 	EmptyStateBody,
+	EmptyStateFooter,
 	Flex,
 	FlexItem,
 	HelperText,
@@ -185,11 +187,31 @@ export function LatestSnapshot({
 						No snapshots of {application || "this release"} yet.
 					</Content>
 				) : !unreleased ? (
-					<EmptyState
-						titleText="Latest snapshot is already released"
-						headingLevel="h4"
-						variant="xs"
-					/>
+					released && (
+						<EmptyState
+							titleText="Nothing pending release"
+							headingLevel="h4"
+							variant="xs"
+							status="info"
+						>
+							<EmptyStateBody>
+								No new build since{" "}
+								<Link
+									to={`/releases/${encodeURIComponent(version)}/snapshots?with_release=true`}
+								>
+									<code>{released.name}</code>
+								</Link>{" "}
+								(built <CreatedAt iso={released.created_at} />) was released.
+							</EmptyStateBody>
+							<EmptyStateFooter>
+								<EmptyStateActions>
+									<Button variant="link" onClick={() => setView("released")}>
+										Show latest released
+									</Button>
+								</EmptyStateActions>
+							</EmptyStateFooter>
+						</EmptyState>
+					)
 				) : (
 					<SnapshotSummary
 						version={version}
