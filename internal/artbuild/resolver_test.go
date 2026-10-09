@@ -2,10 +2,14 @@ package artbuild
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 	"time"
@@ -18,6 +22,9 @@ type fakeStore struct {
 	got     []Build
 	apps    []string
 	pending map[string][]PendingBuild
+	// attempts and covered are the last StoreArtBuildAttempts call.
+	attempts []Attempt
+	covered  [2]time.Time
 	// searchedAt is when the fake service answered the last search.
 	searchedAt, checkedAt time.Time
 }
@@ -48,6 +55,11 @@ func (f *fakeStore) ReplaceArtPendingBuilds(_ context.Context, group string, bui
 	}
 	f.pending[group] = builds
 	f.checkedAt = checkedAt
+	return nil
+}
+
+func (f *fakeStore) StoreArtBuildAttempts(_ context.Context, _ string, attempts []Attempt, from, to time.Time) error {
+	f.attempts, f.covered = attempts, [2]time.Time{from, to}
 	return nil
 }
 
@@ -172,7 +184,7 @@ func TestResolveOtherStream(t *testing.T) {
 }
 
 // refreshWith runs one pass with no image candidates against a service whose
-// /search answers with fixture, or 502 when fixture is empty.
+// /search answers with the fixture file, or 502 when fixture is empty.
 func refreshWith(t *testing.T, fixture string) (*fakeStore, []url.Values) {
 	t.Helper()
 	var searches []url.Values
@@ -184,7 +196,7 @@ func refreshWith(t *testing.T, fixture string) (*fakeStore, []url.Values) {
 			http.Error(w, "timeout", http.StatusBadGateway)
 			return
 		}
-		http.ServeFile(w, r, "testdata/"+fixture)
+		http.ServeFile(w, r, fixture)
 	}))
 	defer srv.Close()
 
@@ -198,7 +210,7 @@ func refreshWith(t *testing.T, fixture string) (*fakeStore, []url.Values) {
 // name and version is stored while it runs. quay-operator's and quay-clair's
 // newest builds have finished, so neither is stored.
 func TestRefreshPending(t *testing.T) {
-	store, searches := refreshWith(t, "search_group.json")
+	store, searches := refreshWith(t, "testdata/search_group.json")
 	if len(searches) != 1 {
 		t.Fatalf("searches: got %d, want 1", len(searches))
 	}
@@ -232,5 +244,53 @@ func TestRefreshPendingFailure(t *testing.T) {
 	store, searches := refreshWith(t, "")
 	if len(searches) != 1 || store.pending != nil {
 		t.Errorf("searches %d, replaced %+v; want 1 search and no replace", len(searches), store.pending)
+	}
+}
+
+// Every image record of the search is stored, and the search covers its
+// whole window.
+func TestRefreshAttempts(t *testing.T) {
+	start := time.Now()
+	store, _ := refreshWith(t, "testdata/search_group.json")
+	if len(store.attempts) != 8 {
+		t.Fatalf("attempts: got %d, want the 8 image records", len(store.attempts))
+	}
+	want := Attempt{
+		Group: "quay-3.18", Version: "3.18.1", Name: "quay-operator-container",
+		NVR: "quay-operator-container-3.18.1-202609300827.p2.g35cf767.assembly.stream.el9", RecordID: "7f4d8117-35dc-6c01-1e27-3b3d32a2fa8f",
+		Outcome: "success", ImageDigest: "sha256:bfd08ada78f2c19d7dc773f42fc53f5ceb649ff1c34da95e62fb73f0a15a6563",
+		StartedAt: time.Date(2026, 9, 30, 8, 36, 21, 0, time.UTC),
+	}
+	if !slices.Contains(store.attempts, want) {
+		t.Errorf("attempts %+v lack %+v", store.attempts, want)
+	}
+	if from, to := store.covered[0], store.covered[1]; from.Before(start.AddDate(0, 0, -pendingDays)) || from.After(store.searchedAt.AddDate(0, 0, -pendingDays)) || to.Before(store.searchedAt) {
+		t.Errorf("covered [%v, %v], want from %d days before the pass to the search", from, to, pendingDays)
+	}
+}
+
+// A capped answer covers only from its oldest row.
+func TestRefreshAttemptsCapped(t *testing.T) {
+	oldest := time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)
+	builds := make([]map[string]string, searchCap)
+	for i := range builds {
+		builds[i] = map[string]string{
+			"type": "fbc", "outcome": "success", "record_id": fmt.Sprint(i),
+			"nvr":        "quay-fbc-3.18.1-1.el9",
+			"start_time": oldest.Add(time.Duration(searchCap-i) * time.Minute).Format(time.RFC1123),
+		}
+	}
+	builds[searchCap-1]["start_time"] = oldest.Format(time.RFC1123)
+	body, err := json.Marshal(map[string]any{"builds": builds})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixture := filepath.Join(t.TempDir(), "capped.json")
+	if err := os.WriteFile(fixture, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, _ := refreshWith(t, fixture)
+	if !store.covered[0].Equal(oldest) {
+		t.Errorf("covered from %v, want the oldest row %v", store.covered[0], oldest)
 	}
 }

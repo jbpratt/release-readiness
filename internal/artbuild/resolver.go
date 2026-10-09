@@ -24,6 +24,8 @@ const (
 	perPass      = 50
 	// pendingDays is how far back a stream's search looks for running builds.
 	pendingDays = 7
+	// searchCap is the most rows /search returns, newest first.
+	searchCap = 1000
 )
 
 var quayStream = regexp.MustCompile(`quay-(\d+)-(\d+)`)
@@ -47,6 +49,16 @@ type PendingBuild struct {
 	StartedAt                 time.Time
 }
 
+// Attempt is one image-build record of a stream search. ART records a
+// finished build as another record of its NVR and leaves the pending one.
+// ImageDigest is empty until a build succeeds.
+type Attempt struct {
+	Group, Version, Name, NVR string
+	RecordID, Outcome         string
+	ImageDigest               string
+	StartedAt                 time.Time
+}
+
 // Candidate is a stored component image to look up. Applications holds every
 // application with a stored Snapshot holding it; FirstSeen is the oldest one.
 type Candidate struct {
@@ -63,6 +75,9 @@ type Store interface {
 	ListActiveApplications(ctx context.Context) ([]string, error)
 	// ReplaceArtPendingBuilds replaces group's pending builds with builds.
 	ReplaceArtPendingBuilds(ctx context.Context, group string, builds []PendingBuild, checkedAt time.Time) error
+	// StoreArtBuildAttempts upserts group's attempts by record id and extends
+	// its covered span by [from, to], or restarts it there after a gap.
+	StoreArtBuildAttempts(ctx context.Context, group string, attempts []Attempt, from, to time.Time) error
 }
 
 // Resolver looks up stored component images in ART build history, one
@@ -158,10 +173,11 @@ func (r *Resolver) refreshPending(ctx context.Context, now time.Time, pace <-cha
 		if err := wait(ctx, pace); err != nil {
 			return
 		}
+		from := now.AddDate(0, 0, -pendingDays)
 		builds, err := r.client.search(ctx, url.Values{
 			"group":     {g},
 			"assembly":  {"stream"},
-			"dateRange": {now.AddDate(0, 0, -pendingDays).Format(time.DateOnly) + " to " + now.AddDate(0, 0, 1).Format(time.DateOnly)},
+			"dateRange": {from.Format(time.DateOnly) + " to " + now.AddDate(0, 0, 1).Format(time.DateOnly)},
 		})
 		if err != nil {
 			if ctx.Err() != nil {
@@ -173,11 +189,46 @@ func (r *Resolver) refreshPending(ctx context.Context, now time.Time, pace <-cha
 		}
 		// Stamp the search time, not the pass start: the candidate phase can
 		// take minutes and the API hides rows checked too long ago.
-		if err := r.store.ReplaceArtPendingBuilds(ctx, g, pendingBuilds(g, builds), time.Now().UTC()); err != nil {
+		searched := time.Now().UTC()
+		if err := r.store.ReplaceArtPendingBuilds(ctx, g, pendingBuilds(g, builds), searched); err != nil {
 			r.logger.Error("store pending", "group", g, "error", err)
 			pass.Add(fmt.Errorf("store pending %s: %w", g, err))
 		}
+		attempts := imageAttempts(g, builds)
+		// A capped answer dropped its oldest rows, so it covers only from
+		// the oldest row it kept.
+		if len(builds) >= searchCap {
+			from = searched
+			for _, sb := range builds {
+				if t, err := time.Parse(time.RFC1123, sb.StartTime); err == nil && t.Before(from) {
+					from = t.UTC()
+				}
+			}
+		}
+		if err := r.store.StoreArtBuildAttempts(ctx, g, attempts, from, searched); err != nil {
+			r.logger.Error("store attempts", "group", g, "error", err)
+			pass.Add(fmt.Errorf("store attempts %s: %w", g, err))
+		}
 	}
+}
+
+// imageAttempts returns the image-build records of a search.
+func imageAttempts(group string, builds []searchBuild) []Attempt {
+	var out []Attempt
+	for _, sb := range builds {
+		name, version := SplitNVR(sb.NVR)
+		started, err := time.Parse(time.RFC1123, sb.StartTime)
+		if sb.Type != "image" || name == "" || sb.RecordID == "" || err != nil {
+			continue
+		}
+		_, digest, _ := strings.Cut(sb.ImagePullspec, "@")
+		out = append(out, Attempt{
+			Group: group, Version: version, Name: name, NVR: sb.NVR,
+			RecordID: sb.RecordID, Outcome: sb.Outcome, ImageDigest: digest,
+			StartedAt: started.UTC(),
+		})
+	}
+	return out
 }
 
 // pendingBuilds keeps, per NVR name and version, the newest image build if it

@@ -459,6 +459,40 @@ func TestPendingArtBuild(t *testing.T) {
 	}
 }
 
+// Build attempts are the release's z-version only, with a link to each
+// record; a stream never searched has no coverage, which reads as unknown.
+func TestListBuildAttempts(t *testing.T) {
+	srv := setupTestServer(t)
+	t0 := seedReleaseView(t, srv)
+	const url = "/api/v1/releases/quay-v3.18.0/build-attempts"
+	var resp model.BuildAttempts
+	getJSON(t, srv, url, http.StatusOK, &resp)
+	if resp.CoveredFrom != nil || resp.CoveredTo != nil || resp.Attempts == nil || len(resp.Attempts) != 0 {
+		t.Errorf("before any search: got %+v, want null coverage and no attempts", resp)
+	}
+
+	const nvr = "quay-clair-container-3.18.0-202610010000.p2.gabc1234.assembly.stream.el9"
+	attempts := []artbuild.Attempt{
+		{Group: "quay-3.18", Version: "3.18.0", Name: "quay-clair-container", NVR: nvr, RecordID: "rec-1", Outcome: "build_error", StartedAt: t0},
+		{Group: "quay-3.18", Version: "3.18.1", Name: "quay-clair-container", NVR: "quay-clair-container-3.18.1-1.el9", RecordID: "rec-2", Outcome: "success", StartedAt: t0},
+	}
+	if err := srv.db.StoreArtBuildAttempts(t.Context(), "quay-3.18", attempts, t0.Add(-time.Hour), t0.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	getJSON(t, srv, url, http.StatusOK, &resp)
+	if resp.CoveredFrom == nil || !resp.CoveredFrom.Equal(t0.Add(-time.Hour)) || resp.CoveredTo == nil || !resp.CoveredTo.Equal(t0.Add(time.Hour)) {
+		t.Errorf("coverage: got [%v, %v]", resp.CoveredFrom, resp.CoveredTo)
+	}
+	want := model.BuildAttempt{
+		Component: "quay-clair-container", NVR: nvr, Outcome: "build_error", StartedAt: t0,
+		BuildURL: "https://art.example/build?nvr=" + nvr + "&record_id=rec-1",
+	}
+	if len(resp.Attempts) != 1 || resp.Attempts[0] != want {
+		t.Errorf("attempts:\n got %+v\nwant [%+v]", resp.Attempts, want)
+	}
+	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/build-attempts", http.StatusNotFound, nil)
+}
+
 func TestReleasesOverview(t *testing.T) {
 	srv := setupTestServer(t)
 	ctx := t.Context()

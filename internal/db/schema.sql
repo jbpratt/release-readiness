@@ -148,6 +148,32 @@ CREATE TABLE IF NOT EXISTS art_pending_builds (
     PRIMARY KEY (group_name, release_version, component)
 );
 
+-- Every ART image-build record a group's searches returned. ART records a
+-- finished build as another record of its NVR and leaves the pending one.
+-- image_digest is null until a build succeeds.
+CREATE TABLE IF NOT EXISTS art_build_attempts (
+    group_name      TEXT NOT NULL,
+    record_id       TEXT NOT NULL,
+    release_version TEXT NOT NULL,
+    component       TEXT NOT NULL,
+    nvr             TEXT NOT NULL,
+    outcome         TEXT NOT NULL,
+    start_time      TEXT NOT NULL,
+    image_digest    TEXT,
+    first_seen      TEXT NOT NULL,
+    last_seen       TEXT NOT NULL,
+    PRIMARY KEY (group_name, record_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_art_build_attempts_version ON art_build_attempts(release_version);
+
+-- Span of build start times a group's searches read without a gap.
+CREATE TABLE IF NOT EXISTS art_build_coverage (
+    group_name   TEXT PRIMARY KEY,
+    covered_from TEXT NOT NULL,
+    covered_to   TEXT NOT NULL
+);
+
 -- File-based catalog read from an FBC image, keyed by its sha256:... digest.
 -- A parsed row is immutable, even with no bundles; a failed one is retried.
 CREATE TABLE IF NOT EXISTS fbc_catalogs (

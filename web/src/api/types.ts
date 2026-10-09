@@ -24,6 +24,24 @@ export interface ArtBuild {
 	upstream_sha: string;
 }
 
+/** One ART image build; component is its NVR name. */
+export interface BuildAttempt {
+	component: string;
+	nvr: string;
+	/** "success", "pending", or a failure such as "build_error". */
+	outcome: string;
+	started_at: string;
+	build_url: string;
+}
+
+/** A release's ART image builds started in the span ART history was read without a gap. */
+export interface BuildAttempts {
+	/** null when the stream's ART history was never read. */
+	covered_from: string | null;
+	covered_to: string | null;
+	attempts: BuildAttempt[];
+}
+
 export interface ReleaseSnapshot {
 	application: string;
 	name: string;

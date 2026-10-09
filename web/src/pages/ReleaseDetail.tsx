@@ -50,6 +50,7 @@ import type {
 	ReadinessResponse,
 	ReleaseVersion,
 } from "../api/types";
+import BuildAttempts from "../components/BuildAttempts";
 import PriorityLabel from "../components/PriorityLabel";
 import {
 	LatestSnapshot,
@@ -160,6 +161,8 @@ export default function ReleaseDetail() {
 					state={latest}
 					issueSummary={issueSummary ?? null}
 				/>
+
+				<BuildAttempts version={version!} />
 
 				<IssuesCard
 					issues={issues}

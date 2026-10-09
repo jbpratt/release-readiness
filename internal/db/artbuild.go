@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"strings"
 	"time"
 
@@ -124,4 +126,62 @@ func (d *DB) ArtPendingBuilds(ctx context.Context, versions []string, checkedSin
 		}
 	}
 	return builds, nil
+}
+
+func (d *DB) StoreArtBuildAttempts(ctx context.Context, group string, attempts []artbuild.Attempt, from, to time.Time) error {
+	seen := to.UTC().Format(time.RFC3339)
+	return d.InTx(ctx, func(tx *DB) error {
+		q := tx.queries()
+		for _, a := range attempts {
+			if err := q.UpsertArtBuildAttempt(ctx, dbsqlc.UpsertArtBuildAttemptParams{
+				GroupName:      group,
+				RecordID:       a.RecordID,
+				ReleaseVersion: a.Version,
+				Component:      a.Name,
+				Nvr:            a.NVR,
+				Outcome:        a.Outcome,
+				StartTime:      a.StartedAt.UTC().Format(time.RFC3339),
+				ImageDigest:    sql.NullString{String: a.ImageDigest, Valid: a.ImageDigest != ""},
+				FirstSeen:      seen,
+				LastSeen:       seen,
+			}); err != nil {
+				return err
+			}
+		}
+		return q.UpsertArtBuildCoverage(ctx, dbsqlc.UpsertArtBuildCoverageParams{
+			GroupName:   group,
+			CoveredFrom: from.UTC().Format(time.RFC3339),
+			CoveredTo:   seen,
+		})
+	})
+}
+
+// ArtBuildCoverage returns the span of build start times group's searches
+// read without a gap; ok is false when it was never searched.
+func (d *DB) ArtBuildCoverage(ctx context.Context, group string) (from, to time.Time, ok bool, err error) {
+	r, err := d.queries().GetArtBuildCoverage(ctx, group)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, time.Time{}, false, err
+	}
+	return parseTime(r.CoveredFrom), parseTime(r.CoveredTo), true, nil
+}
+
+// ArtBuildAttempts returns version's image-build attempts in group inside
+// the covered span, one per build, newest first.
+func (d *DB) ArtBuildAttempts(ctx context.Context, group, version string) ([]artbuild.Attempt, error) {
+	rows, err := d.queries().ListArtBuildAttempts(ctx, dbsqlc.ListArtBuildAttemptsParams{GroupName: group, ReleaseVersion: version})
+	if err != nil {
+		return nil, err
+	}
+	attempts := make([]artbuild.Attempt, len(rows))
+	for i, r := range rows {
+		attempts[i] = artbuild.Attempt{
+			Group: group, Version: version, Name: r.Component, NVR: r.Nvr,
+			RecordID: r.RecordID, Outcome: r.Outcome, StartedAt: parseTime(r.StartTime),
+		}
+	}
+	return attempts, nil
 }
