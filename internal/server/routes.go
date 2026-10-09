@@ -20,6 +20,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/releases/{version}/snapshots", s.handleListReleaseSnapshots)
 	mux.HandleFunc("GET /api/v1/releases/{version}/snapshots/{name}", s.handleGetReleaseSnapshot)
 	mux.HandleFunc("GET /api/v1/releases/{version}/snapshots/{name}/prow-runs", s.handleListSnapshotProwRuns)
+	mux.HandleFunc("GET /api/v1/releases/{version}/snapshots/{name}/ticket-delta", s.handleGetTicketDelta)
 	mux.HandleFunc("GET /api/v1/releases/{version}/issues", s.handleListReleaseIssues)
 	mux.HandleFunc("GET /api/v1/releases/{version}/issues/summary", s.handleGetReleaseIssueSummary)
 	mux.HandleFunc("GET /api/v1/releases/{version}/readiness", s.handleGetReleaseReadiness)
@@ -27,6 +28,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/releases/{version}/build-attempts", s.handleListBuildAttempts)
 	mux.HandleFunc("GET /api/v1/releases/{version}/staged", s.handleGetStaged)
 	mux.HandleFunc("GET /api/v1/releases/{version}/selected-build", s.handleGetSelectedBuild)
+	mux.HandleFunc("GET /api/v1/releases/{version}/ticket-membership", s.handleGetTicketMembership)
 
 	// SPA — serve React app from embedded dist/
 	distSub, _ := fs.Sub(web.DistFS, "dist")

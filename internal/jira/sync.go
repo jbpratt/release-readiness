@@ -68,6 +68,15 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 	s.logger.Info("discovered active releases", "count", len(releases))
 
 	activeSet := make(map[string]bool, len(releases))
+	streams := make(map[string]bool)
+	// Stream candidates are stored under their own Target Version, with
+	// no release_versions row: they are not a release.
+	syncStream := func(version string) {
+		if z := StreamVersion(version); z != "" && !streams[z] {
+			streams[z] = true
+			pass.Add(s.syncVersion(ctx, z))
+		}
+	}
 
 	for _, rel := range releases {
 		activeSet[rel.FixVersion] = true
@@ -101,6 +110,7 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 		}
 
 		pass.Add(s.syncVersion(ctx, rel.FixVersion))
+		syncStream(rel.FixVersion)
 	}
 
 	// Keep syncing versions whose tracking ticket closed (dropped from
@@ -133,6 +143,7 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 			pass.Add(fmt.Errorf("upsert version %s: %w", dbv.Name, err))
 		}
 		pass.Add(s.syncVersion(ctx, dbv.Name))
+		syncStream(dbv.Name)
 	}
 }
 

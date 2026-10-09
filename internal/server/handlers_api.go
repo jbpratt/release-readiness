@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"regexp"
 	"slices"
@@ -16,6 +17,8 @@ import (
 
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/fbc"
+	"github.com/quay/release-readiness/internal/github"
+	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/releaseview"
 	"github.com/quay/release-readiness/internal/syncstatus"
@@ -521,4 +524,286 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 
 func writeError(w http.ResponseWriter, status int, err error) {
 	writeJSON(w, status, map[string]string{"error": err.Error()})
+}
+
+const (
+	reasonNoSelectedBuild = "no selected build"
+	reasonNoEvidence      = "no build evidence"
+	reasonScanIncomplete  = "selected build scan incomplete"
+	reasonEarlierRange    = "earlier build range not compared"
+	reasonNotCarried      = "inclusion not proven: a later range is incomplete"
+	reasonNoConcrete      = "no reviewed concrete target version"
+	reasonOutsideTarget   = "evidenced key outside reviewed target version"
+	reasonNotScanned      = "not scanned yet"
+)
+
+// ticketHit is a ticket key's evidence in builds[idx] of a STAGE build
+// history. Proven is set when every later range of that component was
+// compared, so the newest build still contains it.
+type ticketHit struct {
+	key    string
+	idx    int
+	proven bool
+	model.TicketEvidence
+}
+
+// walkEvidence collects the ticket evidence of builds[0]'s components through
+// builds, newest first, and returns builds[0]'s components whose own range,
+// or any earlier range, was not compared.
+func (s *Server) walkEvidence(ctx context.Context, builds []*model.SelectedBuild) ([]ticketHit, []model.UnknownSpan, error) {
+	scans := make([]map[[2]string]github.Scan, len(builds))
+	for i, b := range builds {
+		list, err := s.db.ListEvidenceScans(ctx, b.SnapshotName)
+		if err != nil {
+			return nil, nil, err
+		}
+		scans[i] = make(map[[2]string]github.Scan, len(list))
+		for _, sc := range list {
+			scans[i][[2]string{sc.Component, sc.ImageDigest}] = sc
+		}
+	}
+	upstreamSHA := func(i int, name string) string {
+		if i < len(builds) {
+			if j := slices.IndexFunc(builds[i].Components, func(bc model.SelectedBuildComponent) bool { return bc.Name == name }); j >= 0 {
+				return builds[i].Components[j].UpstreamSHA
+			}
+		}
+		return ""
+	}
+	var hits []ticketHit
+	var unknown []model.UnknownSpan
+	for _, c := range builds[0].Components {
+		chained := true
+		for i, b := range builds {
+			j := slices.IndexFunc(b.Components, func(bc model.SelectedBuildComponent) bool { return bc.Name == c.Name })
+			if j < 0 {
+				break
+			}
+			digest := b.Components[j].ImageDigest
+			sc, ok := scans[i][[2]string{c.Name, digest}]
+			// A re-released Snapshot moves in the history: its stored range
+			// proves nothing once it no longer matches its neighbours.
+			if ok && sc.State == github.StateComplete && (sc.HeadSHA != b.Components[j].UpstreamSHA || sc.BaseSHA != upstreamSHA(i+1, c.Name)) {
+				sc, ok = github.Scan{}, false
+			}
+			for _, e := range sc.Evidence {
+				hits = append(hits, ticketHit{key: e.Key, idx: i, proven: chained, TicketEvidence: model.TicketEvidence{
+					Snapshot: b.SnapshotName, Component: c.Name, ImageDigest: digest, CommitSHA: e.CommitSHA, CommitURL: e.CommitURL, PRURL: e.PRURL,
+				}})
+			}
+			if ok && sc.State == github.StateComplete {
+				continue
+			}
+			if i == 0 {
+				reason := sc.Reason
+				if !ok {
+					reason = reasonNotScanned
+				}
+				unknown = append(unknown, model.UnknownSpan{Component: c.Name, ImageDigest: digest, Reason: reason})
+			} else if chained {
+				unknown = append(unknown, model.UnknownSpan{Component: c.Name, ImageDigest: c.ImageDigest, Reason: reasonEarlierRange})
+			}
+			chained = false
+		}
+	}
+	return hits, unknown, nil
+}
+
+// firstProven maps each key with proven evidence to the oldest build index
+// proving it.
+func firstProven(hits []ticketHit) map[string]int {
+	first := make(map[string]int)
+	for _, h := range hits {
+		if f, ok := first[h.key]; h.proven && (!ok || h.idx > f) {
+			first[h.key] = h.idx
+		}
+	}
+	return first
+}
+
+// jiraAction is the display-only Jira action for a proven concrete ticket.
+func jiraAction(status string) (action, reason string) {
+	switch strings.ToLower(status) {
+	case "verified":
+		return "would_move_to_release_pending", ""
+	case "release pending", "closed":
+		return "none", ""
+	case "":
+		return "skipped", "status_unknown"
+	}
+	return "skipped", "status_not_verified"
+}
+
+// handleGetTicketMembership puts each ticket of the release's concrete Target
+// Version, its .z stream, and its selected STAGE build's commits in one
+// bucket. A reviewed Target Version is never proof of membership.
+func (s *Server) handleGetTicketMembership(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	version := r.PathValue("version")
+	release, err := s.db.GetReleaseVersion(ctx, version)
+	if err != nil {
+		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
+		return
+	}
+	history, err := s.db.StageBuildHistory(ctx, release, s.StageReleasePlanPattern)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	resp := model.TicketMembership{Buckets: model.TicketBuckets{
+		InSelectedBuild: []model.TicketRow{}, CarriedForward: []model.TicketRow{}, PlannedPatchPending: []model.TicketRow{}, NeedsReview: []model.TicketRow{},
+	}}
+	var hits []ticketHit
+	var unknown []model.UnknownSpan
+	if len(history) > 0 {
+		resp.SelectedBuild = history[0]
+		if hits, unknown, err = s.walkEvidence(ctx, history); err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+	} else {
+		builds, err := s.db.SelectedStageBuilds(ctx, release, s.StageReleasePlanPattern)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		resp.Reason = builds.Reason
+	}
+
+	issues := make(map[string]model.JiraIssueRecord)
+	evidence := make(map[string][]model.TicketEvidence)
+	for _, h := range hits {
+		evidence[h.key] = append(evidence[h.key], h.TicketEvidence)
+	}
+	// Concrete rows are read last so they win over the stream's.
+	for _, v := range []string{jira.StreamVersion(release.Name), release.Name} {
+		if v == "" {
+			continue
+		}
+		list, err := s.db.ListJiraIssues(ctx, v)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
+		for _, i := range list {
+			issues[i.Key] = i
+		}
+	}
+	keys := slices.Collect(maps.Keys(issues))
+	for k := range evidence {
+		if _, ok := issues[k]; !ok {
+			keys = append(keys, k)
+		}
+	}
+	slices.Sort(keys)
+
+	incomplete := reasonEarlierRange
+	if slices.ContainsFunc(unknown, func(u model.UnknownSpan) bool { return u.Reason != reasonEarlierRange }) {
+		incomplete = reasonScanIncomplete
+	}
+	first := firstProven(hits)
+	for _, key := range keys {
+		issue, listed := issues[key]
+		row := model.TicketRow{
+			Key: key, Link: s.jiraBaseURL + "/browse/" + key, Summary: issue.Summary, Status: issue.Status,
+			TargetVersion: issue.FixVersion, ConcreteVersion: release.Name,
+			EvidenceState: "unknown", EvidenceReason: reasonNoSelectedBuild, Evidence: evidence[key],
+			JiraAction: "skipped",
+		}
+		if row.Evidence == nil {
+			row.Evidence = []model.TicketEvidence{}
+		}
+		f, proven := first[key]
+		if resp.SelectedBuild != nil {
+			row.CurrentSnapshot = resp.SelectedBuild.SnapshotName
+			switch {
+			case proven:
+				row.EvidenceState, row.EvidenceReason = "complete", ""
+				row.FirstSeenSnapshot = history[f].SnapshotName
+			case len(row.Evidence) > 0:
+				row.EvidenceReason = reasonNotCarried
+			case len(unknown) > 0:
+				row.EvidenceReason = incomplete
+			default:
+				row.EvidenceState, row.EvidenceReason = "none", reasonNoEvidence
+			}
+		}
+		bucket := &resp.Buckets.NeedsReview
+		row.Bucket = "needs_review"
+		switch {
+		case !listed:
+			row.EvidenceReason = reasonOutsideTarget
+			row.JiraActionReason = reasonOutsideTarget
+		case issue.FixVersion != release.Name:
+			bucket, row.Bucket = &resp.Buckets.PlannedPatchPending, "planned_patch_pending"
+			row.JiraActionReason = reasonNoConcrete
+		case row.EvidenceState == "complete" && f == 0:
+			bucket, row.Bucket = &resp.Buckets.InSelectedBuild, "in_selected_build"
+			row.JiraAction, row.JiraActionReason = jiraAction(issue.Status)
+		case row.EvidenceState == "complete":
+			bucket, row.Bucket = &resp.Buckets.CarriedForward, "carried_forward"
+			row.JiraAction, row.JiraActionReason = jiraAction(issue.Status)
+		default:
+			row.JiraActionReason = row.EvidenceReason
+		}
+		*bucket = append(*bucket, row)
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleGetTicketDelta returns the tickets the named STAGE build Snapshot
+// adds over the STAGE build before it, and the ones it carries forward.
+func (s *Server) handleGetTicketDelta(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	release, snap, ok := s.releaseSnapshot(w, r)
+	if !ok {
+		return
+	}
+	history, err := s.db.StageBuildHistory(ctx, release, s.StageReleasePlanPattern)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	resp := model.TicketDelta{Snapshot: snap.Name, DeltaState: "unknown", Added: []model.DeltaTicket{}, Carried: []model.DeltaTicket{}, Unknown: []model.UnknownSpan{}}
+	i := slices.IndexFunc(history, func(b *model.SelectedBuild) bool { return b.SnapshotName == snap.Name })
+	switch {
+	case i < 0:
+		resp.Reason = "not a successful stage build of this version"
+		writeJSON(w, http.StatusOK, resp)
+		return
+	case i == len(history)-1:
+		resp.Reason = "no previous stage build"
+	default:
+		resp.Baseline = history[i+1].SnapshotName
+		for _, c := range history[i+1].Components {
+			if !slices.ContainsFunc(history[i].Components, func(bc model.SelectedBuildComponent) bool { return bc.Name == c.Name }) {
+				resp.Unknown = append(resp.Unknown, model.UnknownSpan{Component: c.Name, ImageDigest: c.ImageDigest, Reason: "component removed since baseline"})
+			}
+		}
+	}
+	hits, unknown, err := s.walkEvidence(ctx, history[i:])
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	resp.Unknown = append(resp.Unknown, unknown...)
+	first := firstProven(hits)
+	for _, h := range hits {
+		if f, ok := first[h.key]; !ok || !h.proven || h.idx != f {
+			continue
+		}
+		t := model.DeltaTicket{Key: h.key, FirstSeenSnapshot: h.Snapshot, TicketEvidence: h.TicketEvidence}
+		if h.idx == 0 {
+			resp.Added = append(resp.Added, t)
+		} else {
+			resp.Carried = append(resp.Carried, t)
+		}
+	}
+	byKey := func(a, b model.DeltaTicket) int { return strings.Compare(a.Key, b.Key) }
+	slices.SortStableFunc(resp.Added, byKey)
+	slices.SortStableFunc(resp.Carried, byKey)
+	if resp.Baseline != "" && len(resp.Unknown) == 0 {
+		resp.DeltaState = "complete"
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
