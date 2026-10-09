@@ -10,6 +10,12 @@
 		0 4px 12px rgba(0, 0, 0, 0.16);
 }
 
+/* PF6 underlines anchors, breadcrumbs and inline link buttons at rest; keep
+   its hover underline only. */
+:root {
+	--pf-t--global--text-decoration--link--line--default: none;
+}
+
 .rr-label {
 	font-weight: 600;
 	margin-bottom: 0.25rem;
