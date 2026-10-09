@@ -84,58 +84,6 @@ func (q *Queries) GetReleaseVersion(ctx context.Context, name string) (GetReleas
 	return i, err
 }
 
-const listActiveReleaseVersions = `-- name: ListActiveReleaseVersions :many
-SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
-FROM release_versions
-WHERE released = 0 AND archived = 0
-ORDER BY name
-`
-
-type ListActiveReleaseVersionsRow struct {
-	Name                  string
-	Description           string
-	ReleaseDate           string
-	Released              int64
-	Archived              int64
-	ReleaseTicketKey      string
-	ReleaseTicketAssignee string
-	KonfluxApplication    string
-	DueDate               string
-}
-
-func (q *Queries) ListActiveReleaseVersions(ctx context.Context) ([]ListActiveReleaseVersionsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listActiveReleaseVersions)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListActiveReleaseVersionsRow
-	for rows.Next() {
-		var i ListActiveReleaseVersionsRow
-		if err := rows.Scan(
-			&i.Name,
-			&i.Description,
-			&i.ReleaseDate,
-			&i.Released,
-			&i.Archived,
-			&i.ReleaseTicketKey,
-			&i.ReleaseTicketAssignee,
-			&i.KonfluxApplication,
-			&i.DueDate,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listAllReleaseVersions = `-- name: ListAllReleaseVersions :many
 SELECT name, description, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
 FROM release_versions

@@ -16,7 +16,7 @@ type Store interface {
 	UpsertReleaseVersion(ctx context.Context, v *model.ReleaseVersion) error
 	UpsertJiraIssue(ctx context.Context, issue *model.JiraIssueRecord) error
 	DeleteJiraIssuesNotIn(ctx context.Context, fixVersion string, keys []string) error
-	ListActiveReleaseVersions(ctx context.Context) ([]model.ReleaseVersion, error)
+	ListAllReleaseVersions(ctx context.Context) ([]model.ReleaseVersion, error)
 }
 
 // TxFunc wraps a function in a database transaction, passing a tx-scoped Store.
@@ -104,39 +104,36 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 		pass.Add(s.syncVersion(ctx, rel.FixVersion))
 	}
 
-	// Reconcile unreleased versions in DB that may have been released in
-	// JIRA after their tracking ticket was closed (and thus dropped from
-	// DiscoverActiveReleases).
-	dbVersions, err := s.store.ListActiveReleaseVersions(ctx)
+	// Keep syncing versions whose tracking ticket closed (dropped from
+	// DiscoverActiveReleases): a shipped release still lists its issues,
+	// and JIRA often leaves a shipped version unreleased. Archived ones stay frozen.
+	dbVersions, err := s.store.ListAllReleaseVersions(ctx)
 	if err != nil {
-		s.logger.Error("list active db versions", "error", err)
-		pass.Add(fmt.Errorf("list active db versions: %w", err))
-	} else {
-		for _, dbv := range dbVersions {
-			if activeSet[dbv.Name] {
-				continue
-			}
-			versionInfo, err := s.client.GetVersion(ctx, dbv.Name)
-			if err != nil {
-				continue
-			}
-			if versionInfo.Released || versionInfo.Archived {
-				dbv.Released = versionInfo.Released
-				dbv.Archived = versionInfo.Archived
-				if versionInfo.ReleaseDate != "" {
-					t, err := time.Parse("2006-01-02", versionInfo.ReleaseDate)
-					if err == nil {
-						dbv.ReleaseDate = &t
-					}
-				}
-				if err := s.store.UpsertReleaseVersion(ctx, &dbv); err != nil {
-					s.logger.Error("upsert version", "version", dbv.Name, "error", err)
-					pass.Add(fmt.Errorf("upsert version %s: %w", dbv.Name, err))
-				}
-				pass.Add(s.syncVersion(ctx, dbv.Name))
-				s.logger.Info("reconciled version", "version", dbv.Name, "released", versionInfo.Released)
+		s.logger.Error("list db versions", "error", err)
+		pass.Add(fmt.Errorf("list db versions: %w", err))
+		return
+	}
+	for _, dbv := range dbVersions {
+		if dbv.Archived || activeSet[dbv.Name] {
+			continue
+		}
+		versionInfo, err := s.client.GetVersion(ctx, dbv.Name)
+		if err != nil {
+			continue
+		}
+		dbv.Released = versionInfo.Released
+		dbv.Archived = versionInfo.Archived
+		if versionInfo.ReleaseDate != "" {
+			t, err := time.Parse("2006-01-02", versionInfo.ReleaseDate)
+			if err == nil {
+				dbv.ReleaseDate = &t
 			}
 		}
+		if err := s.store.UpsertReleaseVersion(ctx, &dbv); err != nil {
+			s.logger.Error("upsert version", "version", dbv.Name, "error", err)
+			pass.Add(fmt.Errorf("upsert version %s: %w", dbv.Name, err))
+		}
+		pass.Add(s.syncVersion(ctx, dbv.Name))
 	}
 }
 

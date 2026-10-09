@@ -156,19 +156,6 @@ func (d *DB) GetReleaseVersion(ctx context.Context, name string) (*model.Release
 		row.ReleaseTicketKey, row.ReleaseTicketAssignee, row.KonfluxApplication, row.DueDate), nil
 }
 
-func (d *DB) ListActiveReleaseVersions(ctx context.Context) ([]model.ReleaseVersion, error) {
-	rows, err := d.queries().ListActiveReleaseVersions(ctx)
-	if err != nil {
-		return nil, err
-	}
-	versions := make([]model.ReleaseVersion, len(rows))
-	for i, r := range rows {
-		versions[i] = *toReleaseVersion(r.Name, r.Description, r.ReleaseDate, r.Released, r.Archived,
-			r.ReleaseTicketKey, r.ReleaseTicketAssignee, r.KonfluxApplication, r.DueDate)
-	}
-	return versions, nil
-}
-
 func (d *DB) ListAllReleaseVersions(ctx context.Context) ([]model.ReleaseVersion, error) {
 	rows, err := d.queries().ListAllReleaseVersions(ctx)
 	if err != nil {
