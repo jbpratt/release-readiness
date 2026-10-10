@@ -377,7 +377,9 @@ function IssuesCard({
 							<div>
 								Not compared:{" "}
 								{data.not_compared
-									.map((c) => `${c.component} (${c.reason})`)
+									.map(
+										(c) => `${componentLabel(c.component, app)} (${c.reason})`,
+									)
 									.join(", ")}
 							</div>
 						)}
@@ -411,14 +413,15 @@ function IssuesCard({
 }
 
 // The page already names the release, so quay-3-18-quay-clair reads clair.
-const commitLabel = (c: BuildCommit, app?: string) => {
+const componentLabel = (component: string, app?: string) => {
 	const prefix = `${app}-quay-`;
-	const name =
-		app && c.component.startsWith(prefix)
-			? c.component.slice(prefix.length)
-			: c.component;
-	return `${name}@${c.commit_sha.slice(0, 7)}`;
+	return app && component.startsWith(prefix)
+		? component.slice(prefix.length)
+		: component;
 };
+
+const commitLabel = (c: BuildCommit, app?: string) =>
+	`${componentLabel(c.component, app)}@${c.commit_sha.slice(0, 7)}`;
 
 function IssuesTable({
 	issues,
@@ -555,7 +558,7 @@ function IssuesTable({
 					{sortedIssues.map((issue) => (
 						<Tr key={issue.key}>
 							{isColumnVisible("key") && (
-								<Td>
+								<Td style={{ whiteSpace: "nowrap" }}>
 									<a
 										href={issue.link}
 										target="_blank"
