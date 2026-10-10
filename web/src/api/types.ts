@@ -12,16 +12,14 @@ export interface KonfluxRelease {
 }
 
 /**
- * What decides whether a version can ship. candidate is null with reason set
- * when there is none; a shipped version sets nothing else.
+ * What decides whether a version can ship. candidate is null with reason set,
+ * and builds empty, when there is none; a shipped version sets nothing else.
  */
 export interface ReleaseCandidate {
 	shipped: boolean;
 	candidate: CandidateBuild | null;
 	reason: string;
-	stage: StageFlag | null;
-	prod: KonfluxRelease | null;
-	ci: CandidateCI;
+	builds: BuildRow[];
 }
 
 /** The Snapshot up for release: the version's STAGE build, else the stream's newest. */
@@ -29,8 +27,6 @@ export interface CandidateBuild {
 	snapshot: string;
 	source: "staged" | "newest";
 	created_at: string;
-	/** Its stage Release's completion time when source is "staged". */
-	staged_at: string | null;
 	components: CandidateComponent[];
 }
 
@@ -71,23 +67,32 @@ export interface SeverityCounts {
 }
 
 /**
- * Whether every image of the stream's newest build is in a Snapshot a STAGE
- * Release succeeded with; "unknown" when the stream has no STAGE Release.
+ * A build that matters to the version: the candidate, the stream's newest
+ * build, and when neither was tested, the newest build a periodic run tested.
+ */
+export interface BuildRow {
+	snapshot: string;
+	created_at: string;
+	roles: ("candidate" | "newest" | "last_tested")[];
+	stage: StageFlag;
+	/** The version's prod Release, on the candidate only. */
+	prod: KonfluxRelease | null;
+	/** Per job, the periodic runs that tested the build. */
+	ci: CIJob[];
+}
+
+/**
+ * Whether every image of a build is in a Snapshot a STAGE Release succeeded
+ * with; "unknown" when the stream has no STAGE Release.
  */
 export interface StageFlag {
 	state: "staged" | "not_staged" | "unknown";
-	snapshot: string;
-	created_at: string;
+	/** When the build reached stage, once staged. */
+	staged_at: string | null;
 	total: number;
 	not_staged: string[];
 	/** The newest STAGE Release that did not succeed holding a not-staged image. */
 	release: KonfluxRelease | null;
-}
-
-/** The jobs whose runs tested the candidate; last_tested only when none did. */
-export interface CandidateCI {
-	jobs: CIJob[];
-	last_tested: LastTested | null;
 }
 
 /** A job's newest run of a build and how many of its runs tested it. */
@@ -97,13 +102,6 @@ export interface CIJob {
 	prow_url: string;
 	started_at: string | null;
 	runs: number;
-}
-
-/** The newest build a run tested, named by its operator bundle's NVR. */
-export interface LastTested {
-	bundle_nvr: string;
-	tested_at: string | null;
-	jobs: CIJob[];
 }
 
 export interface JiraIssue {
