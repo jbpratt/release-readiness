@@ -219,3 +219,81 @@ type BuildCommit struct {
 	CommitSHA string `json:"commit_sha"`
 	CommitURL string `json:"commit_url"`
 }
+
+// StageRelease is a Konflux Release through a STAGE ReleasePlan with the
+// component images of the Snapshot it names.
+type StageRelease struct {
+	KonfluxRelease
+	Images []string
+}
+
+// ReleaseCandidate is what decides whether a version can ship: the build up
+// for release, whether the stream's newest build reached stage, the version's
+// prod Release and the periodic CI runs of that build. Candidate is null with
+// Reason set when there is none. A shipped version sets nothing else.
+type ReleaseCandidate struct {
+	Shipped   bool            `json:"shipped"`
+	Candidate *CandidateBuild `json:"candidate"`
+	Reason    string          `json:"reason"`
+	Stage     *StageFlag      `json:"stage"`
+	Prod      *KonfluxRelease `json:"prod"`
+	CI        CandidateCI     `json:"ci"`
+}
+
+// CandidateBuild is the Snapshot up for release: Source "staged" is the
+// version's selected STAGE build, StagedAt its stage Release's completion
+// time; "newest" is the stream's newest build.
+type CandidateBuild struct {
+	Snapshot   string               `json:"snapshot"`
+	Source     string               `json:"source"`
+	CreatedAt  time.Time            `json:"created_at"`
+	StagedAt   *time.Time           `json:"staged_at"`
+	Components []CandidateComponent `json:"components"`
+}
+
+// CandidateComponent is a build image with its ART build, both empty until
+// ART resolves it.
+type CandidateComponent struct {
+	Name     string `json:"name"`
+	Image    string `json:"image"`
+	NVR      string `json:"nvr"`
+	BuildURL string `json:"build_url"`
+}
+
+// StageFlag tells whether every image of the stream's newest build is in a
+// Snapshot a STAGE Release of the stream succeeded with: State is "staged",
+// "not_staged" with the components that are not, or "unknown" when the stream
+// has no STAGE Release. Release is the newest STAGE Release that did not
+// succeed whose Snapshot holds an image that is not staged.
+type StageFlag struct {
+	State     string          `json:"state"`
+	Snapshot  string          `json:"snapshot"`
+	CreatedAt time.Time       `json:"created_at"`
+	Total     int             `json:"total"`
+	NotStaged []string        `json:"not_staged"`
+	Release   *KonfluxRelease `json:"release"`
+}
+
+// CandidateCI is, per job, the periodic runs that tested the candidate.
+// LastTested is set only when none did.
+type CandidateCI struct {
+	Jobs       []CIJob     `json:"jobs"`
+	LastTested *LastTested `json:"last_tested"`
+}
+
+// CIJob is a job's newest run of a build and how many of its runs tested it.
+type CIJob struct {
+	JobName   string     `json:"job_name"`
+	State     string     `json:"state"`
+	ProwURL   string     `json:"prow_url"`
+	StartedAt *time.Time `json:"started_at"`
+	Runs      int        `json:"runs"`
+}
+
+// LastTested is the newest build a run tested, named by its operator bundle's
+// NVR, with the jobs that tested it.
+type LastTested struct {
+	BundleNVR string     `json:"bundle_nvr"`
+	TestedAt  *time.Time `json:"tested_at"`
+	Jobs      []CIJob    `json:"jobs"`
+}

@@ -27,6 +27,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/releases/{version}/build-attempts", s.handleListBuildAttempts)
 	mux.HandleFunc("GET /api/v1/releases/{version}/staged", s.handleGetStaged)
 	mux.HandleFunc("GET /api/v1/releases/{version}/build-tickets", s.handleGetBuildTickets)
+	mux.HandleFunc("GET /api/v1/releases/{version}/candidate", s.handleGetCandidate)
 
 	// SPA — serve React app from embedded dist/
 	distSub, _ := fs.Sub(web.DistFS, "dist")

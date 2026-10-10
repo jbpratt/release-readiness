@@ -18,3 +18,17 @@ SELECT id, name, application, snapshot, release_plan, released_status, released_
 FROM konflux_releases
 WHERE snapshot IN (sqlc.slice('snapshots'))
 ORDER BY created_at DESC, id DESC;
+
+-- name: ListKonfluxReleasesByApplication :many
+SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, start_time, completion_time
+FROM konflux_releases
+WHERE application = ?
+ORDER BY created_at DESC, id DESC;
+
+-- name: ListReleasedSnapshotImages :many
+-- The component images of each stored Snapshot a Release of the application names.
+SELECT DISTINCT s.name, sc.image_url
+FROM konflux_releases kr
+JOIN snapshots s ON s.name = kr.snapshot AND s.application = kr.application
+JOIN snapshot_components sc ON sc.snapshot_id = s.id
+WHERE kr.application = ?;
