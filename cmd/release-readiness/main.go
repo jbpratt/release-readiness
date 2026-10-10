@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -13,6 +14,9 @@ import (
 	"syscall"
 	"time"
 
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/transport"
+
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
@@ -21,6 +25,7 @@ import (
 	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/kube"
 	"github.com/quay/release-readiness/internal/prow"
+	"github.com/quay/release-readiness/internal/scan"
 	"github.com/quay/release-readiness/internal/server"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
@@ -46,6 +51,9 @@ func main() {
 
 	// ART build history flags
 	artURL := flag.String("art-build-history-url", "https://art-build-history-art-build-history.apps.artc2023.pc3z.p1.openshiftapps.com", "ART build history service URL (empty disables ART build links)")
+
+	// Tekton Results flags
+	resultsURL := flag.String("tekton-results-url", "https://tekton-results-tekton-results.apps.kflux-ocp-p01.7ayg.p1.openshiftapps.com", "Tekton Results API URL to read the CVE scans of candidate images from with the Konflux credential (empty disables)")
 
 	// Red Hat container catalog flags
 	catalogURL := flag.String("catalog-url", "https://catalog.redhat.com/api/containers/v1", "Red Hat container catalog API URL (empty leaves JIRA's released flag as the only shipped signal)")
@@ -91,7 +99,12 @@ func main() {
 	var wg sync.WaitGroup
 	status := syncstatus.New()
 
-	if kc, err := kube.NewClient(*kubeconfig); err != nil {
+	kubeCfg, err := kube.RESTConfig(*kubeconfig)
+	var kc dynamic.Interface
+	if err == nil {
+		kc, err = kube.NewClient(kubeCfg)
+	}
+	if err != nil {
 		logger.Error("create kubernetes client, konflux sync disabled", "error", err)
 		status.Track("konflux", 0).Report(fmt.Errorf("create kubernetes client: %w", err))
 	} else {
@@ -144,10 +157,12 @@ func main() {
 		}()
 	}
 
+	var art *artbuild.Client
 	if *artURL != "" {
 		artLog := logger.With("component", "art-resolve")
 		logger.Info("art build history enabled", "url", *artURL)
-		resolver := artbuild.NewResolver(artbuild.NewClient(*artURL, &http.Client{Timeout: time.Minute}), database, artLog)
+		art = artbuild.NewClient(*artURL, &http.Client{Timeout: time.Minute})
+		resolver := artbuild.NewResolver(art, database, artLog)
 		resolver.Status = status.Track("art-builds", 5*time.Minute)
 		wg.Add(1)
 		go func() {
@@ -196,6 +211,35 @@ func main() {
 	srv.Scanner = scanner
 	srv.KonfluxUIURL = *konfluxUIURL
 	srv.KonfluxNamespace = *namespace
+
+	if *resultsURL != "" {
+		var rt http.RoundTripper
+		switch {
+		case kc == nil:
+			err = errors.New("no Konflux client")
+		case *artURL == "":
+			err = errors.New("ART build history disabled")
+		case kubeCfg.BearerToken == "" && kubeCfg.BearerTokenFile == "":
+			err = errors.New("the Konflux credential has no bearer token")
+		default:
+			// The system roots, not the cluster CA, verify the Results route.
+			rt, err = transport.NewBearerAuthWithRefreshRoundTripper(kubeCfg.BearerToken, kubeCfg.BearerTokenFile, http.DefaultTransport.(*http.Transport).Clone())
+		}
+		if err != nil {
+			logger.Warn("image scan sync disabled", "error", err)
+		} else {
+			logger.Info("image scan sync enabled", "url", *resultsURL)
+			results := scan.NewClient(*resultsURL, &http.Client{Timeout: time.Minute, Transport: rt})
+			syncer := scan.NewSyncer(results, art, database, srv.CandidateDigests, logger.With("component", "image-scans"))
+			syncer.Status = status.Track("image-scans", 5*time.Minute)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				syncer.Run(ctx, 5*time.Minute)
+			}()
+		}
+	}
+
 	if err := srv.Run(ctx); err != nil {
 		logger.Error("server", "error", err)
 		os.Exit(1)

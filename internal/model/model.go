@@ -252,12 +252,39 @@ type CandidateBuild struct {
 }
 
 // CandidateComponent is a build image with its ART build, both empty until
-// ART resolves it.
+// ART resolves it, and its CVE scan, null until the scan sync reads it.
 type CandidateComponent struct {
-	Name     string `json:"name"`
-	Image    string `json:"image"`
-	NVR      string `json:"nvr"`
-	BuildURL string `json:"build_url"`
+	Name     string     `json:"name"`
+	Image    string     `json:"image"`
+	NVR      string     `json:"nvr"`
+	BuildURL string     `json:"build_url"`
+	Scan     *ImageScan `json:"scan"`
+}
+
+// ImageScan is the CVE scan of an image by its build PipelineRun: State is
+// "pending", "scanned", "scan_failed" or "not_scanned", and Counts is null
+// unless scanned. URL is the PipelineRun's Konflux page.
+type ImageScan struct {
+	State  string      `json:"state"`
+	Counts *ScanCounts `json:"counts"`
+	URL    string      `json:"url"`
+}
+
+// ScanCounts is a scan's CVEs by severity, split by whether a fix exists.
+// Basis "scanner_arch_findings" counts a CVE once per architecture it is
+// found in; "unique_cves" counts it once.
+type ScanCounts struct {
+	Basis   string         `json:"basis"`
+	Fixable SeverityCounts `json:"fixable"`
+	NoFix   SeverityCounts `json:"no_fix"`
+}
+
+type SeverityCounts struct {
+	Critical int `json:"critical"`
+	High     int `json:"high"`
+	Medium   int `json:"medium"`
+	Low      int `json:"low"`
+	Unknown  int `json:"unknown"`
 }
 
 // StageFlag tells whether every image of the stream's newest build is in a

@@ -1,0 +1,297 @@
+{
+  "pipelineRun": {
+    "metadata": {
+      "labels": {
+        "appstudio.openshift.io/application": "quay-3-18",
+        "appstudio.openshift.io/component": "quay-3-18-quay-operator-bundle",
+        "doozer-watch-id": "1791596232053368544",
+        "kueue.x-k8s.io/priority-class": "build-priority-3",
+        "kueue.x-k8s.io/queue-name": "pipelines-queue",
+        "pipelines.appstudio.openshift.io/type": "build",
+        "tekton.dev/pipeline": "quay-3-18-quay-operator-bundle"
+      },
+      "name": "quay-3-18-quay-operator-bundle-rjgp9"
+    },
+    "status": {
+      "childReferences": [
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-bundle-rjgp9-init",
+          "pipelineTaskName": "init"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-bundle-rjgp9-clone-repository",
+          "pipelineTaskName": "clone-repository"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-bundle-rjgp9-prefetch-dependencies",
+          "pipelineTaskName": "prefetch-dependencies"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-bundle-rjgp9-build-container",
+          "pipelineTaskName": "build-container"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-bundle-rjgp9-build-image-index",
+          "pipelineTaskName": "build-image-index"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-bundle-rjgp9-build-source-image",
+          "pipelineTaskName": "build-source-image",
+          "whenExpressions": [
+            {
+              "input": "true",
+              "operator": "in",
+              "values": [
+                "true"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "qua9db67c80768f484ddbebaf9a52f1552b-deprecated-base-image-check",
+          "pipelineTaskName": "deprecated-base-image-check",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-bundle-rjgp9-roxctl-scan",
+          "pipelineTaskName": "roxctl-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-bundle-048d8e9f4d677bef10d2e590930ce9e3",
+          "pipelineTaskName": "ecosystem-cert-preflight-checks",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-bundle-rjgp9-sast-snyk-check",
+          "pipelineTaskName": "sast-snyk-check",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-bundle-rjgp9-clamav-scan",
+          "pipelineTaskName": "clamav-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "qua9db67c80768f484ddbebaf9a52f1552b-coverity-availability-check",
+          "pipelineTaskName": "coverity-availability-check",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-bundle-rjgp9-sast-shell-check",
+          "pipelineTaskName": "sast-shell-check",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-bundle-rjgp9-sast-unicode-check",
+          "pipelineTaskName": "sast-unicode-check",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-bundle-rjgp9-apply-tags",
+          "pipelineTaskName": "apply-tags"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-bundle-rjgp9-push-dockerfile",
+          "pipelineTaskName": "push-dockerfile"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-bundle-rjgp9-rpms-signature-scan",
+          "pipelineTaskName": "rpms-signature-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        }
+      ],
+      "completionTime": "2026-10-10T01:48:30Z",
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-10-10T01:48:30Z",
+          "message": "Tasks Completed: 17 (Failed: 0, Cancelled 0), Skipped: 0",
+          "reason": "Succeeded",
+          "status": "True",
+          "type": "Succeeded"
+        }
+      ],
+      "results": [
+        {
+          "name": "IMAGE_URL",
+          "value": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images:quay-operator-metadata-container-3.18.1.202610092112.p2.g35cf767.assembly.stream.el9-1"
+        },
+        {
+          "name": "IMAGE_DIGEST",
+          "value": "sha256:cd5893a5fae423d560644866ac134b8aa5e5857dded8e6eb2d916441f386d00f"
+        },
+        {
+          "name": "CHAINS-GIT_URL",
+          "value": "https://github.com/openshift-priv/quay-quay-operator"
+        },
+        {
+          "name": "CHAINS-GIT_COMMIT",
+          "value": "6e2a4a54e4d06c686f63e6a02e209be857daa619"
+        }
+      ]
+    }
+  },
+  "taskRuns": [
+    {
+      "metadata": {
+        "labels": {
+          "app.kubernetes.io/managed-by": "tekton-pipelines",
+          "app.kubernetes.io/version": "0.1",
+          "appstudio.openshift.io/application": "quay-3-18",
+          "appstudio.openshift.io/component": "quay-3-18-quay-operator-bundle",
+          "doozer-watch-id": "1791596232053368544",
+          "kueue.x-k8s.io/priority-class": "build-priority-3",
+          "kueue.x-k8s.io/queue-name": "pipelines-queue",
+          "pipelines.appstudio.openshift.io/type": "build",
+          "tekton.dev/memberOf": "tasks",
+          "tekton.dev/pipeline": "quay-3-18-quay-operator-bundle",
+          "tekton.dev/pipelineRun": "quay-3-18-quay-operator-bundle-rjgp9",
+          "tekton.dev/pipelineRunUID": "266a7e11-9417-423a-ae5f-779492f6d2fb",
+          "tekton.dev/pipelineTask": "roxctl-scan",
+          "tekton.dev/task": "roxctl-scan"
+        },
+        "name": "quay-3-18-quay-operator-bundle-rjgp9-roxctl-scan"
+      },
+      "status": {
+        "completionTime": "2026-10-10T01:48:30Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-10-10T01:48:30Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "results": [
+          {
+            "name": "IMAGES_PROCESSED",
+            "type": "string",
+            "value": "{\"image\": {\"pullspec\": \"quay.io/redhat-user-workloads/ocp-art-tenant/art-images:quay-operator-metadata-container-3.18.1.202610092112.p2.g35cf767.assembly.stream.el9-1\", \"digests\": [\"sha256:cd5893a5fae423d560644866ac134b8aa5e5857dded8e6eb2d916441f386d00f\"]}}\n"
+          },
+          {
+            "name": "REPORTS",
+            "type": "string",
+            "value": "{\"sha256:cd5893a5fae423d560644866ac134b8aa5e5857dded8e6eb2d916441f386d00f\":\"sha256:ac7f22ae58964e3030efef5a24373d338f2944559981ec0fc984fd46b5a75178\"}\n"
+          },
+          {
+            "name": "SCAN_OUTPUT",
+            "type": "string",
+            "value": "{\"vulnerabilities\":{\"critical\":0,\"high\":0,\"medium\":0,\"low\":0},\"unpatched_vulnerabilities\":{\"critical\":0,\"high\":0,\"medium\":1,\"low\":0},\"discrepancies\":{\"count\":0}}\n"
+          },
+          {
+            "name": "TEST_OUTPUT",
+            "type": "string",
+            "value": "{\"result\":\"SUCCESS\",\"timestamp\":\"2026-10-10T01:48:29+00:00\",\"note\":\"Task roxctl-scan completed: Refer to Tekton task result SCAN_OUTPUT for vulnerabilities scanned by Rox.\",\"namespace\":\"default\",\"successes\":0,\"failures\":0,\"warnings\":0}\n"
+          }
+        ]
+      }
+    }
+  ]
+}

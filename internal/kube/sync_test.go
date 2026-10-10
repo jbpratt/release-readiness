@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"k8s.io/client-go/rest"
 
 	"github.com/quay/release-readiness/internal/db"
 	"github.com/quay/release-readiness/internal/fbc"
@@ -372,7 +373,7 @@ func TestSyncCatalogs(t *testing.T) {
 	}
 }
 
-func TestNewClientKubeconfigList(t *testing.T) {
+func TestRESTConfigKubeconfigList(t *testing.T) {
 	dir := t.TempDir()
 	kc := filepath.Join(dir, "kc.yaml")
 	cfg := `apiVersion: v1
@@ -391,7 +392,15 @@ current-context: x
 	if err := os.WriteFile(kc, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := NewClient(kc + string(filepath.ListSeparator) + filepath.Join(dir, "missing.yaml")); err != nil {
-		t.Fatalf("NewClient: %v", err)
+	rc, err := RESTConfig(kc + string(filepath.ListSeparator) + filepath.Join(dir, "missing.yaml"))
+	if err != nil || rc.BearerToken != "t" {
+		t.Fatalf("RESTConfig: %+v, %v; want the token t", rc, err)
+	}
+}
+
+func TestNewClientError(t *testing.T) {
+	c, err := NewClient(&rest.Config{Host: "https://example.invalid", TLSClientConfig: rest.TLSClientConfig{CAData: []byte("not PEM")}})
+	if err == nil || c != nil {
+		t.Fatalf("NewClient = %#v, %v; want a nil client and an error", c, err)
 	}
 }

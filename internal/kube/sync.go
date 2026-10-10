@@ -34,21 +34,24 @@ const (
 	fbcPerPass    = 5
 )
 
-// NewClient builds a dynamic client from kubeconfig, or from the in-cluster
-// service account when kubeconfig is empty.
-func NewClient(kubeconfig string) (dynamic.Interface, error) {
-	var cfg *rest.Config
-	var err error
+// RESTConfig loads kubeconfig, or the in-cluster service account when
+// kubeconfig is empty.
+func RESTConfig(kubeconfig string) (*rest.Config, error) {
 	if kubeconfig == "" {
-		cfg, err = rest.InClusterConfig()
-	} else {
-		rules := &clientcmd.ClientConfigLoadingRules{Precedence: filepath.SplitList(kubeconfig)}
-		cfg, err = clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, nil).ClientConfig()
+		return rest.InClusterConfig()
 	}
+	rules := &clientcmd.ClientConfigLoadingRules{Precedence: filepath.SplitList(kubeconfig)}
+	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, nil).ClientConfig()
+}
+
+// NewClient builds a dynamic client from cfg.
+func NewClient(cfg *rest.Config) (dynamic.Interface, error) {
+	c, err := dynamic.NewForConfig(cfg)
 	if err != nil {
+		// A nil *DynamicClient would make the returned interface non-nil.
 		return nil, err
 	}
-	return dynamic.NewForConfig(cfg)
+	return c, nil
 }
 
 // Store is the subset of the database layer needed by the Konflux syncer.

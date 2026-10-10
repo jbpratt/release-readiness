@@ -1,0 +1,78 @@
+{
+  "pipelineRun": {
+    "metadata": {
+      "name": "synth-rox-running"
+    },
+    "status": {
+      "conditions": [
+        {
+          "reason": "Succeeded",
+          "status": "True",
+          "type": "Succeeded"
+        }
+      ],
+      "completionTime": "2026-10-09T12:10:00Z",
+      "childReferences": [
+        {
+          "name": "synth-rox-running-roxctl-scan-0",
+          "pipelineTaskName": "roxctl-scan"
+        },
+        {
+          "name": "synth-rox-running-roxctl-scan-1",
+          "pipelineTaskName": "roxctl-scan"
+        }
+      ]
+    }
+  },
+  "taskRuns": [
+    {
+      "metadata": {
+        "name": "synth-rox-running-roxctl-scan-0",
+        "labels": {
+          "tekton.dev/pipelineRun": "synth-rox-running",
+          "tekton.dev/pipelineTask": "roxctl-scan"
+        }
+      },
+      "status": {
+        "conditions": [
+          {
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "completionTime": "2026-10-09T12:00:00Z",
+        "results": [
+          {
+            "name": "REPORTS",
+            "type": "string",
+            "value": "{}\n"
+          },
+          {
+            "name": "TEST_OUTPUT",
+            "type": "string",
+            "value": "{\"result\":\"ERROR\"}\n"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "name": "synth-rox-running-roxctl-scan-1",
+        "labels": {
+          "tekton.dev/pipelineRun": "synth-rox-running",
+          "tekton.dev/pipelineTask": "roxctl-scan"
+        }
+      },
+      "status": {
+        "conditions": [
+          {
+            "reason": "Running",
+            "status": "Unknown",
+            "type": "Succeeded"
+          }
+        ]
+      }
+    }
+  ]
+}

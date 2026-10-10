@@ -1,0 +1,27 @@
+{
+  "pipelineRun": {
+    "metadata": {
+      "name": "synth-running"
+    },
+    "status": {
+      "conditions": [
+        {
+          "reason": "Running",
+          "status": "Unknown",
+          "type": "Succeeded"
+        }
+      ],
+      "childReferences": [
+        {
+          "name": "synth-running-init",
+          "pipelineTaskName": "init"
+        },
+        {
+          "name": "synth-running-build-images-0",
+          "pipelineTaskName": "build-images"
+        }
+      ]
+    }
+  },
+  "taskRuns": []
+}

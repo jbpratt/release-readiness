@@ -1,0 +1,28 @@
+{
+  "pipelineRun": {
+    "metadata": {
+      "name": "synth-taskruns-missing"
+    },
+    "status": {
+      "conditions": [
+        {
+          "reason": "Succeeded",
+          "status": "True",
+          "type": "Succeeded"
+        }
+      ],
+      "completionTime": "2026-10-09T12:00:00Z",
+      "childReferences": [
+        {
+          "name": "synth-taskruns-missing-build-images-0",
+          "pipelineTaskName": "build-images"
+        },
+        {
+          "name": "synth-taskruns-missing-roxctl-scan",
+          "pipelineTaskName": "roxctl-scan"
+        }
+      ]
+    }
+  },
+  "taskRuns": []
+}

@@ -4,6 +4,10 @@
 
 package dbsqlc
 
+import (
+	"database/sql"
+)
+
 type ArtBuild struct {
 	Digest       string
 	State        string
@@ -56,6 +60,16 @@ type FbcCatalogBundle struct {
 	BundleName    string
 	BundleRef     string
 	BundleDigest  string
+}
+
+type ImageScan struct {
+	Digest      string
+	State       string
+	PipelineRun string
+	DetailUrl   string
+	CountsJson  sql.NullString
+	ReportsJson sql.NullString
+	CheckedAt   string
 }
 
 type JiraIssue struct {

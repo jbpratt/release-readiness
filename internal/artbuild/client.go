@@ -39,6 +39,8 @@ type record struct {
 	ImagePullspec string `json:"image_pullspec"`
 	Commitish     string `json:"commitish"`
 	SourceRepo    string `json:"source_repo"`
+	// BuildPipelineURL is the build PipelineRun's Konflux UI page.
+	BuildPipelineURL string `json:"build_pipeline_url"`
 }
 
 func (c *Client) search(ctx context.Context, q url.Values) ([]searchBuild, error) {
@@ -61,6 +63,16 @@ func (c *Client) record(ctx context.Context, nvr, recordID string) (*record, err
 		return nil, err
 	}
 	return &r, nil
+}
+
+// BuildPipelineURL returns the Konflux UI page of the PipelineRun that built
+// a record, "" when the record has none.
+func (c *Client) BuildPipelineURL(ctx context.Context, nvr, recordID string) (string, error) {
+	r, err := c.record(ctx, nvr, recordID)
+	if err != nil {
+		return "", err
+	}
+	return r.BuildPipelineURL, nil
 }
 
 func (c *Client) get(ctx context.Context, path string, v any) error {

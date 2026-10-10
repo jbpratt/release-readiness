@@ -40,6 +40,34 @@ export interface CandidateComponent {
 	image: string;
 	nvr: string;
 	build_url: string;
+	/** null until the image scan sync has read it. */
+	scan: ImageScan | null;
+}
+
+/** The CVE scan of an image by its build PipelineRun, whose Konflux page is url. */
+export interface ImageScan {
+	state: "pending" | "scanned" | "scan_failed" | "not_scanned";
+	/** null unless scanned. */
+	counts: ScanCounts | null;
+	url: string;
+}
+
+/**
+ * A scan's CVEs by severity, with and without a fix. scanner_arch_findings
+ * counts a CVE once per architecture it is found in; unique_cves once.
+ */
+export interface ScanCounts {
+	basis: "scanner_arch_findings" | "unique_cves";
+	fixable: SeverityCounts;
+	no_fix: SeverityCounts;
+}
+
+export interface SeverityCounts {
+	critical: number;
+	high: number;
+	medium: number;
+	low: number;
+	unknown: number;
 }
 
 /**

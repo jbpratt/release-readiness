@@ -183,3 +183,17 @@ CREATE TABLE IF NOT EXISTS staged_snapshots (
 );
 
 CREATE INDEX IF NOT EXISTS idx_staged_snapshots_assembly ON staged_snapshots(assembly, env, kind, created_at);
+
+-- CVE scan of a candidate image, keyed by its sha256:... digest, read from the
+-- scan TaskRuns of the PipelineRun that built it. A pending row is retried;
+-- the other states are final. counts_json and reports_json are NULL unless
+-- scanned; reports_json maps each architecture manifest digest to its report.
+CREATE TABLE IF NOT EXISTS image_scans (
+    digest       TEXT PRIMARY KEY,
+    state        TEXT NOT NULL CHECK (state IN ('pending', 'scanned', 'scan_failed', 'not_scanned')),
+    pipeline_run TEXT NOT NULL DEFAULT '',
+    detail_url   TEXT NOT NULL DEFAULT '',
+    counts_json  TEXT,
+    reports_json TEXT,
+    checked_at   TEXT NOT NULL
+);

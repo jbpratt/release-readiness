@@ -40,6 +40,7 @@ import type {
 	CandidateCI,
 	CIJob,
 	DashboardConfig,
+	ImageScan,
 	KonfluxRelease,
 	ReleaseCandidate,
 } from "../api/types";
@@ -53,7 +54,7 @@ import {
 	jiraSearchUrl,
 	konfluxUrl,
 } from "../utils/links";
-import { jobShortName, notVerified } from "../utils/releaseDetail";
+import { jobShortName, notVerified, scanCell } from "../utils/releaseDetail";
 import { releaseStatus } from "../utils/releaseStatus";
 
 /** A Konflux UI page of the version's application. */
@@ -67,6 +68,7 @@ const muted = { color: "var(--pf-t--global--text--color--subtle)" };
 const textColor = {
 	green: "var(--pf-t--global--text--color--status--success--default)",
 	red: "var(--pf-t--global--text--color--status--danger--default)",
+	orange: "var(--pf-t--global--text--color--status--warning--default)",
 	blue: "var(--pf-t--global--text--color--status--info--default)",
 	grey: muted.color,
 };
@@ -309,6 +311,7 @@ function Candidate({
 	app: string;
 	konflux: KonfluxLink;
 }) {
+	const hasScans = build.components.some((c) => c.scan);
 	return (
 		<>
 			<div>
@@ -368,6 +371,7 @@ function Candidate({
 					<Tr>
 						<Th>Component</Th>
 						<Th>Build</Th>
+						{hasScans && <Th>CVEs</Th>}
 					</Tr>
 				</Thead>
 				<Tbody>
@@ -381,11 +385,38 @@ function Candidate({
 									noNvr
 								)}
 							</Td>
+							{hasScans && (
+								<Td>
+									<ScanCell scan={c.scan} />
+								</Td>
+							)}
 						</Tr>
 					))}
 				</Tbody>
 			</Table>
 		</>
+	);
+}
+
+/** An image's CVE scan linked to its build PipelineRun, the counts on hover. */
+function ScanCell({ scan }: { scan: ImageScan | null }) {
+	const cell = scanCell(scan);
+	const link = (
+		<ExtLink href={cell.url || null}>
+			<span style={cell.color && { color: textColor[cell.color] }}>
+				{cell.text}
+			</span>
+		</ExtLink>
+	);
+	return cell.detail ? (
+		<Tooltip
+			maxWidth="30rem"
+			content={cell.detail.map((line) => <div key={line}>{line}</div>)}
+		>
+			<span>{link}</span>
+		</Tooltip>
+	) : (
+		link
 	);
 }
 

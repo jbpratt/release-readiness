@@ -1,0 +1,32 @@
+{
+  "pipelineRun": {
+    "metadata": {
+      "name": "synth-no-scan-task"
+    },
+    "status": {
+      "conditions": [
+        {
+          "reason": "Succeeded",
+          "status": "True",
+          "type": "Succeeded"
+        }
+      ],
+      "completionTime": "2026-10-09T12:00:00Z",
+      "childReferences": [
+        {
+          "name": "synth-no-scan-task-init",
+          "pipelineTaskName": "init"
+        },
+        {
+          "name": "synth-no-scan-task-build-images-0",
+          "pipelineTaskName": "build-images"
+        },
+        {
+          "name": "synth-no-scan-task-clamav-scan-0",
+          "pipelineTaskName": "clamav-scan"
+        }
+      ]
+    }
+  },
+  "taskRuns": []
+}

@@ -1,0 +1,545 @@
+{
+  "pipelineRun": {
+    "metadata": {
+      "labels": {
+        "appstudio.openshift.io/application": "quay-3-18",
+        "appstudio.openshift.io/component": "quay-3-18-quay-quay",
+        "doozer-watch-id": "1791265101232067272",
+        "kueue.x-k8s.io/priority-class": "build-priority-1",
+        "kueue.x-k8s.io/queue-name": "pipelines-queue",
+        "pipelines.appstudio.openshift.io/type": "build",
+        "pipelineservice.appstudio.io/throttled": "quay-3-18-quay-quay-d9s9v-build-images-2",
+        "tekton.dev/pipeline": "quay-3-18-quay-quay"
+      },
+      "name": "quay-3-18-quay-quay-d9s9v"
+    },
+    "status": {
+      "childReferences": [
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-init",
+          "pipelineTaskName": "init"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-clone-repository",
+          "pipelineTaskName": "clone-repository"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-prefetch-dependencies",
+          "pipelineTaskName": "prefetch-dependencies"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-build-images-0",
+          "pipelineTaskName": "build-images"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-build-images-1",
+          "pipelineTaskName": "build-images"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-build-images-2",
+          "pipelineTaskName": "build-images"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-build-images-3",
+          "pipelineTaskName": "build-images"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-build-image-index",
+          "pipelineTaskName": "build-image-index"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-build-source-image",
+          "pipelineTaskName": "build-source-image",
+          "whenExpressions": [
+            {
+              "input": "true",
+              "operator": "in",
+              "values": [
+                "true"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-deprecated-base-image-check",
+          "pipelineTaskName": "deprecated-base-image-check",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-clair-scan-0",
+          "pipelineTaskName": "clair-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-clair-scan-1",
+          "pipelineTaskName": "clair-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-clair-scan-2",
+          "pipelineTaskName": "clair-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-clair-scan-3",
+          "pipelineTaskName": "clair-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-sast-snyk-check",
+          "pipelineTaskName": "sast-snyk-check",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-sast-shell-check",
+          "pipelineTaskName": "sast-shell-check",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-sast-unicode-check",
+          "pipelineTaskName": "sast-unicode-check",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-clamav-scan-0",
+          "pipelineTaskName": "clamav-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-clamav-scan-1",
+          "pipelineTaskName": "clamav-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-clamav-scan-2",
+          "pipelineTaskName": "clamav-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-clamav-scan-3",
+          "pipelineTaskName": "clamav-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-apply-tags",
+          "pipelineTaskName": "apply-tags"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-push-dockerfile",
+          "pipelineTaskName": "push-dockerfile"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-quay-d9s9v-rpms-signature-scan",
+          "pipelineTaskName": "rpms-signature-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        }
+      ],
+      "completionTime": "2026-10-06T07:54:01Z",
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-10-06T07:54:01Z",
+          "message": "Tasks Completed: 15 (Failed: 0, Cancelled 0), Skipped: 0",
+          "reason": "Succeeded",
+          "status": "True",
+          "type": "Succeeded"
+        }
+      ],
+      "results": [
+        {
+          "name": "IMAGE_URL",
+          "value": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images:quay-rhel9-3.18.1-20261006.052849"
+        },
+        {
+          "name": "IMAGE_DIGEST",
+          "value": "sha256:4db6193f032e733fb80f8b83c5a3a0c4e43cda6fdbd7c9cbf150b1ee93bbab3c"
+        },
+        {
+          "name": "CHAINS-GIT_URL",
+          "value": "https://github.com/openshift-priv/quay-quay"
+        },
+        {
+          "name": "CHAINS-GIT_COMMIT",
+          "value": "6b6e37acd15b2bd434ab9a9ec5ef4d7bf9291c70"
+        }
+      ]
+    }
+  },
+  "taskRuns": [
+    {
+      "metadata": {
+        "labels": {
+          "app.kubernetes.io/managed-by": "tekton-pipelines",
+          "app.kubernetes.io/version": "0.3.2",
+          "appstudio.openshift.io/application": "quay-3-18",
+          "appstudio.openshift.io/component": "quay-3-18-quay-quay",
+          "doozer-watch-id": "1791265101232067272",
+          "kueue.x-k8s.io/priority-class": "build-priority-1",
+          "kueue.x-k8s.io/queue-name": "pipelines-queue",
+          "pipelines.appstudio.openshift.io/type": "build",
+          "pipelineservice.appstudio.io/throttled": "quay-3-18-quay-quay-d9s9v-build-images-2",
+          "tekton.dev/memberOf": "tasks",
+          "tekton.dev/pipeline": "quay-3-18-quay-quay",
+          "tekton.dev/pipelineRun": "quay-3-18-quay-quay-d9s9v",
+          "tekton.dev/pipelineRunUID": "cd04e10d-2437-44de-a3e0-f4341eb2dbf3",
+          "tekton.dev/pipelineTask": "clair-scan",
+          "tekton.dev/task": "clair-scan"
+        },
+        "name": "quay-3-18-quay-quay-d9s9v-clair-scan-1"
+      },
+      "status": {
+        "completionTime": "2026-10-06T07:52:42Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-10-06T07:52:42Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "results": [
+          {
+            "name": "IMAGES_PROCESSED",
+            "type": "string",
+            "value": "{\"image\": {\"pullspec\": \"quay.io/redhat-user-workloads/ocp-art-tenant/art-images:quay-rhel9-3.18.1-20261006.052849\", \"digests\": [\"sha256:2774e4fe2d8c2d8d6cf6c558a0edd86f83d20c9039128753b8cef71e9b6ed8d2\",\"sha256:4db6193f032e733fb80f8b83c5a3a0c4e43cda6fdbd7c9cbf150b1ee93bbab3c\"]}}\n"
+          },
+          {
+            "name": "REPORTS",
+            "type": "string",
+            "value": "{\"sha256:2774e4fe2d8c2d8d6cf6c558a0edd86f83d20c9039128753b8cef71e9b6ed8d2\":\"sha256:1c53567066312891efed2eedd5fba9dfdd2ca699885a39b49fa8ea50c761fa4d\"}\n"
+          },
+          {
+            "name": "SCAN_OUTPUT",
+            "type": "string",
+            "value": "{\"vulnerabilities\":{\"critical\":0,\"high\":1,\"medium\":0,\"low\":0,\"unknown\":0},\"unpatched_vulnerabilities\":{\"critical\":0,\"high\":125,\"medium\":498,\"low\":121,\"unknown\":3}}\n"
+          },
+          {
+            "name": "TEST_OUTPUT",
+            "type": "string",
+            "value": "{\"result\":\"SUCCESS\",\"timestamp\":\"2026-10-06T07:52:42+00:00\",\"note\":\"Task clair-scan completed: Refer to Tekton task result SCAN_OUTPUT for vulnerabilities scanned by Clair.\",\"namespace\":\"default\",\"successes\":0,\"failures\":0,\"warnings\":0}\n"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "labels": {
+          "app.kubernetes.io/managed-by": "tekton-pipelines",
+          "app.kubernetes.io/version": "0.3.2",
+          "appstudio.openshift.io/application": "quay-3-18",
+          "appstudio.openshift.io/component": "quay-3-18-quay-quay",
+          "doozer-watch-id": "1791265101232067272",
+          "kueue.x-k8s.io/priority-class": "build-priority-1",
+          "kueue.x-k8s.io/queue-name": "pipelines-queue",
+          "pipelines.appstudio.openshift.io/type": "build",
+          "pipelineservice.appstudio.io/throttled": "quay-3-18-quay-quay-d9s9v-build-images-2",
+          "tekton.dev/memberOf": "tasks",
+          "tekton.dev/pipeline": "quay-3-18-quay-quay",
+          "tekton.dev/pipelineRun": "quay-3-18-quay-quay-d9s9v",
+          "tekton.dev/pipelineRunUID": "cd04e10d-2437-44de-a3e0-f4341eb2dbf3",
+          "tekton.dev/pipelineTask": "clair-scan",
+          "tekton.dev/task": "clair-scan"
+        },
+        "name": "quay-3-18-quay-quay-d9s9v-clair-scan-3"
+      },
+      "status": {
+        "completionTime": "2026-10-06T07:52:42Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-10-06T07:52:42Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "results": [
+          {
+            "name": "IMAGES_PROCESSED",
+            "type": "string",
+            "value": "{\"image\": {\"pullspec\": \"quay.io/redhat-user-workloads/ocp-art-tenant/art-images:quay-rhel9-3.18.1-20261006.052849\", \"digests\": [\"sha256:fbe63262355afc7d1d44f86ef5b0a5dcedf244649567732e63c06addf1b62bff\",\"sha256:4db6193f032e733fb80f8b83c5a3a0c4e43cda6fdbd7c9cbf150b1ee93bbab3c\"]}}\n"
+          },
+          {
+            "name": "REPORTS",
+            "type": "string",
+            "value": "{\"sha256:fbe63262355afc7d1d44f86ef5b0a5dcedf244649567732e63c06addf1b62bff\":\"sha256:aca5a55f4cd52da7f81e759b2dff9266a82767ad565dcbd58c9cf84ff4284f0f\"}\n"
+          },
+          {
+            "name": "SCAN_OUTPUT",
+            "type": "string",
+            "value": "{\"vulnerabilities\":{\"critical\":0,\"high\":1,\"medium\":0,\"low\":0,\"unknown\":0},\"unpatched_vulnerabilities\":{\"critical\":0,\"high\":125,\"medium\":498,\"low\":121,\"unknown\":3}}\n"
+          },
+          {
+            "name": "TEST_OUTPUT",
+            "type": "string",
+            "value": "{\"result\":\"SUCCESS\",\"timestamp\":\"2026-10-06T07:52:42+00:00\",\"note\":\"Task clair-scan completed: Refer to Tekton task result SCAN_OUTPUT for vulnerabilities scanned by Clair.\",\"namespace\":\"default\",\"successes\":0,\"failures\":0,\"warnings\":0}\n"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "labels": {
+          "app.kubernetes.io/managed-by": "tekton-pipelines",
+          "app.kubernetes.io/version": "0.3.2",
+          "appstudio.openshift.io/application": "quay-3-18",
+          "appstudio.openshift.io/component": "quay-3-18-quay-quay",
+          "doozer-watch-id": "1791265101232067272",
+          "kueue.x-k8s.io/priority-class": "build-priority-1",
+          "kueue.x-k8s.io/queue-name": "pipelines-queue",
+          "pipelines.appstudio.openshift.io/type": "build",
+          "pipelineservice.appstudio.io/throttled": "quay-3-18-quay-quay-d9s9v-build-images-2",
+          "tekton.dev/memberOf": "tasks",
+          "tekton.dev/pipeline": "quay-3-18-quay-quay",
+          "tekton.dev/pipelineRun": "quay-3-18-quay-quay-d9s9v",
+          "tekton.dev/pipelineRunUID": "cd04e10d-2437-44de-a3e0-f4341eb2dbf3",
+          "tekton.dev/pipelineTask": "clair-scan",
+          "tekton.dev/task": "clair-scan"
+        },
+        "name": "quay-3-18-quay-quay-d9s9v-clair-scan-0"
+      },
+      "status": {
+        "completionTime": "2026-10-06T07:52:56Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-10-06T07:52:56Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "results": [
+          {
+            "name": "IMAGES_PROCESSED",
+            "type": "string",
+            "value": "{\"image\": {\"pullspec\": \"quay.io/redhat-user-workloads/ocp-art-tenant/art-images:quay-rhel9-3.18.1-20261006.052849\", \"digests\": [\"sha256:59726d934010c9215248cb30bd1ad084f03099c0138b8a3c2a3751b209683783\",\"sha256:4db6193f032e733fb80f8b83c5a3a0c4e43cda6fdbd7c9cbf150b1ee93bbab3c\"]}}\n"
+          },
+          {
+            "name": "REPORTS",
+            "type": "string",
+            "value": "{\"sha256:59726d934010c9215248cb30bd1ad084f03099c0138b8a3c2a3751b209683783\":\"sha256:8000f1d569b81c7ac402528b8670b140578e629a72f6a8ada0a19f7e7a7e59e3\"}\n"
+          },
+          {
+            "name": "SCAN_OUTPUT",
+            "type": "string",
+            "value": "{\"vulnerabilities\":{\"critical\":0,\"high\":1,\"medium\":0,\"low\":0,\"unknown\":0},\"unpatched_vulnerabilities\":{\"critical\":0,\"high\":125,\"medium\":498,\"low\":121,\"unknown\":3}}\n"
+          },
+          {
+            "name": "TEST_OUTPUT",
+            "type": "string",
+            "value": "{\"result\":\"SUCCESS\",\"timestamp\":\"2026-10-06T07:52:55+00:00\",\"note\":\"Task clair-scan completed: Refer to Tekton task result SCAN_OUTPUT for vulnerabilities scanned by Clair.\",\"namespace\":\"default\",\"successes\":0,\"failures\":0,\"warnings\":0}\n"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "labels": {
+          "app.kubernetes.io/managed-by": "tekton-pipelines",
+          "app.kubernetes.io/version": "0.3.2",
+          "appstudio.openshift.io/application": "quay-3-18",
+          "appstudio.openshift.io/component": "quay-3-18-quay-quay",
+          "doozer-watch-id": "1791265101232067272",
+          "kueue.x-k8s.io/priority-class": "build-priority-1",
+          "kueue.x-k8s.io/queue-name": "pipelines-queue",
+          "pipelines.appstudio.openshift.io/type": "build",
+          "pipelineservice.appstudio.io/throttled": "quay-3-18-quay-quay-d9s9v-build-images-2",
+          "tekton.dev/memberOf": "tasks",
+          "tekton.dev/pipeline": "quay-3-18-quay-quay",
+          "tekton.dev/pipelineRun": "quay-3-18-quay-quay-d9s9v",
+          "tekton.dev/pipelineRunUID": "cd04e10d-2437-44de-a3e0-f4341eb2dbf3",
+          "tekton.dev/pipelineTask": "clair-scan",
+          "tekton.dev/task": "clair-scan"
+        },
+        "name": "quay-3-18-quay-quay-d9s9v-clair-scan-2"
+      },
+      "status": {
+        "completionTime": "2026-10-06T07:52:57Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-10-06T07:52:57Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "results": [
+          {
+            "name": "IMAGES_PROCESSED",
+            "type": "string",
+            "value": "{\"image\": {\"pullspec\": \"quay.io/redhat-user-workloads/ocp-art-tenant/art-images:quay-rhel9-3.18.1-20261006.052849\", \"digests\": [\"sha256:060f89d43333c52fdb48c5b19d9cac20078bffa4112cdb3ba2871f913afa9bc9\",\"sha256:4db6193f032e733fb80f8b83c5a3a0c4e43cda6fdbd7c9cbf150b1ee93bbab3c\"]}}\n"
+          },
+          {
+            "name": "REPORTS",
+            "type": "string",
+            "value": "{\"sha256:060f89d43333c52fdb48c5b19d9cac20078bffa4112cdb3ba2871f913afa9bc9\":\"sha256:f8c029675382fb578bd13e05ef4e396019a93a4f976c2b281f5593f7271b9493\"}\n"
+          },
+          {
+            "name": "SCAN_OUTPUT",
+            "type": "string",
+            "value": "{\"vulnerabilities\":{\"critical\":0,\"high\":1,\"medium\":0,\"low\":0,\"unknown\":0},\"unpatched_vulnerabilities\":{\"critical\":0,\"high\":125,\"medium\":498,\"low\":121,\"unknown\":3}}\n"
+          },
+          {
+            "name": "TEST_OUTPUT",
+            "type": "string",
+            "value": "{\"result\":\"SUCCESS\",\"timestamp\":\"2026-10-06T07:52:56+00:00\",\"note\":\"Task clair-scan completed: Refer to Tekton task result SCAN_OUTPUT for vulnerabilities scanned by Clair.\",\"namespace\":\"default\",\"successes\":0,\"failures\":0,\"warnings\":0}\n"
+          }
+        ]
+      }
+    }
+  ]
+}
