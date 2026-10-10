@@ -257,6 +257,47 @@ func (q *Queries) ListSnapshotComponents(ctx context.Context, snapshotID int64) 
 	return items, nil
 }
 
+const listStreamSnapshotsWithDigest = `-- name: ListStreamSnapshotsWithDigest :many
+SELECT name
+FROM snapshots s
+WHERE application = ?1 AND name NOT LIKE 'fbc-ri-%'
+  AND NOT EXISTS (SELECT 1 FROM staged_snapshots ss WHERE ss.name = s.name)
+  AND EXISTS (SELECT 1 FROM snapshot_components sc
+              WHERE sc.snapshot_id = s.id
+                AND substr(sc.image_url, instr(sc.image_url, '@') + 1) = CAST(?2 AS TEXT))
+ORDER BY created_at DESC, name DESC
+`
+
+type ListStreamSnapshotsWithDigestParams struct {
+	Application string
+	Digest      string
+}
+
+// The stream builds, as NewestStreamSnapshot filters them, holding an image
+// of the digest, newest first.
+func (q *Queries) ListStreamSnapshotsWithDigest(ctx context.Context, arg ListStreamSnapshotsWithDigestParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listStreamSnapshotsWithDigest, arg.Application, arg.Digest)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		items = append(items, name)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const newestStreamSnapshot = `-- name: NewestStreamSnapshot :one
 SELECT name
 FROM snapshots s

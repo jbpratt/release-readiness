@@ -24,6 +24,24 @@ const day = (iso: string) =>
 		year: "numeric",
 	});
 
-/** "Due Aug 20, 2026" */
-export const dueText = (due?: string) =>
-	due ? `Due ${day(due)}` : "No due date";
+const DAY = 86_400_000;
+
+const days = (n: number) => `${n} day${n === 1 ? "" : "s"}`;
+
+/**
+ * A due date, "Aug 20, 2026", flagged while unshipped when past, red, or
+ * within a week, orange: "Aug 20, 2026 (51 days overdue)", "(in 3 days)".
+ */
+export function due(
+	iso: string,
+	shipped: boolean,
+	now = Date.now(),
+): { text: string; color?: "red" | "orange" } {
+	const n = Math.floor(Date.parse(iso) / DAY) - Math.floor(now / DAY);
+	if (shipped || n > 7) return { text: day(iso) };
+	if (n < 0) return { text: `${day(iso)} (${days(-n)} overdue)`, color: "red" };
+	return {
+		text: `${day(iso)} (${n === 0 ? "today" : `in ${days(n)}`})`,
+		color: "orange",
+	};
+}

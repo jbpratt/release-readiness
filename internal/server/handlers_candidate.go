@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/model"
@@ -23,9 +24,9 @@ var quayVersion = regexp.MustCompile(`^quay-v(\d+\.\d+\.\d+)$`)
 var ciRoles = []string{"quay", "clair", "quay-operator", "quay-operator-bundle"}
 
 // handleGetCandidate serves what decides whether an unshipped version can
-// ship: the build up for release, whether the stream's newest build reached
-// stage, the version's prod Release and the periodic jobs that tested the
-// build.
+// ship: the build up for release and, per build that matters, whether it
+// reached stage, the version's prod Release and the periodic jobs that tested
+// it.
 func (s *Server) handleGetCandidate(w http.ResponseWriter, r *http.Request) {
 	version := r.PathValue("version")
 	release, err := s.db.GetReleaseVersion(r.Context(), version)
@@ -46,23 +47,63 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 	if err != nil {
 		return nil, err
 	}
-	resp := &model.ReleaseCandidate{Shipped: c.shipped, Candidate: c.build, Reason: c.reason, CI: model.CandidateCI{Jobs: []model.CIJob{}}}
-	if c.assembly == "" {
+	resp := &model.ReleaseCandidate{Shipped: c.shipped, Candidate: c.build, Reason: c.reason, Builds: []model.BuildRow{}}
+	if c.build == nil {
 		return resp, nil
 	}
 	app := release.KonfluxApplication
-	if c.newest != nil {
-		releases, err := s.db.StageReleases(ctx, release, s.StageReleasePlanPattern)
-		if err != nil {
-			return nil, err
+	releases, err := s.db.StageReleases(ctx, release, s.StageReleasePlanPattern)
+	if err != nil {
+		return nil, err
+	}
+	runs, err := s.db.ListProwRunsByApplication(ctx, app)
+	if err != nil {
+		return nil, err
+	}
+	row := func(snap *model.ReleaseSnapshot, roles ...string) model.BuildRow {
+		images := buildImages(app, snap)
+		b := model.BuildRow{Snapshot: snap.Name, CreatedAt: snap.CreatedAt, Roles: roles, Stage: stageFlag(images, releases), CI: []model.CIJob{}}
+		var imgs []prow.Image
+		for _, img := range images {
+			role, d, _ := strings.Cut(prow.ComponentKey(app, img.Name, img.Image), "@")
+			imgs = append(imgs, prow.Image{Role: role, Digest: d})
 		}
-		resp.Stage = stageFlag(app, c.newest, releases)
+		if build := ciBuild(imgs); build != nil {
+			b.CI = ciJobs(runs, build)
+		}
+		return b
 	}
-	if resp.Prod, err = s.db.LatestProdRelease(ctx, c.assembly); err != nil {
+
+	snap := &model.ReleaseSnapshot{Name: c.build.Snapshot, CreatedAt: c.build.CreatedAt}
+	for _, cc := range c.build.Components {
+		snap.Components = append(snap.Components, model.SnapshotImage{Name: cc.Name, Image: cc.Image})
+	}
+	roles := []string{"candidate"}
+	if c.newest != nil && c.newest.Name == snap.Name {
+		roles = append(roles, "newest")
+	}
+	cand := row(snap, roles...)
+	if c.build.Source == "staged" && cand.Stage.State == "staged" {
+		// ART assembles a STAGE build from images it often staged before,
+		// so its own stage Release dates it.
+		cand.Stage.StagedAt = c.stagedAt
+	}
+	if cand.Prod, err = s.db.LatestProdRelease(ctx, c.assembly); err != nil {
 		return nil, err
 	}
-	if resp.CI, err = s.candidateCI(ctx, app, resp.Candidate); err != nil {
+	resp.Builds = append(resp.Builds, cand)
+	if c.newest != nil && c.newest.Name != snap.Name {
+		resp.Builds = append(resp.Builds, row(c.newest, "newest"))
+	}
+	if slices.ContainsFunc(resp.Builds, func(b model.BuildRow) bool { return len(b.CI) > 0 }) {
+		return resp, nil
+	}
+	tested, err := s.lastTested(ctx, app, runs)
+	if err != nil {
 		return nil, err
+	}
+	if tested != nil {
+		resp.Builds = append(resp.Builds, row(tested, "last_tested"))
 	}
 	return resp, nil
 }
@@ -74,8 +115,10 @@ type candidate struct {
 	// reason says why the version has no build.
 	reason string
 	// build is the version's selected STAGE build, else newest, the
-	// stream's newest build.
+	// stream's newest build. stagedAt is the STAGE build's stage Release's
+	// completion time.
 	build    *model.CandidateBuild
+	stagedAt *time.Time
 	newest   *model.ReleaseSnapshot
 	assembly string
 }
@@ -98,7 +141,7 @@ func (s *Server) selectCandidate(ctx context.Context, release *model.ReleaseVers
 		return nil, err
 	}
 	c := &candidate{newest: newest, assembly: m[1]}
-	if c.build, err = s.candidateBuild(ctx, release, newest); err != nil {
+	if c.build, c.stagedAt, err = s.candidateBuild(ctx, release, newest); err != nil {
 		return nil, err
 	}
 	if c.build == nil {
@@ -137,21 +180,22 @@ func (s *Server) CandidateDigests(ctx context.Context) ([]string, error) {
 
 // candidateBuild returns the version's selected STAGE build, else the
 // stream's newest build, or nil when there is neither, with its images' ART
-// builds and scans.
-func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersion, newest *model.ReleaseSnapshot) (*model.CandidateBuild, error) {
+// builds and scans, and the STAGE build's stage Release's completion time.
+func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersion, newest *model.ReleaseSnapshot) (*model.CandidateBuild, *time.Time, error) {
 	staged, _, err := s.db.SelectedStageBuild(ctx, release, s.StageReleasePlanPattern)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	snap, c := newest, &model.CandidateBuild{Source: "newest"}
+	var stagedAt *time.Time
 	if staged != nil {
 		if snap, err = s.db.GetReleaseSnapshot(ctx, staged.SnapshotName); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		c.Source, c.StagedAt = "staged", &staged.CompletedAt
+		c.Source, stagedAt = "staged", &staged.CompletedAt
 	}
 	if snap == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	c.Snapshot, c.CreatedAt = snap.Name, snap.CreatedAt
 	images := buildImages(release.KonfluxApplication, snap)
@@ -161,11 +205,11 @@ func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersi
 	}
 	builds, err := s.db.ResolvedArtBuilds(ctx, digests)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	scans, err := s.db.ImageScans(ctx, digests)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	c.Components = make([]model.CandidateComponent, len(images))
 	for i, img := range images {
@@ -177,30 +221,40 @@ func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersi
 			c.Components[i].Scan = &model.ImageScan{State: sc.State, Counts: sc.Counts, URL: sc.DetailURL}
 		}
 	}
-	return c, nil
+	return c, stagedAt, nil
 }
 
-// stageFlag tells whether every image of the stream's newest build is in a
-// Snapshot a STAGE Release of the stream succeeded with. A stream with no
-// STAGE Release at all is unknown: nothing shows it goes through stage.
-func stageFlag(app string, newest *model.ReleaseSnapshot, releases []model.StageRelease) *model.StageFlag {
-	images := buildImages(app, newest)
-	f := &model.StageFlag{State: "unknown", Snapshot: newest.Name, CreatedAt: newest.CreatedAt, Total: len(images), NotStaged: []string{}}
+// stageFlag tells whether every image of a build is in a Snapshot a STAGE
+// Release of the stream succeeded with and, when all are, dates it by the
+// last image to get there: the latest over its images of the earliest such
+// Release's completion. A stream with no STAGE Release at all is unknown:
+// nothing shows it goes through stage.
+func stageFlag(images []model.SnapshotImage, releases []model.StageRelease) model.StageFlag {
+	f := model.StageFlag{State: "unknown", Total: len(images), NotStaged: []string{}}
 	if len(releases) == 0 {
 		return f
 	}
 	staged := map[string]bool{}
+	first := map[string]time.Time{}
 	for _, r := range releases {
 		if r.ReleasedStatus == "True" && r.ReleasedReason == "Succeeded" {
 			for _, img := range r.Images {
-				staged[imageDigest(img)] = true
+				d := imageDigest(img)
+				staged[d] = true
+				if t, ok := first[d]; r.CompletionTime != nil && (!ok || r.CompletionTime.Before(t)) {
+					first[d] = *r.CompletionTime
+				}
 			}
 		}
 	}
 	missing := map[string]bool{}
+	var last time.Time
 	for _, img := range images {
 		d := imageDigest(img.Image)
 		if d != "" && staged[d] {
+			if first[d].After(last) {
+				last = first[d]
+			}
 			continue
 		}
 		f.NotStaged = append(f.NotStaged, img.Name)
@@ -210,6 +264,9 @@ func stageFlag(app string, newest *model.ReleaseSnapshot, releases []model.Stage
 	}
 	if len(f.NotStaged) == 0 {
 		f.State = "staged"
+		if !last.IsZero() {
+			f.StagedAt = &last
+		}
 		return f
 	}
 	f.State = "not_staged"
@@ -223,41 +280,28 @@ func stageFlag(app string, newest *model.ReleaseSnapshot, releases []model.Stage
 	return f
 }
 
-// candidateCI lists the periodic jobs whose runs tested the candidate or, when
-// none did, the newest build a run recorded all of ciRoles for.
-func (s *Server) candidateCI(ctx context.Context, app string, c *model.CandidateBuild) (model.CandidateCI, error) {
-	ci := model.CandidateCI{Jobs: []model.CIJob{}}
-	runs, err := s.db.ListProwRunsByApplication(ctx, app)
-	if err != nil {
-		return ci, err
-	}
-	if c != nil {
-		var imgs []prow.Image
-		for _, cc := range c.Components {
-			role, d, _ := strings.Cut(prow.ComponentKey(app, cc.Name, cc.Image), "@")
-			imgs = append(imgs, prow.Image{Role: role, Digest: d})
-		}
-		if build := ciBuild(imgs); build != nil {
-			ci.Jobs = ciJobs(runs, build)
-		}
-	}
-	if len(ci.Jobs) > 0 {
-		return ci, nil
-	}
+// lastTested returns the newest build a periodic run tested: of the runs,
+// newest first, that recorded all of ciRoles, the first whose build a stream
+// build holds gives the newest such stream build. It is nil when none does.
+func (s *Server) lastTested(ctx context.Context, app string, runs []prow.Run) (*model.ReleaseSnapshot, error) {
+	tried := map[string]bool{}
 	for _, run := range runs {
 		build := ciBuild(run.Images)
 		if build == nil {
 			continue
 		}
-		bundle := build["quay-operator-bundle"]
-		art, err := s.db.ResolvedArtBuilds(ctx, []string{bundle})
-		if err != nil {
-			return ci, err
+		digests := make([]string, len(ciRoles))
+		for i, role := range ciRoles {
+			digests[i] = build[role]
 		}
-		ci.LastTested = &model.LastTested{BundleNVR: art[bundle].NVR, TestedAt: run.StartedAt, Jobs: ciJobs(runs, build)}
-		break
+		if key := strings.Join(digests, " "); !tried[key] {
+			tried[key] = true
+			if snap, err := s.db.NewestStreamBuildWith(ctx, app, digests); err != nil || snap != nil {
+				return snap, err
+			}
+		}
 	}
-	return ci, nil
+	return nil, nil
 }
 
 // ciBuild returns the first digest imgs hold for each of ciRoles, or nil when

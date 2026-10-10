@@ -228,26 +228,23 @@ type StageRelease struct {
 }
 
 // ReleaseCandidate is what decides whether a version can ship: the build up
-// for release, whether the stream's newest build reached stage, the version's
-// prod Release and the periodic CI runs of that build. Candidate is null with
-// Reason set when there is none. A shipped version sets nothing else.
+// for release and, per build that matters, whether it reached stage, the
+// version's prod Release and the periodic CI runs that tested it. Candidate
+// is null with Reason set, and Builds empty, when there is none. A shipped
+// version sets nothing else.
 type ReleaseCandidate struct {
 	Shipped   bool            `json:"shipped"`
 	Candidate *CandidateBuild `json:"candidate"`
 	Reason    string          `json:"reason"`
-	Stage     *StageFlag      `json:"stage"`
-	Prod      *KonfluxRelease `json:"prod"`
-	CI        CandidateCI     `json:"ci"`
+	Builds    []BuildRow      `json:"builds"`
 }
 
 // CandidateBuild is the Snapshot up for release: Source "staged" is the
-// version's selected STAGE build, StagedAt its stage Release's completion
-// time; "newest" is the stream's newest build.
+// version's selected STAGE build, "newest" the stream's newest build.
 type CandidateBuild struct {
 	Snapshot   string               `json:"snapshot"`
 	Source     string               `json:"source"`
 	CreatedAt  time.Time            `json:"created_at"`
-	StagedAt   *time.Time           `json:"staged_at"`
 	Components []CandidateComponent `json:"components"`
 }
 
@@ -287,25 +284,31 @@ type SeverityCounts struct {
 	Unknown  int `json:"unknown"`
 }
 
-// StageFlag tells whether every image of the stream's newest build is in a
-// Snapshot a STAGE Release of the stream succeeded with: State is "staged",
-// "not_staged" with the components that are not, or "unknown" when the stream
-// has no STAGE Release. Release is the newest STAGE Release that did not
-// succeed whose Snapshot holds an image that is not staged.
-type StageFlag struct {
-	State     string          `json:"state"`
+// BuildRow is a build that matters to a version. Roles are "candidate", the
+// build up for release, "newest", the stream's newest build, and
+// "last_tested", the newest build a periodic run tested, listed only when
+// neither of the others was. Prod, the version's prod Release, is set on the
+// candidate only. CI is, per job, the periodic runs that tested the build.
+type BuildRow struct {
 	Snapshot  string          `json:"snapshot"`
 	CreatedAt time.Time       `json:"created_at"`
+	Roles     []string        `json:"roles"`
+	Stage     StageFlag       `json:"stage"`
+	Prod      *KonfluxRelease `json:"prod"`
+	CI        []CIJob         `json:"ci"`
+}
+
+// StageFlag tells whether every image of a build is in a Snapshot a STAGE
+// Release of the stream succeeded with: State is "staged", with StagedAt when
+// the build reached stage, "not_staged" with the components that are not, or
+// "unknown" when the stream has no STAGE Release. Release is the newest STAGE
+// Release that did not succeed whose Snapshot holds an image that is not staged.
+type StageFlag struct {
+	State     string          `json:"state"`
+	StagedAt  *time.Time      `json:"staged_at"`
 	Total     int             `json:"total"`
 	NotStaged []string        `json:"not_staged"`
 	Release   *KonfluxRelease `json:"release"`
-}
-
-// CandidateCI is, per job, the periodic runs that tested the candidate.
-// LastTested is set only when none did.
-type CandidateCI struct {
-	Jobs       []CIJob     `json:"jobs"`
-	LastTested *LastTested `json:"last_tested"`
 }
 
 // CIJob is a job's newest run of a build and how many of its runs tested it.
@@ -315,12 +318,4 @@ type CIJob struct {
 	ProwURL   string     `json:"prow_url"`
 	StartedAt *time.Time `json:"started_at"`
 	Runs      int        `json:"runs"`
-}
-
-// LastTested is the newest build a run tested, named by its operator bundle's
-// NVR, with the jobs that tested it.
-type LastTested struct {
-	BundleNVR string     `json:"bundle_nvr"`
-	TestedAt  *time.Time `json:"tested_at"`
-	Jobs      []CIJob    `json:"jobs"`
 }

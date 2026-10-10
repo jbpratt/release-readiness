@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ImageScan } from "../api/types.ts";
-import { jobShortName, notVerified, scanCell } from "./releaseDetail.ts";
+import {
+	componentLabel,
+	jobLabels,
+	jobShortName,
+	notVerified,
+	nvrLabel,
+	scanCell,
+} from "./releaseDetail.ts";
 
 test("jobShortName", () => {
 	assert.equal(
@@ -17,9 +24,71 @@ test("jobShortName", () => {
 		"gcp-gcs",
 	);
 	assert.equal(
+		jobShortName(
+			"periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly-fips",
+		),
+		"aws-s3-fips",
+	);
+	assert.equal(
 		jobShortName("periodic-ci-quay-quay-tests-master-e2e"),
 		"periodic-ci-quay-quay-tests-master-e2e",
 	);
+});
+
+test("jobLabels", () => {
+	const job = (name: string) => `periodic-ci-quay-quay-redhat-3.18-${name}`;
+	assert.deepEqual(
+		jobLabels([
+			job("aws-ocp422-e2e-install-aws-odf-nightly"),
+			job("aws-ocp422-e2e-install-aws-s3-nightly"),
+			job("aws-ocp422-e2e-install-aws-s3-nightly-fips"),
+		]),
+		["aws-odf", "aws-s3", "aws-s3-fips"],
+	);
+	assert.deepEqual(
+		jobLabels([
+			job("aws-ocp414-e2e-install-aws-s3-nightly"),
+			job("aws-ocp422-e2e-install-aws-s3-nightly"),
+			job("aws-ocp422-e2e-install-aws-s3-nightly-fips"),
+			job("gcp-ocp422-e2e-install-gcp-gcs-nightly"),
+		]),
+		["aws-ocp414-aws-s3", "aws-ocp422-aws-s3", "aws-s3-fips", "gcp-gcs"],
+	);
+	assert.deepEqual(
+		jobLabels([
+			"periodic-ci-quay-quay-master-e2e-install-aws-s3",
+			job("aws-ocp422-e2e-install-aws-s3-nightly"),
+		]),
+		["periodic-ci-quay-quay-master-e2e-install-aws-s3", "aws-ocp422-aws-s3"],
+	);
+});
+
+test("componentLabel", () => {
+	assert.equal(componentLabel("quay-3-18-quay-quay", "quay-3-18"), "quay");
+	assert.equal(
+		componentLabel("quay-3-18-quay-operator-bundle", "quay-3-18"),
+		"operator-bundle",
+	);
+	assert.equal(
+		componentLabel("quay-3-18-container-security-operator", "quay-3-18"),
+		"container-security-operator",
+	);
+});
+
+test("nvrLabel", () => {
+	assert.equal(
+		nvrLabel(
+			"quay-quay-container-3.18.1-202610060528.p2.g1148474.assembly.stream.el9",
+		),
+		"3.18.1-202610060528.p2.g1148474",
+	);
+	assert.equal(
+		nvrLabel(
+			"quay-operator-metadata-container-3.18.1.202610061637.p2.g35cf767.assembly.stream.el9-1",
+		),
+		"3.18.1.202610061637.p2.g35cf767-1",
+	);
+	assert.equal(nvrLabel("quay-builder-3.18.1-1"), "quay-builder-3.18.1-1");
 });
 
 test("notVerified: Release Pending, Verified, Closed and Done, in any case, are verified", () => {

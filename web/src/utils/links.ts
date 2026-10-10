@@ -9,6 +9,25 @@ export function jiraSearchUrl(jql: string, baseUrl: string): string {
 }
 
 /**
+ * JQL for exactly a version's ticket list: its Target Version, and by key
+ * the tickets listed under another fix version.
+ */
+export function ticketsJql(
+	project: string,
+	version: string,
+	tickets: { key: string; fix_version: string }[],
+): string {
+	const target = `"Target Version"="${version}"`;
+	const keys = tickets
+		.filter((t) => t.fix_version !== version)
+		.map((t) => t.key)
+		.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+	return keys.length === 0
+		? `project=${project} AND ${target}`
+		: `project=${project} AND (${target} OR key in (${keys.join(", ")}))`;
+}
+
+/**
  * Konflux UI page of an application, or of one of its Snapshots or Releases;
  * null without a base URL, namespace or application.
  */

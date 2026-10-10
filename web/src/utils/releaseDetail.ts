@@ -7,9 +7,55 @@ const VERIFIED = new Set(["release pending", "verified", "closed", "done"]);
 export const notVerified = (tickets: { status: string }[]) =>
 	tickets.filter((t) => !VERIFIED.has(t.status.toLowerCase())).length;
 
-/** A periodic job's install target: ...-e2e-install-aws-s3-nightly is aws-s3. */
+// A "-nightly" segment, at the end or before a suffix like "-fips".
+const NIGHTLY = /-nightly(?=-|$)/;
+
+/**
+ * A periodic job's install target: ...-e2e-install-aws-s3-nightly is aws-s3,
+ * ...-e2e-install-aws-s3-nightly-fips aws-s3-fips.
+ */
 export const jobShortName = (job: string) =>
-	job.match(/e2e-install-(.+?)(?:-nightly)?$/)?.[1] ?? job;
+	job.match(/e2e-install-(.+)$/)?.[1].replace(NIGHTLY, "") ?? job;
+
+/**
+ * Each job's short name, or for jobs that share one, its name after
+ * "redhat-X.Y-" less "e2e-install-" and "-nightly": aws-ocp414-aws-s3.
+ */
+export function jobLabels(jobs: string[]): string[] {
+	const short = jobs.map(jobShortName);
+	return jobs.map((job, i) =>
+		short.indexOf(short[i]) === short.lastIndexOf(short[i])
+			? short[i]
+			: (job
+					.match(/redhat-\d+\.\d+-(.+)$/)?.[1]
+					.replace("e2e-install-", "")
+					.replace(NIGHTLY, "") ?? job),
+	);
+}
+
+/**
+ * A component named without what the page already says, its application and
+ * product: quay-3-18-quay-clair is clair.
+ */
+export const componentLabel = (name: string, app: string) =>
+	(name.startsWith(`${app}-`) ? name.slice(app.length + 1) : name).replace(
+		/^quay-/,
+		"",
+	);
+
+const CONTAINER = "-container-";
+
+/**
+ * An image's NVR without its image name and ART's assembly part:
+ * quay-quay-container-3.18.1-1.p2.g1148474.assembly.stream.el9 is
+ * 3.18.1-1.p2.g1148474.
+ */
+export function nvrLabel(nvr: string): string {
+	const i = nvr.indexOf(CONTAINER);
+	return i < 0
+		? nvr
+		: nvr.slice(i + CONTAINER.length).replace(/\.assembly\..+?\.el\d+/, "");
+}
 
 const SEVERITIES = ["critical", "high", "medium", "low", "unknown"] as const;
 

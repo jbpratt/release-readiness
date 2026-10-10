@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/quay/release-readiness/internal/db/sqlc"
@@ -120,6 +121,27 @@ func (d *DB) NewestStreamBuild(ctx context.Context, application string) (*model.
 		return nil, err
 	}
 	return d.GetReleaseSnapshot(ctx, name)
+}
+
+// NewestStreamBuildWith returns the newest Snapshot of application that ART
+// built from its stream whose images hold every digest, as NewestStreamBuild
+// does, or nil when there is none.
+func (d *DB) NewestStreamBuildWith(ctx context.Context, application string, digests []string) (*model.ReleaseSnapshot, error) {
+	var names []string
+	for i, digest := range digests {
+		holding, err := d.queries().ListStreamSnapshotsWithDigest(ctx, dbsqlc.ListStreamSnapshotsWithDigestParams{Application: application, Digest: digest})
+		if err != nil {
+			return nil, err
+		}
+		if i == 0 {
+			names = holding
+		}
+		names = slices.DeleteFunc(names, func(n string) bool { return !slices.Contains(holding, n) })
+	}
+	if len(names) == 0 {
+		return nil, nil
+	}
+	return d.GetReleaseSnapshot(ctx, names[0])
 }
 
 // GetReleaseSnapshot returns a stored Snapshot with its component images and
