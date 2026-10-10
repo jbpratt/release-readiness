@@ -40,6 +40,15 @@ export function formatReleaseName(name: string): string {
 	return name;
 }
 
+/** The X.Y of a release version name: `quay-v3.18.1` -> `3.18`. */
+export function minorVersion(name: string): string {
+	return name
+		.replace(/^[a-z]+-v/, "")
+		.split(".")
+		.slice(0, 2)
+		.join(".");
+}
+
 /** ART pipeline health view for the Quay tenant (needs an artc2023 browser login). */
 export const ART_PIPELINES_HEALTH_URL =
 	"https://art-pipelines-ui-art-pipelines-ui.apps.artc2023.pc3z.p1.openshiftapps.com/#/health?namespace=art-quay-tenant";
