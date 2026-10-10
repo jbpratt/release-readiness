@@ -194,23 +194,26 @@ func main() {
 		}()
 	}
 
-	var scanner *github.Scanner
+	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, shipped, status, logger)
+	srv.StageReleasePlanPattern = stagePlans
+	srv.KonfluxUIURL = *konfluxUIURL
+	srv.KonfluxNamespace = *namespace
+
 	if stagePlans != nil {
 		logger.Info("github evidence scan enabled", "token", *githubToken != "")
-		scanner = github.NewScanner(github.NewClient("https://api.github.com", *githubToken, &http.Client{Timeout: time.Minute}), database, stagePlans, logger.With("component", "github-evidence"))
-		scanner.Status = status.Track("github-evidence", 10*time.Minute)
+		srv.Scanner = github.NewScanner(github.NewClient("https://api.github.com", *githubToken, &http.Client{Timeout: time.Minute}), srv.TicketBuilds, logger.With("component", "github-evidence"))
+		srv.Scanner.Status = status.Track("github-evidence", 10*time.Minute)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			scanner.Run(ctx, 10*time.Minute)
+			// Until the catalog is read, the versions it shipped look
+			// unshipped, and their compares would be read.
+			if shipped != nil {
+				shipped.Refresh(ctx)
+			}
+			srv.Scanner.Run(ctx, 10*time.Minute)
 		}()
 	}
-
-	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, shipped, status, logger)
-	srv.StageReleasePlanPattern = stagePlans
-	srv.Scanner = scanner
-	srv.KonfluxUIURL = *konfluxUIURL
-	srv.KonfluxNamespace = *namespace
 
 	if *resultsURL != "" {
 		var rt http.RoundTripper

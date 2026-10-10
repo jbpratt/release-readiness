@@ -5,6 +5,7 @@ import {
 	componentLabel,
 	jobLabels,
 	jobShortName,
+	missingCommits,
 	notVerified,
 	nvrLabel,
 	scanCell,
@@ -73,6 +74,37 @@ test("componentLabel", () => {
 		componentLabel("quay-3-18-container-security-operator", "quay-3-18"),
 		"container-security-operator",
 	);
+});
+
+test("missingCommits: one link per commit, titled with the components lacking it", () => {
+	const commit = (component: string, sha: string) => ({
+		component: `quay-3-18-${component}`,
+		commit_sha: sha,
+		commit_url: `https://github.com/quay/x/commit/${sha}`,
+	});
+	assert.deepEqual(
+		missingCommits(
+			[
+				commit("quay-operator", "aaa"),
+				commit("quay-operator-bundle", "aaa"),
+				commit("quay-operator", "bbb"),
+			],
+			"quay-3-18",
+		),
+		[
+			{
+				sha: "aaa",
+				url: "https://github.com/quay/x/commit/aaa",
+				title: "operator, operator-bundle",
+			},
+			{
+				sha: "bbb",
+				url: "https://github.com/quay/x/commit/bbb",
+				title: "operator",
+			},
+		],
+	);
+	assert.deepEqual(missingCommits([], "quay-3-18"), []);
 });
 
 test("nvrLabel", () => {

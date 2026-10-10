@@ -180,7 +180,8 @@ func (s *Server) CandidateDigests(ctx context.Context) ([]string, error) {
 
 // candidateBuild returns the version's selected STAGE build, else the
 // stream's newest build, or nil when there is neither, with its images' ART
-// builds and scans, and the STAGE build's stage Release's completion time.
+// builds, upstream commits and scans, and the STAGE build's stage Release's
+// completion time.
 func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersion, newest *model.ReleaseSnapshot) (*model.CandidateBuild, *time.Time, error) {
 	staged, _, err := s.db.SelectedStageBuild(ctx, release, s.StageReleasePlanPattern)
 	if err != nil {
@@ -216,6 +217,7 @@ func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersi
 		c.Components[i] = model.CandidateComponent{Name: img.Name, Image: img.Image}
 		if b, ok := builds[digests[i]]; ok {
 			c.Components[i].NVR, c.Components[i].BuildURL = b.NVR, artbuild.PageURL(s.artBaseURL, b.NVR, b.RecordID)
+			c.Components[i].UpstreamRepo, c.Components[i].UpstreamSHA = b.UpstreamRepo, b.UpstreamSHA
 		}
 		if sc, ok := scans[digests[i]]; ok {
 			c.Components[i].Scan = &model.ImageScan{State: sc.State, Counts: sc.Counts, URL: sc.DetailURL}

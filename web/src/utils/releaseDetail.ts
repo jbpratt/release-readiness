@@ -1,4 +1,9 @@
-import type { ImageScan, ScanCounts, SeverityCounts } from "../api/types";
+import type {
+	BuildCommit,
+	ImageScan,
+	ScanCounts,
+	SeverityCounts,
+} from "../api/types";
 
 // Ticket statuses counted as verified.
 const VERIFIED = new Set(["release pending", "verified", "closed", "done"]);
@@ -42,6 +47,27 @@ export const componentLabel = (name: string, app: string) =>
 		/^quay-/,
 		"",
 	);
+
+/**
+ * A ticket's not_in_build commits once each, titled with the components that
+ * lack them: an operator and its bundle share their commits.
+ */
+export function missingCommits(
+	commits: BuildCommit[],
+	app: string,
+): { sha: string; url: string; title: string }[] {
+	const out: { sha: string; url: string; title: string }[] = [];
+	for (const c of commits) {
+		const name = componentLabel(c.component, app);
+		const seen = out.find((o) => o.sha === c.commit_sha);
+		if (seen) {
+			seen.title += `, ${name}`;
+		} else {
+			out.push({ sha: c.commit_sha, url: c.commit_url, title: name });
+		}
+	}
+	return out;
+}
 
 const CONTAINER = "-container-";
 

@@ -56,6 +56,7 @@ import {
 import {
 	componentLabel,
 	jobLabels,
+	missingCommits,
 	notVerified,
 	nvrLabel,
 	scanCell,
@@ -594,6 +595,11 @@ function TicketsCard({
 				config.jira_base_url,
 			)
 		: null;
+	const zTip = issues?.some((t) => t.fix_version !== version)
+		? data?.z_since
+			? `.z tickets are listed when a candidate commit newer than ${data.z_since.replace(/^[a-z]+-v/, "")}'s candidate names them.`
+			: ".z tickets are listed when a candidate commit on the release branch names them."
+		: undefined;
 
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
@@ -603,6 +609,11 @@ function TicketsCard({
 				{open > 0 && ` · ${open} not verified`}
 			</LinkedCardTitle>
 			<CardBody>
+				{data && !data.build && data.reason !== "shipped" && (
+					<div style={{ ...muted, marginBottom: "0.5rem" }}>
+						Not checked against a build: {data.reason}
+					</div>
+				)}
 				{data && data.not_compared.length > 0 && (
 					<div style={{ ...muted, marginBottom: "0.5rem" }}>
 						Not compared:{" "}
@@ -612,7 +623,12 @@ function TicketsCard({
 					</div>
 				)}
 				{hasIssues ? (
-					<IssuesTable issues={issues!} hasBuild={!!data?.build} app={app} />
+					<IssuesTable
+						issues={issues!}
+						hasBuild={!!data?.build}
+						zTip={zTip}
+						app={app}
+					/>
 				) : error ? (
 					error.message
 				) : !issues ? (
@@ -630,6 +646,20 @@ function TicketsCard({
 const commitLabel = (c: BuildCommit, app: string) =>
 	`${componentLabel(c.component, app)}@${c.commit_sha.slice(0, 7)}`;
 
+// Tickets not in the build sort first, then "-", then by commit.
+const inBuildKey = (t: BuildTicket, app: string) =>
+	t.in_build.length > 0
+		? `2 ${t.in_build.map((c) => commitLabel(c, app)).join(" ")}`
+		: t.not_in_build.length > 0
+			? "0"
+			: "1";
+
+const inBuildTip = lines(
+	"Commits: the candidate's release-branch commits that name the ticket.",
+	"Not in build: a default-branch commit names it and no candidate commit does.",
+	"-: no compared commit names it, which proves nothing.",
+);
+
 // The ticket table's columns, in order.
 const ISSUES_COLUMNS = [
 	"key",
@@ -643,10 +673,13 @@ const ISSUES_COLUMNS = [
 function IssuesTable({
 	issues,
 	hasBuild,
+	zTip,
 	app,
 }: {
 	issues: BuildTicket[];
 	hasBuild: boolean;
+	/** How the .z tickets were found, when any are listed. */
+	zTip?: string;
 	app: string;
 }) {
 	const [activeSortKey, setActiveSortKey] = useState<string | undefined>(
@@ -670,13 +703,7 @@ function IssuesTable({
 					cmp = a.status.localeCompare(b.status);
 					break;
 				case "inBuild":
-					// "" for no commit, so "-" sorts first.
-					cmp = a.in_build
-						.map((c) => commitLabel(c, app))
-						.join(" ")
-						.localeCompare(
-							b.in_build.map((c) => commitLabel(c, app)).join(" "),
-						);
+					cmp = inBuildKey(a, app).localeCompare(inBuildKey(b, app));
 					break;
 			}
 			return activeSortDirection === "asc" ? cmp : -cmp;
@@ -710,10 +737,18 @@ function IssuesTable({
 					>
 						Status
 					</Th>
-					<Th>Target</Th>
-					<Th sort={getSortParams("inBuild")} modifier="fitContent">
-						In build
+					<Th info={zTip ? { tooltip: zTip } : undefined} modifier="fitContent">
+						Target
 					</Th>
+					{hasBuild && (
+						<Th
+							sort={getSortParams("inBuild")}
+							info={{ tooltip: inBuildTip }}
+							modifier="fitContent"
+						>
+							In build
+						</Th>
+					)}
 				</Tr>
 			</Thead>
 			<Tbody>
@@ -732,22 +767,38 @@ function IssuesTable({
 							<StatusLabel status={issue.status} />
 						</Td>
 						<Td>{issue.fix_version.replace(/^[a-z]+-v/, "")}</Td>
-						<Td style={{ whiteSpace: "nowrap" }}>
-							{hasBuild &&
-								(issue.in_build.length === 0
-									? "-"
-									: issue.in_build.map((c) => (
-											<div key={`${c.component}@${c.commit_sha}`}>
-												<a
-													href={c.commit_url}
-													{...external}
-													title={c.component}
-												>
-													{commitLabel(c, app)}
-												</a>
-											</div>
-										)))}
-						</Td>
+						{hasBuild && (
+							<Td style={{ whiteSpace: "nowrap" }}>
+								{issue.in_build.length > 0 ? (
+									issue.in_build.map((c) => (
+										<div key={`${c.component}@${c.commit_sha}`}>
+											<a href={c.commit_url} {...external} title={c.component}>
+												{commitLabel(c, app)}
+											</a>
+										</div>
+									))
+								) : issue.not_in_build.length > 0 ? (
+									<>
+										<Label isCompact color="red">
+											Not in build
+										</Label>
+										{missingCommits(issue.not_in_build, app).map((c) => (
+											<a
+												key={c.sha}
+												href={c.url}
+												{...external}
+												title={c.title}
+												style={{ marginLeft: "0.5rem" }}
+											>
+												{c.sha.slice(0, 7)}
+											</a>
+										))}
+									</>
+								) : (
+									"-"
+								)}
+							</Td>
+						)}
 					</Tr>
 				))}
 			</Tbody>
