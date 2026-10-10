@@ -43,9 +43,15 @@ import type {
 } from "../api/types";
 import { seedCache, useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
+import { due } from "../utils/format";
 import { formatReleaseName, jiraIssueUrl } from "../utils/links";
 
 type ViewMode = "compact" | "expanded";
+
+const dueColor = {
+	red: "var(--pf-t--global--text--color--status--danger--default)",
+	orange: "var(--pf-t--global--text--color--status--warning--default)",
+};
 
 export default function ReleasesOverview() {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -184,11 +190,13 @@ function ReleaseCard({
 	viewMode: ViewMode;
 	jiraBaseUrl?: string;
 }) {
-	const dueDate = release.due_date ? new Date(release.due_date) : null;
-	const releaseDate = release.release_date
-		? new Date(release.release_date)
-		: null;
-	const targetDate = dueDate ?? releaseDate;
+	const target = release.due_date ?? release.release_date;
+	const targetDue = target ? due(target, shipped) : null;
+	const targetDate = targetDue && (
+		<span style={targetDue.color && { color: dueColor[targetDue.color] }}>
+			{targetDue.text}
+		</span>
+	);
 
 	const signalColor = readinessSignal?.signal ?? "grey";
 	const signalIcon =
@@ -276,7 +284,7 @@ function ReleaseCard({
 							<DescriptionListGroup>
 								<DescriptionListTerm>Target</DescriptionListTerm>
 								<DescriptionListDescription>
-									{targetDate.toLocaleDateString()}
+									{targetDate}
 								</DescriptionListDescription>
 							</DescriptionListGroup>
 						)}
@@ -313,7 +321,7 @@ function ReleaseCard({
 								{targetDate && (
 									<FlexItem>
 										<span className="rr-label">Target Date</span>
-										<div>{targetDate.toLocaleDateString()}</div>
+										<div>{targetDate}</div>
 									</FlexItem>
 								)}
 								{release.release_ticket_key && (

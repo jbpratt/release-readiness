@@ -5,6 +5,7 @@ import {
 	jiraIssueUrl,
 	jiraSearchUrl,
 	konfluxUrl,
+	ticketsJql,
 } from "./links.ts";
 
 test("konfluxUrl", () => {
@@ -52,6 +53,24 @@ test("jiraSearchUrl", () => {
 			"https://redhat.atlassian.net/",
 		),
 		"https://redhat.atlassian.net/issues/?jql=project%3DPROJQUAY%20AND%20%22Target%20Version%22%3D%22quay-v3.18.2%22",
+	);
+});
+
+test("ticketsJql", () => {
+	const ticket = (key: string, fix_version: string) => ({ key, fix_version });
+	assert.equal(
+		ticketsJql("PROJQUAY", "quay-v3.18.1", [
+			ticket("PROJQUAY-1", "quay-v3.18.1"),
+		]),
+		'project=PROJQUAY AND "Target Version"="quay-v3.18.1"',
+	);
+	assert.equal(
+		ticketsJql("PROJQUAY", "quay-v3.18.1", [
+			ticket("PROJQUAY-12235", "quay-v3.18.z"),
+			ticket("PROJQUAY-1", "quay-v3.18.1"),
+			ticket("PROJQUAY-9692", "quay-v3.18.z"),
+		]),
+		'project=PROJQUAY AND ("Target Version"="quay-v3.18.1" OR key in (PROJQUAY-9692, PROJQUAY-12235))',
 	);
 });
 
