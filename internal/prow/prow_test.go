@@ -99,9 +99,9 @@ func TestApplyArtifact(t *testing.T) {
 	if !strings.HasSuffix(r.CatalogRef, "@sha256:16703125878630f03d1781454b1da8212db6127c822f95c2cfe04e805210bb0d") {
 		t.Errorf("catalog ref = %q", r.CatalogRef)
 	}
-	// 19 images plus the catalog and the operator bundle.
-	if len(r.Images) != 21 {
-		t.Fatalf("images = %d, want 21", len(r.Images))
+	// 11 pod images plus the catalog and the operator bundle.
+	if len(r.Images) != 13 {
+		t.Fatalf("images = %d, want 13", len(r.Images))
 	}
 	byRole := map[string]Image{}
 	for _, img := range r.Images {
@@ -125,6 +125,37 @@ func TestApplyArtifact(t *testing.T) {
 	r.applyArtifact([]byte(`{"schema_version": 1, "images": [{"role": "quay",`))
 	if r.ArtifactState != ArtifactInvalid || len(r.Images) != 0 {
 		t.Errorf("truncated artifact: state %q, %d images", r.ArtifactState, len(r.Images))
+	}
+}
+
+func TestApplyArtifactCountsOnlyPodImages(t *testing.T) {
+	const (
+		quay    = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+		builder = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+		catalog = "sha256:3333333333333333333333333333333333333333333333333333333333333333"
+		bundle  = "sha256:4444444444444444444444444444444444444444444444444444444444444444"
+	)
+	r := &Run{}
+	r.applyArtifact([]byte(`{"schema_version": 1,
+		"catalog": {"resolved_ref": "quay.io/x/art-fbc@` + catalog + `"},
+		"operator": {"bundle_ref": "quay.io/x/bundle@` + bundle + `"},
+		"images": [
+			{"role": "quay", "requested_ref": "quay.io/x/art-images@` + quay + `", "source": "pod"},
+			{"role": "builder", "requested_ref": "quay.io/x/art-images@` + builder + `", "source": "csv-related"}
+		]}`))
+	for _, tc := range []struct {
+		app, component, digest string
+		want                   bool
+	}{
+		{"quay-3-18", "quay-3-18-quay-quay", quay, true},
+		{"fbc-quay-3-18", "fbc-quay-3-18-quay-operator", catalog, true},
+		{"quay-3-18", "quay-3-18-quay-operator-bundle", bundle, true},
+		{"quay-3-18", "quay-3-18-quay-builder", builder, false},
+	} {
+		key := ComponentKey(tc.app, tc.component, "quay.io/x/art-images@"+tc.digest)
+		if got := r.Tested(map[string]bool{key: true}); got != tc.want {
+			t.Errorf("Tested(%s) = %v, want %v", key, got, tc.want)
+		}
 	}
 }
 
