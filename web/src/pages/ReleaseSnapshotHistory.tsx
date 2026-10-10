@@ -3,23 +3,32 @@ import {
 	BreadcrumbItem,
 	EmptyState,
 	EmptyStateBody,
+	HelperText,
+	HelperTextItem,
 	PageSection,
 	Spinner,
 	Title,
 } from "@patternfly/react-core";
 import { Link, useParams } from "react-router-dom";
 import { getRelease } from "../api/client";
+import BuildAttempts from "../components/BuildAttempts";
 import { UnlinkedProwRuns } from "../components/ProwRuns";
-import { SnapshotHistory } from "../components/ReleaseSnapshots";
+import {
+	LatestSnapshot,
+	SnapshotHistory,
+	useLatestSnapshot,
+} from "../components/ReleaseSnapshots";
 import { useCachedFetch } from "../hooks/useCachedFetch";
-import { formatReleaseName } from "../utils/links";
+import { formatReleaseName, minorVersion } from "../utils/links";
 
+/** The Builds page: the stream cards above the snapshot history and CI runs. */
 export default function ReleaseSnapshotHistory() {
 	const { version } = useParams<{ version: string }>();
 	const { data: release, loading } = useCachedFetch(
 		version ? `release:${version}` : null,
 		() => getRelease(version!),
 	);
+	const latest = useLatestSnapshot(version!, release);
 
 	if (loading && !release) {
 		return (
@@ -46,34 +55,33 @@ export default function ReleaseSnapshotHistory() {
 		);
 	}
 
-	const displayName = formatReleaseName(release.name);
+	const app = release.konflux_application;
+	const minor = minorVersion(release.name);
 
 	return (
-		<>
-			<PageSection>
-				<Breadcrumb>
-					<BreadcrumbItem>
-						<Link to="/">Releases</Link>
-					</BreadcrumbItem>
-					<BreadcrumbItem>
-						<Link to={`/releases/${encodeURIComponent(version!)}`}>
-							{displayName}
-						</Link>
-					</BreadcrumbItem>
-					<BreadcrumbItem isActive>Snapshot history</BreadcrumbItem>
-				</Breadcrumb>
-			</PageSection>
-
-			<PageSection>
-				<Title headingLevel="h1" style={{ marginBottom: "1rem" }}>
-					{displayName} snapshot history
-				</Title>
-				<SnapshotHistory
-					version={version!}
-					konfluxApp={release.konflux_application}
-				/>
-				<UnlinkedProwRuns version={version!} />
-			</PageSection>
-		</>
+		<PageSection>
+			<Breadcrumb style={{ marginBottom: "1rem" }}>
+				<BreadcrumbItem>
+					<Link to="/">Releases</Link>
+				</BreadcrumbItem>
+				<BreadcrumbItem>
+					<Link to={`/releases/${encodeURIComponent(version!)}`}>
+						{formatReleaseName(release.name)}
+					</Link>
+				</BreadcrumbItem>
+				<BreadcrumbItem isActive>Builds</BreadcrumbItem>
+			</Breadcrumb>
+			<Title headingLevel="h1">Builds of {app || "this release"}</Title>
+			<HelperText style={{ marginBottom: "1rem" }}>
+				<HelperTextItem>
+					The stream: every {minor}.z build, the same for each {minor} version.
+					Snapshots, ART image builds and CI runs.
+				</HelperTextItem>
+			</HelperText>
+			<LatestSnapshot version={version!} state={latest} />
+			<BuildAttempts version={version!} />
+			<SnapshotHistory version={version!} konfluxApp={app} />
+			<UnlinkedProwRuns version={version!} />
+		</PageSection>
 	);
 }

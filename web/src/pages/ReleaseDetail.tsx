@@ -26,13 +26,11 @@ import {
 	SelectList,
 	SelectOption,
 	Spinner,
-	Tab,
-	Tabs,
-	TabTitleText,
 	Title,
 	Tooltip,
 } from "@patternfly/react-core";
 import {
+	ArrowRightIcon,
 	ColumnsIcon,
 	OutlinedQuestionCircleIcon,
 } from "@patternfly/react-icons";
@@ -64,10 +62,8 @@ import type {
 	ReleaseVersion,
 	StagedSnapshot,
 } from "../api/types";
-import BuildAttempts from "../components/BuildAttempts";
 import PriorityLabel from "../components/PriorityLabel";
 import {
-	LatestSnapshot,
 	SnapshotReleaseLabel,
 	useLatestSnapshot,
 } from "../components/ReleaseSnapshots";
@@ -79,7 +75,7 @@ import {
 } from "../hooks/useColumnManagement";
 import { useConfig } from "../hooks/useConfig";
 import { relative } from "../utils/format";
-import { formatReleaseName, jiraIssueUrl } from "../utils/links";
+import { formatReleaseName, jiraIssueUrl, minorVersion } from "../utils/links";
 
 export default function ReleaseDetail() {
 	const { version } = useParams<{ version: string }>();
@@ -140,6 +136,7 @@ export default function ReleaseDetail() {
 	}
 
 	const displayName = formatReleaseName(release.name);
+	const minor = minorVersion(release.name);
 
 	return (
 		<>
@@ -161,6 +158,26 @@ export default function ReleaseDetail() {
 					<FlexItem>
 						<Title headingLevel="h1">{displayName}</Title>
 					</FlexItem>
+					<FlexItem>
+						<Tooltip
+							content={`The stream: every ${minor}.z build, the same for each ${minor} version.`}
+						>
+							<Button
+								variant="secondary"
+								icon={<ArrowRightIcon />}
+								iconPosition="end"
+								component={(props: object) => (
+									<Link
+										{...props}
+										to={`/releases/${encodeURIComponent(release.name)}/snapshots`}
+									/>
+								)}
+							>
+								Builds, snapshots and CI of{" "}
+								{release.konflux_application || "this release"}
+							</Button>
+						</Tooltip>
+					</FlexItem>
 				</Flex>
 
 				<ReleaseSignal
@@ -171,25 +188,7 @@ export default function ReleaseDetail() {
 					latest={latest}
 				/>
 
-				<Tabs defaultActiveKey="snapshot" aria-label="Release builds">
-					<Tab
-						eventKey="snapshot"
-						title={<TabTitleText>Snapshot &amp; ART staging</TabTitleText>}
-					>
-						<div style={{ paddingTop: "1rem" }}>
-							<LatestSnapshot version={version!} state={latest} />
-							<StagedCard version={version!} />
-						</div>
-					</Tab>
-					<Tab
-						eventKey="builds"
-						title={<TabTitleText>ART image builds</TabTitleText>}
-					>
-						<div style={{ paddingTop: "1rem" }}>
-							<BuildAttempts version={version!} />
-						</div>
-					</Tab>
-				</Tabs>
+				<StagedCard version={version!} />
 
 				<IssuesCard
 					data={tickets}
@@ -396,12 +395,6 @@ function StagedCard({ version }: { version: string }) {
 				)}
 			</CardTitle>
 			<CardBody>
-				<HelperText style={{ marginBottom: "0.5rem" }}>
-					<HelperTextItem>
-						These ART stage snapshots are selected separately and can differ
-						from the stream snapshot above.
-					</HelperTextItem>
-				</HelperText>
 				{error ? (
 					error.message
 				) : !data ? (
