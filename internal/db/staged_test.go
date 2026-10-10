@@ -66,6 +66,36 @@ func TestLatestStagedSnapshot(t *testing.T) {
 	}
 }
 
+// ART stages a stream when it staged any version of its X.Y.
+func TestStreamStaged(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	ctx := context.Background()
+
+	t0 := time.Date(2026, 10, 7, 20, 0, 0, 0, time.UTC)
+	for _, s := range []struct{ name, assembly, env string }{
+		{"stage-3-18-1", "3.18.1", "stage"},
+		{"prod-3-17-6", "3.17.6", "prod"},
+	} {
+		if err := d.UpsertStagedSnapshot(ctx, s.name, s.assembly, "image", s.env, t0); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for version, want := range map[string]bool{
+		"quay-v3.18.4": true,
+		"quay-v3.1.8":  false, // 3.18.1 is not in the 3.1 stream
+		"quay-v3.17.6": false, // staged for prod only
+		"omr-v3.18.1":  false, // not a quay-vX.Y.Z version
+	} {
+		if got, err := d.StreamStaged(ctx, version); got != want || err != nil {
+			t.Errorf("%s: got %v, %v; want %v", version, got, err, want)
+		}
+	}
+}
+
 func TestSelectedStageBuild(t *testing.T) {
 	d, err := Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {

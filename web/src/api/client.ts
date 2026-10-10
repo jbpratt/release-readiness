@@ -2,7 +2,6 @@ import type {
 	BuildAttempts,
 	BuildTickets,
 	DashboardConfig,
-	IssueSummary,
 	ProwRunsResponse,
 	ReadinessResponse,
 	ReleaseOverview,
@@ -91,12 +90,6 @@ export function getReleaseSnapshot(
 export function getBuildTickets(version: string): Promise<BuildTickets> {
 	return fetchJSON(
 		`${BASE}/releases/${encodeURIComponent(version)}/build-tickets`,
-	);
-}
-
-export function getReleaseIssueSummary(version: string): Promise<IssueSummary> {
-	return fetchJSON(
-		`${BASE}/releases/${encodeURIComponent(version)}/issues/summary`,
 	);
 }
 

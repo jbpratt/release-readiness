@@ -83,10 +83,18 @@ export interface StagedSnapshot {
 	release: KonfluxRelease | null;
 }
 
+/** An operator's newest staged FBC Snapshot. */
+export interface StagedCatalog {
+	operator: string;
+	staged: StagedSnapshot | null;
+}
+
 export interface StagedSnapshots {
-	assembly: string;
+	/** ART staged a Snapshot for some version of this X.Y stream. */
+	stream_staged: boolean;
 	staged_image: StagedSnapshot | null;
-	staged_fbc: StagedSnapshot | null;
+	/** quay-operator, container-security-operator and quay-bridge-operator. */
+	catalogs: StagedCatalog[];
 }
 
 export interface JiraIssue {
@@ -143,6 +151,8 @@ export interface ReleaseVersion {
 export interface ReadinessResponse {
 	signal: "green" | "yellow" | "red";
 	message: string;
+	/** Released in Jira or published in the Red Hat catalog. */
+	shipped: boolean;
 }
 
 export interface ReleaseOverview {

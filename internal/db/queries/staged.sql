@@ -29,3 +29,10 @@ WHERE ss.assembly = sqlc.arg(assembly) AND ss.kind = 'image' AND ss.env = 'stage
   AND s.application = sqlc.arg(application)
   AND kr.released_status = 'True' AND kr.released_reason = 'Succeeded' AND kr.completion_time != ''
 ORDER BY kr.completion_time DESC, kr.created_at DESC, kr.name DESC;
+
+-- name: StreamStaged :one
+-- The '.' after stream X.Y keeps 3.1 from matching assembly 3.18.1.
+SELECT CAST(EXISTS (
+    SELECT 1 FROM staged_snapshots
+    WHERE env = 'stage' AND assembly LIKE CAST(sqlc.arg(stream) AS TEXT) || '.%'
+) AS BOOLEAN) AS staged;

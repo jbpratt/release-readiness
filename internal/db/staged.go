@@ -50,6 +50,17 @@ var (
 	imageDigest     = regexp.MustCompile(`@(sha256:[0-9a-f]{64})$`)
 )
 
+// StreamStaged reports whether ART staged a Snapshot for any version of the
+// X.Y stream of name, e.g. 3.18.0 for quay-v3.18.1. A name that is not
+// quay-vX.Y.Z has none.
+func (d *DB) StreamStaged(ctx context.Context, name string) (bool, error) {
+	m := concreteVersion.FindStringSubmatch(name)
+	if m == nil {
+		return false, nil
+	}
+	return d.queries().StreamStaged(ctx, m[2]+"."+m[3])
+}
+
 // SelectedStageBuild returns the newest image Snapshot staged for release's
 // concrete version whose Konflux Release succeeded through a ReleasePlan
 // matching plans for the version's X-Y stream, ranked by that Release's

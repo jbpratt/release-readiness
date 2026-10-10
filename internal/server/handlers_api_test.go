@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -468,17 +469,24 @@ func TestGetStaged(t *testing.T) {
 	srv := setupTestServer(t)
 	ctx := t.Context()
 	t0 := time.Date(2026, 10, 7, 20, 0, 0, 0, time.UTC)
-	// Two z-versions of one application each select their own assembly's Snapshots.
-	for _, v := range []string{"quay-v3.18.1", "quay-v3.18.2", "quay-v3.18.3"} {
-		if err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{Name: v, KonfluxApplication: "quay-3-18"}); err != nil {
+	// Two z-versions of one application each select their own assembly's
+	// Snapshots. ART stages no 3.16 version.
+	for _, v := range []model.ReleaseVersion{
+		{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"},
+		{Name: "quay-v3.18.2", KonfluxApplication: "quay-3-18"},
+		{Name: "quay-v3.18.3", KonfluxApplication: "quay-3-18"},
+		{Name: "quay-v3.16.8", KonfluxApplication: "quay-3-16"},
+	} {
+		if err := srv.db.UpsertReleaseVersion(ctx, &v); err != nil {
 			t.Fatal(err)
 		}
 	}
 	for i, s := range []struct{ name, assembly, kind, component string }{
 		{"quay-stage-3-18-1-image", "3.18.1", "image", ""},
 		{"quay-stage-3-18-1-fbc", "3.18.1", "fbc", "fbc-quay-3-18-quay-operator"},
-		// Staged later, but the container-security-operator catalog.
+		// Staged later, but the other operators' catalogs.
 		{"quay-stage-3-18-1-fbc-cso", "3.18.1", "fbc", "fbc-quay-3-18-container-security-operator"},
+		{"quay-stage-3-18-1-fbc-qbo", "3.18.1", "fbc", "fbc-quay-3-18-quay-bridge-operator"},
 		{"quay-stage-3-18-2-image", "3.18.2", "image", ""},
 	} {
 		created := t0.Add(time.Duration(i) * time.Minute)
@@ -505,27 +513,46 @@ func TestGetStaged(t *testing.T) {
 
 	var got model.StagedSnapshots
 	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/staged", http.StatusOK, &got)
-	if got.Assembly != "3.18.1" || got.Image == nil || got.Image.Name != "quay-stage-3-18-1-image" ||
+	if !got.StreamStaged || got.Image == nil || got.Image.Name != "quay-stage-3-18-1-image" ||
 		got.Image.Release == nil || got.Image.Release.ReleasedReason != "Failed" || got.Image.Release.FailedTask != "verify-conforma" {
 		t.Errorf("3.18.1: got %+v", got)
 	}
-	if got.FBC == nil || got.FBC.Name != "quay-stage-3-18-1-fbc" || got.FBC.Release != nil {
-		t.Errorf("3.18.1 staged_fbc = %+v, want quay-stage-3-18-1-fbc without a Release", got.FBC)
+	wantCatalogs := []struct{ operator, name string }{
+		{"quay-operator", "quay-stage-3-18-1-fbc"},
+		{"container-security-operator", "quay-stage-3-18-1-fbc-cso"},
+		{"quay-bridge-operator", "quay-stage-3-18-1-fbc-qbo"},
+	}
+	if len(got.Catalogs) != len(wantCatalogs) {
+		t.Fatalf("3.18.1 catalogs = %+v, want %d", got.Catalogs, len(wantCatalogs))
+	}
+	for i, w := range wantCatalogs {
+		if c := got.Catalogs[i]; c.Operator != w.operator || c.Staged == nil || c.Staged.Name != w.name || c.Staged.Release != nil {
+			t.Errorf("3.18.1 catalogs[%d] = %s %+v, want %s %s without a Release", i, c.Operator, c.Staged, w.operator, w.name)
+		}
 	}
 
 	got = model.StagedSnapshots{}
 	getJSON(t, srv, "/api/v1/releases/quay-v3.18.2/staged", http.StatusOK, &got)
-	if got.Assembly != "3.18.2" || got.Image == nil || got.Image.Name != "quay-stage-3-18-2-image" || got.FBC != nil {
+	if !got.StreamStaged || got.Image == nil || got.Image.Name != "quay-stage-3-18-2-image" {
 		t.Errorf("3.18.2: got %+v", got)
 	}
 
-	var raw map[string]any
-	getJSON(t, srv, "/api/v1/releases/quay-v3.18.3/staged", http.StatusOK, &raw)
-	if v, ok := raw["staged_image"]; !ok || v != nil {
-		t.Errorf("3.18.3 staged_image = %v (present %v), want null", v, ok)
-	}
-	if v, ok := raw["staged_fbc"]; !ok || v != nil {
-		t.Errorf("3.18.3 staged_fbc = %v (present %v), want null", v, ok)
+	// Nothing staged for the version: only the stream tells whether ART stages it.
+	for version, stream := range map[string]bool{"quay-v3.18.3": true, "quay-v3.16.8": false} {
+		var raw map[string]any
+		getJSON(t, srv, "/api/v1/releases/"+version+"/staged", http.StatusOK, &raw)
+		want := map[string]any{
+			"stream_staged": stream,
+			"staged_image":  nil,
+			"catalogs": []any{
+				map[string]any{"operator": "quay-operator", "staged": nil},
+				map[string]any{"operator": "container-security-operator", "staged": nil},
+				map[string]any{"operator": "quay-bridge-operator", "staged": nil},
+			},
+		}
+		if !reflect.DeepEqual(raw, want) {
+			t.Errorf("%s: got %v, want %v", version, raw, want)
+		}
 	}
 	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/staged", http.StatusNotFound, nil)
 }
@@ -836,14 +863,16 @@ func TestComputeReadiness(t *testing.T) {
 	open := &model.IssueSummary{Total: 2, Open: 1}
 	for _, tc := range []struct {
 		desc           string
+		released       bool
 		catalogShipped bool
 		want           model.ReadinessResponse
 	}{
-		{"catalog-shipped, JIRA unreleased", true, model.ReadinessResponse{Signal: "green", Message: "Shipped"}},
-		{"unshipped past due", false, model.ReadinessResponse{Signal: "red", Message: "Past due date"}},
+		{"released in JIRA", true, false, model.ReadinessResponse{Signal: "green", Message: "Released", Shipped: true}},
+		{"catalog-shipped, JIRA unreleased", false, true, model.ReadinessResponse{Signal: "green", Message: "Shipped", Shipped: true}},
+		{"unshipped past due", false, false, model.ReadinessResponse{Signal: "red", Message: "Past due date"}},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			release := &model.ReleaseVersion{Name: "quay-v3.17.5", DueDate: &past}
+			release := &model.ReleaseVersion{Name: "quay-v3.17.5", Released: tc.released, DueDate: &past}
 			if got := computeReadiness(release, open, true, tc.catalogShipped); got != tc.want {
 				t.Errorf("got %+v, want %+v", got, tc.want)
 			}

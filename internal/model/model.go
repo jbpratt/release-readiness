@@ -121,6 +121,8 @@ type BuildAttempt struct {
 type ReadinessResponse struct {
 	Signal  string `json:"signal"`  // "green", "yellow", "red"
 	Message string `json:"message"` // human-readable reason
+	// Shipped is set when JIRA marks it released or the catalog published it.
+	Shipped bool `json:"shipped"`
 }
 
 // ReleaseVersion represents a JIRA fixVersion with release metadata.
@@ -151,12 +153,20 @@ type KonfluxRelease struct {
 	CompletionTime *time.Time `json:"completion_time,omitempty"`
 }
 
-// StagedSnapshots is the newest image and quay-operator FBC Konflux Snapshot
-// that ART staged for a release's assembly. Each is null when ART staged none.
+// StagedSnapshots is the newest image Konflux Snapshot and each operator's
+// newest FBC Snapshot that ART staged for a release's assembly; each is null
+// when ART staged none. StreamStaged is whether ART staged any version of the
+// release's X.Y stream.
 type StagedSnapshots struct {
-	Assembly string          `json:"assembly"`
-	Image    *StagedSnapshot `json:"staged_image"`
-	FBC      *StagedSnapshot `json:"staged_fbc"`
+	StreamStaged bool            `json:"stream_staged"`
+	Image        *StagedSnapshot `json:"staged_image"`
+	Catalogs     []StagedCatalog `json:"catalogs"`
+}
+
+// StagedCatalog is an operator's newest staged FBC Snapshot.
+type StagedCatalog struct {
+	Operator string          `json:"operator"`
+	Staged   *StagedSnapshot `json:"staged"`
 }
 
 // StagedSnapshot is a Snapshot annotated art.redhat.com/env=stage with the
