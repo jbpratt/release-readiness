@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Prints the release page mockups' Q3-C fixture: for each version, the newest
-# staged FBC per operator and OCP version, read from the cluster (read-only).
+# Prints, for each version, the newest staged FBC per operator and OCP version,
+# read from the cluster (read-only).
 # Only a successful FBC Release reports its OCP version, so failed ones are left out.
 set -euo pipefail
 NS=${NS:-art-quay-tenant}

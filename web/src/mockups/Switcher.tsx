@@ -2,38 +2,23 @@ import { Label } from "@patternfly/react-core";
 import { Fragment } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
-const VERSIONS = ["quay-v3.18.1", "quay-v3.17.6"];
+const VERSIONS = ["quay-v3.18.1", "quay-v3.17.6", "quay-v3.17.5"];
 
-// The redesign's open questions and their options; A is the recommendation.
+// The open questions and their options; the first option is the default.
 const QUESTIONS = {
-	q1: {
-		title: "Stream snapshot card and ART image builds",
+	readiness: {
+		title: "Readiness",
 		options: {
-			A: "Move them, unchanged, to the Builds page; the version page keeps one link.",
-			B: "Keep them on the version page, under the checklist.",
-			C: "Delete them.",
-		},
-	},
-	q2: {
-		title: "The verdict",
-		options: {
-			A: "Name the blocker and show lateness as a date in the header.",
-			B: 'Keep "Past due date" as the verdict.',
-		},
-	},
-	q3: {
-		title: "Catalog (FBC) detail",
-		options: {
-			A: "One row: the quay-operator catalog, newest of its OCP versions.",
-			B: "One row per operator: quay-operator, container-security-operator, quay-bridge-operator.",
-			C: "One row per OCP version.",
+			strip: "Stage tiles with counts.",
+			bar: "A segmented progress bar.",
+			pipeline: "Chevron stages and a blocker callout.",
 		},
 	},
 	q4: {
-		title: "The Shipped row",
+		title: "Q4 The Shipped stage",
 		options: {
-			A: "Include the production Release, which RR already syncs.",
-			B: "Show catalog and Jira status only.",
+			B: "From the Red Hat catalog and Jira's released flag.",
+			none: "None; the verdict still says Shipped.",
 		},
 	},
 };
@@ -41,20 +26,21 @@ const QUESTIONS = {
 type Question = keyof typeof QUESTIONS;
 export type Picks = Record<Question, string>;
 
-/** The URL's ?q1= to ?q4= picks; a missing or unknown one is A. */
+/** The URL's ?readiness= and ?q4= picks; a missing or unknown one is the default. */
 export function usePicks(): Picks {
 	const [params] = useSearchParams();
 	const pick = (q: Question) => {
+		const options = Object.keys(QUESTIONS[q].options);
 		const value = params.get(q) ?? "";
-		return Object.keys(QUESTIONS[q].options).includes(value) ? value : "A";
+		return options.includes(value) ? value : options[0];
 	};
-	return { q1: pick("q1"), q2: pick("q2"), q3: pick("q3"), q4: pick("q4") };
+	return { readiness: pick("readiness"), q4: pick("q4") };
 }
 
 export const mockupPath = (version: string, picks: Picks, builds = false) =>
 	`/mockups/releases/${encodeURIComponent(version)}${builds ? "/snapshots" : ""}?${new URLSearchParams(picks)}`;
 
-/** Mockup chrome: the version and the pick for each question, as links. */
+/** Mockup chrome: the version, the locked picks and the open questions, as links. */
 export default function Switcher({
 	version,
 	picks,
@@ -62,7 +48,7 @@ export default function Switcher({
 }: {
 	version: string;
 	picks: Picks;
-	/** On the Builds page mockup, which Q1-A links to. */
+	/** On the Builds page mockup, which the version page's Builds button opens. */
 	builds?: boolean;
 }) {
 	const live = `/releases/${encodeURIComponent(version)}${builds ? "/snapshots" : ""}`;
@@ -81,7 +67,7 @@ export default function Switcher({
 				<Label color="orange" isCompact>
 					Mockup
 				</Label>{" "}
-				Proposed release page on live data, one variant per pick. Version:{" "}
+				Proposed release page on live data, round 2. Version:{" "}
 				{VERSIONS.map((v) => (
 					<Fragment key={v}>
 						<Option to={mockupPath(v, picks, builds)} selected={v === version}>
@@ -91,19 +77,20 @@ export default function Switcher({
 				))}
 				· <Link to={live}>Live page</Link>
 			</div>
+			<div>
+				Locked: Q1-A Builds button, Q2 blocker and Past due date, Q3-B per
+				operator, Q5-A .z tickets count.
+			</div>
 			{(Object.keys(QUESTIONS) as Question[]).map((q) => (
 				<div key={q}>
-					<strong>
-						{q.toUpperCase()} {QUESTIONS[q].title}:
-					</strong>{" "}
+					<strong>{QUESTIONS[q].title}:</strong>{" "}
 					{Object.entries(QUESTIONS[q].options).map(([option, text]) => (
 						<Fragment key={option}>
 							<Option
 								to={mockupPath(version, { ...picks, [q]: option })}
 								selected={picks[q] === option}
 							>
-								<strong>{option}</strong>
-								{option === "A" && " (rec.)"} {text}
+								<strong>{option}</strong> {text}
 							</Option>{" "}
 						</Fragment>
 					))}
