@@ -1,4 +1,3 @@
-import { ColumnManagementModal } from "@patternfly/react-component-groups";
 import {
 	Breadcrumb,
 	BreadcrumbItem,
@@ -10,22 +9,16 @@ import {
 	EmptyStateBody,
 	Flex,
 	FlexItem,
-	HelperText,
-	HelperTextItem,
-	MenuToggle,
+	Icon,
 	PageSection,
-	Popover,
-	Select,
-	SelectList,
-	SelectOption,
 	Spinner,
 	Title,
 	Tooltip,
 } from "@patternfly/react-core";
 import {
-	ArrowRightIcon,
-	ColumnsIcon,
-	OutlinedQuestionCircleIcon,
+	ExclamationTriangleIcon,
+	ExternalLinkAltIcon,
+	InfoCircleIcon,
 } from "@patternfly/react-icons";
 import {
 	Table,
@@ -36,33 +29,47 @@ import {
 	type ThProps,
 	Tr,
 } from "@patternfly/react-table";
-import { useMemo, useState } from "react";
-import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
-import {
-	getBuildTickets,
-	getRelease,
-	getReleaseReadiness,
-	getStaged,
-} from "../api/client";
+import { Fragment, type ReactNode, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { getBuildTickets, getCandidate, getRelease } from "../api/client";
 import type {
 	BuildCommit,
 	BuildTicket,
 	BuildTickets,
+	CandidateBuild,
+	CandidateCI,
+	CIJob,
 	DashboardConfig,
-	ReleaseVersion,
+	KonfluxRelease,
+	ReleaseCandidate,
 } from "../api/types";
-import PriorityLabel from "../components/PriorityLabel";
-import ReadinessPipeline from "../components/ReadinessPipeline";
 import StatusLabel from "../components/StatusLabel";
 import { useCachedFetch } from "../hooks/useCachedFetch";
-import {
-	type ColumnDef,
-	useColumnManagement,
-} from "../hooks/useColumnManagement";
 import { useConfig } from "../hooks/useConfig";
-import { relative } from "../utils/format";
-import { formatReleaseName, jiraIssueUrl, minorVersion } from "../utils/links";
-import { dueText, readiness } from "../utils/readiness";
+import { dueText, relative } from "../utils/format";
+import {
+	formatReleaseName,
+	jiraIssueUrl,
+	jiraSearchUrl,
+	konfluxUrl,
+} from "../utils/links";
+import { jobShortName, notVerified } from "../utils/releaseDetail";
+import { releaseStatus } from "../utils/releaseStatus";
+
+/** A Konflux UI page of the version's application. */
+type KonfluxLink = (
+	kind?: "snapshots" | "releases",
+	name?: string,
+) => string | null;
+
+const external = { target: "_blank", rel: "noopener noreferrer" };
+const muted = { color: "var(--pf-t--global--text--color--subtle)" };
+const textColor = {
+	green: "var(--pf-t--global--text--color--status--success--default)",
+	red: "var(--pf-t--global--text--color--status--danger--default)",
+	blue: "var(--pf-t--global--text--color--status--info--default)",
+	grey: muted.color,
+};
 
 export default function ReleaseDetail() {
 	const { version } = useParams<{ version: string }>();
@@ -76,17 +83,10 @@ export default function ReleaseDetail() {
 		version ? `buildTickets:${version}` : null,
 		() => getBuildTickets(version!),
 	);
-	const [searchParams] = useSearchParams();
-
-	// Old deep links carry snapshot history filters; send them to the history page.
-	if (searchParams.has("app") || searchParams.has("with_release")) {
-		return (
-			<Navigate
-				to={{ pathname: "snapshots", search: `?${searchParams}` }}
-				replace
-			/>
-		);
-	}
+	const candidate = useCachedFetch(
+		version ? `candidate:${version}` : null,
+		() => getCandidate(version!),
+	);
 
 	if (loadingRelease && !release) {
 		return (
@@ -115,7 +115,16 @@ export default function ReleaseDetail() {
 
 	const displayName = formatReleaseName(release.name);
 	const ticket = release.release_ticket_key;
-	const minor = minorVersion(release.name);
+	const app = release.konflux_application ?? "";
+	// Every Release the candidate response names is in the version's application.
+	const konflux: KonfluxLink = (kind, name) =>
+		konfluxUrl(
+			config?.konflux_ui_url ?? "",
+			config?.konflux_namespace ?? "",
+			app,
+			kind,
+			name,
+		);
 
 	return (
 		<PageSection>
@@ -137,126 +146,315 @@ export default function ReleaseDetail() {
 							ticket,
 							config?.jira_base_url || "https://redhat.atlassian.net",
 						)}
-						target="_blank"
-						rel="noopener noreferrer"
+						{...external}
 					>
 						{ticket}
 					</a>
 				)}
 				<span>{release.release_ticket_assignee || "Unassigned"}</span>
-				<FlexItem align={{ default: "alignRight" }}>
-					<Tooltip
-						content={`The stream: every ${minor}.z build, the same for each ${minor} version.`}
-					>
-						<Button
-							variant="secondary"
-							icon={<ArrowRightIcon />}
-							iconPosition="end"
-							component={(props: object) => (
-								<Link
-									{...props}
-									to={`/releases/${encodeURIComponent(release.name)}/snapshots`}
-								/>
-							)}
-						>
-							Builds, snapshots and CI of{" "}
-							{release.konflux_application || "this release"}
-						</Button>
-					</Tooltip>
-				</FlexItem>
 			</Flex>
 
-			<ReadinessCard
-				release={release}
-				tickets={tickets?.tickets}
-				ticketsError={ticketsError}
-				jiraEnabled={config?.jira_enabled !== false}
+			<CandidateCard
+				data={candidate.data}
+				error={candidate.error}
+				app={app}
+				konflux={konflux}
 			/>
 
-			<IssuesCard
+			{candidate.data?.candidate && <CICard ci={candidate.data.ci} app={app} />}
+
+			<TicketsCard
 				data={tickets}
 				error={ticketsError}
 				version={version!}
-				app={release.konflux_application}
+				app={app}
 				config={config}
 			/>
 		</PageSection>
 	);
 }
 
-/** The readiness pipeline: what ART staged, the tickets, and whether the version shipped. */
-function ReadinessCard({
-	release,
-	tickets,
-	ticketsError,
-	jiraEnabled,
+/** A link opening in a new tab, or plain text without an href. */
+function ExtLink({
+	href,
+	children,
 }: {
-	release: ReleaseVersion;
-	tickets?: BuildTicket[];
-	ticketsError?: Error;
-	jiraEnabled: boolean;
+	href: string | null;
+	children: ReactNode;
 }) {
-	const { name } = release;
-	const staged = useCachedFetch(`staged:${name}`, () => getStaged(name));
-	const shipped = useCachedFetch(`readiness:${name}`, () =>
-		getReleaseReadiness(name),
+	return href ? (
+		<a href={href} {...external}>
+			{children}
+		</a>
+	) : (
+		children
 	);
-	const error = staged.error ?? shipped.error ?? ticketsError;
+}
+
+/** A card title with a link out on the right, hidden without an href. */
+function LinkedCardTitle({
+	href,
+	link,
+	children,
+}: {
+	href: string | null;
+	link: string;
+	children: ReactNode;
+}) {
+	return (
+		<CardTitle>
+			<Flex
+				justifyContent={{ default: "justifyContentSpaceBetween" }}
+				alignItems={{ default: "alignItemsCenter" }}
+			>
+				<FlexItem>{children}</FlexItem>
+				{href && (
+					<FlexItem>
+						<Button
+							component="a"
+							variant="link"
+							isInline
+							href={href}
+							{...external}
+							icon={<ExternalLinkAltIcon />}
+							iconPosition="end"
+						>
+							{link}
+						</Button>
+					</FlexItem>
+				)}
+			</Flex>
+		</CardTitle>
+	);
+}
+
+/** A Release linked to its Konflux page, then its status, with the detail on hover. */
+function ReleaseStatus({
+	release,
+	href,
+}: {
+	release: KonfluxRelease;
+	href: string | null;
+}) {
+	const status = releaseStatus(release);
+	return (
+		<>
+			<ExtLink href={href}>{release.name}</ExtLink>:{" "}
+			<span style={{ color: textColor[status.color] }}>{status.text}</span>
+			{"detail" in status && status.detail && (
+				<>
+					{" "}
+					<Tooltip content={status.detail}>
+						<InfoCircleIcon style={muted} />
+					</Tooltip>
+				</>
+			)}
+		</>
+	);
+}
+
+const noNvr = (
+	<span title="Not in ART build history yet" style={muted}>
+		-
+	</span>
+);
+
+/** The build up for release, whether it reached stage, and its images. */
+function CandidateCard({
+	data,
+	error,
+	app,
+	konflux,
+}: {
+	data?: ReleaseCandidate;
+	error?: Error;
+	app: string;
+	konflux: KonfluxLink;
+}) {
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<CardTitle>Readiness</CardTitle>
+			<LinkedCardTitle href={konflux()} link="Konflux">
+				Candidate build
+			</LinkedCardTitle>
 			<CardBody>
 				{error ? (
 					error.message
-				) : staged.data && shipped.data && tickets ? (
-					<ReadinessPipeline
-						r={readiness({
-							release,
-							staged: staged.data,
-							tickets,
-							shipped: shipped.data.shipped,
-							jiraEnabled,
-							now: Date.now(),
-						})}
-					/>
-				) : (
+				) : !data ? (
 					<Spinner size="md" />
+				) : data.shipped ? (
+					"Shipped."
+				) : !data.candidate ? (
+					data.reason
+				) : (
+					<Candidate
+						data={data}
+						build={data.candidate}
+						app={app}
+						konflux={konflux}
+					/>
 				)}
 			</CardBody>
 		</Card>
 	);
 }
 
-const ISSUES_COLUMNS: ColumnDef[] = [
-	{ key: "key", label: "Key" },
-	{ key: "type", label: "Type" },
-	{ key: "summary", label: "Summary" },
-	{ key: "priority", label: "Priority" },
-	{ key: "status", label: "Status" },
-	{ key: "assignee", label: "Assignee" },
-	{ key: "qaContact", label: "QA Contact" },
-	{ key: "target", label: "Target" },
-	{ key: "inBuild", label: "In build" },
-];
-
-const priorityWeight: Record<string, number> = {
-	blocker: 0,
-	critical: 1,
-	major: 2,
-	normal: 3,
-	minor: 4,
-};
-
-function buildJQL(
-	config: DashboardConfig | undefined,
-	version: string,
-): string | undefined {
-	if (!config?.jira_project) return undefined;
-	const project = config.jira_project;
-	return `project=${project} AND "Target Version"="${version}"`;
+function Candidate({
+	data: { prod, stage },
+	build,
+	app,
+	konflux,
+}: {
+	data: ReleaseCandidate;
+	build: CandidateBuild;
+	app: string;
+	konflux: KonfluxLink;
+}) {
+	return (
+		<>
+			<div>
+				<ExtLink href={konflux("snapshots", build.snapshot)}>
+					{build.snapshot}
+				</ExtLink>{" "}
+				· built {relative(build.created_at)} ·{" "}
+				{build.source === "staged"
+					? `in stage since ${relative(build.staged_at!)}`
+					: `newest build of ${app}`}
+			</div>
+			{prod && (
+				<div>
+					Prod:{" "}
+					<ReleaseStatus release={prod} href={konflux("releases", prod.name)} />
+				</div>
+			)}
+			{stage?.state === "not_staged" && (
+				<div>
+					<Icon status="warning" isInline>
+						<ExclamationTriangleIcon />
+					</Icon>{" "}
+					{stage.snapshot !== build.snapshot && (
+						<>
+							Newest build{" "}
+							<ExtLink href={konflux("snapshots", stage.snapshot)}>
+								{stage.snapshot}
+							</ExtLink>{" "}
+							({relative(stage.created_at)}):{" "}
+						</>
+					)}
+					<Tooltip
+						content={stage.not_staged
+							.map((c) => componentLabel(c, app))
+							.join(", ")}
+					>
+						<span style={{ textDecoration: "underline dotted" }}>
+							{stage.not_staged.length} of {stage.total} images not in stage
+						</span>
+					</Tooltip>
+					{stage.release && (
+						<>
+							.{" "}
+							<ReleaseStatus
+								release={stage.release}
+								href={konflux("releases", stage.release.name)}
+							/>
+						</>
+					)}
+				</div>
+			)}
+			{stage?.state === "unknown" && (
+				<div style={muted}>No stage Release for {app} yet.</div>
+			)}
+			<Table variant="compact" style={{ marginTop: "0.5rem" }}>
+				<Thead>
+					<Tr>
+						<Th>Component</Th>
+						<Th>Build</Th>
+					</Tr>
+				</Thead>
+				<Tbody>
+					{build.components.map((c) => (
+						<Tr key={c.name}>
+							<Td>{componentLabel(c.name, app)}</Td>
+							<Td>
+								{c.nvr ? (
+									<ExtLink href={c.build_url || null}>{c.nvr}</ExtLink>
+								) : (
+									noNvr
+								)}
+							</Td>
+						</Tr>
+					))}
+				</Tbody>
+			</Table>
+		</>
+	);
 }
 
-function IssuesCard({
+// Prow job states as the OCP release controller words them; any other is grey.
+const ciStates: Record<string, [string, keyof typeof textColor]> = {
+	success: ["Succeeded", "green"],
+	failure: ["Failed", "red"],
+	error: ["Error", "red"],
+};
+
+/** The periodic runs that tested the candidate, else the build they last tested. */
+function CICard({ ci, app }: { ci: CandidateCI; app: string }) {
+	return (
+		<Card isCompact style={{ marginBottom: "1rem" }}>
+			<CardTitle>CI</CardTitle>
+			<CardBody>
+				{ci.jobs.length > 0 ? (
+					<Jobs jobs={ci.jobs} />
+				) : ci.last_tested ? (
+					<>
+						<div>Not tested yet.</div>
+						<div style={muted}>
+							Last tested: {ci.last_tested.bundle_nvr || noNvr}
+							{ci.last_tested.tested_at &&
+								` (${relative(ci.last_tested.tested_at)})`}
+						</div>
+						<Jobs jobs={ci.last_tested.jobs} />
+					</>
+				) : (
+					`No periodic run has tested a build of ${app} yet.`
+				)}
+			</CardBody>
+		</Card>
+	);
+}
+
+/** One line per job: its short name linked to the run, its state, its full name. */
+function Jobs({ jobs }: { jobs: CIJob[] }) {
+	return (
+		<div
+			style={{
+				display: "grid",
+				gridTemplateColumns: "auto auto 1fr",
+				columnGap: "1rem",
+			}}
+		>
+			{jobs.map((j) => {
+				const [state, color] = ciStates[j.state] ?? [
+					j.state.charAt(0).toUpperCase() + j.state.slice(1),
+					"grey",
+				];
+				return (
+					<Fragment key={j.job_name}>
+						<a href={j.prow_url} {...external}>
+							{jobShortName(j.job_name)}
+						</a>
+						<span>
+							<span style={{ color: textColor[color] }}>{state}</span>
+							{j.runs > 1 && ` (${j.runs} runs)`}
+						</span>
+						<span style={muted}>{j.job_name}</span>
+					</Fragment>
+				);
+			})}
+		</div>
+	);
+}
+
+function TicketsCard({
 	data,
 	error,
 	version,
@@ -266,138 +464,37 @@ function IssuesCard({
 	data?: BuildTickets;
 	error?: Error;
 	version: string;
-	app?: string;
+	app: string;
 	config?: DashboardConfig;
 }) {
 	const issues = data?.tickets;
-	const [typeFilter, setTypeFilter] = useState<string>("All");
-	const [typeSelectOpen, setTypeSelectOpen] = useState(false);
-	const columnMgmt = useColumnManagement("rr-columns-issues", ISSUES_COLUMNS);
-
-	const issueTypes = useMemo(() => {
-		const types = new Set((issues ?? []).map((i) => i.issue_type));
-		return ["All", ...Array.from(types).sort()];
-	}, [issues]);
-
-	const filteredIssues = useMemo(
-		() =>
-			typeFilter === "All"
-				? (issues ?? [])
-				: (issues ?? []).filter((i) => i.issue_type === typeFilter),
-		[issues, typeFilter],
-	);
 	const hasIssues = (issues ?? []).length > 0;
-
-	const jql = buildJQL(config, version);
+	const open = notVerified(issues ?? []);
+	const jira = config?.jira_project
+		? jiraSearchUrl(
+				`project=${config.jira_project} AND "Target Version"="${version}"`,
+				config.jira_base_url,
+			)
+		: null;
 
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<CardTitle>
-				<Flex
-					justifyContent={{ default: "justifyContentSpaceBetween" }}
-					alignItems={{ default: "alignItemsCenter" }}
-				>
-					<FlexItem>
-						Tickets for {formatReleaseName(version)}
-						{hasIssues && ` (${filteredIssues.length})`}
-						{jql && (
-							<Popover headerContent="JQL Query" bodyContent={jql}>
-								<Button
-									variant="plain"
-									aria-label="Show JQL query"
-									style={{ padding: "0 0 0 0.25rem" }}
-								>
-									<OutlinedQuestionCircleIcon />
-								</Button>
-							</Popover>
-						)}
-					</FlexItem>
-					{hasIssues && (
-						<FlexItem>
-							<Flex
-								alignItems={{ default: "alignItemsCenter" }}
-								spaceItems={{ default: "spaceItemsMd" }}
-							>
-								<FlexItem>
-									<Button
-										variant="plain"
-										aria-label="Manage columns"
-										onClick={columnMgmt.openModal}
-									>
-										<ColumnsIcon />
-									</Button>
-								</FlexItem>
-								<FlexItem>
-									<Select
-										isOpen={typeSelectOpen}
-										selected={typeFilter}
-										onSelect={(_e, value) => {
-											setTypeFilter(value as string);
-											setTypeSelectOpen(false);
-										}}
-										onOpenChange={setTypeSelectOpen}
-										toggle={(toggleRef) => (
-											<MenuToggle
-												ref={toggleRef}
-												onClick={() => setTypeSelectOpen((prev) => !prev)}
-												isExpanded={typeSelectOpen}
-											>
-												Type: {typeFilter}
-											</MenuToggle>
-										)}
-									>
-										<SelectList>
-											{issueTypes.map((t) => (
-												<SelectOption key={t} value={t}>
-													{t}
-												</SelectOption>
-											))}
-										</SelectList>
-									</Select>
-								</FlexItem>
-							</Flex>
-						</FlexItem>
-					)}
-				</Flex>
-			</CardTitle>
+			<LinkedCardTitle href={jira} link="Jira">
+				Tickets for {formatReleaseName(version)}
+				{hasIssues && ` (${issues!.length})`}
+				{open > 0 && ` · ${open} not verified`}
+			</LinkedCardTitle>
 			<CardBody>
-				{data && (
-					<div style={{ marginBottom: "0.5rem" }}>
-						<div>
-							{data.build ? (
-								<>
-									Build <code>{data.build.snapshot}</code>, STAGE{" "}
-									{relative(data.build.completed_at)}
-								</>
-							) : (
-								`No STAGE build: ${data.reason}`
-							)}
-						</div>
-						{data.not_compared.length > 0 && (
-							<div>
-								Not compared:{" "}
-								{data.not_compared
-									.map(
-										(c) => `${componentLabel(c.component, app)} (${c.reason})`,
-									)
-									.join(", ")}
-							</div>
-						)}
+				{data && data.not_compared.length > 0 && (
+					<div style={{ ...muted, marginBottom: "0.5rem" }}>
+						Not compared:{" "}
+						{data.not_compared
+							.map((c) => `${componentLabel(c.component, app)} (${c.reason})`)
+							.join(", ")}
 					</div>
 				)}
-				<HelperText style={{ marginBottom: "0.5rem" }}>
-					<HelperTextItem>
-						Target Version tickets from Jira, plus .z tickets a build commit
-						names. In build links the commits that name the ticket.
-					</HelperTextItem>
-				</HelperText>
 				{hasIssues ? (
-					<IssuesTable
-						issues={filteredIssues}
-						hasBuild={!!data?.build}
-						app={app}
-						columnMgmt={columnMgmt}
-					/>
+					<IssuesTable issues={issues!} hasBuild={!!data?.build} app={app} />
 				) : error ? (
 					error.message
 				) : !issues ? (
@@ -423,19 +520,18 @@ const componentLabel = (component: string, app?: string) => {
 const commitLabel = (c: BuildCommit, app?: string) =>
 	`${componentLabel(c.component, app)}@${c.commit_sha.slice(0, 7)}`;
 
+// The ticket table's columns, in order.
+const ISSUES_COLUMNS = ["key", "summary", "status", "target", "inBuild"];
+
 function IssuesTable({
 	issues,
 	hasBuild,
 	app,
-	columnMgmt,
 }: {
 	issues: BuildTicket[];
 	hasBuild: boolean;
 	app?: string;
-	columnMgmt: ReturnType<typeof useColumnManagement>;
 }) {
-	const { isColumnVisible, visibleColumns } = columnMgmt;
-
 	const [activeSortKey, setActiveSortKey] = useState<string | undefined>(
 		undefined,
 	);
@@ -450,22 +546,8 @@ function IssuesTable({
 		return [...issues].sort((a, b) => {
 			let cmp = 0;
 			switch (activeSortKey) {
-				case "type":
-					cmp = a.issue_type.localeCompare(b.issue_type);
-					break;
-				case "priority":
-					cmp =
-						(priorityWeight[a.priority.toLowerCase()] ?? 5) -
-						(priorityWeight[b.priority.toLowerCase()] ?? 5);
-					break;
 				case "status":
 					cmp = a.status.localeCompare(b.status);
-					break;
-				case "assignee":
-					cmp = a.assignee.localeCompare(b.assignee);
-					break;
-				case "qaContact":
-					cmp = a.qa_contact.localeCompare(b.qa_contact);
 					break;
 				case "inBuild":
 					// "" for no commit, so "-" sorts first.
@@ -481,143 +563,70 @@ function IssuesTable({
 		});
 	}, [issues, activeSortKey, activeSortDirection, app]);
 
-	const visibleColumnKeys = visibleColumns.map((c) => c.key);
-
 	const getSortParams = (columnKey: string): ThProps["sort"] => ({
 		sortBy: {
-			index: activeSortKey
-				? visibleColumnKeys.indexOf(activeSortKey)
-				: undefined,
+			index: activeSortKey ? ISSUES_COLUMNS.indexOf(activeSortKey) : undefined,
 			direction: activeSortDirection,
 		},
 		onSort: (_event, _index, direction) => {
 			setActiveSortKey(columnKey);
 			setActiveSortDirection(direction);
 		},
-		columnIndex: visibleColumnKeys.indexOf(columnKey),
+		columnIndex: ISSUES_COLUMNS.indexOf(columnKey),
 	});
 
 	return (
-		<>
-			<Table variant="compact" style={{ tableLayout: "auto" }}>
-				<Thead>
-					<Tr>
-						{isColumnVisible("key") && (
-							<Th style={{ whiteSpace: "nowrap" }}>Key</Th>
-						)}
-						{isColumnVisible("type") && (
-							<Th sort={getSortParams("type")} style={{ whiteSpace: "nowrap" }}>
-								Type
-							</Th>
-						)}
-						{isColumnVisible("summary") && <Th>Summary</Th>}
-						{isColumnVisible("priority") && (
-							<Th
-								sort={getSortParams("priority")}
-								style={{ whiteSpace: "nowrap", minWidth: "120px" }}
-							>
-								Priority
-							</Th>
-						)}
-						{isColumnVisible("status") && (
-							<Th
-								sort={getSortParams("status")}
-								style={{ whiteSpace: "nowrap", minWidth: "110px" }}
-							>
-								Status
-							</Th>
-						)}
-						{isColumnVisible("assignee") && (
-							<Th
-								sort={getSortParams("assignee")}
-								style={{ whiteSpace: "nowrap" }}
-							>
-								Assignee
-							</Th>
-						)}
-						{isColumnVisible("qaContact") && (
-							<Th
-								sort={getSortParams("qaContact")}
-								style={{ whiteSpace: "nowrap" }}
-							>
-								QA Contact
-							</Th>
-						)}
-						{isColumnVisible("target") && <Th>Target</Th>}
-						{isColumnVisible("inBuild") && (
-							<Th
-								sort={getSortParams("inBuild")}
-								style={{ whiteSpace: "nowrap" }}
-							>
-								In build
-							</Th>
-						)}
+		<Table variant="compact" style={{ tableLayout: "auto" }}>
+			<Thead>
+				<Tr>
+					<Th style={{ whiteSpace: "nowrap" }}>Key</Th>
+					<Th>Summary</Th>
+					<Th
+						sort={getSortParams("status")}
+						style={{ whiteSpace: "nowrap", minWidth: "110px" }}
+					>
+						Status
+					</Th>
+					<Th>Target</Th>
+					<Th sort={getSortParams("inBuild")} modifier="fitContent">
+						In build
+					</Th>
+				</Tr>
+			</Thead>
+			<Tbody>
+				{sortedIssues.map((issue) => (
+					<Tr key={issue.key}>
+						<Td style={{ whiteSpace: "nowrap" }}>
+							<a href={issue.link} {...external}>
+								{issue.key}
+							</a>
+						</Td>
+						<Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+							{issue.summary}
+						</Td>
+						<Td>
+							<StatusLabel status={issue.status} />
+						</Td>
+						<Td>{issue.fix_version.replace(/^[a-z]+-v/, "")}</Td>
+						<Td style={{ whiteSpace: "nowrap" }}>
+							{hasBuild &&
+								(issue.in_build.length === 0
+									? "-"
+									: issue.in_build.map((c) => (
+											<div key={`${c.component}@${c.commit_sha}`}>
+												<a
+													href={c.commit_url}
+													{...external}
+													title={c.component}
+												>
+													{commitLabel(c, app)}
+												</a>
+											</div>
+										)))}
+						</Td>
 					</Tr>
-				</Thead>
-				<Tbody>
-					{sortedIssues.map((issue) => (
-						<Tr key={issue.key}>
-							{isColumnVisible("key") && (
-								<Td style={{ whiteSpace: "nowrap" }}>
-									<a
-										href={issue.link}
-										target="_blank"
-										rel="noopener noreferrer"
-									>
-										{issue.key}
-									</a>
-								</Td>
-							)}
-							{isColumnVisible("type") && <Td>{issue.issue_type}</Td>}
-							{isColumnVisible("summary") && (
-								<Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
-									{issue.summary}
-								</Td>
-							)}
-							{isColumnVisible("priority") && (
-								<Td>
-									<PriorityLabel priority={issue.priority} />
-								</Td>
-							)}
-							{isColumnVisible("status") && (
-								<Td>
-									<StatusLabel status={issue.status} />
-								</Td>
-							)}
-							{isColumnVisible("assignee") && <Td>{issue.assignee}</Td>}
-							{isColumnVisible("qaContact") && <Td>{issue.qa_contact}</Td>}
-							{isColumnVisible("target") && (
-								<Td>{issue.fix_version.replace(/^[a-z]+-v/, "")}</Td>
-							)}
-							{isColumnVisible("inBuild") && (
-								<Td style={{ whiteSpace: "nowrap" }}>
-									{hasBuild &&
-										(issue.in_build.length === 0
-											? "-"
-											: issue.in_build.map((c) => (
-													<div key={`${c.component}@${c.commit_sha}`}>
-														<a
-															href={c.commit_url}
-															target="_blank"
-															rel="noopener noreferrer"
-															title={c.component}
-														>
-															{commitLabel(c, app)}
-														</a>
-													</div>
-												)))}
-								</Td>
-							)}
-						</Tr>
-					))}
-				</Tbody>
-			</Table>
-			<ColumnManagementModal
-				appliedColumns={columnMgmt.appliedColumns}
-				applyColumns={columnMgmt.applyColumns}
-				isOpen={columnMgmt.isModalOpen}
-				onClose={columnMgmt.closeModal}
-			/>
-		</>
+				))}
+			</Tbody>
+		</Table>
 	);
 }

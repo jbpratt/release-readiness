@@ -58,18 +58,25 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 }
 
-func TestConfigJiraEnabled(t *testing.T) {
+func TestConfig(t *testing.T) {
 	srv := setupTestServer(t)
 	var got map[string]any
 	getJSON(t, srv, "/api/v1/config", http.StatusOK, &got)
 	if got["jira_enabled"] != false {
 		t.Errorf("without a jira sync: jira_enabled = %v, want false", got["jira_enabled"])
 	}
+	if got["konflux_ui_url"] != "" || got["konflux_namespace"] != "" {
+		t.Errorf("unset: konflux_ui_url = %v, konflux_namespace = %v, want both empty", got["konflux_ui_url"], got["konflux_namespace"])
+	}
 
 	srv.syncStatus.Track("jira", time.Minute)
+	srv.KonfluxUIURL, srv.KonfluxNamespace = "https://konflux.example", "art-quay-tenant"
 	getJSON(t, srv, "/api/v1/config", http.StatusOK, &got)
 	if got["jira_enabled"] != true {
 		t.Errorf("with a jira sync: jira_enabled = %v, want true", got["jira_enabled"])
+	}
+	if got["konflux_ui_url"] != "https://konflux.example" || got["konflux_namespace"] != "art-quay-tenant" {
+		t.Errorf("set: konflux_ui_url = %v, konflux_namespace = %v", got["konflux_ui_url"], got["konflux_namespace"])
 	}
 }
 
