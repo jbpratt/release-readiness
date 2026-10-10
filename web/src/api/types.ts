@@ -116,23 +116,30 @@ export interface JiraIssue {
 	qa_contact: string;
 }
 
-/** An upstream commit in one component of a build. */
+/** An upstream commit in, or missing from, one component of a build. */
 export interface BuildCommit {
 	component: string;
 	commit_sha: string;
 	commit_url: string;
 }
 
-/** A ticket with the selected STAGE build's commits whose message names it. */
+/** A ticket with the candidate's commits whose message names it. */
 export interface BuildTicket extends JiraIssue {
 	in_build: BuildCommit[];
+	/**
+	 * For a Target Version ticket no candidate commit names, the
+	 * default-branch commits naming it that the candidate lacks.
+	 */
+	not_in_build: BuildCommit[];
 }
 
-/** A release's tickets checked against its selected STAGE build. */
+/** A release's tickets checked against its candidate build. */
 export interface BuildTickets {
-	/** null when no STAGE build is selected; reason says why. */
-	build: { snapshot: string; completed_at: string } | null;
+	/** null when there is no candidate; reason says why ("shipped", ...). */
+	build: { snapshot: string; source: "staged" | "newest" } | null;
 	reason?: string;
+	/** The previous version whose candidate the .z tickets are new since. */
+	z_since?: string;
 	/** Build components whose commits were not read. */
 	not_compared: { component: string; reason: string }[];
 	tickets: BuildTicket[];

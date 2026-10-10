@@ -1,6 +1,7 @@
-// Package github finds the tickets a STAGE build carries by reading, through
-// the read-only GitHub REST API, the upstream commits each of its components
-// gained after leaving its repo's default branch.
+// Package github finds the tickets a candidate build carries, and those its
+// repos' default branches fixed that it lacks, by comparing, through the
+// read-only GitHub REST API, the upstream commit of each of its components
+// with its repo's default branch.
 package github
 
 import (
@@ -33,8 +34,10 @@ type Commit struct {
 	Message string
 }
 
-// Comparison is base...head with every page of its commits read.
+// Comparison is base...head with every page of its commits read. Status is
+// "ahead", "behind", "diverged" or "identical": how head relates to base.
 type Comparison struct {
+	Status       string
 	TotalCommits int
 	Commits      []Commit
 }
@@ -45,7 +48,8 @@ func (c *Client) Compare(ctx context.Context, owner, repo, base, head string) (*
 	var cmp Comparison
 	for page := 1; ; page++ {
 		var resp struct {
-			TotalCommits int `json:"total_commits"`
+			Status       string `json:"status"`
+			TotalCommits int    `json:"total_commits"`
 			Commits      []struct {
 				SHA     string `json:"sha"`
 				HTMLURL string `json:"html_url"`
@@ -59,7 +63,7 @@ func (c *Client) Compare(ctx context.Context, owner, repo, base, head string) (*
 			return nil, err
 		}
 		if page == 1 {
-			cmp.TotalCommits = resp.TotalCommits
+			cmp.Status, cmp.TotalCommits = resp.Status, resp.TotalCommits
 		}
 		for _, rc := range resp.Commits {
 			cmp.Commits = append(cmp.Commits, Commit{SHA: rc.SHA, HTMLURL: rc.HTMLURL, Message: rc.Commit.Message})

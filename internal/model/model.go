@@ -192,28 +192,55 @@ type SelectedBuildComponent struct {
 	Name, UpstreamRepo, UpstreamSHA string
 }
 
-// BuildTickets is a release's tickets with the commits of its selected STAGE
-// build that name each. Build is nil with Reason set when none is selected.
-type BuildTickets struct {
-	Build       *SelectedBuild `json:"build"`
-	Reason      string         `json:"reason,omitempty"`
-	NotCompared []NotCompared  `json:"not_compared"`
-	Tickets     []BuildTicket  `json:"tickets"`
+// TicketBuild is the build a version's tickets are checked against, its
+// candidate: Source "staged" is its selected STAGE build, "newest" the
+// stream's newest build. Since is the previous version of its X.Y when that
+// one is unshipped and has a candidate, whose commits are the bases the .z
+// tickets are found from, else "". Targets is set when the version has
+// Target Version tickets.
+type TicketBuild struct {
+	Snapshot   string            `json:"snapshot"`
+	Source     string            `json:"source"`
+	Since      string            `json:"-"`
+	Targets    bool              `json:"-"`
+	Components []TicketComponent `json:"-"`
 }
 
-// NotCompared is a selected build component whose commits were not read.
+// TicketComponent is one image of a ticket build with the upstream commit ART
+// built it from, both empty until ART resolves it, and BaseSHA, the upstream
+// commit of the component of the same name in Since's candidate.
+type TicketComponent struct {
+	Name, UpstreamRepo, UpstreamSHA, BaseSHA string
+}
+
+// BuildTickets is a release's tickets with the commits of its candidate build
+// that name each. Build is nil with Reason set when there is none. ZSince is
+// the build's Since when its commits were the base of at least one component.
+type BuildTickets struct {
+	Build       *TicketBuild  `json:"build"`
+	Reason      string        `json:"reason,omitempty"`
+	ZSince      string        `json:"z_since,omitempty"`
+	NotCompared []NotCompared `json:"not_compared"`
+	Tickets     []BuildTicket `json:"tickets"`
+}
+
+// NotCompared is a build component whose commits were not read.
 type NotCompared struct {
 	Component string `json:"component"`
 	Reason    string `json:"reason"`
 }
 
-// BuildTicket is a JIRA issue with the build commits whose message names it.
+// BuildTicket is a JIRA issue with the build commits whose message names it
+// and, for a Target Version ticket none names, the default-branch commits the
+// build lacks that name it.
 type BuildTicket struct {
 	JiraIssueRecord
-	InBuild []BuildCommit `json:"in_build"`
+	InBuild    []BuildCommit `json:"in_build"`
+	NotInBuild []BuildCommit `json:"not_in_build"`
 }
 
-// BuildCommit is an upstream commit in one component of a build.
+// BuildCommit is an upstream commit in, or missing from, one component of a
+// build.
 type BuildCommit struct {
 	Component string `json:"component"`
 	CommitSHA string `json:"commit_sha"`
@@ -248,14 +275,16 @@ type CandidateBuild struct {
 	Components []CandidateComponent `json:"components"`
 }
 
-// CandidateComponent is a build image with its ART build, both empty until
-// ART resolves it, and its CVE scan, null until the scan sync reads it.
+// CandidateComponent is a build image with its ART build and the upstream
+// commit ART built it from, all empty until ART resolves it, and its CVE scan,
+// null until the scan sync reads it.
 type CandidateComponent struct {
-	Name     string     `json:"name"`
-	Image    string     `json:"image"`
-	NVR      string     `json:"nvr"`
-	BuildURL string     `json:"build_url"`
-	Scan     *ImageScan `json:"scan"`
+	Name                      string     `json:"name"`
+	Image                     string     `json:"image"`
+	NVR                       string     `json:"nvr"`
+	BuildURL                  string     `json:"build_url"`
+	Scan                      *ImageScan `json:"scan"`
+	UpstreamRepo, UpstreamSHA string     `json:"-"`
 }
 
 // ImageScan is the CVE scan of an image by its build PipelineRun: State is
