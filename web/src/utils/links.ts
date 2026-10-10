@@ -3,22 +3,25 @@ export function jiraIssueUrl(key: string, baseUrl: string): string {
 	return `${baseUrl.replace(/\/+$/, "")}/browse/${key}`;
 }
 
-/**
- * GitHub commit page of an upstream build source, or null unless the repo is
- * on github.com and the sha is known.
- */
-export function upstreamCommitUrl(repo: string, sha: string): string | null {
-	const m = repo.match(/^https:\/\/github\.com\/([^/]+\/[^/]+?)(?:\.git)?\/*$/);
-	return m && sha ? `https://github.com/${m[1]}/commit/${sha}` : null;
+/** Build a JIRA issue search URL from a JQL query. */
+export function jiraSearchUrl(jql: string, baseUrl: string): string {
+	return `${baseUrl.replace(/\/+$/, "")}/issues/?jql=${encodeURIComponent(jql)}`;
 }
 
 /**
- * quay.io UI manifest page for a digest-pinned image reference,
- * e.g. `quay.io/ns/repo@sha256:abc` -> `https://quay.io/repository/ns/repo/manifest/sha256:abc`.
+ * Konflux UI page of an application, or of one of its Snapshots or Releases;
+ * null without a base URL, namespace or application.
  */
-export function quayManifestUrl(image: string): string | null {
-	const m = image.match(/^quay\.io\/([^@:]+)(?::[^@]*)?@(sha256:[0-9a-f]+)$/);
-	return m ? `https://quay.io/repository/${m[1]}/manifest/${m[2]}` : null;
+export function konfluxUrl(
+	base: string,
+	ns: string,
+	app: string,
+	kind?: "snapshots" | "releases",
+	name?: string,
+): string | null {
+	if (!base || !ns || !app) return null;
+	const url = `${base.replace(/\/+$/, "")}/ns/${ns}/applications/${app}`;
+	return kind && name ? `${url}/${kind}/${name}` : url;
 }
 
 /**
@@ -38,15 +41,6 @@ export function formatReleaseName(name: string): string {
 		return `${label} v${version}`;
 	}
 	return name;
-}
-
-/** The X.Y of a release version name: `quay-v3.18.1` -> `3.18`. */
-export function minorVersion(name: string): string {
-	return name
-		.replace(/^[a-z]+-v/, "")
-		.split(".")
-		.slice(0, 2)
-		.join(".");
 }
 
 /** ART pipeline health view for the Quay tenant (needs an artc2023 browser login). */
