@@ -93,6 +93,21 @@ func (q *Queries) ListSuccessfulStageReleases(ctx context.Context, arg ListSucce
 	return items, nil
 }
 
+const streamStaged = `-- name: StreamStaged :one
+SELECT CAST(EXISTS (
+    SELECT 1 FROM staged_snapshots
+    WHERE env = 'stage' AND assembly LIKE CAST(?1 AS TEXT) || '.%'
+) AS BOOLEAN) AS staged
+`
+
+// The '.' after stream X.Y keeps 3.1 from matching assembly 3.18.1.
+func (q *Queries) StreamStaged(ctx context.Context, stream string) (bool, error) {
+	row := q.db.QueryRowContext(ctx, streamStaged, stream)
+	var staged bool
+	err := row.Scan(&staged)
+	return staged, err
+}
+
 const upsertStagedSnapshot = `-- name: UpsertStagedSnapshot :exec
 INSERT INTO staged_snapshots (name, assembly, kind, env, created_at)
 VALUES (?, ?, ?, ?, ?)
