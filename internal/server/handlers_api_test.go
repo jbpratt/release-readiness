@@ -744,6 +744,7 @@ func TestGetIssueSummariesBatch(t *testing.T) {
 		{Key: "Q-1", Summary: "bug1", Status: "Open", Priority: "Major", FixVersion: "3.16.3", IssueType: "Bug"},
 		{Key: "Q-2", Summary: "cve1", Status: "Closed", Priority: "Critical", FixVersion: "3.16.3", IssueType: "Vulnerability"},
 		{Key: "Q-3", Summary: "task1", Status: "Verified", Priority: "Minor", FixVersion: "3.17.0", IssueType: "Story"},
+		{Key: "Q-4", Summary: "bug2", Status: "Release Pending", Priority: "Major", FixVersion: "3.17.0", IssueType: "Bug"},
 	}
 	for _, issue := range issues {
 		if err := srv.db.UpsertJiraIssue(ctx, &issue); err != nil {
@@ -771,8 +772,17 @@ func TestGetIssueSummariesBatch(t *testing.T) {
 	if s170 == nil {
 		t.Fatal("3.17.0 summary: got nil")
 	}
-	if s170.Total != 1 || s170.Verified != 1 {
-		t.Errorf("3.17.0: got total=%d verified=%d, want 1/1", s170.Total, s170.Verified)
+	// Release Pending counts as verified, in the batch and for one version.
+	want := model.IssueSummary{Total: 2, Verified: 2}
+	if *s170 != want {
+		t.Errorf("3.17.0: got %+v, want %+v", *s170, want)
+	}
+	one, err := srv.db.GetIssueSummary(ctx, "3.17.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if *one != want {
+		t.Errorf("GetIssueSummary 3.17.0: got %+v, want %+v", *one, want)
 	}
 
 	if summaries["nonexistent"] != nil {
