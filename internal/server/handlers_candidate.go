@@ -42,38 +42,23 @@ func (s *Server) handleGetCandidate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVersion) (*model.ReleaseCandidate, error) {
-	app := release.KonfluxApplication
-	resp := &model.ReleaseCandidate{CI: model.CandidateCI{Jobs: []model.CIJob{}}}
-	m := quayVersion.FindStringSubmatch(release.Name)
-	switch {
-	case release.Released || s.catalogShipped(release.Name):
-		resp.Shipped = true
-		return resp, nil
-	case app == "":
-		resp.Reason = "no Konflux application"
-		return resp, nil
-	case m == nil:
-		resp.Reason = "not a concrete quay-vX.Y.Z version"
-		return resp, nil
-	}
-	newest, err := s.db.NewestStreamBuild(ctx, app)
+	c, err := s.selectCandidate(ctx, release)
 	if err != nil {
 		return nil, err
 	}
-	if resp.Candidate, err = s.candidateBuild(ctx, release, newest); err != nil {
-		return nil, err
+	resp := &model.ReleaseCandidate{Shipped: c.shipped, Candidate: c.build, Reason: c.reason, CI: model.CandidateCI{Jobs: []model.CIJob{}}}
+	if c.assembly == "" {
+		return resp, nil
 	}
-	if resp.Candidate == nil {
-		resp.Reason = "no build of " + app
-	}
-	if newest != nil {
+	app := release.KonfluxApplication
+	if c.newest != nil {
 		releases, err := s.db.StageReleases(ctx, release, s.StageReleasePlanPattern)
 		if err != nil {
 			return nil, err
 		}
-		resp.Stage = stageFlag(app, newest, releases)
+		resp.Stage = stageFlag(app, c.newest, releases)
 	}
-	if resp.Prod, err = s.db.LatestProdRelease(ctx, m[1]); err != nil {
+	if resp.Prod, err = s.db.LatestProdRelease(ctx, c.assembly); err != nil {
 		return nil, err
 	}
 	if resp.CI, err = s.candidateCI(ctx, app, resp.Candidate); err != nil {
@@ -82,8 +67,77 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 	return resp, nil
 }
 
+// candidate is a version's build up for release. A version that shipped, or
+// that is not one ART builds, has no assembly and nothing more to decide.
+type candidate struct {
+	shipped bool
+	// reason says why the version has no build.
+	reason string
+	// build is the version's selected STAGE build, else newest, the
+	// stream's newest build.
+	build    *model.CandidateBuild
+	newest   *model.ReleaseSnapshot
+	assembly string
+}
+
+// selectCandidate selects the version's build up for release, for its page
+// and the image scan sync alike.
+func (s *Server) selectCandidate(ctx context.Context, release *model.ReleaseVersion) (*candidate, error) {
+	app := release.KonfluxApplication
+	m := quayVersion.FindStringSubmatch(release.Name)
+	switch {
+	case release.Released || s.catalogShipped(release.Name):
+		return &candidate{shipped: true}, nil
+	case app == "":
+		return &candidate{reason: "no Konflux application"}, nil
+	case m == nil:
+		return &candidate{reason: "not a concrete quay-vX.Y.Z version"}, nil
+	}
+	newest, err := s.db.NewestStreamBuild(ctx, app)
+	if err != nil {
+		return nil, err
+	}
+	c := &candidate{newest: newest, assembly: m[1]}
+	if c.build, err = s.candidateBuild(ctx, release, newest); err != nil {
+		return nil, err
+	}
+	if c.build == nil {
+		c.reason = "no build of " + app
+	}
+	return c, nil
+}
+
+// CandidateDigests returns the image digests of the build up for release of
+// every version that is not archived; released versions select none.
+func (s *Server) CandidateDigests(ctx context.Context) ([]string, error) {
+	versions, err := s.db.ListAllReleaseVersions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var digests []string
+	for _, v := range versions {
+		if v.Archived {
+			continue
+		}
+		c, err := s.selectCandidate(ctx, &v)
+		if err != nil {
+			return nil, err
+		}
+		if c.build == nil {
+			continue
+		}
+		for _, cc := range c.build.Components {
+			if d := imageDigest(cc.Image); d != "" && !slices.Contains(digests, d) {
+				digests = append(digests, d)
+			}
+		}
+	}
+	return digests, nil
+}
+
 // candidateBuild returns the version's selected STAGE build, else the
-// stream's newest build, or nil when there is neither.
+// stream's newest build, or nil when there is neither, with its images' ART
+// builds and scans.
 func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersion, newest *model.ReleaseSnapshot) (*model.CandidateBuild, error) {
 	staged, _, err := s.db.SelectedStageBuild(ctx, release, s.StageReleasePlanPattern)
 	if err != nil {
@@ -109,11 +163,18 @@ func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersi
 	if err != nil {
 		return nil, err
 	}
+	scans, err := s.db.ImageScans(ctx, digests)
+	if err != nil {
+		return nil, err
+	}
 	c.Components = make([]model.CandidateComponent, len(images))
 	for i, img := range images {
 		c.Components[i] = model.CandidateComponent{Name: img.Name, Image: img.Image}
 		if b, ok := builds[digests[i]]; ok {
 			c.Components[i].NVR, c.Components[i].BuildURL = b.NVR, artbuild.PageURL(s.artBaseURL, b.NVR, b.RecordID)
+		}
+		if sc, ok := scans[digests[i]]; ok {
+			c.Components[i].Scan = &model.ImageScan{State: sc.State, Counts: sc.Counts, URL: sc.DetailURL}
 		}
 	}
 	return c, nil
