@@ -565,14 +565,20 @@ func TestGetStaged(t *testing.T) {
 }
 
 // The ticket list is the release's Target Version tickets plus the .z stream
-// tickets a commit of its selected STAGE build names, each listed once.
+// tickets a commit of its candidate names, since the previous version's
+// candidate when that one is unshipped, each listed once.
 func TestGetBuildTickets(t *testing.T) {
 	srv := setupTestServer(t)
 	ctx := t.Context()
 	srv.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
-	t0 := time.Date(2026, 10, 7, 20, 0, 0, 0, time.UTC)
-	for _, v := range []string{"quay-v3.18.1", "quay-v3.18.2"} {
-		if err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{Name: v, KonfluxApplication: "quay-3-18"}); err != nil {
+	for _, v := range []model.ReleaseVersion{
+		{Name: "quay-v3.18.0", Archived: true},
+		{Name: "quay-v3.18.1"},
+		{Name: "quay-v3.18.2"},
+		{Name: "quay-v3.18.3"},
+	} {
+		v.KonfluxApplication = "quay-3-18"
+		if err := srv.db.UpsertReleaseVersion(ctx, &v); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -580,130 +586,171 @@ func TestGetBuildTickets(t *testing.T) {
 		{Key: "PROJQUAY-1", FixVersion: "quay-v3.18.1"},
 		{Key: "PROJQUAY-1", FixVersion: "quay-v3.18.z"},
 		{Key: "PROJQUAY-2", FixVersion: "quay-v3.18.1"},
-		{Key: "PROJQUAY-3", FixVersion: "quay-v3.18.z"},
+		{Key: "PROJQUAY-3", FixVersion: "quay-v3.18.1"},
 		{Key: "PROJQUAY-4", FixVersion: "quay-v3.18.z"},
-		{Key: "PROJQUAY-5", FixVersion: "quay-v3.18.2"},
+		{Key: "PROJQUAY-5", FixVersion: "quay-v3.18.z"},
+		{Key: "PROJQUAY-6", FixVersion: "quay-v3.18.z"},
+		{Key: "PROJQUAY-7", FixVersion: "quay-v3.18.0"},
+		{Key: "PROJQUAY-8", FixVersion: "quay-v3.18.z"},
 	} {
 		if err := srv.db.UpsertJiraIssue(ctx, &i); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// 3.18.1's STAGE build: quay and clair from GitHub commits, builder unresolved.
-	digest := func(c byte) string { return "sha256:" + strings.Repeat(string(c), 64) }
-	if err := srv.db.UpsertStagedSnapshot(ctx, "stage-image", "3.18.1", "image", "stage", t0); err != nil {
+	// 3.18.1's STAGE build, and the stream's newest build: a newer quay
+	// beside the same clair.
+	seedImages(t, srv, "stage-image", "2026-10-07T20:02:43Z", map[string]string{"quay-3-18-quay-quay": testImage("stage/quay"), "quay-3-18-quay-clair": testImage("clair")})
+	if err := srv.db.UpsertStagedSnapshot(ctx, "stage-image", "3.18.1", "image", "stage", mustTime(t, "2026-10-07T20:02:43Z")); err != nil {
 		t.Fatal(err)
 	}
-	id, err := srv.db.CreateSnapshot(ctx, "quay-3-18", "stage-image", t0)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for name, d := range map[string]byte{"quay-3-18-quay-quay": 'a', "quay-3-18-quay-clair": 'c', "quay-3-18-quay-builder": 'b'} {
-		if err := srv.db.CreateSnapshotComponent(ctx, id, name, "quay.io/x/"+name+"@"+digest(d)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	completed := t0.Add(10 * time.Minute)
-	if err := srv.db.UpsertKonfluxRelease(ctx, &model.KonfluxRelease{
-		Name: "stage-release", Application: "quay-3-18", Snapshot: "stage-image", ReleasePlan: "quay-advisory-stage-3-18",
-		ReleasedStatus: "True", ReleasedReason: "Succeeded", CreatedAt: t0, CompletionTime: &completed,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	quaySHA, clairSHA := strings.Repeat("1", 40), strings.Repeat("2", 40)
+	seedKonfluxRelease(t, srv, "stage-release", "stage-image", "quay-advisory-stage-3-18", "Succeeded", "2026-10-07T20:02:43Z", "2026-10-07T20:14:57Z")
+	seedImages(t, srv, "quay-3-18-20261010-013713-000", "2026-10-10T01:48:34Z", map[string]string{"quay-3-18-quay-quay": testImage("new/quay"), "quay-3-18-quay-clair": testImage("clair")})
+	quay1, quay2, clair := strings.Repeat("1", 40), strings.Repeat("2", 40), strings.Repeat("c", 40)
 	for _, b := range []artbuild.Build{
-		{Digest: digest('a'), State: artbuild.StateResolved, UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: quaySHA, CheckedAt: t0},
-		{Digest: digest('c'), State: artbuild.StateResolved, UpstreamRepo: "https://github.com/quay/clair", UpstreamSHA: clairSHA, CheckedAt: t0},
+		{Digest: testDigest("stage/quay"), UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: quay1},
+		{Digest: testDigest("new/quay"), UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: quay2},
+		{Digest: testDigest("clair"), UpstreamRepo: "https://github.com/quay/clair", UpstreamSHA: clair},
 	} {
+		b.State, b.CheckedAt = artbuild.StateResolved, time.Now()
 		if err := srv.db.UpsertArtBuild(ctx, b); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	// GitHub returns quay's commits and fails clair's compare.
+	// quay's default branch has commits 3, 4, 6 and 7, which 3.18.1's
+	// build lacks; the newest build adds commit 5 to it and merges in
+	// commit 6.
 	commit := func(n int) model.BuildCommit {
 		sha := fmt.Sprintf("%040x", n)
 		return model.BuildCommit{Component: "quay-3-18-quay-quay", CommitSHA: sha, CommitURL: "https://github.com/quay/quay/commit/" + sha}
 	}
+	messages := map[int]string{1: "PROJQUAY-1: fix", 2: "PROJQUAY-4: backport", 3: "PROJQUAY-2: fix", 4: "PROJQUAY-1: follow-up", 5: "PROJQUAY-5: backport", 6: "PROJQUAY-8: fix", 7: "PROJQUAY-8: follow-up"}
+	compares := map[string][]int{
+		"/repos/quay/quay/compare/HEAD..." + quay1:          {1, 2},
+		"/repos/quay/quay/compare/" + quay1 + "...HEAD":     {3, 4, 6, 7},
+		"/repos/quay/quay/compare/HEAD..." + quay2:          {1, 2, 5},
+		"/repos/quay/quay/compare/" + quay1 + "..." + quay2: {5, 6},
+		"/repos/quay/quay/compare/" + quay2 + "...HEAD":     {3, 4, 7},
+		"/repos/quay/clair/compare/HEAD..." + clair:         {},
+		"/repos/quay/clair/compare/" + clair + "...HEAD":    {},
+	}
+	var requested []string
 	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/repos/quay/quay/compare/HEAD..."+quaySHA {
-			w.WriteHeader(http.StatusBadGateway)
+		requested = append(requested, r.URL.Path)
+		ns, ok := compares[r.URL.Path]
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		var commits []map[string]any
-		for i, msg := range []string{"PROJQUAY-1: fix", "PROJQUAY-3: backport"} {
-			c := commit(i + 1)
-			commits = append(commits, map[string]any{"sha": c.CommitSHA, "html_url": c.CommitURL, "commit": map[string]string{"message": msg}})
+		commits := []map[string]any{}
+		for _, n := range ns {
+			c := commit(n)
+			commits = append(commits, map[string]any{"sha": c.CommitSHA, "html_url": c.CommitURL, "commit": map[string]string{"message": messages[n]}})
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"total_commits": len(commits), "commits": commits})
+		_ = json.NewEncoder(w).Encode(map[string]any{"status": "ahead", "total_commits": len(commits), "commits": commits})
 	}))
 	defer gh.Close()
-	srv.Scanner = github.NewScanner(github.NewClient(gh.URL, "", gh.Client()), srv.db, srv.StageReleasePlanPattern, slog.Default())
+	srv.Scanner = github.NewScanner(github.NewClient(gh.URL, "", gh.Client()), srv.TicketBuilds, slog.Default())
+	srv.Scanner.ScanOnce(ctx)
+	// 3.18.2 has no STAGE build: its newest build's quay is compared, and
+	// since 3.18.1's, but not with the default branch, as it has no Target
+	// Version tickets. The archived 3.18.0 is not scanned.
+	slices.Sort(requested)
+	wantRequested := []string{
+		"/repos/quay/clair/compare/" + clair + "...HEAD",
+		"/repos/quay/clair/compare/HEAD..." + clair,
+		"/repos/quay/quay/compare/" + quay1 + "...HEAD",
+		"/repos/quay/quay/compare/" + quay1 + "..." + quay2,
+		"/repos/quay/quay/compare/HEAD..." + quay1,
+		"/repos/quay/quay/compare/HEAD..." + quay2,
+	}
+	slices.Sort(wantRequested)
+	if !slices.Equal(requested, wantRequested) {
+		t.Errorf("compares = %v, want %v", requested, wantRequested)
+	}
+	// Given a Target Version ticket, 3.18.2's build is compared with the
+	// default branch on the next pass.
+	if err := srv.db.UpsertJiraIssue(ctx, &model.JiraIssueRecord{Key: "PROJQUAY-9", FixVersion: "quay-v3.18.2"}); err != nil {
+		t.Fatal(err)
+	}
 	srv.Scanner.ScanOnce(ctx)
 
-	var got model.BuildTickets
-	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/build-tickets", http.StatusOK, &got)
-	if got.Build == nil || got.Build.SnapshotName != "stage-image" || !got.Build.CompletedAt.Equal(completed) || got.Reason != "" {
-		t.Errorf("build = %+v, reason %q; want stage-image completed at %v", got.Build, got.Reason, completed)
+	type row struct {
+		key, fixVersion     string
+		inBuild, notInBuild []model.BuildCommit
 	}
-	wantNotCompared := []model.NotCompared{
-		{Component: "quay-3-18-quay-builder", Reason: github.ReasonNoProvenance},
-		{Component: "quay-3-18-quay-clair", Reason: github.ReasonAPIError},
-	}
-	if !slices.Equal(got.NotCompared, wantNotCompared) {
-		t.Errorf("not_compared = %+v, want %+v", got.NotCompared, wantNotCompared)
-	}
-	// PROJQUAY-1 is listed once, as 3.18.1's; PROJQUAY-4 is a .z ticket no
-	// commit names.
-	want := []struct {
-		key, fixVersion string
-		inBuild         []model.BuildCommit
-	}{
-		{"PROJQUAY-1", "quay-v3.18.1", []model.BuildCommit{commit(1)}},
-		{"PROJQUAY-2", "quay-v3.18.1", nil},
-		{"PROJQUAY-3", "quay-v3.18.z", []model.BuildCommit{commit(2)}},
-	}
-	if len(got.Tickets) != len(want) {
-		t.Fatalf("tickets = %+v, want %d", got.Tickets, len(want))
-	}
-	for i, w := range want {
-		if g := got.Tickets[i]; g.Key != w.key || g.FixVersion != w.fixVersion || !slices.Equal(g.InBuild, w.inBuild) {
-			t.Errorf("tickets[%d] = %s %s %+v, want %s %s %+v", i, g.Key, g.FixVersion, g.InBuild, w.key, w.fixVersion, w.inBuild)
+	check := func(version string, build *model.TicketBuild, zSince string, want []row) {
+		t.Helper()
+		var got model.BuildTickets
+		getJSON(t, srv, "/api/v1/releases/"+version+"/build-tickets", http.StatusOK, &got)
+		if !reflect.DeepEqual(got.Build, build) || got.Reason != "" || got.ZSince != zSince || len(got.NotCompared) != 0 {
+			t.Errorf("%s: build %+v, reason %q, z_since %q, not compared %+v; want %+v, z_since %q", version, got.Build, got.Reason, got.ZSince, got.NotCompared, build, zSince)
+		}
+		if len(got.Tickets) != len(want) {
+			t.Fatalf("%s: tickets = %+v, want %d", version, got.Tickets, len(want))
+		}
+		for i, w := range want {
+			if g := got.Tickets[i]; g.Key != w.key || g.FixVersion != w.fixVersion || !slices.Equal(g.InBuild, w.inBuild) || !slices.Equal(g.NotInBuild, w.notInBuild) {
+				t.Errorf("%s: tickets[%d] = %s %s %+v %+v, want %+v", version, i, g.Key, g.FixVersion, g.InBuild, g.NotInBuild, w)
+			}
 		}
 	}
+	staged := &model.TicketBuild{Snapshot: "stage-image", Source: "staged"}
+	newest := &model.TicketBuild{Snapshot: "quay-3-18-20261010-013713-000", Source: "newest"}
+	// No version before 3.18.1 is unshipped, so its .z tickets are those its
+	// build's commits name. PROJQUAY-1 is listed once, as 3.18.1's, and in
+	// the build despite the default branch's follow-up; PROJQUAY-2 is fixed
+	// only on the default branch; PROJQUAY-6 is a .z ticket no commit names.
+	check("quay-v3.18.1", staged, "", []row{
+		{"PROJQUAY-1", "quay-v3.18.1", []model.BuildCommit{commit(1)}, nil},
+		{"PROJQUAY-2", "quay-v3.18.1", nil, []model.BuildCommit{commit(3)}},
+		{"PROJQUAY-3", "quay-v3.18.1", nil, nil},
+		{"PROJQUAY-4", "quay-v3.18.z", []model.BuildCommit{commit(2)}, nil},
+	})
+	// 3.18.2's .z tickets are only those named since 3.18.1's build, and
+	// 3.18.3's since 3.18.2's, the same build. PROJQUAY-8 came with the
+	// merge, so no In build commit names it, but a .z ticket is never red,
+	// even when a default-branch commit the build lacks names it.
+	check("quay-v3.18.2", newest, "quay-v3.18.1", []row{
+		{"PROJQUAY-9", "quay-v3.18.2", nil, nil},
+		{"PROJQUAY-5", "quay-v3.18.z", []model.BuildCommit{commit(5)}, nil},
+		{"PROJQUAY-8", "quay-v3.18.z", nil, nil},
+	})
+	check("quay-v3.18.3", newest, "quay-v3.18.2", nil)
 
-	var none struct {
+	var raw struct {
 		Build       json.RawMessage `json:"build"`
 		Reason      string          `json:"reason"`
 		NotCompared json.RawMessage `json:"not_compared"`
 		Tickets     []struct {
-			Key     string          `json:"key"`
-			InBuild json.RawMessage `json:"in_build"`
+			Key        string          `json:"key"`
+			InBuild    json.RawMessage `json:"in_build"`
+			NotInBuild json.RawMessage `json:"not_in_build"`
 		} `json:"tickets"`
 	}
-	getJSON(t, srv, "/api/v1/releases/quay-v3.18.2/build-tickets", http.StatusOK, &none)
-	if string(none.Build) != "null" || none.Reason != "no successful stage release of a staged image snapshot" || string(none.NotCompared) != "[]" ||
-		len(none.Tickets) != 1 || none.Tickets[0].Key != "PROJQUAY-5" || string(none.Tickets[0].InBuild) != "[]" {
-		t.Errorf("without a build: got %+v", none)
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/build-tickets", http.StatusOK, &raw)
+	if string(raw.Build) != "null" || raw.Reason != "archived" || len(raw.Tickets) != 1 {
+		t.Errorf("archived: got %+v", raw)
 	}
 	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/build-tickets", http.StatusNotFound, nil)
 
-	// Once 3.18.1 is released, the scanner drops its compares and never makes
-	// them again.
+	// Once 3.18.1 ships, it has no build, and 3.18.2's .z tickets are again
+	// those its build's commits name.
 	if err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18", Released: true}); err != nil {
 		t.Fatal(err)
 	}
-	srv.Scanner.ScanOnce(ctx)
-	var released model.BuildTickets
-	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/build-tickets", http.StatusOK, &released)
-	wantNotCompared = []model.NotCompared{
-		{Component: "quay-3-18-quay-builder", Reason: github.ReasonNoProvenance},
-		{Component: "quay-3-18-quay-clair", Reason: "version is released or archived"},
-		{Component: "quay-3-18-quay-quay", Reason: "version is released or archived"},
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/build-tickets", http.StatusOK, &raw)
+	if string(raw.Build) != "null" || raw.Reason != "shipped" || string(raw.NotCompared) != "[]" || len(raw.Tickets) != 3 ||
+		string(raw.Tickets[1].InBuild) != "[]" || string(raw.Tickets[1].NotInBuild) != "[]" {
+		t.Errorf("shipped: got %+v", raw)
 	}
-	if !slices.Equal(released.NotCompared, wantNotCompared) {
-		t.Errorf("released not_compared = %+v, want %+v", released.NotCompared, wantNotCompared)
-	}
+	check("quay-v3.18.2", newest, "", []row{
+		{"PROJQUAY-9", "quay-v3.18.2", nil, nil},
+		{"PROJQUAY-1", "quay-v3.18.z", []model.BuildCommit{commit(1)}, nil},
+		{"PROJQUAY-4", "quay-v3.18.z", []model.BuildCommit{commit(2)}, nil},
+		{"PROJQUAY-5", "quay-v3.18.z", []model.BuildCommit{commit(5)}, nil},
+	})
 }
 
 func TestReleasesOverview(t *testing.T) {

@@ -321,9 +321,11 @@ func (s *Server) handleGetStaged(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetBuildTickets lists the release's Target Version tickets, then the
-// tickets of its .z stream that a commit of its selected STAGE build names,
-// each with the build commits naming it. A ticket under both Target Versions
-// is listed once, as the release's own.
+// tickets of its .z stream that a commit of its candidate new since the
+// previous version's candidate names, each with the candidate commits naming
+// it and, for a Target Version ticket none names, the default-branch commits
+// naming it that the candidate lacks. A ticket under both Target Versions is
+// listed once, as the release's own.
 func (s *Server) handleGetBuildTickets(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	version := r.PathValue("version")
@@ -332,21 +334,23 @@ func (s *Server) handleGetBuildTickets(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
 		return
 	}
-	build, reason, err := s.db.SelectedStageBuild(ctx, release, s.StageReleasePlanPattern)
+	versions, err := s.db.ListAllReleaseVersions(ctx)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	build, reason, err := s.ticketBuild(ctx, release, versions)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
 	resp := model.BuildTickets{Build: build, Reason: reason, NotCompared: []model.NotCompared{}, Tickets: []model.BuildTicket{}}
-	var found map[string][]model.BuildCommit
+	var e github.Evidence
 	if build != nil {
-		found, resp.NotCompared = s.Scanner.Tickets(build)
-		// The scanner skips released and archived versions, so "not scanned
-		// yet" would never change for them.
-		for i, c := range resp.NotCompared {
-			if c.Reason == github.ReasonNotScanned && (release.Released || release.Archived) {
-				resp.NotCompared[i].Reason = "version is released or archived"
-			}
+		e = s.Scanner.Tickets(build)
+		resp.NotCompared = e.NotCompared
+		if e.ZSince {
+			resp.ZSince = build.Since
 		}
 	}
 	issues, err := s.db.ListJiraIssues(ctx, release.Name)
@@ -362,19 +366,113 @@ func (s *Server) handleGetBuildTickets(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, i := range stream {
 			listed := slices.ContainsFunc(issues, func(c model.JiraIssueRecord) bool { return c.Key == i.Key })
-			if _, ok := found[i.Key]; ok && !listed {
+			if e.Z[i.Key] && !listed {
 				issues = append(issues, i)
 			}
 		}
 	}
 	for _, i := range issues {
-		inBuild := found[i.Key]
-		if inBuild == nil {
-			inBuild = []model.BuildCommit{}
+		t := model.BuildTicket{JiraIssueRecord: i, InBuild: e.InBuild[i.Key], NotInBuild: []model.BuildCommit{}}
+		if t.InBuild == nil {
+			t.InBuild = []model.BuildCommit{}
 		}
-		resp.Tickets = append(resp.Tickets, model.BuildTicket{JiraIssueRecord: i, InBuild: inBuild})
+		// A .z ticket is listed only because a candidate commit names it.
+		if missing, ok := e.NotInBuild[i.Key]; ok && i.FixVersion == release.Name {
+			t.NotInBuild = missing
+		}
+		resp.Tickets = append(resp.Tickets, t)
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// TicketBuilds returns the build each version's tickets are checked against,
+// for the versions that have one.
+func (s *Server) TicketBuilds(ctx context.Context) ([]model.TicketBuild, error) {
+	versions, err := s.db.ListAllReleaseVersions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var builds []model.TicketBuild
+	for i := range versions {
+		b, _, err := s.ticketBuild(ctx, &versions[i], versions)
+		if err != nil {
+			return nil, err
+		}
+		if b != nil {
+			builds = append(builds, *b)
+		}
+	}
+	return builds, nil
+}
+
+// ticketBuild returns release's candidate as its tickets are checked against
+// it, or nil and the reason there is none: "shipped", "archived" or the
+// candidate's. When the previous version is unshipped and has a candidate,
+// each component's base is the upstream commit of the component of the same
+// name in that candidate.
+func (s *Server) ticketBuild(ctx context.Context, release *model.ReleaseVersion, versions []model.ReleaseVersion) (*model.TicketBuild, string, error) {
+	c, err := s.selectCandidate(ctx, release)
+	switch {
+	case err != nil:
+		return nil, "", err
+	case c.shipped:
+		return nil, "shipped", nil
+	case release.Archived:
+		return nil, "archived", nil
+	case c.build == nil:
+		return nil, c.reason, nil
+	}
+	issues, err := s.db.ListJiraIssues(ctx, release.Name)
+	if err != nil {
+		return nil, "", err
+	}
+	b := &model.TicketBuild{Snapshot: c.build.Snapshot, Source: c.build.Source, Targets: len(issues) > 0}
+	for _, cc := range c.build.Components {
+		b.Components = append(b.Components, model.TicketComponent{Name: cc.Name, UpstreamRepo: cc.UpstreamRepo, UpstreamSHA: cc.UpstreamSHA})
+	}
+	prev := previousVersion(release, versions)
+	if prev == nil {
+		return b, "", nil
+	}
+	pc, err := s.selectCandidate(ctx, prev)
+	if err != nil || pc.build == nil {
+		return b, "", err
+	}
+	b.Since = prev.Name
+	for i, tc := range b.Components {
+		if j := slices.IndexFunc(pc.build.Components, func(p model.CandidateComponent) bool { return p.Name == tc.Name }); j >= 0 {
+			b.Components[i].BaseSHA = pc.build.Components[j].UpstreamSHA
+		}
+	}
+	return b, "", nil
+}
+
+// previousVersion returns the version of release's X.Y with the highest lower
+// Z that is not archived, or nil.
+func previousVersion(release *model.ReleaseVersion, versions []model.ReleaseVersion) *model.ReleaseVersion {
+	xy, z, ok := splitZ(release.Name)
+	if !ok {
+		return nil
+	}
+	var prev *model.ReleaseVersion
+	best := -1
+	for i, v := range versions {
+		if vxy, vz, ok := splitZ(v.Name); ok && !v.Archived && vxy == xy && vz < z && vz > best {
+			prev, best = &versions[i], vz
+		}
+	}
+	return prev
+}
+
+// splitZ returns the X.Y and the Z of a quay-vX.Y.Z version.
+func splitZ(name string) (xy string, z int, ok bool) {
+	m := quayVersion.FindStringSubmatch(name)
+	if m == nil {
+		return "", 0, false
+	}
+	i := strings.LastIndexByte(m[1], '.')
+	z, err := strconv.Atoi(m[1][i+1:])
+	return m[1][:i], z, err == nil
 }
 
 // componentSet counts the release's newest image per component across its
