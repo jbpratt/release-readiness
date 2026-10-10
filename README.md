@@ -30,7 +30,7 @@ Discovers active releases by querying for JIRA issues with the `-area/release` c
 
 ### Prow sync (default: every 15m, only when jobs are configured)
 
-Lists the runs of each `-prow-jobs` periodic in the public `test-platform-results-public` GCS bucket and stores each run's state, Prow link and, once the run has finished, the images its `tested-images.json` names. A job maps to a Konflux application, so every z-stream of a minor (`quay-v3.18.1`, `quay-v3.18.2`) shows the same runs. The deployment ingests the four 3.18 install periodics (AWS ODF, AWS S3, Azure Blob, GCP GCS) whose `quay-gather` step publishes `tested-images.json`.
+Lists the runs of each `-prow-jobs` periodic in the public `test-platform-results-public` GCS bucket and stores each run's state, Prow link and, once the run has finished, the images its `tested-images.json` names. A job maps to a Konflux application, so every z-stream of a minor (`quay-v3.18.1`, `quay-v3.18.2`) shows the same runs. The deployment ingests the install periodics whose `quay-gather` step publishes `tested-images.json`: for 3.18, AWS (ODF, S3, S3 FIPS, arm64, OCP 4.14, OCP 5.0), Azure Blob, GCP GCS and s390x libvirt; for 3.17, AWS S3.
 
 A run counts as testing a Snapshot component only on an exact (role, manifest digest) match: `quay-X-Y-quay-{quay,clair,builder,builder-qemu,operator,operator-bundle}` against the matching role, and `fbc-quay-X-Y-quay-operator` against the catalog. `/api/v1/releases/{version}/snapshots/{name}/prow-runs` returns those runs per component; `/api/v1/releases/{version}/prow-runs` pages through the application's runs (`limit`, `offset`, `unlinked=true` for runs matching no Snapshot image).
 
