@@ -2,6 +2,8 @@ package db
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"time"
 
 	"github.com/quay/release-readiness/internal/db/sqlc"
@@ -105,6 +107,19 @@ func (d *DB) ListReleaseSnapshots(ctx context.Context, konfluxApp string, apps [
 		return nil, err
 	}
 	return snapshots, nil
+}
+
+// NewestStreamBuild returns the newest Snapshot of application that ART
+// built from its stream, as GetReleaseSnapshot does, or nil when there is none.
+func (d *DB) NewestStreamBuild(ctx context.Context, application string) (*model.ReleaseSnapshot, error) {
+	name, err := d.queries().NewestStreamSnapshot(ctx, application)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return d.GetReleaseSnapshot(ctx, name)
 }
 
 // GetReleaseSnapshot returns a stored Snapshot with its component images and
