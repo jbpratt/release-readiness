@@ -1,68 +1,3 @@
-export interface SnapshotImage {
-	name: string;
-	image: string;
-	/** null until the image is found in ART build history. */
-	art: ArtBuild | null;
-	/** A newer ART build still running from another upstream commit. */
-	pending_art_build: PendingArtBuild | null;
-}
-
-export interface PendingArtBuild {
-	build_url: string;
-	upstream_sha: string;
-	started_at: string;
-}
-
-export interface ArtBuild {
-	nvr: string;
-	build_url: string;
-	upstream_repo: string;
-	upstream_sha: string;
-}
-
-/** One ART image build; component is its NVR name. */
-export interface BuildAttempt {
-	component: string;
-	/** "success", "pending", or a failure such as "build_error". */
-	outcome: string;
-	started_at: string;
-	build_url: string;
-}
-
-/** A release's ART image builds started in the span ART history was read without a gap. */
-export interface BuildAttempts {
-	/** null when the stream's ART history was never read. */
-	covered_from: string | null;
-	attempts: BuildAttempt[];
-}
-
-export interface ReleaseSnapshot {
-	name: string;
-	created_at: string;
-	component_count: number;
-	/** A Konflux Release names this Snapshot, but it is no longer stored. */
-	missing?: boolean;
-	/** Set in lists on a Snapshot ART built for an assembly: "image" or "fbc". */
-	art_kind?: string;
-	releases?: KonfluxRelease[];
-	components?: SnapshotImage[];
-	/** Set on a Quay snapshot detail carrying the quay-operator bundle. */
-	fbc_catalog?: FBCCatalog;
-}
-
-/** Whether the newest quay-operator FBC catalog references the snapshot's bundle. */
-export interface FBCCatalog {
-	status: "current" | "behind" | "unknown";
-	catalog_snapshot: string;
-	catalog_bundle_image: string;
-	snapshot_bundle_image: string;
-}
-
-export interface ReleaseSnapshotPage {
-	snapshots: ReleaseSnapshot[];
-	has_more: boolean;
-}
-
 export interface KonfluxRelease {
 	name: string;
 	release_plan: string;
@@ -76,25 +11,71 @@ export interface KonfluxRelease {
 	completion_time?: string;
 }
 
-/** A Snapshot annotated art.redhat.com/env=stage, with the newest Release naming it. */
-export interface StagedSnapshot {
-	name: string;
+/**
+ * What decides whether a version can ship. candidate is null with reason set
+ * when there is none; a shipped version sets nothing else.
+ */
+export interface ReleaseCandidate {
+	shipped: boolean;
+	candidate: CandidateBuild | null;
+	reason: string;
+	stage: StageFlag | null;
+	prod: KonfluxRelease | null;
+	ci: CandidateCI;
+}
+
+/** The Snapshot up for release: the version's STAGE build, else the stream's newest. */
+export interface CandidateBuild {
+	snapshot: string;
+	source: "staged" | "newest";
 	created_at: string;
+	/** Its stage Release's completion time when source is "staged". */
+	staged_at: string | null;
+	components: CandidateComponent[];
+}
+
+/** A build image; nvr and build_url are "" until ART build history has it. */
+export interface CandidateComponent {
+	name: string;
+	image: string;
+	nvr: string;
+	build_url: string;
+}
+
+/**
+ * Whether every image of the stream's newest build is in a Snapshot a STAGE
+ * Release succeeded with; "unknown" when the stream has no STAGE Release.
+ */
+export interface StageFlag {
+	state: "staged" | "not_staged" | "unknown";
+	snapshot: string;
+	created_at: string;
+	total: number;
+	not_staged: string[];
+	/** The newest STAGE Release that did not succeed holding a not-staged image. */
 	release: KonfluxRelease | null;
 }
 
-/** An operator's newest staged FBC Snapshot. */
-export interface StagedCatalog {
-	operator: string;
-	staged: StagedSnapshot | null;
+/** The jobs whose runs tested the candidate; last_tested only when none did. */
+export interface CandidateCI {
+	jobs: CIJob[];
+	last_tested: LastTested | null;
 }
 
-export interface StagedSnapshots {
-	/** ART staged a Snapshot for some version of this X.Y stream. */
-	stream_staged: boolean;
-	staged_image: StagedSnapshot | null;
-	/** quay-operator, container-security-operator and quay-bridge-operator. */
-	catalogs: StagedCatalog[];
+/** A job's newest run of a build and how many of its runs tested it. */
+export interface CIJob {
+	job_name: string;
+	state: string;
+	prow_url: string;
+	started_at: string | null;
+	runs: number;
+}
+
+/** The newest build a run tested, named by its operator bundle's NVR. */
+export interface LastTested {
+	bundle_nvr: string;
+	tested_at: string | null;
+	jobs: CIJob[];
 }
 
 export interface JiraIssue {
@@ -169,6 +150,9 @@ export interface DashboardConfig {
 	jira_base_url: string;
 	jira_project: string;
 	jira_enabled: boolean;
+	/** "" disables Konflux links. */
+	konflux_ui_url: string;
+	konflux_namespace: string;
 }
 
 interface SyncProblem {
@@ -180,31 +164,4 @@ interface SyncProblem {
 
 export interface SyncStatus {
 	problems: SyncProblem[];
-}
-
-export interface ProwRun {
-	job_name: string;
-	build_id: string;
-	state: string;
-	started_at: string | null;
-	completed_at: string | null;
-	prow_url: string;
-	/** missing until the job publishes tested-images.json. */
-	artifact_state: "present" | "missing" | "invalid";
-	catalog_ref: string;
-	fetched_at: string;
-}
-
-interface ProwSync {
-	last_successful_sync: string | null;
-	stale: boolean;
-}
-
-export interface ProwRunsResponse extends ProwSync {
-	runs: ProwRun[];
-}
-
-/** Runs that tested each component's exact image, newest first. */
-export interface SnapshotProwRuns extends ProwSync {
-	components: Record<string, ProwRun[]>;
 }

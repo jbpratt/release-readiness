@@ -3,50 +3,55 @@ import { test } from "node:test";
 import {
 	formatReleaseName,
 	jiraIssueUrl,
-	quayManifestUrl,
-	upstreamCommitUrl,
+	jiraSearchUrl,
+	konfluxUrl,
 } from "./links.ts";
 
-const digest = `sha256:${"ab".repeat(32)}`;
-
-test("quayManifestUrl", () => {
+test("konfluxUrl", () => {
+	const base =
+		"https://konflux-ui.apps.kflux-ocp-p01.7ayg.p1.openshiftapps.com";
+	const app = `${base}/ns/art-quay-tenant/applications/quay-3-18`;
+	assert.equal(konfluxUrl(base, "art-quay-tenant", "quay-3-18"), app);
+	assert.equal(konfluxUrl(`${base}/`, "art-quay-tenant", "quay-3-18"), app);
 	assert.equal(
-		quayManifestUrl(
-			`quay.io/redhat-user-workloads/ocp-art-tenant/art-images@${digest}`,
+		konfluxUrl(
+			base,
+			"art-quay-tenant",
+			"quay-3-18",
+			"snapshots",
+			"quay-3-18-20261010-013713-000",
 		),
-		`https://quay.io/repository/redhat-user-workloads/ocp-art-tenant/art-images/manifest/${digest}`,
+		`${app}/snapshots/quay-3-18-20261010-013713-000`,
 	);
 	assert.equal(
-		quayManifestUrl(`quay.io/projectquay/quay@${digest}`),
-		`https://quay.io/repository/projectquay/quay/manifest/${digest}`,
+		konfluxUrl(
+			base,
+			"art-quay-tenant",
+			"quay-3-18",
+			"releases",
+			"fbc-ri-stage-quay-3-18-quay-operator-ssrlx",
+		),
+		`${app}/releases/fbc-ri-stage-quay-3-18-quay-operator-ssrlx`,
 	);
-	assert.equal(quayManifestUrl("quay.io/projectquay/quay:v3.18.0"), null);
-	assert.equal(quayManifestUrl(`registry.redhat.io/quay/quay@${digest}`), null);
-});
-
-test("upstreamCommitUrl", () => {
-	const sha = "35cf767efc3b4e7bebc7802afcf12b60cd343bc0";
-	assert.equal(
-		upstreamCommitUrl("https://github.com/quay/quay-operator", sha),
-		`https://github.com/quay/quay-operator/commit/${sha}`,
-	);
-	assert.equal(
-		upstreamCommitUrl("https://github.com/quay/quay-operator.git/", sha),
-		`https://github.com/quay/quay-operator/commit/${sha}`,
-	);
-	assert.equal(
-		upstreamCommitUrl("https://github.com/quay/quay-operator", ""),
-		null,
-	);
-	assert.equal(upstreamCommitUrl("", sha), null);
-	assert.equal(upstreamCommitUrl("https://gitlab.com/quay/quay", sha), null);
-	assert.equal(upstreamCommitUrl("https://github.com/quay", sha), null);
+	assert.equal(konfluxUrl("", "art-quay-tenant", "quay-3-18"), null);
+	assert.equal(konfluxUrl(base, "", "quay-3-18"), null);
+	assert.equal(konfluxUrl(base, "art-quay-tenant", ""), null);
 });
 
 test("jiraIssueUrl", () => {
 	assert.equal(
 		jiraIssueUrl("PROJQUAY-1", "https://issues.redhat.com/"),
 		"https://issues.redhat.com/browse/PROJQUAY-1",
+	);
+});
+
+test("jiraSearchUrl", () => {
+	assert.equal(
+		jiraSearchUrl(
+			'project=PROJQUAY AND "Target Version"="quay-v3.18.2"',
+			"https://redhat.atlassian.net/",
+		),
+		"https://redhat.atlassian.net/issues/?jql=project%3DPROJQUAY%20AND%20%22Target%20Version%22%3D%22quay-v3.18.2%22",
 	);
 });
 

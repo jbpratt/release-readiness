@@ -14,3 +14,16 @@ export function relative(iso: string): string {
 	];
 	return rtf.format(Math.round(secs / size), unit);
 }
+
+// Due dates are midnight UTC, so a local time zone west of UTC shows the day before.
+const day = (iso: string) =>
+	new Date(iso).toLocaleDateString("en-US", {
+		timeZone: "UTC",
+		month: "short",
+		day: "numeric",
+		year: "numeric",
+	});
+
+/** "Due Aug 20, 2026" */
+export const dueText = (due?: string) =>
+	due ? `Due ${day(due)}` : "No due date";

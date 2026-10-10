@@ -29,6 +29,9 @@ type Server struct {
 	// Scanner holds the GitHub compares of the selected STAGE builds; nil
 	// has compared nothing.
 	Scanner *github.Scanner
+	// KonfluxUIURL and KonfluxNamespace locate the Konflux UI pages the web
+	// links to; an empty URL links none.
+	KonfluxUIURL, KonfluxNamespace string
 }
 
 // New builds the server. An empty artBaseURL leaves every component's art null;

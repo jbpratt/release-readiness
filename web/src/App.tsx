@@ -24,7 +24,7 @@ import {
 	SunIcon,
 } from "@patternfly/react-icons";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import "@patternfly/react-core/dist/styles/base.css";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SyncStatusWarning from "./components/SyncStatusWarning";
@@ -33,31 +33,24 @@ import { ART_PIPELINES_HEALTH_URL } from "./utils/links";
 
 const ReleasesOverview = lazy(() => import("./pages/ReleasesOverview"));
 const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
-const ReleaseSnapshotHistory = lazy(
-	() => import("./pages/ReleaseSnapshotHistory"),
-);
 
 const glossary: [string, string][] = [
-	["Upstream commit", "A commit in the public upstream repo, e.g. quay/quay."],
 	[
-		"ART build",
-		"ART builds each image in Konflux from its build repo: the openshift-priv rebase fork that mirrors the upstream commit.",
+		"Candidate build",
+		"The version's build in stage, else the stream's newest build.",
 	],
 	[
-		"Konflux snapshot",
-		"The set of component images (digest and build repo commit) Konflux records for an application after a build. Konflux tests and releases snapshots.",
+		"Stage",
+		"A Konflux Release through the stream's quay-advisory-stage-X-Y plan. A build is in stage once every image is in a Snapshot such a Release succeeded with.",
 	],
 	[
-		"FBC",
-		"File-based catalog: the operator index entries that publish the operator bundles, built as the fbc-quay-X-Y application.",
+		"CI",
+		"Periodic Prow jobs whose tested-images.json lists the build's quay, clair, operator and bundle digests.",
 	],
+	["In build", "The build's commits whose message names the ticket."],
 	[
 		"z-stream",
 		"The patch releases of one minor version, e.g. 3.18.z. The next release per stream is its lowest unshipped z.",
-	],
-	[
-		"Release pipeline vs shipped",
-		"A Konflux Release runs the release pipeline for one snapshot. The product version has shipped only once the Red Hat catalog publishes it or JIRA marks it released.",
 	],
 ];
 
@@ -131,28 +124,10 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 								maxWidth="36rem"
 								bodyContent={
 									<>
-										<Content>
-											<Content component="p">
-												Tracks release readiness for Quay by combining two data
-												sources:
-											</Content>
-											<Content component="ul">
-												<Content component="li">
-													<strong>JIRA</strong> — syncs active releases by
-													Target Version and their issues. Tracks status,
-													priority, type, and assignee to compute a readiness
-													signal.
-												</Content>
-												<Content component="li">
-													<strong>Build Snapshots</strong> — reads Konflux
-													Snapshots and Releases from Kubernetes. Each snapshot
-													lists its component builds (git SHA, image).
-												</Content>
-											</Content>
-											<Content component="p">
-												A change flows: upstream merge → ART build → snapshot →
-												FBC / release.
-											</Content>
+										<Content component="p">
+											One page per version answers: can it ship? Data: Konflux
+											Snapshots and Releases, ART build history, Prow periodics,
+											Jira, GitHub.
 										</Content>
 										<DescriptionList isCompact style={{ marginTop: "1rem" }}>
 											{glossary.map(([term, desc]) => (
@@ -207,7 +182,7 @@ export default function App() {
 							<Route path="/releases/:version" element={<ReleaseDetail />} />
 							<Route
 								path="/releases/:version/snapshots"
-								element={<ReleaseSnapshotHistory />}
+								element={<Navigate to=".." relative="path" replace />}
 							/>
 						</Routes>
 					</Suspense>

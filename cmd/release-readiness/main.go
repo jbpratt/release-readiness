@@ -33,6 +33,7 @@ func main() {
 	kubeconfig := flag.String("kubeconfig", os.Getenv("KUBECONFIG"), "kubeconfig path (empty uses the in-cluster service account)")
 	namespace := flag.String("namespace", envOrDefault("KONFLUX_NAMESPACE", "art-quay-tenant"), "Konflux namespace to read Snapshots and Releases from")
 	konfluxPollInterval := flag.Duration("konflux-poll-interval", 30*time.Second, "Konflux sync poll interval")
+	konfluxUIURL := flag.String("konflux-ui-url", envOrDefault("KONFLUX_UI_URL", "https://konflux-ui.apps.kflux-ocp-p01.7ayg.p1.openshiftapps.com"), "Konflux UI URL for links to -namespace's applications, Snapshots and Releases (empty disables Konflux links)")
 
 	// JIRA flags
 	jiraURL := flag.String("jira-url", envOrDefault("JIRA_URL", "https://redhat.atlassian.net"), "JIRA Cloud URL")
@@ -193,6 +194,8 @@ func main() {
 	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, shipped, status, logger)
 	srv.StageReleasePlanPattern = stagePlans
 	srv.Scanner = scanner
+	srv.KonfluxUIURL = *konfluxUIURL
+	srv.KonfluxNamespace = *namespace
 	if err := srv.Run(ctx); err != nil {
 		logger.Error("server", "error", err)
 		os.Exit(1)
