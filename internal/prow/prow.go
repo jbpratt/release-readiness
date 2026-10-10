@@ -103,6 +103,7 @@ type testedImages struct {
 	Images []struct {
 		Role         string `json:"role"`
 		RequestedRef string `json:"requested_ref"`
+		Source       string `json:"source"`
 	} `json:"images"`
 }
 
@@ -149,7 +150,8 @@ func parseRun(job Job, buildID string, pjData, finData []byte) (*Run, string, er
 }
 
 // applyArtifact records tested-images.json on r. The catalog and operator
-// bundle are stored as images too so a digest lookup finds them.
+// bundle are stored as images too so a digest lookup finds them; of the rest,
+// only images that ran in a pod count, not those the CSV merely references.
 func (r *Run) applyArtifact(data []byte) {
 	var ti testedImages
 	if err := json.Unmarshal(data, &ti); err != nil || ti.SchemaVersion != 1 {
@@ -168,7 +170,9 @@ func (r *Run) applyArtifact(data []byte) {
 		add("quay-operator-bundle", ti.Operator.BundleRef)
 	}
 	for _, img := range ti.Images {
-		add(img.Role, img.RequestedRef)
+		if img.Source == "pod" {
+			add(img.Role, img.RequestedRef)
+		}
 	}
 }
 
