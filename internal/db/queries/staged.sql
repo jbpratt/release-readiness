@@ -36,3 +36,10 @@ SELECT CAST(EXISTS (
     SELECT 1 FROM staged_snapshots
     WHERE env = 'stage' AND assembly LIKE CAST(sqlc.arg(stream) AS TEXT) || '.%'
 ) AS BOOLEAN) AS staged;
+
+-- name: LatestProdImageRelease :one
+SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, start_time, completion_time
+FROM konflux_releases
+WHERE snapshot IN (SELECT name FROM staged_snapshots WHERE assembly = ? AND kind = 'image' AND env = 'prod')
+ORDER BY created_at DESC, id DESC
+LIMIT 1;

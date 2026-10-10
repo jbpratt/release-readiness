@@ -55,3 +55,13 @@ FROM candidates c
 LEFT JOIN staged_snapshots ss ON ss.name = c.name
 ORDER BY c.created_at DESC, c.name DESC
 LIMIT ? OFFSET ?;
+
+-- name: NewestStreamSnapshot :one
+-- ART's assembly Snapshots (staged_snapshots) and its fbc-ri-* re-releases of
+-- a bundle's related images are not stream builds.
+SELECT name
+FROM snapshots s
+WHERE application = ? AND name NOT LIKE 'fbc-ri-%'
+  AND NOT EXISTS (SELECT 1 FROM staged_snapshots ss WHERE ss.name = s.name)
+ORDER BY created_at DESC, name DESC
+LIMIT 1;

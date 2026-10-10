@@ -9,6 +9,34 @@ import (
 	"context"
 )
 
+const latestProdImageRelease = `-- name: LatestProdImageRelease :one
+SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, start_time, completion_time
+FROM konflux_releases
+WHERE snapshot IN (SELECT name FROM staged_snapshots WHERE assembly = ? AND kind = 'image' AND env = 'prod')
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+func (q *Queries) LatestProdImageRelease(ctx context.Context, assembly string) (KonfluxRelease, error) {
+	row := q.db.QueryRowContext(ctx, latestProdImageRelease, assembly)
+	var i KonfluxRelease
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Application,
+		&i.Snapshot,
+		&i.ReleasePlan,
+		&i.ReleasedStatus,
+		&i.ReleasedReason,
+		&i.FailedTask,
+		&i.FailedStep,
+		&i.CreatedAt,
+		&i.StartTime,
+		&i.CompletionTime,
+	)
+	return i, err
+}
+
 const latestStagedSnapshot = `-- name: LatestStagedSnapshot :one
 SELECT name, assembly, kind, env, created_at
 FROM staged_snapshots ss

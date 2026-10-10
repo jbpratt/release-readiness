@@ -119,3 +119,48 @@ func (d *DB) selectedBuild(ctx context.Context, r dbsqlc.ListSuccessfulStageRele
 	}
 	return b, nil
 }
+
+// StageReleases returns the Releases of release's application through a
+// ReleasePlan matching plans for the version's X-Y stream, the filter
+// SelectedStageBuild applies, newest first, each with the component images of
+// the Snapshot it names. A version that is not quay-vX.Y.Z has none.
+func (d *DB) StageReleases(ctx context.Context, release *model.ReleaseVersion, plans *regexp.Regexp) ([]model.StageRelease, error) {
+	m := concreteVersion.FindStringSubmatch(release.Name)
+	if m == nil || plans == nil {
+		return nil, nil
+	}
+	rows, err := d.queries().ListKonfluxReleasesByApplication(ctx, release.KonfluxApplication)
+	if err != nil {
+		return nil, err
+	}
+	imgs, err := d.queries().ListReleasedSnapshotImages(ctx, release.KonfluxApplication)
+	if err != nil {
+		return nil, err
+	}
+	images := map[string][]string{}
+	for _, img := range imgs {
+		images[img.Name] = append(images[img.Name], img.ImageUrl)
+	}
+	stream := "-" + m[2] + "-" + m[3]
+	var releases []model.StageRelease
+	for _, r := range rows {
+		if plans.MatchString(r.ReleasePlan) && strings.HasSuffix(r.ReleasePlan, stream) {
+			releases = append(releases, model.StageRelease{KonfluxRelease: toKonfluxRelease(r), Images: images[r.Snapshot]})
+		}
+	}
+	return releases, nil
+}
+
+// LatestProdRelease returns the newest Release, whatever its status, of an
+// image Snapshot ART staged for prod for assembly, or nil.
+func (d *DB) LatestProdRelease(ctx context.Context, assembly string) (*model.KonfluxRelease, error) {
+	row, err := d.queries().LatestProdImageRelease(ctx, assembly)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	r := toKonfluxRelease(row)
+	return &r, nil
+}

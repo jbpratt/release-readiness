@@ -257,6 +257,24 @@ func (q *Queries) ListSnapshotComponents(ctx context.Context, snapshotID int64) 
 	return items, nil
 }
 
+const newestStreamSnapshot = `-- name: NewestStreamSnapshot :one
+SELECT name
+FROM snapshots s
+WHERE application = ? AND name NOT LIKE 'fbc-ri-%'
+  AND NOT EXISTS (SELECT 1 FROM staged_snapshots ss WHERE ss.name = s.name)
+ORDER BY created_at DESC, name DESC
+LIMIT 1
+`
+
+// ART's assembly Snapshots (staged_snapshots) and its fbc-ri-* re-releases of
+// a bundle's related images are not stream builds.
+func (q *Queries) NewestStreamSnapshot(ctx context.Context, application string) (string, error) {
+	row := q.db.QueryRowContext(ctx, newestStreamSnapshot, application)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
 const snapshotExistsByName = `-- name: SnapshotExistsByName :one
 SELECT COUNT(*) FROM snapshots WHERE name = ?
 `
