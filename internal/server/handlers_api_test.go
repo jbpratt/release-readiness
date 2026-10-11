@@ -475,6 +475,20 @@ func TestReleasesOverviewReadiness(t *testing.T) {
 	}
 }
 
+// omr-v2.0.13 is not a version ART builds, so it has no build to wait on.
+func TestReleasesOverviewReadinessUntracked(t *testing.T) {
+	srv := setupTestServer(t)
+	if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: "omr-v2.0.13", KonfluxApplication: "omr-2-0"}); err != nil {
+		t.Fatalf("upsert release: %v", err)
+	}
+	var overviews []model.ReleaseOverview
+	getJSON(t, srv, "/api/v1/releases/overview", http.StatusOK, &overviews)
+	want := model.ReadinessResponse{Signal: "green", Message: "No open issues"}
+	if len(overviews) != 1 || overviews[0].Readiness != want {
+		t.Errorf("overviews = %+v, want omr-v2.0.13 readiness %+v", overviews, want)
+	}
+}
+
 // A version's latest build is its newest build or its STAGE build, whichever
 // is newer, shipped or not; one with neither has none.
 func TestReleasesOverviewLatestBuild(t *testing.T) {
@@ -527,7 +541,35 @@ func TestComputeReadiness(t *testing.T) {
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			release := &model.ReleaseVersion{Name: "quay-v3.17.5", Released: tc.released, DueDate: &past}
-			if got := computeReadiness(release, open, true, tc.catalogShipped); got != tc.want {
+			if got := computeReadiness(release, open, true, tc.catalogShipped, time.Now()); got != tc.want {
+				t.Errorf("got %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
+
+// Due dates count in whole UTC days, as the version page counts them: at
+// 23:59Z a version due that day is due today, not past due.
+func TestComputeReadinessDue(t *testing.T) {
+	now := mustTime(t, "2026-10-10T23:59:00Z")
+	open := &model.IssueSummary{Total: 2, Open: 1}
+	for _, tc := range []struct {
+		desc   string
+		due    string
+		issues *model.IssueSummary
+		want   model.ReadinessResponse
+	}{
+		{"due yesterday", "2026-10-09", nil, model.ReadinessResponse{Signal: "red", Message: "Past due date"}},
+		{"due today", "2026-10-10", nil, model.ReadinessResponse{Signal: "yellow", Message: "Due today"}},
+		{"due today, open issues", "2026-10-10", open, model.ReadinessResponse{Signal: "yellow", Message: "Open issues remain"}},
+		{"due tomorrow", "2026-10-11", nil, model.ReadinessResponse{Signal: "yellow", Message: "Due in 1 day"}},
+		{"due in 3 days", "2026-10-13", nil, model.ReadinessResponse{Signal: "yellow", Message: "Due in 3 days"}},
+		{"due in 4 days", "2026-10-14", nil, model.ReadinessResponse{Signal: "green", Message: "No open issues"}},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			due := mustTime(t, tc.due+"T00:00:00Z")
+			release := &model.ReleaseVersion{Name: "quay-v3.17.5", KonfluxApplication: "quay-3-17", DueDate: &due}
+			if got := computeReadiness(release, tc.issues, true, false, now); got != tc.want {
 				t.Errorf("got %+v, want %+v", got, tc.want)
 			}
 		})

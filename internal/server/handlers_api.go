@@ -293,7 +293,7 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 		overviews[i] = model.ReleaseOverview{
 			Release:      rel,
 			IssueSummary: summary,
-			Readiness:    computeReadiness(&rel, summary, latest != nil, catalogShipped),
+			Readiness:    computeReadiness(&rel, summary, latest != nil, catalogShipped, time.Now()),
 			LatestBuild:  latest,
 			Shipped:      catalogShipped || rel.Released,
 		}
@@ -332,7 +332,7 @@ func markNextInStream(overviews []model.ReleaseOverview) {
 // computeReadiness derives a readiness signal from release metadata,
 // issue summary, whether a build snapshot exists, and whether the catalog
 // already publishes it (JIRA can lag a shipped release).
-func computeReadiness(release *model.ReleaseVersion, issueSummary *model.IssueSummary, hasSnapshot, catalogShipped bool) model.ReadinessResponse {
+func computeReadiness(release *model.ReleaseVersion, issueSummary *model.IssueSummary, hasSnapshot, catalogShipped bool, now time.Time) model.ReadinessResponse {
 	if release.Released {
 		return model.ReadinessResponse{Signal: "green", Message: "Released", Shipped: true}
 	}
@@ -340,26 +340,39 @@ func computeReadiness(release *model.ReleaseVersion, issueSummary *model.IssueSu
 		return model.ReadinessResponse{Signal: "green", Message: "Shipped", Shipped: true}
 	}
 
-	now := time.Now()
 	signal := "green"
 	message := "No open issues"
 
 	openIssues := issueSummary != nil && issueSummary.Open > 0
+	// Due dates are midnight UTC. Count whole UTC days, as the version page
+	// does, so a version is due today until its due day ends.
+	const day = 24 * time.Hour
+	var daysUntil int
+	if release.DueDate != nil {
+		daysUntil = int(release.DueDate.Truncate(day).Sub(now.Truncate(day)) / day)
+	}
+	// Builds are found only for a version ART builds, a quay-vX.Y.Z with a
+	// Konflux application; no other version ever has one.
+	tracked := release.KonfluxApplication != "" && quayVersion.MatchString(release.Name)
 
-	if release.DueDate != nil && now.After(*release.DueDate) {
+	if release.DueDate != nil && daysUntil < 0 {
 		signal = "red"
 		message = "Past due date"
 	} else if openIssues {
 		signal = "yellow"
 		message = "Open issues remain"
-	} else if !hasSnapshot {
+	} else if tracked && !hasSnapshot {
 		signal = "yellow"
 		message = "No build snapshots yet"
-	} else if release.DueDate != nil {
-		daysUntil := int(release.DueDate.Sub(now).Hours() / 24)
-		if daysUntil <= 3 {
-			signal = "yellow"
-			message = fmt.Sprintf("Due date in %d days", daysUntil)
+	} else if release.DueDate != nil && daysUntil <= 3 {
+		signal = "yellow"
+		switch daysUntil {
+		case 0:
+			message = "Due today"
+		case 1:
+			message = "Due in 1 day"
+		default:
+			message = fmt.Sprintf("Due in %d days", daysUntil)
 		}
 	}
 
