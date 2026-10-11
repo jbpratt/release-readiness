@@ -58,6 +58,29 @@ func TestUpsertProwRunPendingToTerminal(t *testing.T) {
 	}
 }
 
+// Each upsert replaces whether the run's install failed.
+func TestUpsertProwRunInstallFailed(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	ctx := t.Context()
+
+	at := time.Date(2026, 10, 10, 0, 56, 53, 0, time.UTC)
+	run := &prow.Run{JobName: "job", BuildID: "1", Application: "quay-3-18", State: "failure", StartedAt: &at, CompletedAt: &at, ArtifactState: prow.ArtifactPresent, FetchedAt: at}
+	for _, failed := range []bool{true, true, false} {
+		run.InstallFailed = failed
+		if err := d.UpsertProwRun(ctx, run); err != nil {
+			t.Fatal(err)
+		}
+		runs, err := d.ListProwRunsByApplication(ctx, "quay-3-18")
+		if err != nil || len(runs) != 1 || runs[0].InstallFailed != failed {
+			t.Fatalf("runs after an upsert with install failed %v = %+v, %v", failed, runs, err)
+		}
+	}
+}
+
 // A finished run an older binary stored as "missing" is read once more.
 func TestListFinishedProwBuildIDs(t *testing.T) {
 	d, err := Open(filepath.Join(t.TempDir(), "test.db"))

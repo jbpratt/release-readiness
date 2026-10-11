@@ -116,6 +116,15 @@ CREATE TABLE IF NOT EXISTS prow_run_images (
 
 CREATE INDEX IF NOT EXISTS idx_prow_run_images_run ON prow_run_images(job_name, build_id);
 
+-- A run whose Quay install step failed after its quay-operator Subscription
+-- was created.
+CREATE TABLE IF NOT EXISTS prow_install_failures (
+    job_name TEXT NOT NULL,
+    build_id TEXT NOT NULL,
+    PRIMARY KEY (job_name, build_id),
+    FOREIGN KEY (job_name, build_id) REFERENCES prow_runs(job_name, build_id) ON DELETE CASCADE
+);
+
 -- ART assembly annotations (art.redhat.com/assembly, kind, env) of a Konflux
 -- Snapshot, for Snapshots that carry all three.
 CREATE TABLE IF NOT EXISTS staged_snapshots (

@@ -64,6 +64,11 @@ type KonfluxRelease struct {
 	CompletionTime string
 }
 
+type ProwInstallFailure struct {
+	JobName string
+	BuildID string
+}
+
 type ProwRun struct {
 	JobName       string
 	BuildID       string

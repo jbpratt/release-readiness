@@ -92,12 +92,12 @@ export interface BuildFBC {
 }
 
 /**
- * The runs that installed one build: the candidate, another build with its
- * label and CI state, an unknown build, or no Quay. Without a candidate, no
- * row is the candidate's.
+ * The runs that installed one build, or failed to install it: the candidate,
+ * another build with its label and CI state, or an unknown build. Without a
+ * candidate, no row is the candidate's.
  */
 export interface CIBuild {
-	kind: "candidate" | "build" | "unknown" | "not_installed";
+	kind: "candidate" | "build" | "unknown";
 	/** "" unless candidate or build. */
 	snapshot: string;
 	created_at: string | null;
@@ -115,6 +115,7 @@ export interface CIRun {
 	state: string;
 	started_at: string;
 	prow_url: string;
+	install_failed?: boolean;
 }
 
 /** A build image; nvr and build_url are "" until ART build history has it. */

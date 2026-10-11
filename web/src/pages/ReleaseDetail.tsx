@@ -784,7 +784,7 @@ const nowrap = { whiteSpace: "nowrap" } as const;
 /**
  * The periodic runs since the candidate's bundle was first built, or the
  * version's builds' without one, after the OCP release controller: a row per
- * build they installed, the candidate first.
+ * build they installed, or failed to install, the candidate first.
  */
 function CICard({
 	ci,
@@ -816,10 +816,10 @@ function CICard({
 					)}
 					<strong>In CI</strong>: reached the catalog CI installs from.
 				</div>
-				<Table variant="compact" aria-label="CI runs by installed build">
+				<Table variant="compact" aria-label="CI runs by build">
 					<Thead>
 						<Tr>
-							<Th modifier="fitContent">Installed build</Th>
+							<Th modifier="fitContent">Build</Th>
 							<Th modifier="fitContent">State</Th>
 							<Th>Jobs</Th>
 						</Tr>
@@ -833,10 +833,8 @@ function CICard({
 											build={{ snapshot: b.snapshot, created_at: b.created_at }}
 											konflux={konflux}
 										/>
-									) : b.kind === "unknown" ? (
-										<span style={muted}>Unknown build</span>
 									) : (
-										"Quay not installed"
+										<span style={muted}>Unknown build</span>
 									)}
 								</Td>
 								<Td style={nowrap}>
@@ -888,7 +886,8 @@ function JobChips({
 						content={lines(
 							job_name,
 							...runs.map(
-								(r) => `${when(r.started_at)} · ${runState(r.state)[0]}`,
+								(r) =>
+									`${when(r.started_at)} · ${r.install_failed ? "Install failed" : runState(r.state)[0]}`,
 							),
 						)}
 					>
@@ -908,6 +907,7 @@ function JobChips({
 							)}
 						>
 							{label(job_name)}
+							{runs[0].install_failed && " · install failed"}
 							{runs.length > 1 && ` ×${runs.length}`}
 						</Label>
 					</Tooltip>

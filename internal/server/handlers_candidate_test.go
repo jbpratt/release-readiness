@@ -252,7 +252,8 @@ func olmImages(operator, quay, clair, builder, qemu string) []prow.Image {
 }
 
 // ciRows is each CI build row as "kind[ snapshot created_at[ state release]]:
-// job=run,run ...", with jobs and run IDs as seedRun stored them.
+// job=run,run ...", with jobs and run IDs as seedRun stored them, and
+// "(install_failed)" after a run whose install failed.
 func ciRows(builds []model.CIBuild) []string {
 	rows := []string{}
 	for _, b := range builds {
@@ -270,7 +271,11 @@ func ciRows(builds []model.CIBuild) []string {
 		for _, j := range b.Jobs {
 			var ids []string
 			for _, r := range j.Runs {
-				ids = append(ids, strings.TrimPrefix(r.ProwURL, "https://prow.example/"))
+				id := strings.TrimPrefix(r.ProwURL, "https://prow.example/")
+				if r.InstallFailed {
+					id += "(install_failed)"
+				}
+				ids = append(ids, id)
 			}
 			row += " " + strings.TrimPrefix(j.JobName, jobPrefix) + "=" + strings.Join(ids, ",")
 		}
@@ -395,7 +400,8 @@ func TestGetCandidate(t *testing.T) {
 // The periodic runs since the stream first built the candidate's operator
 // bundle, by the build each installed: the candidate, by its bundle or, for a
 // run that recorded none, its five Quay images; each other build, newest
-// first, with whether it is in CI; an unknown build; and no Quay.
+// first, with whether it is in CI; and an unknown build. A run that installed
+// no Quay is left out.
 func TestGetCandidateCI(t *testing.T) {
 	srv := setupTestServer(t)
 	seedQuay318(t, srv)
@@ -444,7 +450,6 @@ func TestGetCandidateCI(t *testing.T) {
 		"build quay-3-18-20261009-042610-000 2026-10-09T04:29:06Z in fbc-ri-stage-quay-3-18-quay-operator-r8fcb: " +
 			"aws-ocp422-e2e-install-aws-odf-nightly=8 aws-ocp422-e2e-install-aws-s3-nightly=6 azure-ocp422-e2e-install-azure-blob-nightly=7 gcp-ocp422-e2e-install-gcp-gcs-nightly=5",
 		"unknown: azure-ocp422-e2e-install-azure-blob-nightly=13 gcp-ocp422-e2e-install-gcp-gcs-nightly=15",
-		"not_installed: aws-ocp422-e2e-install-aws-odf-nightly=16",
 	}
 	if rows := ciRows(ci.Builds); !slices.Equal(rows, want) {
 		t.Fatalf("builds:\n%s\nwant:\n%s", strings.Join(rows, "\n"), strings.Join(want, "\n"))
@@ -461,6 +466,90 @@ func TestGetCandidateCI(t *testing.T) {
 	}
 	if n := got.Newest; n == nil || n.Snapshot != "quay-3-18-20261010-013713-000" || n.CI.State != "failed" || n.CI.Release == nil || n.CI.Release.Name != "fbc-ri-stage-quay-3-18-quay-operator-ssrlx" {
 		t.Errorf("newest = %+v, want quay-3-18-20261010-013713-000, failed to reach CI", n)
+	}
+}
+
+// A run that installed no Quay shows only when its Quay install failed: on the
+// build whose bundle the FBC of its catalog holds, when ART's record of that
+// FBC lists the bundle of exactly one of the stream's builds. A run whose
+// install failed says so on any row.
+func TestGetCandidateInstallFailed(t *testing.T) {
+	srv := setupTestServer(t)
+	seedQuay318(t, srv)
+	bundle := func(built string) string {
+		return "quay-operator-metadata-container-3.18.1." + built + ".p2.g35cf767.assembly.stream.el9-1"
+	}
+	tested, newer := bundle("202610090339"), bundle("202610100137")
+	resolveNVR(t, srv, "tested/quay-3-18-quay-operator-bundle", tested)
+	resolveNVR(t, srv, "new/quay-3-18-quay-operator-bundle", newer)
+	const fbc = "quay-operator-fbc-3.18.1-20261009044841.ocp4.22"
+	for _, r := range []struct {
+		job, id, started string
+		installFailed    bool
+		images           []prow.Image
+	}{
+		// Failed before OLM installed a CSV.
+		{"aws-ocp422-e2e-install-aws-s3-nightly", "40", "2026-10-11T00:56:03Z", true, nil},
+		// Died before the install, with the same catalog.
+		{"azure-ocp422-e2e-install-azure-blob-nightly", "41", "2026-10-11T01:27:00Z", false, nil},
+		// Failed after OLM installed the new build's CSV.
+		{"aws-ocp422-e2e-install-aws-odf-nightly", "42", "2026-10-11T03:11:00Z", true, runImages("new", "new", "new", "new")},
+	} {
+		at := mustTime(t, r.started)
+		run := &prow.Run{
+			JobName: jobPrefix + r.job, BuildID: r.id, Application: "quay-3-18", State: "failure", StartedAt: &at,
+			ProwURL: "https://prow.example/" + r.id, ArtifactState: prow.ArtifactPresent, CatalogRef: testImage("fbc/" + fbc),
+			InstallFailed: r.installFailed, FetchedAt: at,
+			Images: append([]prow.Image{{Role: "catalog", Digest: testDigest("fbc/" + fbc)}}, r.images...),
+		}
+		if err := srv.db.UpsertProwRun(t.Context(), run); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := func(awsS3 string) []string {
+		return []string{
+			"candidate quay-stage-3-18-1-image-20261007200243 2026-10-07T20:02:43Z:",
+			"build quay-3-18-20261010-013713-000 2026-10-10T01:48:34Z none: aws-ocp422-e2e-install-aws-odf-nightly=42(install_failed)",
+			"build quay-3-18-20261009-042610-000 2026-10-09T04:29:06Z in fbc-ri-stage-quay-3-18-quay-operator-r8fcb: aws-ocp422-e2e-install-aws-odf-nightly=8 " +
+				"aws-ocp422-e2e-install-aws-s3-nightly=" + awsS3 + " azure-ocp422-e2e-install-azure-blob-nightly=7 gcp-ocp422-e2e-install-gcp-gcs-nightly=5",
+		}
+	}
+	for _, step := range []struct {
+		desc    string
+		bundles []string // the FBC record's; nil before ART's record is read
+		awsS3   string   // the tested build's aws-s3 runs
+	}{
+		{"no FBC record", nil, "6"},
+		{"the FBC holds the tested build's bundle", []string{tested}, "40(install_failed),6"},
+		{"the FBC holds two builds' bundles", []string{tested, newer}, "6"},
+	} {
+		if step.bundles != nil {
+			seedFBC(t, srv, fbc, "2026-10-09T05:42:05", step.bundles...)
+		}
+		var got model.ReleaseCandidate
+		getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
+		if rows := ciRows(got.CI.Builds); !slices.Equal(rows, want(step.awsS3)) {
+			t.Errorf("%s: builds:\n%s\nwant:\n%s", step.desc, strings.Join(rows, "\n"), strings.Join(want(step.awsS3), "\n"))
+		}
+	}
+
+	// Only a run whose install failed carries install_failed.
+	var raw struct {
+		CI struct {
+			Builds []struct {
+				Jobs []struct {
+					Runs []map[string]any `json:"runs"`
+				} `json:"jobs"`
+			} `json:"builds"`
+		} `json:"ci"`
+	}
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &raw)
+	if b := raw.CI.Builds; len(b) != 3 {
+		t.Fatalf("builds = %v", b)
+	}
+	failed, passed := raw.CI.Builds[1].Jobs[0].Runs[0], raw.CI.Builds[2].Jobs[0].Runs[0]
+	if _, ok := passed["install_failed"]; ok || failed["install_failed"] != true {
+		t.Errorf("runs 42, 8 = %v, %v; want install_failed true, and none", failed, passed)
 	}
 }
 
