@@ -20,7 +20,6 @@ import (
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
-	"github.com/quay/release-readiness/internal/fbc"
 	"github.com/quay/release-readiness/internal/github"
 	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/kube"
@@ -63,7 +62,7 @@ func main() {
 	prowInterval := flag.Duration("prow-interval", 15*time.Minute, "Prow sync poll interval")
 
 	// Selected STAGE build flags
-	stagePlanPattern := flag.String("stage-release-plan-pattern", envOrDefault("STAGE_RELEASE_PLAN_PATTERN", `^quay-advisory-stage-\d+-\d+$`), "regexp matching the Konflux ReleasePlan names whose Releases are image STAGE (empty selects no build)")
+	stagePlanPattern := flag.String("stage-release-plan-pattern", envOrDefault("STAGE_RELEASE_PLAN_PATTERN", `^quay-advisory-stage-\d+-\d+$`), "regexp matching the Konflux ReleasePlan names whose Releases are image STAGE (empty selects no staged build)")
 
 	// GitHub ticket evidence flags
 	githubToken := flag.String("github-token", os.Getenv("GITHUB_TOKEN"), "read-only GitHub token (optional; raises the rate limit)")
@@ -117,9 +116,6 @@ func main() {
 		}
 		syncer := kube.NewSyncer(kc, *namespace, database, konfluxTx, konfluxLog)
 		syncer.Status = status.Track("konflux", *konfluxPollInterval)
-		syncer.Catalogs = fbc.NewClient(&http.Client{Timeout: time.Minute})
-		// Reported only when a catalog is read, so it has no staleness check.
-		syncer.CatalogStatus = status.Track("fbc-catalogs", 0)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -238,6 +234,11 @@ func main() {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				// Until the catalog is read, the versions it shipped look
+				// unshipped, and their scans would be read.
+				if shipped != nil {
+					shipped.Refresh(ctx)
+				}
 				syncer.Run(ctx, 5*time.Minute)
 			}()
 		}

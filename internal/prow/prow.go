@@ -218,13 +218,3 @@ func ComponentKey(application, component, image string) string {
 	}
 	return role + "@" + d
 }
-
-// Tested reports whether r tested an image with any of keys.
-func (r *Run) Tested(keys map[string]bool) bool {
-	for _, img := range r.Images {
-		if img.Digest != "" && keys[img.Role+"@"+img.Digest] {
-			return true
-		}
-	}
-	return false
-}

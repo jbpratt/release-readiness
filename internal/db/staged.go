@@ -22,44 +22,7 @@ func (d *DB) UpsertStagedSnapshot(ctx context.Context, name, assembly, kind, env
 	})
 }
 
-// LatestStagedSnapshot returns the newest stage Snapshot of kind for assembly
-// holding component, or of any component when it is empty, with the newest
-// Release naming it, or nil when there is none.
-func (d *DB) LatestStagedSnapshot(ctx context.Context, assembly, kind, component string) (*model.StagedSnapshot, error) {
-	row, err := d.queries().LatestStagedSnapshot(ctx, dbsqlc.LatestStagedSnapshotParams{Assembly: assembly, Kind: kind, Component: component})
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	s := &model.StagedSnapshot{Name: row.Name, CreatedAt: parseTime(row.CreatedAt)}
-	releases, err := d.queries().ListKonfluxReleasesBySnapshots(ctx, []string{row.Name})
-	if err != nil {
-		return nil, err
-	}
-	if len(releases) > 0 {
-		r := toKonfluxRelease(releases[0])
-		s.Release = &r
-	}
-	return s, nil
-}
-
-var (
-	concreteVersion = regexp.MustCompile(`^quay-v((\d+)\.(\d+)\.\d+)$`)
-	imageDigest     = regexp.MustCompile(`@(sha256:[0-9a-f]{64})$`)
-)
-
-// StreamStaged reports whether ART staged a Snapshot for any version of the
-// X.Y stream of name, e.g. 3.18.0 for quay-v3.18.1. A name that is not
-// quay-vX.Y.Z has none.
-func (d *DB) StreamStaged(ctx context.Context, name string) (bool, error) {
-	m := concreteVersion.FindStringSubmatch(name)
-	if m == nil {
-		return false, nil
-	}
-	return d.queries().StreamStaged(ctx, m[2]+"."+m[3])
-}
+var concreteVersion = regexp.MustCompile(`^quay-v((\d+)\.(\d+)\.\d+)$`)
 
 // SelectedStageBuild returns the newest image Snapshot staged for release's
 // concrete version whose Konflux Release succeeded through a ReleasePlan
@@ -84,40 +47,10 @@ func (d *DB) SelectedStageBuild(ctx context.Context, release *model.ReleaseVersi
 	stream := "-" + m[2] + "-" + m[3]
 	for _, r := range rows {
 		if plans.MatchString(r.ReleasePlan) && strings.HasSuffix(r.ReleasePlan, stream) {
-			b, err := d.selectedBuild(ctx, r)
-			return b, "", err
+			return &model.SelectedBuild{SnapshotName: r.SnapshotName, CompletedAt: parseTime(r.CompletionTime)}, "", nil
 		}
 	}
 	return nil, "no successful stage release of a staged image snapshot", nil
-}
-
-func (d *DB) selectedBuild(ctx context.Context, r dbsqlc.ListSuccessfulStageReleasesRow) (*model.SelectedBuild, error) {
-	components, err := d.listSnapshotComponents(ctx, r.SnapshotID)
-	if err != nil {
-		return nil, err
-	}
-	b := &model.SelectedBuild{
-		SnapshotName: r.SnapshotName,
-		CompletedAt:  parseTime(r.CompletionTime),
-		Components:   make([]model.SelectedBuildComponent, len(components)),
-	}
-	digests := make([]string, len(components))
-	for i, c := range components {
-		b.Components[i].Name = c.Component
-		if m := imageDigest.FindStringSubmatch(c.ImageURL); m != nil {
-			digests[i] = m[1]
-		}
-	}
-	art, err := d.ResolvedArtBuilds(ctx, digests)
-	if err != nil {
-		return nil, err
-	}
-	for i, digest := range digests {
-		if a, ok := art[digest]; ok {
-			b.Components[i].UpstreamRepo, b.Components[i].UpstreamSHA = a.UpstreamRepo, a.UpstreamSHA
-		}
-	}
-	return b, nil
 }
 
 // StageReleases returns the Releases of release's application through a

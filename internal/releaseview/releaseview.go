@@ -34,20 +34,6 @@ func Applications(konfluxApp string) []string {
 	return []string{konfluxApp}
 }
 
-// Contains reports whether a Snapshot of application carrying the named
-// components belongs to the release. quay-images-base is shared across
-// versions, so its Snapshots belong only when they carry one of the release's
-// own quay-X-Y-* images (e.g. quay-3-18-base-rhel9).
-func Contains(konfluxApp, application string, components []string) bool {
-	if !slices.Contains(Applications(konfluxApp), application) {
-		return false
-	}
-	if application != BaseImagesApp {
-		return true
-	}
-	return slices.ContainsFunc(components, func(c string) bool { return strings.HasPrefix(c, konfluxApp+"-") })
-}
-
 // Select returns the newest row per component name among the release's
 // applications, sorted by name.
 func Select(konfluxApp string, rows []Component) []Component {

@@ -18,9 +18,7 @@ The Go backend runs background sync loops that pull data into a local SQLite dat
 
 ### Konflux sync (default: every 30s)
 
-Lists `Snapshot` and `Release` resources (`appstudio.redhat.com/v1alpha1`) in the `-namespace` Konflux namespace through the Kubernetes API, using `-kubeconfig`/`KUBECONFIG` or, when unset, the in-cluster service account. New snapshots are stored with their component images; releases are upserted and served with the snapshots they name. Each record's `created_at` is the resource's `creationTimestamp`.
-
-Each pass also reads the file-based catalog of the newest quay-operator FBC images not yet read, pulled anonymously from the image's registry (registry v2 API), to check whether a Quay Snapshot's operator bundle is in the catalog.
+Lists `Snapshot` and `Release` resources (`appstudio.redhat.com/v1alpha1`) in the `-namespace` Konflux namespace through the Kubernetes API, using `-kubeconfig`/`KUBECONFIG` or, when unset, the in-cluster service account. New snapshots are stored with their component images; releases are upserted. Each record's `created_at` is the resource's `creationTimestamp`.
 
 Test results are not ingested.
 
@@ -32,19 +30,17 @@ Discovers active releases by querying for JIRA issues with the `-area/release` c
 
 Lists the runs of each `-prow-jobs` periodic in the public `test-platform-results-public` GCS bucket and stores each run's state, Prow link and, once the run has finished, the images its `tested-images.json` names. A job maps to a Konflux application, so every z-stream of a minor (`quay-v3.18.1`, `quay-v3.18.2`) shows the same runs. The deployment ingests the install periodics whose `quay-gather` step publishes `tested-images.json`: for 3.18, AWS (ODF, S3, S3 FIPS, arm64, OCP 4.14, OCP 5.0), Azure Blob, GCP GCS and s390x libvirt; for 3.17, AWS S3.
 
-A run counts as testing a Snapshot component only on an exact (role, manifest digest) match: `quay-X-Y-quay-{quay,clair,builder,builder-qemu,operator,operator-bundle}` against the matching role, and `fbc-quay-X-Y-quay-operator` against the catalog. `/api/v1/releases/{version}/snapshots/{name}/prow-runs` returns those runs per component; `/api/v1/releases/{version}/prow-runs` pages through the application's runs (`limit`, `offset`, `unlinked=true` for runs matching no Snapshot image).
+A run counts as testing a Snapshot component only on an exact (role, manifest digest) match: `quay-X-Y-quay-{quay,clair,builder,builder-qemu,operator,operator-bundle}` against the matching role, and `fbc-quay-X-Y-quay-operator` against the catalog.
 
 ### Sync status
 
-`/api/v1/sync-status` lists as `problems` each enabled sync (`konflux`, `jira`, `art-builds`, `catalog`, `fbc-catalogs`, `prow`, `github-evidence`) whose last pass failed or that has had no success within 3 poll intervals (at least 10 minutes); the header shows a warning icon while any exist.
+`/api/v1/sync-status` lists as `problems` each enabled sync (`konflux`, `jira`, `art-builds`, `catalog`, `prow`, `github-evidence`) whose last pass failed or that has had no success within 3 poll intervals (at least 10 minutes); the header shows a warning icon while any exist.
 
 ## Release view
 
 Each JIRA release maps to a Konflux application by major.minor version: fixVersion `quay-v3.16.2` maps to `quay-3-16`, and `omr-v2.0.10` to `omr-2-0`.
 
-A Quay release's components come from three applications: `fbc-quay-X-Y` (the shipped FBC, 3.16+ only), `quay-X-Y`, and the `quay-X-Y-*` base image components of `quay-images-base`. `/api/v1/releases/{version}/snapshots` pages through the release's snapshots, newest first (`limit`, `offset`, `application`, `with_release=true`), with `art_kind` (`image` or `fbc`) on each one ART built for an assembly, and `/api/v1/releases/{version}/snapshots/{name}` returns one snapshot's components, each with any newer ART build still running (`pending_art_build`), and for a Quay snapshot whether the FBC catalog carries its operator bundle (`fbc_catalog`: `current`, `behind` or `unknown`). `/api/v1/releases/{version}/build-attempts` returns the release's ART image-build attempts, newest first, within the span ART history was read without a gap; `covered_from` is null when the stream was never read.
-
-`/api/v1/releases/{version}/staged` returns the newest image Snapshot ART staged for the version's assembly (`quay-v3.18.1` is assembly `3.18.1`) as `staged_image`, and in `catalogs` the newest FBC Snapshot it staged for each `operator`: `quay-operator`, `container-security-operator` and `quay-bridge-operator` (`staged`). Each Snapshot comes with the newest Konflux Release that names it (`release`, null when none does). A staged Snapshot is one annotated `art.redhat.com/assembly`, `art.redhat.com/kind` (`image` or `fbc`) and `art.redhat.com/env=stage`. ART stages one FBC per operator and OCP version; an operator's holds component `fbc-quay-X-Y-<operator>`. Each is null when ART staged none; none claims to be the build that ships. `stream_staged` says whether ART staged any version of the X.Y stream; it is false for a name that is not `quay-vX.Y.Z`.
+A Quay release's components come from three applications: `fbc-quay-X-Y` (the shipped FBC, 3.16+ only), `quay-X-Y`, and the `quay-X-Y-*` base image components of `quay-images-base`.
 
 `/api/v1/releases/{version}/build-tickets` checks the version's tickets against its candidate, the build `/candidate` selects: `build` holds its `snapshot` and `source` (`staged` or `newest`), or is null with the `reason` (`shipped`, `archived`, or why there is no build) for a version that is then not scanned. A ticket's `in_build` holds the candidate commits whose message names its key: the commits each component's upstream commit gained after its branch left the repo's default branch. The list is the version's Target Version tickets, plus the tickets of its .z stream that a candidate commit new since the previous version names. The previous version is the highest lower Z of the same X.Y that is not archived. When it is unshipped and has a candidate, a component's new commits are those after the same component's commit in that candidate, if GitHub shows that commit is its ancestor (`z_since` then names the previous version); otherwise they are its `in_build` commits. A Target Version ticket no candidate commit names has in `not_in_build` the default-branch commits the candidate lacks that name it, shown as "Not in build", but only when every component's commits and those were read completely. Commits are read in the background through the GitHub compare API, the default branch's only for versions with Target Version tickets and at most hourly; `not_compared` lists the components whose commits were not read, with the reason, prefixed `default branch: ` for the default branch's. An empty `in_build` and `not_in_build`, shown as "-", means no compared commit names the ticket; it does not prove the change is absent.
 
@@ -75,15 +71,15 @@ cd web && npm install && npm run build
 | `-kubeconfig` | `KUBECONFIG` | — | Kubeconfig path (empty uses the in-cluster service account) |
 | `-namespace` | `KONFLUX_NAMESPACE` | `art-quay-tenant` | Konflux namespace to read Snapshots and Releases from |
 | `-konflux-poll-interval` | — | `30s` | Konflux sync poll interval |
-| `-art-build-history-url` | — | `https://art-build-history-art-build-history.apps.artc2023.pc3z.p1.openshiftapps.com` | ART build history service; component images are looked up there in the background for build and upstream commit links, and each Quay stream's image-build attempts are kept (empty disables) |
+| `-art-build-history-url` | — | `https://art-build-history-art-build-history.apps.artc2023.pc3z.p1.openshiftapps.com` | ART build history service; component images are looked up there in the background for build and upstream commit links (empty disables) |
 | `-jira-url` | `JIRA_URL` | `https://redhat.atlassian.net` | JIRA Cloud URL |
 | `-jira-api-url` | `JIRA_API_URL` | `-jira-url` | JIRA REST API base URL; set to `https://api.atlassian.com/ex/jira/<cloudId>` for scoped API tokens |
 | `-jira-email` | `JIRA_EMAIL` | — | JIRA Cloud account email for API token auth |
 | `-jira-token` | `JIRA_TOKEN` | — | JIRA Cloud API token (required to enable JIRA sync) |
 | `-jira-project` | `JIRA_PROJECT` | `PROJQUAY` | JIRA project key |
 | `-jira-poll-interval` | — | `5m` | JIRA sync poll interval |
-| `-stage-release-plan-pattern` | `STAGE_RELEASE_PLAN_PATTERN` | `^quay-advisory-stage-\d+-\d+$` | Regexp matching the Konflux ReleasePlan names whose successful Releases are image STAGE builds (empty selects no build and disables the GitHub evidence scan) |
-| `-github-token` | `GITHUB_TOKEN` | — | Read-only GitHub token for the STAGE build commit compares (optional; anonymous reads allow 60 requests an hour) |
+| `-stage-release-plan-pattern` | `STAGE_RELEASE_PLAN_PATTERN` | `^quay-advisory-stage-\d+-\d+$` | Regexp matching the Konflux ReleasePlan names whose successful Releases are image STAGE builds (empty selects no staged build and disables the GitHub evidence scan) |
+| `-github-token` | `GITHUB_TOKEN` | — | Read-only GitHub token for the candidate build commit compares (optional; anonymous reads allow 60 requests an hour) |
 | `-prow-jobs` | `PROW_JOBS` | — | Periodic Prow jobs to ingest, as `job_name=konflux_application[,...]`, e.g. `periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly=quay-3-18` |
 | `-prow-interval` | — | `15m` | Prow sync poll interval |
 | `-catalog-url` | — | `https://catalog.redhat.com/api/containers/v1` | Red Hat container catalog API, checked hourly in the background to mark versions shipped (empty leaves JIRA's released flag as the only shipped signal) |
