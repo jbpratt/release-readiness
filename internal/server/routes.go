@@ -25,17 +25,10 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	fileServer := http.FileServer(http.FS(distSub))
 
 	mux.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		// Serve static assets directly if they exist
-		path := strings.TrimPrefix(r.URL.Path, "/")
-		if path != "" {
-			if f, err := distSub.Open(path); err == nil {
-				_ = f.Close()
-				fileServer.ServeHTTP(w, r)
-				return
-			}
+		// SPA fallback: serve index.html for any path that is not a built file
+		if _, err := fs.Stat(distSub, strings.TrimPrefix(r.URL.Path, "/")); err != nil {
+			r.URL.Path = "/"
 		}
-		// SPA fallback: serve index.html for all other routes
-		r.URL.Path = "/"
 		fileServer.ServeHTTP(w, r)
 	})
 }

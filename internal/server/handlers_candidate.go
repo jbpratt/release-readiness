@@ -59,7 +59,7 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 		return nil, err
 	}
 	newest := func(images []model.SnapshotImage) *model.NewestBuild {
-		return &model.NewestBuild{Snapshot: c.newest.Name, CreatedAt: c.newest.CreatedAt, Stage: stageFlag(app, images, releases).State}
+		return &model.NewestBuild{Snapshot: c.newest.Name, CreatedAt: c.newest.CreatedAt, Stage: stageState(images, releases)}
 	}
 	if c.build == nil || c.build.Source != "staged" {
 		resp.Reason = "no release candidate yet"
@@ -71,18 +71,13 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 
 	cand := c.build
 	resp.Candidate = cand
-	images := make([]model.SnapshotImage, len(cand.Components))
 	held := map[string]string{}
-	for i, cc := range cand.Components {
-		images[i] = model.SnapshotImage{Name: cc.Name, Image: cc.Image}
+	for _, cc := range cand.Components {
 		held[cc.Name] = imageDigest(cc.Image)
 	}
-	cand.Stage = stageFlag(app, images, releases)
-	if cand.Stage.State == "staged" {
-		// ART assembles a STAGE build from images it often staged before,
-		// so its own stage Release dates it.
-		cand.Stage.StagedAt = c.stagedAt
-	}
+	// Its own stage Release succeeded with every image of it, and dates it:
+	// ART assembles a STAGE build from images it often staged before.
+	cand.Stage = model.StageFlag{State: "staged", StagedAt: c.stagedAt, Total: len(cand.Components), NotStaged: []string{}, NoBundle: []string{}, NoRelease: []string{}}
 	if cand.Prod, err = s.db.LatestProdRelease(ctx, c.assembly); err != nil {
 		return nil, err
 	}
@@ -299,82 +294,28 @@ func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersi
 	return c, stagedAt, nil
 }
 
-// stageFlag tells whether every image of a build is in a Snapshot a STAGE
-// Release of the stream succeeded with and, when all are, dates it by the
-// last image to get there: the latest over its images of the earliest such
-// Release's completion. A stream with no STAGE Release at all is unknown:
-// nothing shows it goes through stage. An image no STAGE Release holds waits
-// on its bundle when the build's bundle for it is staged: ART builds an
-// operator's bundle only after a clean build run.
-func stageFlag(app string, images []model.SnapshotImage, releases []model.StageRelease) model.StageFlag {
-	f := model.StageFlag{State: "unknown", Total: len(images), NotStaged: []string{}, NoBundle: []string{}, NoRelease: []string{}}
+// stageState tells whether every image of a build is in a Snapshot a STAGE
+// Release of the stream succeeded with: "staged" or "not_staged", or
+// "unknown" when the stream has no STAGE Release at all: nothing shows it
+// goes through stage.
+func stageState(images []model.SnapshotImage, releases []model.StageRelease) string {
 	if len(releases) == 0 {
-		return f
+		return "unknown"
 	}
 	staged := map[string]bool{}
-	held := map[string]bool{}
-	first := map[string]time.Time{}
 	for _, r := range releases {
-		for _, img := range r.Images {
-			held[imageDigest(img)] = true
-		}
 		if r.ReleasedStatus == "True" && r.ReleasedReason == "Succeeded" {
 			for _, img := range r.Images {
-				d := imageDigest(img)
-				staged[d] = true
-				if t, ok := first[d]; r.CompletionTime != nil && (!ok || r.CompletionTime.Before(t)) {
-					first[d] = *r.CompletionTime
-				}
+				staged[imageDigest(img)] = true
 			}
 		}
 	}
-	// bundled tells whether the build's bundle for a component, named as the
-	// page names it with "-bundle" added, is staged.
-	bundled := func(name string) bool {
-		return slices.ContainsFunc(images, func(b model.SnapshotImage) bool {
-			d := imageDigest(b.Image)
-			return d != "" && staged[d] && componentLabel(app, b.Name) == componentLabel(app, name)+"-bundle"
-		})
-	}
-	missing := map[string]bool{}
-	var last time.Time
 	for _, img := range images {
-		d := imageDigest(img.Image)
-		if d != "" && staged[d] {
-			if first[d].After(last) {
-				last = first[d]
-			}
-			continue
-		}
-		f.NotStaged = append(f.NotStaged, img.Name)
-		if d != "" {
-			missing[d] = true
-		}
-		switch {
-		case d != "" && held[d]:
-			// A STAGE Release that did not succeed holds it.
-		case bundled(img.Name):
-			f.NoBundle = append(f.NoBundle, img.Name)
-		default:
-			f.NoRelease = append(f.NoRelease, img.Name)
+		if d := imageDigest(img.Image); d == "" || !staged[d] {
+			return "not_staged"
 		}
 	}
-	if len(f.NotStaged) == 0 {
-		f.State = "staged"
-		if !last.IsZero() {
-			f.StagedAt = &last
-		}
-		return f
-	}
-	f.State = "not_staged"
-	// A Release holding a missing digest cannot have succeeded.
-	for _, r := range releases {
-		if slices.ContainsFunc(r.Images, func(img string) bool { return missing[imageDigest(img)] }) {
-			f.Release = &r.KonfluxRelease
-			break
-		}
-	}
-	return f
+	return "staged"
 }
 
 // ciJobs returns, per job, the newest of runs (newest first) that installed
@@ -402,12 +343,6 @@ func buildImages(app string, snap *model.ReleaseSnapshot) []model.SnapshotImage 
 	return slices.DeleteFunc(slices.Clone(snap.Components), func(c model.SnapshotImage) bool {
 		return strings.HasPrefix(c.Name, app+"-base-")
 	})
-}
-
-// componentLabel is a component's name as the page shows it, without its
-// application and product: quay-3-18-quay-clair is clair.
-func componentLabel(app, name string) string {
-	return strings.TrimPrefix(strings.TrimPrefix(name, app+"-"), "quay-")
 }
 
 // imageDigest returns the digest of a repo@sha256:... image, or "" for a tag.

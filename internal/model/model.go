@@ -44,16 +44,15 @@ type ReleaseOverview struct {
 
 // ReleaseSnapshot is one Konflux Snapshot of a release's applications.
 type ReleaseSnapshot struct {
-	Application string          `json:"-"`
-	Name        string          `json:"name"`
-	CreatedAt   time.Time       `json:"created_at"`
-	Components  []SnapshotImage `json:"components,omitempty"`
+	Application string
+	Name        string
+	CreatedAt   time.Time
+	Components  []SnapshotImage
 }
 
 // SnapshotImage is one component image exactly as a Snapshot records it.
 type SnapshotImage struct {
-	Name  string `json:"name"`
-	Image string `json:"image"`
+	Name, Image string
 }
 
 // ReadinessResponse represents the computed readiness signal for a release.
@@ -96,8 +95,8 @@ type KonfluxRelease struct {
 // Konflux Release through a STAGE ReleasePlan succeeded.
 // CompletedAt is that Release's completion time.
 type SelectedBuild struct {
-	SnapshotName string    `json:"snapshot"`
-	CompletedAt  time.Time `json:"completed_at"`
+	SnapshotName string
+	CompletedAt  time.Time
 }
 
 // TicketBuild is the build a version's tickets are checked against, its
@@ -235,14 +234,9 @@ type SeverityCounts struct {
 	Unknown  int `json:"unknown"`
 }
 
-// StageFlag tells whether every image of a build is in a Snapshot a STAGE
-// Release of the stream succeeded with: State is "staged", with StagedAt when
-// the build reached stage, "not_staged" with the components that are not, or
-// "unknown" when the stream has no STAGE Release. Release is the newest STAGE
-// Release that did not succeed whose Snapshot holds an image that is not staged.
-// The not staged components no STAGE Release holds are in NoBundle when the
-// build's bundle for them is staged, as ART builds an operator's bundle only
-// after a clean build run, and otherwise in NoRelease.
+// StageFlag is the release candidate's stage: State "staged", StagedAt when
+// its stage Release completed, and Total its images. Its stage Release
+// succeeded with every image of it, so the lists are empty and Release null.
 type StageFlag struct {
 	State     string          `json:"state"`
 	StagedAt  *time.Time      `json:"staged_at"`
