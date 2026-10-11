@@ -20,8 +20,6 @@ The Go backend runs background sync loops that pull data into a local SQLite dat
 
 Lists `Snapshot` and `Release` resources (`appstudio.redhat.com/v1alpha1`) in the `-namespace` Konflux namespace through the Kubernetes API, using `-kubeconfig`/`KUBECONFIG` or, when unset, the in-cluster service account. New snapshots are stored with their component images; releases are upserted. Each record's `created_at` is the resource's `creationTimestamp`.
 
-Test results are not ingested.
-
 ### JIRA sync (default: every 5m)
 
 Discovers active releases by querying for JIRA issues with the `-area/release` component that are not Closed/Done. Parses the version from the ticket summary (e.g. "Release Quay v3.16.2") and syncs all issues whose Target Version equals the release version (e.g. `quay-v3.16.2`), and the issues of its .z stream Target Version (e.g. `quay-v3.16.z`).
@@ -42,15 +40,9 @@ Each JIRA release maps to a Konflux application by major.minor version: fixVersi
 
 A Quay version's builds are its application's stream Snapshots (not ART's assemblies or `fbc-ri-*` re-releases) whose images, base image excluded, carry that version in the NVR ART build history resolved for them: `quay-quay-container-3.18.1-...` is 3.18.1. Unresolved images do not count, a build carrying two versions, as while ART switches the stream, is of none, and a build counts only if ART built no lower version after it.
 
-`/api/v1/releases/{version}/candidate` returns the version's release `candidate`, its selected STAGE build, with its images, `stage`, the version's `prod` Release and its `ci`, or null with the `reason`, e.g. `no release candidate yet`. In its `stage`, `not_staged` lists the images in no Snapshot a STAGE Release succeeded with; of those in no STAGE Release at all, `no_bundle` lists the ones whose bundle in the build is staged (ART builds an operator's bundle only after a clean build-layered-products run) and `no_release` the others. `newest` is the version's newest build with the `stage` state of its images of the components the candidate holds, when one of them differs from the candidate's, or of all its images when there is no candidate; it is null otherwise. On `/api/v1/releases/overview`, a version's `latest_build` is when the newer of its newest build and its STAGE build was created, omitted when it has neither.
+`/api/v1/releases/{version}/candidate` returns the version's release `candidate`, its selected STAGE build, with its images, `stage`, the version's `prod` Release and its `ci`, or null with the `reason`, e.g. `no release candidate yet`. Its `stage` is `staged`, with `staged_at` when its own stage Release completed. `newest` is the version's newest build with the `stage` state of its images of the components the candidate holds, when one of them differs from the candidate's, or of all its images when there is no candidate; it is null otherwise. On `/api/v1/releases/overview`, a version's `latest_build` is when the newer of its newest build and its STAGE build was created, omitted when it has neither.
 
 `/api/v1/releases/{version}/build-tickets` checks the version's tickets against its candidate, its selected STAGE build, else its newest build: `build` holds its `snapshot` and `source` (`staged` or `newest`), or is null with the `reason` (`shipped`, `archived`, or why there is no build) for a version that is then not scanned. A ticket's `in_build` holds the candidate commits whose message names its key: the commits each component's upstream commit gained after its branch left the repo's default branch. The list is the version's Target Version tickets, plus the tickets of its .z stream that a candidate commit new since the previous version names. The previous version is the highest lower Z of the same X.Y that is not archived. When it is unshipped and has a candidate, a component's new commits are those after the same component's commit in that candidate, if GitHub shows that commit is its ancestor (`z_since` then names the previous version); otherwise they are its `in_build` commits. A Target Version ticket no candidate commit names has in `not_in_build` the default-branch commits the candidate lacks that name it, shown as "Not in build", but only when every component's commits and those were read completely. Commits are read in the background through the GitHub compare API, the default branch's only for versions with Target Version tickets and at most hourly; `not_compared` lists the components whose commits were not read, with the reason, prefixed `default branch: ` for the default branch's. An empty `in_build` and `not_in_build`, shown as "-", means no compared commit names the ticket; it does not prove the change is absent.
-
-## JIRA expectations
-
-- **Release discovery** — searches for issues where `component = "-area/release"` and status is not Closed/Done
-- **Version parsing** — extracts the product and version from the ticket summary (e.g. "Release Quay v3.16.2")
-- **Issue sync** — fetches all issues whose Target Version equals the release version (format: `{product}-v{version}`, e.g. `quay-v3.16.2`)
 
 ## Running the application
 

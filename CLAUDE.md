@@ -50,13 +50,13 @@ The Vite dev server proxies `/api` requests to `localhost:8088` (the Go backend)
 - **`internal/model/`** — Shared data types used across packages.
 
 ### Frontend (`web/`)
-- React 19 + TypeScript, built with Vite 6
+- React 19 + TypeScript, built with Vite
 - UI framework: **PatternFly 6** (Red Hat design system)
 - API client in `web/src/api/client.ts`, types in `web/src/api/types.ts`
 - Pages: `ReleasesOverview`, `ReleaseDetail`
 
 ### Data Flow
-1. Konflux sync loop lists Snapshots and Releases in the namespace → ingests into SQLite (snapshot components, releases). Test results are not ingested.
+1. Konflux sync loop lists Snapshots and Releases in the namespace → ingests into SQLite (snapshot components, releases).
 2. JIRA sync loop discovers active releases → syncs issues per fixVersion into SQLite
 3. React SPA fetches data via `/api/v1/` REST endpoints
 
