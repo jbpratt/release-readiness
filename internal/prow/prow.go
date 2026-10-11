@@ -185,36 +185,3 @@ func digest(ref string) string {
 	}
 	return d
 }
-
-// componentRoles maps a quay-X-Y component, less its application prefix, to
-// the tested-images.json role that deploys it.
-var componentRoles = map[string]string{
-	"quay-quay":            "quay",
-	"quay-clair":           "clair",
-	"quay-builder":         "builder",
-	"quay-builder-qemu":    "builder-qemu",
-	"quay-operator":        "quay-operator",
-	"quay-operator-bundle": "quay-operator-bundle",
-}
-
-// ComponentKey is the exact (role, digest) identity a run must have tested for
-// it to count as testing a Snapshot component's image, or "" when no run can.
-// fbc-quay-X-Y-quay-operator is the catalog the run installs from.
-func ComponentKey(application, component, image string) string {
-	suffix, ok := strings.CutPrefix(component, application+"-")
-	d := digest(image)
-	if !ok || d == "" {
-		return ""
-	}
-	role := componentRoles[suffix]
-	if strings.HasPrefix(application, "fbc-") {
-		role = ""
-		if suffix == "quay-operator" {
-			role = "catalog"
-		}
-	}
-	if role == "" {
-		return ""
-	}
-	return role + "@" + d
-}

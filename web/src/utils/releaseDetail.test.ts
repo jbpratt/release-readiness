@@ -12,7 +12,6 @@ import {
 } from "@patternfly/react-icons";
 import type { ImageScan, KonfluxRelease, StageFlag } from "../api/types.ts";
 import {
-	buildTitle,
 	componentLabel,
 	fixableLabels,
 	jobLabels,
@@ -168,17 +167,6 @@ test("statusIcon: each Jira status its icon, in any case, the verified ones gree
 	for (const [status, icon, verified] of want) {
 		assert.deepEqual(statusIcon(status), { icon, verified }, status);
 	}
-});
-
-test("buildTitle", () => {
-	assert.equal(buildTitle(["candidate"], "staged"), "Staged build");
-	assert.equal(
-		buildTitle(["candidate", "newest"], "staged"),
-		"Staged build · Latest",
-	);
-	assert.equal(buildTitle(["candidate", "newest"], "newest"), "Latest");
-	assert.equal(buildTitle(["newest"], "staged"), "Latest");
-	assert.equal(buildTitle(["last_tested"], "staged"), "Last tested");
 });
 
 const release = (r: Partial<KonfluxRelease>): KonfluxRelease => ({

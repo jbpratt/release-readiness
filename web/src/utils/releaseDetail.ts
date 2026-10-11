@@ -10,8 +10,6 @@ import {
 } from "@patternfly/react-icons";
 import type {
 	BuildCommit,
-	BuildRow,
-	CandidateBuild,
 	ImageScan,
 	KonfluxRelease,
 	ScanCounts,
@@ -117,27 +115,6 @@ export function nvrLabel(nvr: string): string {
 	return i < 0
 		? nvr
 		: nvr.slice(i + CONTAINER.length).replace(/\.assembly\..+?\.el\d+/, "");
-}
-
-// A build's titles by role, in the order a build with several joins them.
-const TITLES = ["Staged build", "Latest", "Last tested"] as const;
-
-/**
- * A build's box title from its roles: the candidate is the staged build, or
- * when none is in stage the latest.
- */
-export function buildTitle(
-	roles: BuildRow["roles"],
-	source: CandidateBuild["source"],
-): string {
-	const titles = roles.map((r) =>
-		r === "last_tested"
-			? "Last tested"
-			: r === "candidate" && source === "staged"
-				? "Staged build"
-				: "Latest",
-	);
-	return TITLES.filter((t) => titles.includes(t)).join(" · ");
 }
 
 /** A line of a build's box: a status icon and the text it explains. */

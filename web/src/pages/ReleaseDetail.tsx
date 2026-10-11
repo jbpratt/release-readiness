@@ -17,9 +17,6 @@ import {
 	Label,
 	type LabelProps,
 	PageSection,
-	Panel,
-	PanelMain,
-	PanelMainBody,
 	Popover,
 	Spinner,
 	Title,
@@ -47,13 +44,13 @@ import { Link, useParams } from "react-router-dom";
 import { getBuildTickets, getCandidate, getRelease } from "../api/client";
 import type {
 	BuildCommit,
-	BuildRow,
 	BuildTicket,
 	BuildTickets,
 	CandidateBuild,
 	CIJob,
 	DashboardConfig,
 	ImageScan,
+	NewestBuild,
 	ReleaseCandidate,
 	ReleaseVersion,
 	ScanCounts,
@@ -70,7 +67,6 @@ import {
 } from "../utils/links";
 import {
 	BASES,
-	buildTitle,
 	componentLabel,
 	fixableLabels,
 	jobLabels,
@@ -174,6 +170,7 @@ export default function ReleaseDetail() {
 			<BuildsCard
 				data={candidate.data}
 				error={candidate.error}
+				version={release.name.replace(/^[a-z]+-v/, "")}
 				app={app}
 				konflux={konflux}
 			/>
@@ -325,22 +322,41 @@ const noNvr = (
 const lines = (...ls: (string | undefined)[]) =>
 	ls.filter(Boolean).map((l) => <div key={l}>{l}</div>);
 
-/** The builds that matter to the version, one box each, and the candidate's images. */
+/** The version's release candidate, its STAGE build, or why it has none. */
 function BuildsCard({
 	data,
 	error,
+	version,
 	app,
 	konflux,
 }: {
 	data?: ReleaseCandidate;
 	error?: Error;
+	/** The version's X.Y.Z. */
+	version: string;
 	app: string;
 	konflux: KonfluxLink;
 }) {
+	const c = data?.candidate;
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<LinkedCardTitle href={konflux()} link="Konflux">
-				Builds
+				{c ? (
+					<>
+						{version} release candidate ·{" "}
+						<ExtLink href={konflux("snapshots", c.snapshot)} title={c.snapshot}>
+							{new Date(c.created_at).toLocaleString(undefined, {
+								month: "short",
+								day: "numeric",
+								hour: "2-digit",
+								minute: "2-digit",
+								hourCycle: "h23",
+							})}
+						</ExtLink>
+					</>
+				) : (
+					"Release candidate"
+				)}
 			</LinkedCardTitle>
 			<CardBody>
 				{error ? (
@@ -349,59 +365,78 @@ function BuildsCard({
 					<Spinner size="md" />
 				) : data.shipped ? (
 					"Shipped."
-				) : !data.candidate ? (
-					data.reason.charAt(0).toUpperCase() + data.reason.slice(1)
-				) : (
-					<Builds
-						builds={data.builds}
-						candidate={data.candidate}
+				) : c ? (
+					<Candidate
+						candidate={c}
+						newest={data.newest}
+						version={version}
 						app={app}
 						konflux={konflux}
 					/>
+				) : (
+					<>
+						{data.reason === "no release candidate yet"
+							? "No release candidate yet."
+							: data.reason.charAt(0).toUpperCase() + data.reason.slice(1)}
+						{data.newest && (
+							<NewestLine
+								label="Newest build"
+								newest={data.newest}
+								konflux={konflux}
+							/>
+						)}
+					</>
 				)}
 			</CardBody>
 		</Card>
 	);
 }
 
-function Builds({
-	builds,
+/** The candidate: whether it is in stage, in prod and tested, a newer build, and its images. */
+function Candidate({
 	candidate,
+	newest,
+	version,
 	app,
 	konflux,
 }: {
-	builds: BuildRow[];
 	candidate: CandidateBuild;
+	newest: NewestBuild | null;
+	version: string;
 	app: string;
 	konflux: KonfluxLink;
 }) {
 	const hasScans = candidate.components.some((c) => c.scan);
-	const oldestFirst = [...builds].sort(
-		(a, b) => Date.parse(a.created_at) - Date.parse(b.created_at),
-	);
 	return (
 		<>
-			<Flex alignItems={{ default: "alignItemsStretch" }}>
-				{oldestFirst.map((b) => (
-					<FlexItem
-						key={b.snapshot}
-						flex={{ default: "flex_1" }}
-						style={{ minWidth: "18rem" }}
-					>
-						<BuildBox
-							build={b}
-							source={candidate.source}
-							app={app}
+			<DescriptionList isHorizontal isCompact termWidth="5ch">
+				<BoxLine term="Stage">
+					<StatusLines
+						lines={stageLines(candidate.stage, app)}
+						konflux={konflux}
+					/>
+				</BoxLine>
+				{candidate.prod && (
+					<BoxLine term="Prod">
+						<StatusLines
+							lines={[releaseLine(candidate.prod)]}
 							konflux={konflux}
 						/>
-					</FlexItem>
-				))}
-			</Flex>
-			<Title headingLevel="h3" size="md" style={{ marginTop: "1rem" }}>
-				Images in the {candidate.source === "staged" ? "staged" : "latest"}{" "}
-				build
-			</Title>
-			<Table variant="compact">
+					</BoxLine>
+				)}
+				<BoxLine term="CI">
+					<CICell jobs={candidate.ci} createdAt={candidate.created_at} />
+				</BoxLine>
+			</DescriptionList>
+			{newest && (
+				<NewestLine
+					label="Newer build"
+					notIn={version}
+					newest={newest}
+					konflux={konflux}
+				/>
+			)}
+			<Table variant="compact" style={{ marginTop: "1rem" }}>
 				<Thead>
 					<Tr>
 						<Th>Component</Th>
@@ -435,64 +470,40 @@ function Builds({
 	);
 }
 
-/** A build by its role: when it was built, and whether it is in stage, in prod and tested. */
-function BuildBox({
-	build,
-	source,
-	app,
+const stageSuffix: Record<NewestBuild["stage"], string> = {
+	staged: " · staged",
+	not_staged: " · not staged",
+	unknown: "",
+};
+
+/** The version's newest build: its date, linked to its Snapshot, and whether it is in stage. */
+function NewestLine({
+	label,
+	notIn,
+	newest,
 	konflux,
 }: {
-	build: BuildRow;
-	source: CandidateBuild["source"];
-	app: string;
+	label: string;
+	/** The X.Y.Z of the candidate, which lacks the newest build's images. */
+	notIn?: string;
+	newest: NewestBuild;
 	konflux: KonfluxLink;
 }) {
 	return (
-		<Panel variant="bordered" style={{ height: "100%" }}>
-			<PanelMain>
-				<PanelMainBody>
-					<Title headingLevel="h3" size="md">
-						{buildTitle(build.roles, source)}
-					</Title>
-					<ExtLink
-						href={konflux("snapshots", build.snapshot)}
-						title={build.snapshot}
-					>
-						{new Date(build.created_at).toLocaleString(undefined, {
-							month: "short",
-							day: "numeric",
-							hour: "2-digit",
-							minute: "2-digit",
-							hourCycle: "h23",
-						})}
-					</ExtLink>
-					<DescriptionList
-						isHorizontal
-						isCompact
-						termWidth="5ch"
-						style={{ marginTop: "0.75rem" }}
-					>
-						<BoxLine term="Stage">
-							<StatusLines
-								lines={stageLines(build.stage, app)}
-								konflux={konflux}
-							/>
-						</BoxLine>
-						{build.prod && (
-							<BoxLine term="Prod">
-								<StatusLines
-									lines={[releaseLine(build.prod)]}
-									konflux={konflux}
-								/>
-							</BoxLine>
-						)}
-						<BoxLine term="CI">
-							<CICell jobs={build.ci} />
-						</BoxLine>
-					</DescriptionList>
-				</PanelMainBody>
-			</PanelMain>
-		</Panel>
+		<div style={{ marginTop: "0.5rem" }}>
+			{label}{" "}
+			<ExtLink
+				href={konflux("snapshots", newest.snapshot)}
+				title={newest.snapshot}
+			>
+				{new Date(newest.created_at).toLocaleDateString("en-US", {
+					month: "short",
+					day: "numeric",
+				})}
+			</ExtLink>
+			{notIn && `: not in ${notIn}`}
+			{stageSuffix[newest.stage]}
+		</div>
 	);
 }
 
@@ -679,10 +690,19 @@ const ciStates: Record<string, [string, LabelProps["status"]]> = {
 	error: ["Error", "danger"],
 };
 
+// Periodic runs record the images they install (tested-images.json, openshift/release #86768) only since this date.
+const ciRecordedSince = Date.parse("2026-10-09T00:00:00Z");
+
 /** A label per job, opening its newest run of the build, the run on hover. */
-function CICell({ jobs }: { jobs: CIJob[] }) {
+function CICell({ jobs, createdAt }: { jobs: CIJob[]; createdAt: string }) {
 	if (jobs.length === 0) {
-		return <Status status="none">Not tested</Status>;
+		return (
+			<Status status="none">
+				{Date.parse(createdAt) < ciRecordedSince
+					? "No CI record (before 2026-10-09)"
+					: "Not tested"}
+			</Status>
+		);
 	}
 	const labels = jobLabels(jobs.map((j) => j.job_name));
 	return (

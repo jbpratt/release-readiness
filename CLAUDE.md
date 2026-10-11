@@ -46,7 +46,7 @@ The Vite dev server proxies `/api` requests to `localhost:8088` (the Go backend)
 - **`internal/db/`** — SQLite data layer (pure-Go driver `modernc.org/sqlite`, no CGO). Schema migrations in `migrations.go`. WAL mode enabled.
 - **`internal/kube/`** — Kubernetes dynamic client. Syncs Konflux Snapshots and Releases from `-namespace` (kubeconfig or in-cluster service account); `created_at` comes from `creationTimestamp`.
 - **`internal/jira/`** — JIRA REST API client. Discovers active releases, syncs issues by fixVersion.
-- **`internal/prow/`** — Prow periodic CI runs from public GCS, keyed by Konflux application (`-prow-jobs job=quay-3-18`). A run tests a Snapshot component only on an exact (role, digest) match (`ComponentKey`).
+- **`internal/prow/`** — Prow periodic CI runs from public GCS, keyed by Konflux application (`-prow-jobs job=quay-3-18`). A run counts for the release candidate when it recorded the candidate's operator bundle digest.
 - **`internal/model/`** — Shared data types used across packages.
 
 ### Frontend (`web/`)
