@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"flag"
@@ -35,17 +36,17 @@ func main() {
 
 	// Konflux flags
 	kubeconfig := flag.String("kubeconfig", os.Getenv("KUBECONFIG"), "kubeconfig path (empty uses the in-cluster service account)")
-	namespace := flag.String("namespace", envOrDefault("KONFLUX_NAMESPACE", "art-quay-tenant"), "Konflux namespace to read Snapshots and Releases from")
+	namespace := flag.String("namespace", cmp.Or(os.Getenv("KONFLUX_NAMESPACE"), "art-quay-tenant"), "Konflux namespace to read Snapshots and Releases from")
 	konfluxPollInterval := flag.Duration("konflux-poll-interval", 30*time.Second, "Konflux sync poll interval")
-	konfluxUIURL := flag.String("konflux-ui-url", envOrDefault("KONFLUX_UI_URL", "https://konflux-ui.apps.kflux-ocp-p01.7ayg.p1.openshiftapps.com"), "Konflux UI URL for links to -namespace's applications, Snapshots and Releases (empty disables Konflux links)")
+	konfluxUIURL := flag.String("konflux-ui-url", cmp.Or(os.Getenv("KONFLUX_UI_URL"), "https://konflux-ui.apps.kflux-ocp-p01.7ayg.p1.openshiftapps.com"), "Konflux UI URL for links to -namespace's applications, Snapshots and Releases (empty disables Konflux links)")
 
 	// JIRA flags
-	jiraURL := flag.String("jira-url", envOrDefault("JIRA_URL", "https://redhat.atlassian.net"), "JIRA Cloud URL")
+	jiraURL := flag.String("jira-url", cmp.Or(os.Getenv("JIRA_URL"), "https://redhat.atlassian.net"), "JIRA Cloud URL")
 	jiraAPIURL := flag.String("jira-api-url", os.Getenv("JIRA_API_URL"), "JIRA REST API base URL (defaults to -jira-url; use https://api.atlassian.com/ex/jira/<cloudId> for scoped API tokens)")
 	jiraEmail := flag.String("jira-email", os.Getenv("JIRA_EMAIL"), "JIRA Cloud account email for API token auth")
 	jiraToken := flag.String("jira-token", os.Getenv("JIRA_TOKEN"), "JIRA Cloud API token")
-	jiraProject := flag.String("jira-project", envOrDefault("JIRA_PROJECT", "PROJQUAY"), "JIRA project key")
-	jiraQAContactField := flag.String("jira-qa-contact-field", envOrDefault("JIRA_QA_CONTACT_FIELD", "customfield_12315948"), "JIRA custom field name for QA Contact")
+	jiraProject := flag.String("jira-project", cmp.Or(os.Getenv("JIRA_PROJECT"), "PROJQUAY"), "JIRA project key")
+	jiraQAContactField := flag.String("jira-qa-contact-field", cmp.Or(os.Getenv("JIRA_QA_CONTACT_FIELD"), "customfield_12315948"), "JIRA custom field name for QA Contact")
 	jiraPollInterval := flag.Duration("jira-poll-interval", 5*time.Minute, "JIRA sync poll interval")
 
 	// ART build history flags
@@ -62,7 +63,7 @@ func main() {
 	prowInterval := flag.Duration("prow-interval", 15*time.Minute, "Prow sync poll interval")
 
 	// Selected STAGE build flags
-	stagePlanPattern := flag.String("stage-release-plan-pattern", envOrDefault("STAGE_RELEASE_PLAN_PATTERN", `^quay-advisory-stage-\d+-\d+$`), "regexp matching the Konflux ReleasePlan names whose Releases are image STAGE (empty selects no staged build)")
+	stagePlanPattern := flag.String("stage-release-plan-pattern", cmp.Or(os.Getenv("STAGE_RELEASE_PLAN_PATTERN"), `^quay-advisory-stage-\d+-\d+$`), "regexp matching the Konflux ReleasePlan names whose Releases are image STAGE (empty selects no staged build)")
 
 	// GitHub ticket evidence flags
 	githubToken := flag.String("github-token", os.Getenv("GITHUB_TOKEN"), "read-only GitHub token (optional; raises the rate limit)")
@@ -111,19 +112,12 @@ func main() {
 		logger.Info("konflux sync enabled", "namespace", *namespace, "interval", *konfluxPollInterval)
 		syncer := kube.NewSyncer(kc, *namespace, database, konfluxLog)
 		syncer.Status = status.Track("konflux", *konfluxPollInterval)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			syncer.Run(ctx, *konfluxPollInterval)
-		}()
+		wg.Go(func() { syncer.Run(ctx, *konfluxPollInterval) })
 	}
 
 	// Start JIRA sync if token is configured
 	if *jiraToken != "" {
-		apiURL := *jiraURL
-		if *jiraAPIURL != "" {
-			apiURL = *jiraAPIURL
-		}
+		apiURL := cmp.Or(*jiraAPIURL, *jiraURL)
 		jiraClient := jira.New(jira.Config{
 			BaseURL:        apiURL,
 			SiteURL:        *jiraURL,
@@ -141,11 +135,7 @@ func main() {
 		}
 		syncer := jira.NewSyncer(jiraClient, database, jiraTx, jiraLog)
 		syncer.Status = status.Track("jira", *jiraPollInterval)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			syncer.Run(ctx, *jiraPollInterval)
-		}()
+		wg.Go(func() { syncer.Run(ctx, *jiraPollInterval) })
 	}
 
 	var art *artbuild.Client
@@ -155,11 +145,7 @@ func main() {
 		art = artbuild.NewClient(*artURL, &http.Client{Timeout: time.Minute})
 		resolver := artbuild.NewResolver(art, database, artLog)
 		resolver.Status = status.Track("art-builds", 5*time.Minute)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			resolver.Run(ctx, 5*time.Minute)
-		}()
+		wg.Go(func() { resolver.Run(ctx, 5*time.Minute) })
 	}
 
 	var shipped *catalog.Shipped
@@ -167,22 +153,14 @@ func main() {
 		logger.Info("catalog shipped lookup enabled", "url", *catalogURL)
 		shipped = catalog.NewShipped(catalog.NewClient(*catalogURL, &http.Client{Timeout: time.Minute}), logger.With("component", "catalog"))
 		shipped.Status = status.Track("catalog", time.Hour)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			shipped.Run(ctx, time.Hour)
-		}()
+		wg.Go(func() { shipped.Run(ctx, time.Hour) })
 	}
 
 	if len(prowJobList) > 0 {
 		logger.Info("prow sync enabled", "jobs", len(prowJobList), "interval", *prowInterval)
 		syncer := prow.NewSyncer(prow.NewClient(prow.DefaultBaseURL), database, prowJobList, *prowInterval, logger.With("component", "prow-sync"))
 		syncer.Status = status.Track("prow", *prowInterval)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			syncer.Run(ctx)
-		}()
+		wg.Go(func() { syncer.Run(ctx) })
 	}
 
 	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, shipped, status, logger)
@@ -194,16 +172,14 @@ func main() {
 		logger.Info("github evidence scan enabled", "token", *githubToken != "")
 		srv.Scanner = github.NewScanner(github.NewClient("https://api.github.com", *githubToken, &http.Client{Timeout: time.Minute}), srv.TicketBuilds, logger.With("component", "github-evidence"))
 		srv.Scanner.Status = status.Track("github-evidence", 10*time.Minute)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			// Until the catalog is read, the versions it shipped look
 			// unshipped, and their compares would be read.
 			if shipped != nil {
 				shipped.Refresh(ctx)
 			}
 			srv.Scanner.Run(ctx, 10*time.Minute)
-		}()
+		})
 	}
 
 	if *resultsURL != "" {
@@ -226,16 +202,14 @@ func main() {
 			results := scan.NewClient(*resultsURL, &http.Client{Timeout: time.Minute, Transport: rt})
 			syncer := scan.NewSyncer(results, art, database, srv.CandidateDigests, logger.With("component", "image-scans"))
 			syncer.Status = status.Track("image-scans", 5*time.Minute)
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				// Until the catalog is read, the versions it shipped look
 				// unshipped, and their scans would be read.
 				if shipped != nil {
 					shipped.Refresh(ctx)
 				}
 				syncer.Run(ctx, 5*time.Minute)
-			}()
+			})
 		}
 	}
 
@@ -246,11 +220,4 @@ func main() {
 
 	wg.Wait()
 	logger.Info("all background tasks stopped")
-}
-
-func envOrDefault(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }
