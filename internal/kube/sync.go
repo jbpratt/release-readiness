@@ -2,11 +2,13 @@ package kube
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -108,6 +110,13 @@ func (s *Syncer) each(ctx context.Context, pass *syncstatus.Pass, gvr schema.Gro
 	opts := metav1.ListOptions{Limit: 500}
 	for {
 		list, err := s.client.Resource(gvr).Namespace(s.namespace).List(ctx, opts)
+		var status apierrors.APIStatus
+		if apierrors.IsResourceExpired(err) && errors.As(err, &status) && status.Status().Continue != "" {
+			// The apiserver compacts the list's revision every 5 minutes; the next pass picks up anything created mid-list.
+			s.logger.Info("list continue token expired, resuming", "resource", gvr.Resource, "namespace", s.namespace)
+			opts.Continue = status.Status().Continue
+			continue
+		}
 		if err != nil {
 			s.logger.Error("list", "resource", gvr.Resource, "namespace", s.namespace, "error", err)
 			pass.Add(fmt.Errorf("list %s: %w", gvr.Resource, err))
