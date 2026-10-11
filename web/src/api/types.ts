@@ -84,20 +84,12 @@ export interface SeverityCounts {
 
 /**
  * Whether every image of a build is in a Snapshot a STAGE Release succeeded
- * with; "unknown" when the stream has no STAGE Release.
+ * with; "unknown" when the stream has no STAGE Release. The candidate is
+ * always staged, when its own stage Release completed.
  */
 export interface StageFlag {
 	state: "staged" | "not_staged" | "unknown";
-	/** When the build reached stage, once staged. */
-	staged_at: string | null;
-	total: number;
-	not_staged: string[];
-	/** The newest STAGE Release that did not succeed holding a not-staged image. */
-	release: KonfluxRelease | null;
-	/** Not-staged images in no STAGE Release whose bundle in the build is staged. */
-	no_bundle: string[];
-	/** The other not-staged images in no STAGE Release. */
-	no_release: string[];
+	staged_at: string;
 }
 
 /** A job's newest run of a build and how many of its runs tested it. */
@@ -109,7 +101,15 @@ export interface CIJob {
 	runs: number;
 }
 
-export interface JiraIssue {
+/** An upstream commit in, or missing from, one component of a build. */
+export interface BuildCommit {
+	component: string;
+	commit_sha: string;
+	commit_url: string;
+}
+
+/** A ticket with the candidate's commits whose message names it. */
+export interface BuildTicket {
 	key: string;
 	summary: string;
 	status: string;
@@ -119,17 +119,6 @@ export interface JiraIssue {
 	issue_type: string;
 	link: string;
 	qa_contact: string;
-}
-
-/** An upstream commit in, or missing from, one component of a build. */
-export interface BuildCommit {
-	component: string;
-	commit_sha: string;
-	commit_url: string;
-}
-
-/** A ticket with the candidate's commits whose message names it. */
-export interface BuildTicket extends JiraIssue {
 	in_build: BuildCommit[];
 	/**
 	 * For a Target Version ticket no candidate commit names, the

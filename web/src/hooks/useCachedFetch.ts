@@ -6,28 +6,11 @@ interface CacheEntry<T> {
 }
 
 const cache = new Map<string, CacheEntry<unknown>>();
-const MAX_CACHE_SIZE = 100;
 
 const DEFAULT_TTL_MS = 60_000;
 
-function cacheSet(key: string, entry: CacheEntry<unknown>): void {
-	// Delete first so re-insertion moves the key to the end (Map ordering)
-	cache.delete(key);
-	cache.set(key, entry);
-	if (cache.size > MAX_CACHE_SIZE) {
-		// Evict oldest entry (first key in insertion order)
-		const oldest = cache.keys().next().value;
-		if (oldest !== undefined) cache.delete(oldest);
-	}
-}
-
-/** Seed an entry into the shared cache so subsequent useCachedFetch calls can reuse it. */
-export function seedCache<T>(key: string, data: T): void {
-	cacheSet(key, { data, timestamp: Date.now() });
-}
-
 export function useCachedFetch<T>(
-	key: string | null,
+	key: string,
 	fetcher: () => Promise<T>,
 	ttlMs = DEFAULT_TTL_MS,
 ): {
@@ -36,40 +19,24 @@ export function useCachedFetch<T>(
 	error: Error | undefined;
 	refetch: () => void;
 } {
-	const [data, setData] = useState<T | undefined>(() => {
-		if (!key) return undefined;
-		const entry = cache.get(key) as CacheEntry<T> | undefined;
-		return entry?.data;
-	});
-	const [loading, setLoading] = useState<boolean>(() => {
-		if (!key) return false;
-		const entry = cache.get(key);
-		return !entry;
-	});
+	const [data, setData] = useState(
+		() => (cache.get(key) as CacheEntry<T> | undefined)?.data,
+	);
+	const [loading, setLoading] = useState(() => !cache.has(key));
 	const [error, setError] = useState<Error | undefined>();
 	const fetcherRef = useRef(fetcher);
 	fetcherRef.current = fetcher;
 
 	const doFetch = useCallback(() => {
-		if (!key) return;
 		const entry = cache.get(key) as CacheEntry<T> | undefined;
-		const now = Date.now();
-		if (entry && now - entry.timestamp < ttlMs) {
-			setData(entry.data);
-			setLoading(false);
-			return;
-		}
 		// Show cached data while refreshing (no loading flicker)
-		if (entry) {
-			setData(entry.data);
-			setLoading(false);
-		} else {
-			setLoading(true);
-		}
+		if (entry) setData(entry.data);
+		setLoading(!entry);
+		if (entry && Date.now() - entry.timestamp < ttlMs) return;
 		fetcherRef
 			.current()
 			.then((result) => {
-				cacheSet(key, { data: result, timestamp: Date.now() });
+				cache.set(key, { data: result, timestamp: Date.now() });
 				setData(result);
 				setError(undefined);
 			})

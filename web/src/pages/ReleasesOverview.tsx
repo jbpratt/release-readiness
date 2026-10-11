@@ -33,7 +33,6 @@ import {
 	ListIcon,
 	ThIcon,
 } from "@patternfly/react-icons";
-import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { listReleasesOverview } from "../api/client";
 import type {
@@ -41,7 +40,7 @@ import type {
 	ReadinessResponse,
 	ReleaseVersion,
 } from "../api/types";
-import { seedCache, useCachedFetch } from "../hooks/useCachedFetch";
+import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
 import { day } from "../utils/format";
 import { formatReleaseName, jiraIssueUrl } from "../utils/links";
@@ -59,14 +58,6 @@ export default function ReleasesOverview() {
 		"releasesOverview",
 		listReleasesOverview,
 	);
-
-	// Seed individual cache entries so detail pages can reuse data
-	useEffect(() => {
-		if (!overviews) return;
-		for (const ov of overviews) {
-			seedCache(`readiness:${ov.release.name}`, ov.readiness);
-		}
-	}, [overviews]);
 
 	const setParam = (key: string, value: string) => {
 		setSearchParams((prev) => {
@@ -179,7 +170,7 @@ function ReleaseCard({
 }: {
 	release: ReleaseVersion;
 	issueSummary?: IssueSummary;
-	readinessSignal?: ReadinessResponse;
+	readinessSignal: ReadinessResponse;
 	latestBuild?: string;
 	shipped: boolean;
 	viewMode: ViewMode;
@@ -188,15 +179,11 @@ function ReleaseCard({
 	const target = release.due_date ?? release.release_date;
 	const targetDate = target && day(target);
 
-	const signalColor = readinessSignal?.signal ?? "grey";
-	const signalIcon =
-		signalColor === "green" ? (
-			<CheckCircleIcon />
-		) : signalColor === "red" ? (
-			<ExclamationCircleIcon />
-		) : signalColor === "yellow" ? (
-			<ExclamationTriangleIcon />
-		) : undefined;
+	const signalIcon = {
+		green: <CheckCircleIcon />,
+		red: <ExclamationCircleIcon />,
+		yellow: <ExclamationTriangleIcon />,
+	}[readinessSignal.signal];
 
 	const verifiedPercent =
 		issueSummary && issueSummary.total > 0
@@ -214,10 +201,19 @@ function ReleaseCard({
 	const navigate = useNavigate();
 	const displayName = formatReleaseName(release.name);
 
-	const ticketLink =
-		release.release_ticket_key && jiraBaseUrl
-			? jiraIssueUrl(release.release_ticket_key, jiraBaseUrl)
-			: null;
+	const ticket =
+		release.release_ticket_key && jiraBaseUrl ? (
+			<a
+				href={jiraIssueUrl(release.release_ticket_key, jiraBaseUrl)}
+				target="_blank"
+				rel="noopener noreferrer"
+				style={{ textDecoration: "none" }}
+			>
+				{release.release_ticket_key}
+			</a>
+		) : (
+			release.release_ticket_key
+		);
 
 	return (
 		<Card
@@ -247,20 +243,8 @@ function ReleaseCard({
 					<FlexItem>
 						{/* A shipped release with an open JIRA ticket shows only its shipped
 						    badge: the readiness signal would only reflect the stale ticket. */}
-						{readinessSignal && !(shipped && !release.released) && (
-							<Label
-								color={
-									signalColor === "green"
-										? "green"
-										: signalColor === "red"
-											? "red"
-											: signalColor === "yellow"
-												? "yellow"
-												: "grey"
-								}
-								icon={signalIcon}
-								isCompact
-							>
+						{!(shipped && !release.released) && (
+							<Label color={readinessSignal.signal} icon={signalIcon} isCompact>
 								{readinessSignal.message}
 							</Label>
 						)}
@@ -288,18 +272,7 @@ function ReleaseCard({
 							<DescriptionListGroup>
 								<DescriptionListTerm>Ticket</DescriptionListTerm>
 								<DescriptionListDescription>
-									{ticketLink ? (
-										<a
-											href={ticketLink}
-											target="_blank"
-											rel="noopener noreferrer"
-											style={{ textDecoration: "none" }}
-										>
-											{release.release_ticket_key}
-										</a>
-									) : (
-										release.release_ticket_key
-									)}
+									{ticket}
 								</DescriptionListDescription>
 							</DescriptionListGroup>
 						)}
@@ -317,20 +290,7 @@ function ReleaseCard({
 								{release.release_ticket_key && (
 									<FlexItem>
 										<span className="rr-label">Ticket</span>
-										<div>
-											{ticketLink ? (
-												<a
-													href={ticketLink}
-													target="_blank"
-													rel="noopener noreferrer"
-													style={{ textDecoration: "none" }}
-												>
-													{release.release_ticket_key}
-												</a>
-											) : (
-												release.release_ticket_key
-											)}
-										</div>
+										<div>{ticket}</div>
 									</FlexItem>
 								)}
 								<FlexItem>
