@@ -1,15 +1,5 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-	CheckCircleIcon,
-	CodeBranchIcon,
-	CodeIcon,
-	FlaskIcon,
-	InProgressIcon,
-	OutlinedCheckCircleIcon,
-	OutlinedCircleIcon,
-	QuestionCircleIcon,
-} from "@patternfly/react-icons";
 import type {
 	BuildLabel,
 	CandidateCI,
@@ -28,8 +18,8 @@ import {
 	notComparedLines,
 	nvrLabel,
 	releaseLine,
+	runsStatus,
 	scanCell,
-	statusIcon,
 } from "./releaseDetail.ts";
 
 test("jobShortName", () => {
@@ -83,6 +73,20 @@ test("jobLabels", () => {
 		]),
 		["periodic-ci-quay-quay-master-e2e-install-aws-s3", "aws-ocp422-aws-s3"],
 	);
+});
+
+test("runsStatus: green when every counted run passed, red when none did, yellow when both", () => {
+	const want: [string[], ReturnType<typeof runsStatus>][] = [
+		[[], undefined],
+		[["success", "success"], "success"],
+		[["failure", "error"], "danger"],
+		[["success", "success", "failure"], "warning"],
+		[["aborted"], undefined],
+		[["success", "aborted"], "success"],
+	];
+	for (const [states, status] of want) {
+		assert.equal(runsStatus(states), status, `[${states}]`);
+	}
 });
 
 test("componentLabel", () => {
@@ -175,26 +179,6 @@ test("nvrLabel", () => {
 		"3.18.1.202610061637.p2.g35cf767-1",
 	);
 	assert.equal(nvrLabel("quay-builder-3.18.1-1"), "quay-builder-3.18.1-1");
-});
-
-test("statusIcon: each Jira status its icon, in any case, the verified ones green", () => {
-	const want = [
-		["New", OutlinedCircleIcon, false],
-		["ASSIGNED", InProgressIcon, false],
-		["In Progress", InProgressIcon, false],
-		["POST", CodeBranchIcon, false],
-		["MODIFIED", CodeIcon, false],
-		["ON_QA", FlaskIcon, false],
-		["on_qa", FlaskIcon, false],
-		["Verified", OutlinedCheckCircleIcon, true],
-		["Release Pending", OutlinedCheckCircleIcon, true],
-		["Closed", CheckCircleIcon, true],
-		["Done", CheckCircleIcon, true],
-		["Refinement", QuestionCircleIcon, false],
-	] as const;
-	for (const [status, icon, verified] of want) {
-		assert.deepEqual(statusIcon(status), { icon, verified }, status);
-	}
 });
 
 const release = (r: Partial<KonfluxRelease>): KonfluxRelease => ({

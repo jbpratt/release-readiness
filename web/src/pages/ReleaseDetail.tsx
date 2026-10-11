@@ -1,5 +1,6 @@
 import {
 	Breadcrumb,
+	BreadcrumbHeading,
 	BreadcrumbItem,
 	Button,
 	Card,
@@ -79,11 +80,11 @@ import {
 	notComparedLines,
 	nvrLabel,
 	releaseLine,
+	runsStatus,
 	SEVERITIES,
 	SEVERITY_COLORS,
 	type StatusLine,
 	scanCell,
-	statusIcon,
 } from "../utils/releaseDetail";
 
 /** A Konflux UI page of the version's application. */
@@ -169,11 +170,8 @@ export default function ReleaseDetail() {
 				<BreadcrumbItem>
 					<Link to="/">Releases</Link>
 				</BreadcrumbItem>
-				<BreadcrumbItem isActive>{displayName}</BreadcrumbItem>
+				<BreadcrumbHeading>{displayName}</BreadcrumbHeading>
 			</Breadcrumb>
-			<Title headingLevel="h1" style={{ marginBottom: "1rem" }}>
-				{displayName}
-			</Title>
 
 			<ReleaseStatusCard
 				release={release}
@@ -383,7 +381,6 @@ function BuildsCard({
 						candidate={c}
 						ci={data.ci}
 						newest={data.newest}
-						version={version}
 						app={app}
 						konflux={konflux}
 					/>
@@ -418,14 +415,12 @@ function Candidate({
 	candidate,
 	ci,
 	newest,
-	version,
 	app,
 	konflux,
 }: {
 	candidate: CandidateBuild;
 	ci: CandidateCI;
 	newest: NewestBuild | null;
-	version: string;
 	app: string;
 	konflux: KonfluxLink;
 }) {
@@ -489,9 +484,7 @@ function Candidate({
 					<Status status="done">Candidate is current.</Status>
 				)}
 			</div>
-			{newest && (
-				<NewestLine notIn={version} newest={newest} konflux={konflux} />
-			)}
+			{newest && <NewestLine notIn newest={newest} konflux={konflux} />}
 			<Table variant="compact" style={{ marginTop: "1rem" }}>
 				<Thead>
 					<Tr>
@@ -603,15 +596,15 @@ function NewestLine({
 	newest,
 	konflux,
 }: {
-	/** The X.Y.Z of the candidate, which lacks the newest build's images. */
-	notIn?: string;
+	/** Whether there is a candidate, which lacks the newest build's images. */
+	notIn?: boolean;
 	newest: NewestBuild;
 	konflux: KonfluxLink;
 }) {
 	return (
 		<div style={line}>
 			Newest build <BuildLink build={newest} konflux={konflux} />
-			{notIn && `: not in ${notIn}`}
+			{notIn && ", not pinned"}
 			{newest.ci.state !== "unknown" && (
 				<>
 					{" · "}
@@ -766,25 +759,26 @@ function ScanDetail({ counts, url }: { counts: ScanCounts; url: string }) {
 	);
 }
 
-// Prow job states as the OCP release controller words them; any other is grey.
-const ciStates: Record<string, [string, LabelProps["status"]]> = {
-	success: ["Succeeded", "success"],
-	failure: ["Failed", "danger"],
-	error: ["Error", "danger"],
+// Prow job states as the OCP release controller words them.
+const ciStates: Record<string, string> = {
+	success: "Succeeded",
+	failure: "Failed",
+	error: "Error",
 };
 
 const runState = (state: string) =>
-	ciStates[state] ?? [
-		state.charAt(0).toUpperCase() + state.slice(1),
-		undefined,
-	];
+	ciStates[state] ?? state.charAt(0).toUpperCase() + state.slice(1);
 
 const nowrap = { whiteSpace: "nowrap" } as const;
+
+// A build's date and time in ms; 0, so oldest, for the unknown build.
+const time = (iso: string | null) => (iso ? Date.parse(iso) : 0);
 
 /**
  * The periodic runs since the candidate's bundle was first built, or the
  * version's builds' without one, after the OCP release controller: a row per
- * build they installed, or failed to install, the candidate first.
+ * build they installed, or failed to install, newest first, the unknown build
+ * last.
  */
 function CICard({
 	ci,
@@ -801,21 +795,17 @@ function CICard({
 	];
 	const labels = jobLabels(jobs);
 	const label = (job: string) => labels[jobs.indexOf(job)];
-	const hasCandidate = ci.builds.some((b) => b.kind === "candidate");
+	const candidate = ci.builds.find((b) => b.kind === "candidate");
+	const notPinned = candidate?.created_at
+		? `Not pinned: the ${version} release candidate is the ${when(candidate.created_at)} build.`
+		: undefined;
+	const builds = [...ci.builds].sort(
+		(a, b) => time(b.created_at) - time(a.created_at),
+	);
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<CardTitle>CI · periodic runs since {when(ci.since)}</CardTitle>
+			<CardTitle>CI</CardTitle>
 			<CardBody>
-				<div style={{ ...muted, marginBottom: "0.5rem" }}>
-					{hasCandidate && (
-						<>
-							<strong>Release candidate</strong>: the pinned build that ships as{" "}
-							{version}. <strong>Staged</strong>: in the {version} stage
-							release.{" "}
-						</>
-					)}
-					<strong>In CI</strong>: reached the catalog CI installs from.
-				</div>
 				<Table variant="compact" aria-label="CI runs by build">
 					<Thead>
 						<Tr>
@@ -825,7 +815,7 @@ function CICard({
 						</Tr>
 					</Thead>
 					<Tbody>
-						{ci.builds.map((b) => (
+						{builds.map((b) => (
 							<Tr key={`${b.kind} ${b.snapshot}`}>
 								<Td style={nowrap}>
 									{b.created_at ? (
@@ -839,16 +829,16 @@ function CICard({
 								</Td>
 								<Td style={nowrap}>
 									{b.kind === "candidate" ? (
-										<Label isCompact color="blue">
+										<Pill color="blue" tip={`Pinned to ship as ${version}.`}>
 											release candidate
-										</Label>
+										</Pill>
 									) : (
 										b.ci && (
-											<>
-												<CIStateText ci={b.ci} konflux={konflux} />
-												{hasCandidate &&
-													`${b.ci.state !== "unknown" ? ", " : ""}not in ${version}`}
-											</>
+											<CIPill
+												ci={b.ci}
+												notPinned={notPinned}
+												konflux={konflux}
+											/>
 										)
 									)}
 								</Td>
@@ -868,7 +858,61 @@ function CICard({
 	);
 }
 
-/** A chip per job, coloured by its newest run, opening it; every run on hover. */
+/**
+ * A build's CI state as a pill, its meaning and notPinned on hover; in and
+ * failed open the stage Release that decides it. Nothing when unknown.
+ */
+function CIPill({
+	ci,
+	notPinned,
+	konflux,
+}: {
+	ci: CIState;
+	/** Which build is pinned instead, when one is. */
+	notPinned?: string;
+	konflux: KonfluxLink;
+}) {
+	const r = ci.release;
+	const href = r && konflux("releases", r.name);
+	switch (ci.state) {
+		case "in":
+			return (
+				<Pill
+					color="teal"
+					href={href}
+					tip={lines("Reached the catalog CI installs from.", notPinned)}
+				>
+					in CI
+				</Pill>
+			);
+		case "failed":
+			return (
+				<Pill
+					color="red"
+					href={href}
+					tip={lines(r ? releaseLine(r).text : undefined, notPinned)}
+				>
+					failed to reach CI
+				</Pill>
+			);
+		case "none":
+			return (
+				<Pill
+					color="grey"
+					tip={lines(
+						"No stage Release put it in the catalog CI installs from.",
+						notPinned,
+					)}
+				>
+					not in CI
+				</Pill>
+			);
+		default:
+			return null;
+	}
+}
+
+/** A chip per job, coloured by its runs' pass/fail mix, opening its newest run; every run on hover. */
 function JobChips({
 	jobs,
 	label,
@@ -881,38 +925,66 @@ function JobChips({
 			{[...jobs]
 				.sort((a, b) => label(a.job_name).localeCompare(label(b.job_name)))
 				.map(({ job_name, runs }) => (
-					<Tooltip
+					<Pill
 						key={job_name}
-						content={lines(
+						status={runsStatus(runs.map((r) => r.state))}
+						href={runs[0].prow_url}
+						tip={lines(
 							job_name,
 							...runs.map(
 								(r) =>
-									`${when(r.started_at)} · ${r.install_failed ? "Install failed" : runState(r.state)[0]}`,
+									`${when(r.started_at)} · ${r.install_failed ? "Install failed" : runState(r.state)}`,
 							),
 						)}
 					>
-						<Label
-							isCompact
-							status={runState(runs[0].state)[1]}
-							isClickable
-							render={({ className, content, componentRef }) => (
-								<a
-									className={className}
-									href={runs[0].prow_url}
-									ref={componentRef}
-									{...external}
-								>
-									{content}
-								</a>
-							)}
-						>
-							{label(job_name)}
-							{runs[0].install_failed && " · install failed"}
-							{runs.length > 1 && ` ×${runs.length}`}
-						</Label>
-					</Tooltip>
+						{label(job_name)}
+						{runs[0].install_failed && " · install failed"}
+						{runs.length > 1 && ` ×${runs.length}`}
+					</Pill>
 				))}
 		</Flex>
+	);
+}
+
+/**
+ * A compact label with a tooltip, opening href in a new tab; without href it
+ * takes keyboard focus, which shows the tooltip.
+ */
+function Pill({
+	tip,
+	href,
+	children,
+	...props
+}: Pick<LabelProps, "color" | "status" | "children"> & {
+	tip: ReactNode;
+	href?: string | null;
+}) {
+	return (
+		<Tooltip content={tip}>
+			{href ? (
+				<Label
+					isCompact
+					isClickable
+					render={({ className, content, componentRef }) => (
+						<a
+							className={className}
+							href={href}
+							ref={componentRef}
+							{...external}
+						>
+							{content}
+						</a>
+					)}
+					{...props}
+				>
+					{children}
+				</Label>
+			) : (
+				<Label isCompact tabIndex={0} {...props}>
+					{children}
+				</Label>
+			)}
+		</Tooltip>
 	);
 }
 
@@ -977,23 +1049,6 @@ function TicketsCard({
 	);
 }
 
-/** A ticket's status as its icon, named on hover. */
-function TicketStatus({ status }: { status: string }) {
-	const { icon: StatusIcon, verified } = statusIcon(status);
-	return (
-		<Tooltip content={status} aria="none">
-			<Icon
-				status={verified ? "success" : undefined}
-				isInline
-				role="img"
-				aria-label={status}
-			>
-				<StatusIcon />
-			</Icon>
-		</Tooltip>
-	);
-}
-
 const commitLabel = (c: BuildCommit, app: string) =>
 	`${componentLabel(c.component, app)}@${c.commit_sha.slice(0, 7)}`;
 
@@ -1012,14 +1067,7 @@ const inBuildTip = lines(
 );
 
 // The ticket table's columns, in order.
-const ISSUES_COLUMNS = [
-	"key",
-	"type",
-	"summary",
-	"status",
-	"target",
-	"inBuild",
-];
+const ISSUES_COLUMNS = ["key", "type", "summary", "target", "inBuild"];
 
 function IssuesTable({
 	issues,
@@ -1050,9 +1098,6 @@ function IssuesTable({
 				case "type":
 					cmp = a.issue_type.localeCompare(b.issue_type);
 					break;
-				case "status":
-					cmp = a.status.localeCompare(b.status);
-					break;
 				case "inBuild":
 					cmp = inBuildKey(a, app).localeCompare(inBuildKey(b, app));
 					break;
@@ -1082,9 +1127,6 @@ function IssuesTable({
 						Type
 					</Th>
 					<Th>Summary</Th>
-					<Th sort={getSortParams("status")} modifier="fitContent">
-						Status
-					</Th>
 					<Th info={zTip ? { tooltip: zTip } : undefined} modifier="fitContent">
 						Target
 					</Th>
@@ -1110,9 +1152,6 @@ function IssuesTable({
 						<Td style={{ whiteSpace: "nowrap" }}>{issue.issue_type}</Td>
 						<Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
 							{issue.summary}
-						</Td>
-						<Td>
-							<TicketStatus status={issue.status} />
 						</Td>
 						<Td>{issue.fix_version.replace(/^[a-z]+-v/, "")}</Td>
 						{hasBuild && (
