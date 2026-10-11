@@ -96,11 +96,8 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 		} else {
 			rv.Released = versionInfo.Released
 			rv.Archived = versionInfo.Archived
-			if versionInfo.ReleaseDate != "" {
-				t, err := time.Parse("2006-01-02", versionInfo.ReleaseDate)
-				if err == nil {
-					rv.ReleaseDate = &t
-				}
+			if t, err := time.Parse(time.DateOnly, versionInfo.ReleaseDate); err == nil {
+				rv.ReleaseDate = &t
 			}
 		}
 
@@ -132,11 +129,8 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 		}
 		dbv.Released = versionInfo.Released
 		dbv.Archived = versionInfo.Archived
-		if versionInfo.ReleaseDate != "" {
-			t, err := time.Parse("2006-01-02", versionInfo.ReleaseDate)
-			if err == nil {
-				dbv.ReleaseDate = &t
-			}
+		if t, err := time.Parse(time.DateOnly, versionInfo.ReleaseDate); err == nil {
+			dbv.ReleaseDate = &t
 		}
 		if err := s.store.UpsertReleaseVersion(ctx, &dbv); err != nil {
 			s.logger.Error("upsert version", "version", dbv.Name, "error", err)

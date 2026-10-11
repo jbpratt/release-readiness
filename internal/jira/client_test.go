@@ -316,15 +316,6 @@ func TestStreamVersion(t *testing.T) {
 	}
 }
 
-func TestBuildSearchJQL(t *testing.T) {
-	client := New(Config{Project: "PROJQUAY"})
-	got := client.buildSearchJQL("quay-v3.16.2")
-	want := `project=PROJQUAY AND "Target Version"="quay-v3.16.2"`
-	if got != want {
-		t.Errorf("buildSearchJQL:\n got %q\nwant %q", got, want)
-	}
-}
-
 func TestSearchIssuesTargetVersion(t *testing.T) {
 	var capturedJQL string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

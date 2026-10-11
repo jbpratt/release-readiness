@@ -2,11 +2,11 @@
 package jira
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -39,13 +39,9 @@ type Client struct {
 
 // New creates a new JIRA client.
 func New(cfg Config) *Client {
-	siteURL := cfg.SiteURL
-	if siteURL == "" {
-		siteURL = cfg.BaseURL
-	}
 	return &Client{
 		baseURL:        strings.TrimRight(cfg.BaseURL, "/"),
-		siteURL:        strings.TrimRight(siteURL, "/"),
+		siteURL:        strings.TrimRight(cmp.Or(cfg.SiteURL, cfg.BaseURL), "/"),
 		email:          cfg.Email,
 		token:          cfg.Token,
 		project:        cfg.Project,
@@ -157,38 +153,9 @@ func (c *Client) DiscoverActiveReleases(ctx context.Context) ([]ActiveRelease, e
 		`project=%s AND component="-area/release" AND status NOT IN (Closed, Done)`,
 		c.project,
 	)
-	fields := "summary,status,duedate,assignee"
-
-	var allIssues []Issue
-	nextPageToken := ""
-
-	for {
-		params := url.Values{
-			"jql":        {jql},
-			"fields":     {fields},
-			"maxResults": {"100"},
-		}
-		if nextPageToken != "" {
-			params.Set("nextPageToken", nextPageToken)
-		}
-
-		reqURL := fmt.Sprintf("%s/rest/api/3/search/jql?%s", c.baseURL, params.Encode())
-		body, err := c.doGetWithRetry(ctx, reqURL)
-		if err != nil {
-			return nil, fmt.Errorf("discover releases: %w", err)
-		}
-
-		var resp searchResponse
-		if err := json.Unmarshal(body, &resp); err != nil {
-			return nil, fmt.Errorf("decode search response: %w", err)
-		}
-
-		allIssues = append(allIssues, resp.Issues...)
-
-		if resp.NextPageToken == "" {
-			break
-		}
-		nextPageToken = resp.NextPageToken
+	allIssues, err := c.search(ctx, jql, "summary,status,duedate,assignee", "discover releases")
+	if err != nil {
+		return nil, err
 	}
 
 	var releases []ActiveRelease
@@ -213,11 +180,8 @@ func (c *Client) DiscoverActiveReleases(ctx context.Context) ([]ActiveRelease, e
 			KonfluxApplication: FixVersionToKonfluxApp(fixVersion),
 		}
 
-		if issue.Fields.DueDate != "" {
-			t, err := time.Parse("2006-01-02", issue.Fields.DueDate)
-			if err == nil {
-				rel.DueDate = &t
-			}
+		if t, err := time.Parse(time.DateOnly, issue.Fields.DueDate); err == nil {
+			rel.DueDate = &t
 		}
 
 		releases = append(releases, rel)
@@ -226,65 +190,52 @@ func (c *Client) DiscoverActiveReleases(ctx context.Context) ([]ActiveRelease, e
 	return releases, nil
 }
 
-// buildSearchJQL constructs the JQL for searching issues by Target Version.
-func (c *Client) buildSearchJQL(version string) string {
-	return fmt.Sprintf(`project=%s AND "Target Version"="%s"`,
-		c.project, version)
-}
-
 // SearchIssues queries JIRA for issues matching a Target Version.
 // It handles pagination automatically and respects rate limits.
 func (c *Client) SearchIssues(ctx context.Context, fixVersion string) ([]Issue, error) {
-	jql := c.buildSearchJQL(fixVersion)
+	jql := fmt.Sprintf(`project=%s AND "Target Version"="%s"`, c.project, fixVersion)
 	fields := "summary,status,priority,labels,assignee,issuetype"
 	if c.qaContactField != "" {
 		fields += "," + c.qaContactField
 	}
 
-	var allIssues []Issue
-	nextPageToken := ""
+	issues, err := c.search(ctx, jql, fields, "search issues")
+	if err != nil {
+		return nil, err
+	}
+	if c.qaContactField != "" {
+		for i := range issues {
+			if v, ok := issues[i].Fields.Raw[c.qaContactField]; ok {
+				var u *UserField
+				if json.Unmarshal(v, &u) == nil && u != nil {
+					issues[i].QAContact = u.DisplayName
+				}
+			}
+		}
+	}
+	return issues, nil
+}
 
+// search returns every issue jql matches, with fields, page by page. A
+// failed request's error is prefixed with what.
+func (c *Client) search(ctx context.Context, jql, fields, what string) ([]Issue, error) {
+	var issues []Issue
+	params := url.Values{"jql": {jql}, "fields": {fields}, "maxResults": {"100"}}
 	for {
-		params := url.Values{
-			"jql":        {jql},
-			"fields":     {fields},
-			"maxResults": {"100"},
-		}
-		if nextPageToken != "" {
-			params.Set("nextPageToken", nextPageToken)
-		}
-
-		reqURL := fmt.Sprintf("%s/rest/api/3/search/jql?%s", c.baseURL, params.Encode())
-		body, err := c.doGetWithRetry(ctx, reqURL)
+		body, err := c.doGetWithRetry(ctx, c.baseURL+"/rest/api/3/search/jql?"+params.Encode())
 		if err != nil {
-			return nil, fmt.Errorf("search issues: %w", err)
+			return nil, fmt.Errorf("%s: %w", what, err)
 		}
-
 		var resp searchResponse
 		if err := json.Unmarshal(body, &resp); err != nil {
 			return nil, fmt.Errorf("decode search response: %w", err)
 		}
-
-		if c.qaContactField != "" {
-			for i := range resp.Issues {
-				if v, ok := resp.Issues[i].Fields.Raw[c.qaContactField]; ok {
-					var u *UserField
-					if json.Unmarshal(v, &u) == nil && u != nil {
-						resp.Issues[i].QAContact = u.DisplayName
-					}
-				}
-			}
-		}
-
-		allIssues = append(allIssues, resp.Issues...)
-
+		issues = append(issues, resp.Issues...)
 		if resp.NextPageToken == "" {
-			break
+			return issues, nil
 		}
-		nextPageToken = resp.NextPageToken
+		params.Set("nextPageToken", resp.NextPageToken)
 	}
-
-	return allIssues, nil
 }
 
 // GetVersion fetches version metadata from JIRA for the given project and version name.
@@ -317,7 +268,7 @@ func (c *Client) doGetWithRetry(ctx context.Context, reqURL string) ([]byte, err
 			delay := c.minDelay
 			if attempt > 0 {
 				// Exponential backoff: 2s, 4s, 8s
-				delay = time.Duration(math.Pow(2, float64(attempt))) * time.Second
+				delay = time.Second << attempt
 			}
 			select {
 			case <-ctx.Done():
@@ -331,14 +282,12 @@ func (c *Client) doGetWithRetry(ctx context.Context, reqURL string) ([]byte, err
 			return body, nil
 		}
 
-		// Check if it's a rate limit error
-		if isRateLimitError(err) && attempt < maxRetries {
-			retryAfter := parseRetryAfter(err)
-			if retryAfter > 0 {
+		if rle, ok := err.(*rateLimitError); ok && attempt < maxRetries {
+			if secs, _ := strconv.Atoi(rle.retryAfter); secs > 0 {
 				select {
 				case <-ctx.Done():
 					return nil, ctx.Err()
-				case <-time.After(retryAfter):
+				case <-time.After(time.Duration(secs) * time.Second):
 				}
 			}
 			continue
@@ -402,23 +351,6 @@ type rateLimitError struct {
 
 func (e *rateLimitError) Error() string {
 	return fmt.Sprintf("JIRA API returned %d: %s", e.statusCode, e.body)
-}
-
-func isRateLimitError(err error) bool {
-	_, ok := err.(*rateLimitError)
-	return ok
-}
-
-func parseRetryAfter(err error) time.Duration {
-	rle, ok := err.(*rateLimitError)
-	if !ok || rle.retryAfter == "" {
-		return 0
-	}
-	seconds, err := strconv.Atoi(rle.retryAfter)
-	if err != nil {
-		return 0
-	}
-	return time.Duration(seconds) * time.Second
 }
 
 var streamVersion = regexp.MustCompile(`^([a-z]+-v\d+\.\d+)\.\d+$`)
