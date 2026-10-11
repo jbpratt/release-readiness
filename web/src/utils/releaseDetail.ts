@@ -10,6 +10,7 @@ import {
 } from "@patternfly/react-icons";
 import type {
 	BuildCommit,
+	BuildTickets,
 	CandidateCI,
 	ImageScan,
 	KonfluxRelease,
@@ -77,6 +78,33 @@ export const componentLabel = (name: string, app: string) =>
 		/^quay-/,
 		"",
 	);
+
+// The not_compared reasons of a GitHub API error, which the next pass retries.
+const API_ERRORS = new Set([
+	"github api error",
+	"default branch: github api error",
+]);
+
+/**
+ * The Tickets card's not-compared lines: the components not compared, with
+ * the reason, then one line for all those a GitHub API error left.
+ */
+export function notComparedLines(
+	notCompared: BuildTickets["not_compared"],
+	app: string,
+): string[] {
+	const other = notCompared.filter((c) => !API_ERRORS.has(c.reason));
+	const lines: string[] = [];
+	if (other.length > 0) {
+		lines.push(
+			`Not compared: ${other.map((c) => `${componentLabel(c.component, app)} (${c.reason})`).join(", ")}`,
+		);
+	}
+	if (other.length < notCompared.length) {
+		lines.push("Not compared with GitHub: API error (retrying)");
+	}
+	return lines;
+}
 
 /**
  * A ticket's not_in_build commits once each, titled with the components that

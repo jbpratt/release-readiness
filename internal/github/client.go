@@ -7,19 +7,28 @@ package github
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const perPage = 100
+
+// errHeld is a request not sent because the rate limit is spent.
+var errHeld = errors.New("github rate limit spent")
 
 // Client reads the GitHub REST API. It only issues GETs.
 type Client struct {
 	baseURL string
 	token   string
 	http    *http.Client
+	// reset is set, to when the rate limit resets, by a response that spent
+	// it. No request is sent while it is set; Scanner clears it.
+	reset time.Time
 }
 
 // NewClient returns a client for baseURL; an empty token reads anonymously.
@@ -75,6 +84,9 @@ func (c *Client) Compare(ctx context.Context, owner, repo, base, head string) (*
 }
 
 func (c *Client) get(ctx context.Context, path string, v any) error {
+	if !c.reset.IsZero() {
+		return errHeld
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
 		return err
@@ -89,6 +101,12 @@ func (c *Client) get(ctx context.Context, path string, v any) error {
 		return err
 	}
 	defer func() { _ = resp.Body.Close() }()
+	// The last request the limit allows reports it spent, as do those it refuses.
+	if resp.Header.Get("X-RateLimit-Remaining") == "0" {
+		if sec, perr := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64); perr == nil {
+			c.reset = time.Unix(sec, 0)
+		}
+	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("GET %s: %s", path, resp.Status)
 	}

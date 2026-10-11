@@ -76,6 +76,7 @@ import {
 	fixableLabels,
 	jobLabels,
 	missingCommits,
+	notComparedLines,
 	nvrLabel,
 	releaseLine,
 	SEVERITIES,
@@ -949,14 +950,12 @@ function TicketsCard({
 				{hasIssues && ` (${issues!.length})`}
 			</LinkedCardTitle>
 			<CardBody>
-				{data && data.not_compared.length > 0 && (
-					<div style={{ ...muted, marginBottom: "0.5rem" }}>
-						Not compared:{" "}
-						{data.not_compared
-							.map((c) => `${componentLabel(c.component, app)} (${c.reason})`)
-							.join(", ")}
-					</div>
-				)}
+				{data &&
+					notComparedLines(data.not_compared, app).map((line) => (
+						<div key={line} style={{ ...muted, marginBottom: "0.5rem" }}>
+							{line}
+						</div>
+					))}
 				{hasIssues ? (
 					<IssuesTable
 						issues={issues!}
