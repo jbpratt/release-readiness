@@ -78,7 +78,6 @@ import {
 	SEVERITY_COLORS,
 	type StatusLine,
 	scanCell,
-	stageLines,
 	statusIcon,
 } from "../utils/releaseDetail";
 
@@ -100,16 +99,15 @@ export default function ReleaseDetail() {
 	const config = useConfig();
 
 	const { data: release, loading: loadingRelease } = useCachedFetch(
-		version ? `release:${version}` : null,
+		`release:${version}`,
 		() => getRelease(version!),
 	);
 	const { data: tickets, error: ticketsError } = useCachedFetch(
-		version ? `buildTickets:${version}` : null,
+		`buildTickets:${version}`,
 		() => getBuildTickets(version!),
 	);
-	const candidate = useCachedFetch(
-		version ? `candidate:${version}` : null,
-		() => getCandidate(version!),
+	const candidate = useCachedFetch(`candidate:${version}`, () =>
+		getCandidate(version!),
 	);
 
 	if (loadingRelease && !release) {
@@ -407,21 +405,25 @@ function Candidate({
 	konflux: KonfluxLink;
 }) {
 	const hasScans = candidate.components.some((c) => c.scan);
+	const prod = candidate.prod && {
+		name: candidate.prod.name,
+		...releaseLine(candidate.prod),
+	};
 	return (
 		<>
 			<DescriptionList isHorizontal isCompact termWidth="5ch">
 				<BoxLine term="Stage">
-					<StatusLines
-						lines={stageLines(candidate.stage, app)}
-						konflux={konflux}
-					/>
+					<Status status="done">
+						{`Staged ${new Date(candidate.stage.staged_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+					</Status>
 				</BoxLine>
-				{candidate.prod && (
+				{prod && (
 					<BoxLine term="Prod">
-						<StatusLines
-							lines={[releaseLine(candidate.prod)]}
-							konflux={konflux}
-						/>
+						<Status status={prod.status}>
+							<ExtLink href={konflux("releases", prod.name)} title={prod.name}>
+								{prod.text}
+							</ExtLink>
+						</Status>
 					</BoxLine>
 				)}
 				<BoxLine term="CI">
@@ -527,11 +529,6 @@ const statusIcons: Record<StatusLine["status"], ReactNode> = {
 			<ExclamationCircleIcon />
 		</Icon>
 	),
-	waiting: (
-		<Icon status="warning" isInline>
-			<ExclamationTriangleIcon />
-		</Icon>
-	),
 	running: (
 		<Icon status="info" isInline>
 			<InProgressIcon />
@@ -560,38 +557,6 @@ function Status({
 			</FlexItem>
 		</Flex>
 	);
-}
-
-/** Status lines, a line about a Release linked to it, a line's why on an info icon. */
-function StatusLines({
-	lines,
-	konflux,
-}: {
-	lines: StatusLine[];
-	konflux: KonfluxLink;
-}) {
-	return lines.map((l) => (
-		<Status key={l.text} status={l.status}>
-			{l.release ? (
-				<ExtLink href={konflux("releases", l.release)} title={l.release}>
-					{l.text}
-				</ExtLink>
-			) : (
-				l.text
-			)}
-			{l.info && (
-				<Tooltip content={l.info}>
-					<Button
-						variant="plain"
-						hasNoPadding
-						aria-label={l.info}
-						icon={<InfoCircleIcon />}
-						style={{ marginLeft: "0.25rem" }}
-					/>
-				</Tooltip>
-			)}
-		</Status>
-	));
 }
 
 /** An image's fixable CVEs by severity, all its counts on click. */

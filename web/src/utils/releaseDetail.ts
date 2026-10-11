@@ -13,9 +13,8 @@ import type {
 	ImageScan,
 	KonfluxRelease,
 	ScanCounts,
-	StageFlag,
 } from "../api/types";
-import { releaseStatus } from "./releaseStatus.ts";
+import { relative } from "./format.ts";
 
 // Ticket statuses counted as verified.
 const VERIFIED = new Set(["release pending", "verified", "closed", "done"]);
@@ -119,61 +118,44 @@ export function nvrLabel(nvr: string): string {
 
 /** A line of a build's box: a status icon and the text it explains. */
 export interface StatusLine {
-	status: "done" | "failed" | "waiting" | "running" | "none";
+	status: "done" | "failed" | "running" | "none";
 	text: string;
-	/** The Release the line words, linked to its Konflux page. */
-	release?: string;
-	/** Why, on an info icon. */
-	info?: string;
 }
 
-const RELEASE_LINE = { green: "done", red: "failed", blue: "running" } as const;
-
-/** A Release's status and where its managed pipeline failed. */
-export function releaseLine(r: KonfluxRelease): StatusLine {
-	const { color, text } = releaseStatus(r);
-	return { status: RELEASE_LINE[color], text, release: r.name };
-}
+// Why a failed Release failed, by the managed pipeline task it stopped at.
+const failedTasks: Record<string, string> = {
+	"apply-mapping": "Release failed: mapping config (ART)",
+	"verify-access-to-resources":
+		"Release failed: registry/resource access (ART/Konflux)",
+	"verify-conforma": "Release failed: Enterprise Contract policy",
+};
 
 /**
- * Whether a build is in stage, else one line per reason its images are not:
- * a STAGE Release that holds some failed or is running, a bundle ART has not
- * built, no STAGE Release at all. Only images a STAGE Release holds set
- * release.
+ * A Release's status and where its managed pipeline failed. A running
+ * Release is also Released=False, with reason Progressing.
  */
-export function stageLines(stage: StageFlag, app: string): StatusLine[] {
-	if (stage.state === "staged") {
-		const on = stage.staged_at
-			? ` ${new Date(stage.staged_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-			: "";
-		return [{ status: "done", text: `Staged${on}` }];
+export function releaseLine(r: KonfluxRelease): StatusLine {
+	if (r.released_status === "True") {
+		return {
+			status: "done",
+			text: r.completion_time
+				? `Released ${relative(r.completion_time)}`
+				: "Released",
+		};
 	}
-	if (stage.state === "unknown") {
-		return [{ status: "none", text: `No stage Release for ${app} yet` }];
+	if (r.released_reason === "Failed") {
+		const known = failedTasks[r.failed_task ?? ""];
+		const at = [r.failed_task, r.failed_step].filter(Boolean).join("/");
+		return {
+			status: "failed",
+			text: known
+				? `${known} (${at})`
+				: at
+					? `Release failed at ${at}`
+					: "Release failed",
+		};
 	}
-	const names = (cs: string[]) =>
-		cs.map((c) => componentLabel(c, app)).join(", ");
-	const lines: StatusLine[] = [];
-	if (stage.release) {
-		lines.push(releaseLine(stage.release));
-	}
-	if (stage.no_bundle.length > 0) {
-		lines.push({
-			status: "waiting",
-			text: `${names(stage.no_bundle)}: built, no bundle yet`,
-			info: "ART builds a bundle only after a clean build-layered-products run.",
-		});
-	}
-	if (stage.no_release.length > 0) {
-		lines.push({
-			status: "waiting",
-			text:
-				stage.no_release.length === stage.total
-					? "Not in a stage Release yet"
-					: `${names(stage.no_release)}: not in a stage Release yet`,
-		});
-	}
-	return lines;
+	return { status: "running", text: "Release in progress" };
 }
 
 export const SEVERITIES = [

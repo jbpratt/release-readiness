@@ -10,7 +10,7 @@ import {
 	OutlinedCircleIcon,
 	QuestionCircleIcon,
 } from "@patternfly/react-icons";
-import type { ImageScan, KonfluxRelease, StageFlag } from "../api/types.ts";
+import type { ImageScan, KonfluxRelease } from "../api/types.ts";
 import {
 	componentLabel,
 	fixableLabels,
@@ -21,7 +21,6 @@ import {
 	nvrLabel,
 	releaseLine,
 	scanCell,
-	stageLines,
 	statusIcon,
 } from "./releaseDetail.ts";
 
@@ -170,112 +169,53 @@ test("statusIcon: each Jira status its icon, in any case, the verified ones gree
 });
 
 const release = (r: Partial<KonfluxRelease>): KonfluxRelease => ({
-	name: "fbc-ri-stage-quay-3-18-quay-operator-ssrlx",
-	release_plan: "quay-advisory-stage-3-18",
-	released_status: "False",
-	released_reason: "Failed",
-	failed_task: "verify-conforma",
-	failed_step: "assert",
-	created_at: "2026-10-10T01:49:22Z",
+	name: "r1",
+	release_plan: "rp",
+	released_status: "",
+	released_reason: "",
+	created_at: "2026-10-08T09:00:00Z",
 	...r,
 });
 
-test("releaseLine: a released prod Release is done", () => {
+test("releaseLine", () => {
+	const failed = (failed_task: string, failed_step?: string) =>
+		releaseLine(
+			release({
+				released_status: "False",
+				released_reason: "Failed",
+				failed_task,
+				failed_step,
+			}),
+		);
+	const running = { status: "running", text: "Release in progress" };
 	assert.deepEqual(
 		releaseLine(
 			release({
-				name: "quay-prod-3-18-1",
-				released_status: "True",
-				released_reason: "Succeeded",
+				released_status: "False",
+				released_reason: "Progressing",
+				failed_task: "verify-conforma",
 			}),
 		),
-		{ status: "done", text: "Released", release: "quay-prod-3-18-1" },
+		running,
 	);
-});
-
-test("stageLines", () => {
-	const app = "quay-3-18";
-	const c = (name: string) => `${app}-${name}`;
-	const flag = (f: Partial<StageFlag>): StageFlag => ({
-		state: "not_staged",
-		staged_at: null,
-		total: 10,
-		not_staged: [],
-		release: null,
-		no_bundle: [],
-		no_release: [],
-		...f,
+	assert.deepEqual(releaseLine(release({})), running);
+	assert.deepEqual(failed("verify-conforma", "assert"), {
+		status: "failed",
+		text: "Release failed: Enterprise Contract policy (verify-conforma/assert)",
+	});
+	assert.deepEqual(failed("verify-conforma"), {
+		status: "failed",
+		text: "Release failed: Enterprise Contract policy (verify-conforma)",
+	});
+	assert.deepEqual(failed("collect-data", "x"), {
+		status: "failed",
+		text: "Release failed at collect-data/x",
 	});
 	assert.deepEqual(
-		stageLines(
-			flag({ state: "staged", staged_at: "2026-10-07T12:00:00Z" }),
-			app,
+		releaseLine(
+			release({ released_status: "True", released_reason: "Succeeded" }),
 		),
-		[{ status: "done", text: "Staged Oct 7" }],
-	);
-	assert.deepEqual(stageLines(flag({ state: "unknown" }), app), [
-		{ status: "none", text: "No stage Release for quay-3-18 yet" },
-	]);
-	// 3.18.1's newest build on Oct 10.
-	const noBundle = [
-		c("container-security-operator"),
-		c("quay-bridge-operator"),
-	];
-	assert.deepEqual(
-		stageLines(
-			flag({
-				not_staged: [
-					...noBundle,
-					c("quay-clair"),
-					c("quay-operator"),
-					c("quay-quay"),
-				],
-				release: release({}),
-				no_bundle: noBundle,
-			}),
-			app,
-		),
-		[
-			{
-				status: "failed",
-				text: "Release failed: Enterprise Contract policy (verify-conforma/assert)",
-				release: "fbc-ri-stage-quay-3-18-quay-operator-ssrlx",
-			},
-			{
-				status: "waiting",
-				text: "container-security-operator, bridge-operator: built, no bundle yet",
-				info: "ART builds a bundle only after a clean build-layered-products run.",
-			},
-		],
-	);
-	assert.deepEqual(
-		stageLines(
-			flag({
-				not_staged: [c("quay-clair"), c("quay-quay")],
-				release: release({ released_reason: "Progressing" }),
-				no_release: [c("quay-clair")],
-			}),
-			app,
-		),
-		[
-			{
-				status: "running",
-				text: "Release in progress",
-				release: "fbc-ri-stage-quay-3-18-quay-operator-ssrlx",
-			},
-			{ status: "waiting", text: "clair: not in a stage Release yet" },
-		],
-	);
-	assert.deepEqual(
-		stageLines(
-			flag({
-				total: 2,
-				not_staged: [c("quay-clair"), c("quay-quay")],
-				no_release: [c("quay-clair"), c("quay-quay")],
-			}),
-			app,
-		),
-		[{ status: "waiting", text: "Not in a stage Release yet" }],
+		{ status: "done", text: "Released" },
 	);
 });
 
