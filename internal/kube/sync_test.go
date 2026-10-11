@@ -4,9 +4,13 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,6 +23,7 @@ import (
 
 	"github.com/quay/release-readiness/internal/db"
 	"github.com/quay/release-readiness/internal/model"
+	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
 const testNamespace = "art-quay-tenant"
@@ -291,6 +296,92 @@ func TestSyncStagedSnapshots(t *testing.T) {
 	}
 	if got == nil || got.SnapshotName != "quay-stage-3-18-1-image" {
 		t.Errorf("selected = %+v, want quay-stage-3-18-1-image", got)
+	}
+}
+
+// TestSyncListContinueExpired serves the second page of Snapshots as the 410
+// the apiserver returns once it has compacted the list's revision.
+func TestSyncListContinueExpired(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		expired   string   // the 410 body for continue=t1
+		continues []string // the continue parameter of each Snapshot list
+		stored    []string
+		problem   string // the konflux problem's message prefix, "" for none
+	}{
+		{
+			name:      "token",
+			expired:   `{"kind":"Status","apiVersion":"v1","metadata":{"continue":"t2"},"status":"Failure","reason":"Expired","code":410}`,
+			continues: []string{"", "t1", "t2"},
+			stored:    []string{"quay-3-18-a", "quay-3-18-b"},
+		},
+		{
+			name:      "no token",
+			expired:   `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"Expired","code":410}`,
+			continues: []string{"", "t1"},
+			stored:    []string{"quay-3-18-a"},
+			problem:   "list snapshots",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			pages := map[string]string{
+				"":   `{"apiVersion":"appstudio.redhat.com/v1alpha1","kind":"SnapshotList","metadata":{"continue":"t1"},"items":[{"metadata":{"name":"quay-3-18-a"},"spec":{"application":"quay-3-18"}}]}`,
+				"t2": `{"apiVersion":"appstudio.redhat.com/v1alpha1","kind":"SnapshotList","metadata":{},"items":[{"metadata":{"name":"quay-3-18-b"},"spec":{"application":"quay-3-18"}}]}`,
+			}
+			var continues []string
+			mux := http.NewServeMux()
+			mux.HandleFunc("GET /apis/appstudio.redhat.com/v1alpha1/namespaces/art-quay-tenant/snapshots", func(w http.ResponseWriter, r *http.Request) {
+				c := r.URL.Query().Get("continue")
+				continues = append(continues, c)
+				w.Header().Set("Content-Type", "application/json")
+				if c == "t1" {
+					w.WriteHeader(http.StatusGone)
+					_, _ = w.Write([]byte(tc.expired))
+					return
+				}
+				_, _ = w.Write([]byte(pages[c]))
+			})
+			mux.HandleFunc("GET /apis/appstudio.redhat.com/v1alpha1/namespaces/art-quay-tenant/releases", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"apiVersion":"appstudio.redhat.com/v1alpha1","kind":"ReleaseList","metadata":{},"items":[]}`))
+			})
+			srv := httptest.NewServer(mux)
+			t.Cleanup(srv.Close)
+			client, err := NewClient(&rest.Config{Host: srv.URL})
+			if err != nil {
+				t.Fatal(err)
+			}
+			database, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = database.Close() })
+			withTx := func(ctx context.Context, fn func(Store) error) error {
+				return database.InTx(ctx, func(tx *db.DB) error { return fn(tx) })
+			}
+			reg := syncstatus.New()
+			s := NewSyncer(client, testNamespace, database, withTx, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			s.Status = reg.Track("konflux", 0)
+			s.SyncOnce(ctx)
+
+			if !slices.Equal(continues, tc.continues) {
+				t.Errorf("continue parameters = %q, want %q", continues, tc.continues)
+			}
+			var stored []string
+			for _, name := range []string{"quay-3-18-a", "quay-3-18-b"} {
+				if ok, _ := database.SnapshotExistsByName(ctx, name); ok {
+					stored = append(stored, name)
+				}
+			}
+			if !slices.Equal(stored, tc.stored) {
+				t.Errorf("stored = %q, want %q", stored, tc.stored)
+			}
+			p := reg.Problems(time.Now())
+			if tc.problem == "" && len(p) != 0 || tc.problem != "" && (len(p) != 1 || p[0].Source != "konflux" || !strings.HasPrefix(p[0].Message, tc.problem)) {
+				t.Errorf("problems = %+v, want konflux %q", p, tc.problem)
+			}
+		})
 	}
 }
 
