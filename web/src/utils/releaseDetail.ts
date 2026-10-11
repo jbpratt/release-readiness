@@ -1,13 +1,3 @@
-import {
-	CheckCircleIcon,
-	CodeBranchIcon,
-	CodeIcon,
-	FlaskIcon,
-	InProgressIcon,
-	OutlinedCheckCircleIcon,
-	OutlinedCircleIcon,
-	QuestionCircleIcon,
-} from "@patternfly/react-icons";
 import type {
 	BuildCommit,
 	BuildTickets,
@@ -17,31 +7,6 @@ import type {
 	ScanCounts,
 } from "../api/types";
 import { relative } from "./format.ts";
-
-// Ticket statuses counted as verified.
-const VERIFIED = new Set(["release pending", "verified", "closed", "done"]);
-
-const STATUS_ICONS: Record<string, typeof QuestionCircleIcon> = {
-	new: OutlinedCircleIcon,
-	assigned: InProgressIcon,
-	"in progress": InProgressIcon,
-	post: CodeBranchIcon,
-	modified: CodeIcon,
-	on_qa: FlaskIcon,
-	verified: OutlinedCheckCircleIcon,
-	"release pending": OutlinedCheckCircleIcon,
-	closed: CheckCircleIcon,
-	done: CheckCircleIcon,
-};
-
-/** A ticket status's icon, and whether it counts as verified, so green. */
-export function statusIcon(status: string) {
-	const s = status.toLowerCase();
-	return {
-		icon: STATUS_ICONS[s] ?? QuestionCircleIcon,
-		verified: VERIFIED.has(s),
-	};
-}
 
 // A "-nightly" segment, at the end or before a suffix like "-fips".
 const NIGHTLY = /-nightly(?=-|$)/;
@@ -67,6 +32,21 @@ export function jobLabels(jobs: string[]): string[] {
 					.replace("e2e-install-", "")
 					.replace(NIGHTLY, "") ?? job),
 	);
+}
+
+/**
+ * A job's status by its runs' Prow states: success when every run that passed
+ * or failed passed, danger when none did, warning when both. Aborted and other
+ * runs do not count.
+ */
+export function runsStatus(
+	states: string[],
+): "success" | "warning" | "danger" | undefined {
+	const passed = states.includes("success");
+	const failed = states.some((s) => s === "failure" || s === "error");
+	if (passed && failed) return "warning";
+	if (passed) return "success";
+	return failed ? "danger" : undefined;
 }
 
 /**
