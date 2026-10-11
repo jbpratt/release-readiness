@@ -15,7 +15,6 @@ import {
 	Label,
 	type LabelProps,
 	PageSection,
-	Popover,
 	ProgressStep,
 	type ProgressStepProps,
 	ProgressStepper,
@@ -52,11 +51,9 @@ import type {
 	CIJob,
 	CIState,
 	DashboardConfig,
-	ImageScan,
 	NewestBuild,
 	ReleaseCandidate,
 	ReleaseVersion,
-	ScanCounts,
 } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
@@ -69,21 +66,16 @@ import {
 	ticketsJql,
 } from "../utils/links";
 import {
-	BASES,
 	ciStep,
 	componentLabel,
 	fbcCopy,
-	fixableLabels,
 	jobLabels,
 	missingCommits,
 	notComparedLines,
 	nvrLabel,
 	releaseLine,
 	runsStatus,
-	SEVERITIES,
-	SEVERITY_COLORS,
 	type StatusLine,
-	scanCell,
 } from "../utils/releaseDetail";
 
 /** A Konflux UI page of the version's application. */
@@ -94,10 +86,6 @@ type KonfluxLink = (
 
 const external = { target: "_blank", rel: "noopener noreferrer" };
 const muted = { color: "var(--pf-t--global--text--color--subtle)" };
-const textColor = {
-	orange: "var(--pf-t--global--text--color--status--warning--default)",
-	grey: muted.color,
-};
 
 /** A local date and time to the minute: "Oct 9, 21:48". */
 const when = (iso: string) =>
@@ -416,7 +404,6 @@ function Candidate({
 	app: string;
 	konflux: KonfluxLink;
 }) {
-	const hasScans = candidate.components.some((c) => c.scan);
 	const prod = candidate.prod && {
 		name: candidate.prod.name,
 		...releaseLine(candidate.prod),
@@ -478,7 +465,6 @@ function Candidate({
 					<Tr>
 						<Th>Component</Th>
 						<Th>Build</Th>
-						{hasScans && <Th>CVEs</Th>}
 					</Tr>
 				</Thead>
 				<Tbody>
@@ -494,11 +480,6 @@ function Candidate({
 									noNvr
 								)}
 							</Td>
-							{hasScans && (
-								<Td>
-									<ScanCell scan={c.scan} label={componentLabel(c.name, app)} />
-								</Td>
-							)}
 						</Tr>
 					))}
 				</Tbody>
@@ -686,95 +667,6 @@ function Status({
 				{children}
 			</FlexItem>
 		</Flex>
-	);
-}
-
-/** An image's fixable CVEs by severity, all its counts on click. */
-function ScanCell({ scan, label }: { scan: ImageScan | null; label: string }) {
-	if (scan?.state === "scanned" && scan.counts) {
-		const fixable = fixableLabels(scan.counts);
-		return (
-			<Popover
-				headerContent={label}
-				bodyContent={<ScanDetail counts={scan.counts} url={scan.url} />}
-				maxWidth="30rem"
-			>
-				<Button variant="plain" hasNoPadding>
-					{fixable.length > 0 ? (
-						<Flex component="span" gap={{ default: "gapXs" }}>
-							{fixable.map((l) => (
-								<Label key={l.text} isCompact color={l.color}>
-									{l.text}
-								</Label>
-							))}
-						</Flex>
-					) : (
-						<span style={muted}>0 fixable</span>
-					)}
-				</Button>
-			</Popover>
-		);
-	}
-	const cell = scanCell(scan);
-	return (
-		<ExtLink href={cell.url || null}>
-			<span style={{ color: textColor[cell.color] }}>{cell.text}</span>
-		</ExtLink>
-	);
-}
-
-/** A scan's CVEs by severity, with and without a fix, and its Konflux page. */
-function ScanDetail({ counts, url }: { counts: ScanCounts; url: string }) {
-	const rows = [
-		["Fixable", counts.fixable],
-		["No fix", counts.no_fix],
-	] as const;
-	return (
-		<>
-			<Table
-				variant="compact"
-				borders={false}
-				gridBreakPoint=""
-				aria-label="CVEs by severity"
-			>
-				<Thead>
-					<Tr>
-						<Td />
-						{SEVERITIES.map((s) => (
-							<Th key={s} modifier="fitContent">
-								{s.charAt(0).toUpperCase() + s.slice(1)}
-							</Th>
-						))}
-					</Tr>
-				</Thead>
-				<Tbody>
-					{rows.map(([row, n]) => (
-						<Tr key={row}>
-							<Th scope="row" modifier="fitContent">
-								{row}
-							</Th>
-							{SEVERITIES.map((s) => (
-								<Td key={s}>
-									{n[s] > 0 ? (
-										<Label isCompact color={SEVERITY_COLORS[s]}>
-											{n[s]}
-										</Label>
-									) : (
-										"—"
-									)}
-								</Td>
-							))}
-						</Tr>
-					))}
-				</Tbody>
-			</Table>
-			<div style={{ ...muted, marginTop: "0.5rem" }}>{BASES[counts.basis]}</div>
-			{url && (
-				<div style={{ marginTop: "0.5rem" }}>
-					<ExtLink href={url}>Scan in Konflux</ExtLink>
-				</div>
-			)}
-		</>
 	);
 }
 

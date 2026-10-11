@@ -16,18 +16,12 @@ type JiraIssueRecord struct {
 	QAContact  string `json:"qa_contact"`
 }
 
-// IssueSummary provides aggregate counts of JIRA issues for a release.
-type IssueSummary struct {
-	CVEs int `json:"cves"`
-}
-
-// ReleaseOverview is a combined view of a release with its issue summary,
-// readiness signal, and when its newest build, stream or STAGE, was created.
+// ReleaseOverview is a combined view of a release with its readiness signal
+// and when its newest build, stream or STAGE, was created.
 type ReleaseOverview struct {
-	Release      ReleaseVersion    `json:"release"`
-	IssueSummary *IssueSummary     `json:"issue_summary,omitempty"`
-	Readiness    ReadinessResponse `json:"readiness"`
-	LatestBuild  *time.Time        `json:"latest_build,omitempty"`
+	Release     ReleaseVersion    `json:"release"`
+	Readiness   ReadinessResponse `json:"readiness"`
+	LatestBuild *time.Time        `json:"latest_build,omitempty"`
 	// Shipped is set when the catalog published the version's tag or JIRA
 	// marks it released.
 	Shipped bool `json:"shipped"`
@@ -264,41 +258,13 @@ type CIRun struct {
 }
 
 // CandidateComponent is a build image with its ART build and the upstream
-// commit ART built it from, all empty until ART resolves it, and its CVE scan,
-// null until the scan sync reads it.
+// commit ART built it from, all empty until ART resolves it.
 type CandidateComponent struct {
-	Name                      string     `json:"name"`
-	Image                     string     `json:"image"`
-	NVR                       string     `json:"nvr"`
-	BuildURL                  string     `json:"build_url"`
-	Scan                      *ImageScan `json:"scan"`
-	UpstreamRepo, UpstreamSHA string     `json:"-"`
-}
-
-// ImageScan is the CVE scan of an image by its build PipelineRun: State is
-// "pending", "scanned", "scan_failed" or "not_scanned", and Counts is null
-// unless scanned. URL is the PipelineRun's Konflux page.
-type ImageScan struct {
-	State  string      `json:"state"`
-	Counts *ScanCounts `json:"counts"`
-	URL    string      `json:"url"`
-}
-
-// ScanCounts is a scan's CVEs by severity, split by whether a fix exists.
-// Basis "scanner_arch_findings" counts a CVE once per architecture it is
-// found in; "unique_cves" counts it once.
-type ScanCounts struct {
-	Basis   string         `json:"basis"`
-	Fixable SeverityCounts `json:"fixable"`
-	NoFix   SeverityCounts `json:"no_fix"`
-}
-
-type SeverityCounts struct {
-	Critical int `json:"critical"`
-	High     int `json:"high"`
-	Medium   int `json:"medium"`
-	Low      int `json:"low"`
-	Unknown  int `json:"unknown"`
+	Name                      string `json:"name"`
+	Image                     string `json:"image"`
+	NVR                       string `json:"nvr"`
+	BuildURL                  string `json:"build_url"`
+	UpstreamRepo, UpstreamSHA string `json:"-"`
 }
 
 // StageFlag is the release candidate's stage: State "staged", StagedAt when

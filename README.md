@@ -32,7 +32,7 @@ A run installed the operator bundle its `tested-images.json` names, that of a `q
 
 ### Sync status
 
-`/api/v1/sync-status` lists as `problems` each enabled sync (`konflux`, `jira`, `art-builds`, `catalog`, `prow`, `github-evidence`, `image-scans`) whose last pass failed or that has had no success within 3 poll intervals (at least 10 minutes); the header shows a warning icon while any exist.
+`/api/v1/sync-status` lists as `problems` each enabled sync (`konflux`, `jira`, `art-builds`, `catalog`, `prow`, `github-evidence`) whose last pass failed or that has had no success within 3 poll intervals (at least 10 minutes); the header shows a warning icon while any exist.
 
 ## Release view
 
@@ -67,7 +67,6 @@ cd web && npm install && npm run build
 | `-konflux-poll-interval` | — | `30s` | Konflux sync poll interval |
 | `-konflux-ui-url` | `KONFLUX_UI_URL` | `https://konflux-ui.apps.kflux-ocp-p01.7ayg.p1.openshiftapps.com` | Konflux UI URL for links to `-namespace`'s applications, Snapshots and Releases (empty disables Konflux links) |
 | `-art-build-history-url` | — | `https://art-build-history-art-build-history.apps.artc2023.pc3z.p1.openshiftapps.com` | ART build history service; component images are looked up there in the background for build and upstream commit links (empty disables) |
-| `-tekton-results-url` | — | `https://tekton-results-tekton-results.apps.kflux-ocp-p01.7ayg.p1.openshiftapps.com` | Tekton Results API; the CVE scans of candidate images are read there in the background with the Konflux credential (empty disables) |
 | `-jira-url` | `JIRA_URL` | `https://redhat.atlassian.net` | JIRA Cloud URL |
 | `-jira-api-url` | `JIRA_API_URL` | `-jira-url` | JIRA REST API base URL; set to `https://api.atlassian.com/ex/jira/<cloudId>` for scoped API tokens |
 | `-jira-email` | `JIRA_EMAIL` | — | JIRA Cloud account email for API token auth |
@@ -84,8 +83,7 @@ cd web && npm install && npm run build
 ### Local development
 
 ```bash
-# Start backend (the kubeconfig needs read access to Snapshots and Releases in the namespace,
-# and to its Tekton Results records while -tekton-results-url is set)
+# Start backend (the kubeconfig needs read access to Snapshots and Releases in the namespace)
 KUBECONFIG=<path> go run ./cmd/release-readiness -addr :8088 -db /tmp/rr.db
 
 # In a separate terminal, start the Vite dev server (proxies /api to localhost:8088)
@@ -94,7 +92,7 @@ cd web && npm run dev
 
 ### Deployment
 
-`deploy/rbac.yaml` creates the `release-readiness` ServiceAccount and a Role granting read-only access to Snapshots and Releases, and get/list on `results.tekton.dev` results and records for the CVE scan counts. The Role and RoleBinding must live in the Konflux namespace the app reads.
+`deploy/rbac.yaml` creates the `release-readiness` ServiceAccount and a Role granting read-only access to Snapshots and Releases. The Role and RoleBinding must live in the Konflux namespace the app reads.
 
 ### Upgrading
 

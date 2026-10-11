@@ -33,11 +33,7 @@ import {
 } from "@patternfly/react-icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { listReleasesOverview } from "../api/client";
-import type {
-	IssueSummary,
-	ReadinessResponse,
-	ReleaseVersion,
-} from "../api/types";
+import type { ReadinessResponse, ReleaseVersion } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
 import { day } from "../utils/format";
@@ -144,7 +140,6 @@ export default function ReleasesOverview() {
 					<ReleaseCard
 						key={ov.release.name}
 						release={ov.release}
-						issueSummary={ov.issue_summary}
 						readinessSignal={ov.readiness}
 						latestBuild={ov.latest_build}
 						viewMode={viewMode}
@@ -158,14 +153,12 @@ export default function ReleasesOverview() {
 
 function ReleaseCard({
 	release,
-	issueSummary,
 	readinessSignal,
 	latestBuild,
 	viewMode,
 	jiraBaseUrl,
 }: {
 	release: ReleaseVersion;
-	issueSummary?: IssueSummary;
 	readinessSignal: ReadinessResponse;
 	latestBuild?: string;
 	viewMode: ViewMode;
@@ -280,12 +273,6 @@ function ReleaseCard({
 									<span className="rr-label">Last build</span>
 									<div>{lastBuild}</div>
 								</FlexItem>
-								{issueSummary && issueSummary.cves > 0 && (
-									<FlexItem>
-										<span className="rr-label">CVEs</span>
-										<div>{issueSummary.cves}</div>
-									</FlexItem>
-								)}
 							</Flex>
 						</FlexItem>
 					</Flex>

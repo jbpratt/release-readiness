@@ -1,16 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type {
-	CandidateCI,
-	CIBuild,
-	ImageScan,
-	KonfluxRelease,
-} from "../api/types.ts";
+import type { CandidateCI, CIBuild, KonfluxRelease } from "../api/types.ts";
 import {
 	ciStep,
 	componentLabel,
 	fbcCopy,
-	fixableLabels,
 	jobLabels,
 	jobShortName,
 	missingCommits,
@@ -18,7 +12,6 @@ import {
 	nvrLabel,
 	releaseLine,
 	runsStatus,
-	scanCell,
 } from "./releaseDetail.ts";
 
 test("jobShortName", () => {
@@ -229,64 +222,6 @@ test("releaseLine", () => {
 		),
 		{ status: "done", text: "Released" },
 	);
-});
-
-test("fixableLabels", () => {
-	const zero = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 };
-	assert.deepEqual(
-		fixableLabels({
-			basis: "unique_cves",
-			fixable: { critical: 1, high: 4, medium: 2, low: 3, unknown: 5 },
-			no_fix: zero,
-		}),
-		[
-			{ text: "1 critical", color: "red" },
-			{ text: "4 high", color: "red" },
-			{ text: "2 medium", color: "orange" },
-			{ text: "3 low", color: "yellow" },
-			{ text: "5 unknown", color: "grey" },
-		],
-	);
-	assert.deepEqual(
-		fixableLabels({
-			basis: "scanner_arch_findings",
-			fixable: { ...zero, high: 4 },
-			no_fix: { ...zero, high: 102, medium: 684, low: 651 },
-		}),
-		[{ text: "4 high", color: "red" }],
-	);
-	assert.deepEqual(
-		fixableLabels({
-			basis: "scanner_arch_findings",
-			fixable: zero,
-			no_fix: { ...zero, high: 24 },
-		}),
-		[],
-	);
-});
-
-test("scanCell", () => {
-	const scan = (s: Partial<ImageScan>): ImageScan => ({
-		state: "scan_failed",
-		counts: null,
-		url: "https://konflux.example/plr",
-		...s,
-	});
-	assert.deepEqual(scanCell(scan({ state: "scan_failed" })), {
-		text: "scan failed",
-		color: "orange",
-		url: "https://konflux.example/plr",
-	});
-	assert.deepEqual(scanCell(scan({ state: "not_scanned" })), {
-		text: "not scanned",
-		color: "grey",
-		url: "https://konflux.example/plr",
-	});
-	assert.deepEqual(scanCell(scan({ state: "pending" })), {
-		text: "-",
-		color: "grey",
-	});
-	assert.deepEqual(scanCell(null), { text: "-", color: "grey" });
 });
 
 test("ciStep: the candidate row's runs, as runsStatus counts them", () => {
