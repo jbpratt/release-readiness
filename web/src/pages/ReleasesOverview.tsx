@@ -149,7 +149,6 @@ export default function ReleasesOverview() {
 						issueSummary={ov.issue_summary}
 						readinessSignal={ov.readiness}
 						latestBuild={ov.latest_build}
-						shipped={ov.shipped}
 						viewMode={viewMode}
 						jiraBaseUrl={config?.jira_base_url}
 					/>
@@ -164,7 +163,6 @@ function ReleaseCard({
 	issueSummary,
 	readinessSignal,
 	latestBuild,
-	shipped,
 	viewMode,
 	jiraBaseUrl,
 }: {
@@ -172,7 +170,6 @@ function ReleaseCard({
 	issueSummary?: IssueSummary;
 	readinessSignal: ReadinessResponse;
 	latestBuild?: string;
-	shipped: boolean;
 	viewMode: ViewMode;
 	jiraBaseUrl?: string;
 }) {
@@ -230,24 +227,11 @@ function ReleaseCard({
 					justifyContent={{ default: "justifyContentSpaceBetween" }}
 					alignItems={{ default: "alignItemsCenter" }}
 				>
+					<FlexItem>{displayName}</FlexItem>
 					<FlexItem>
-						{displayName}
-						{shipped && !release.released && (
-							<Tooltip content="The JIRA release ticket is still open: ticket hygiene, not release risk.">
-								<Label isCompact color="blue" style={{ marginLeft: "0.5rem" }}>
-									Shipped, ticket still open
-								</Label>
-							</Tooltip>
-						)}
-					</FlexItem>
-					<FlexItem>
-						{/* A shipped release with an open JIRA ticket shows only its shipped
-						    badge: the readiness signal would only reflect the stale ticket. */}
-						{!(shipped && !release.released) && (
-							<Label color={readinessSignal.signal} icon={signalIcon} isCompact>
-								{readinessSignal.message}
-							</Label>
-						)}
+						<Label color={readinessSignal.signal} icon={signalIcon} isCompact>
+							{readinessSignal.message}
+						</Label>
 					</FlexItem>
 				</Flex>
 			</CardTitle>
