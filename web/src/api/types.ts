@@ -14,9 +14,10 @@ export interface KonfluxRelease {
 /**
  * What decides whether a version can ship. candidate is null with reason set
  * when there is none; a shipped version sets nothing else. ci is set with the
- * candidate. newest is set when the version's newest build holds, for a
- * component the candidate holds, another image than the candidate does and is
- * not ci's latest_in_ci, or when there is no candidate.
+ * candidate, and without one when the version has builds. newest is set when
+ * the version's newest build holds, for a component the candidate holds,
+ * another image than the candidate does, or when there is no candidate, and is
+ * not ci's passed nor, beside the candidate, its latest_in_ci.
  */
 export interface ReleaseCandidate {
 	shipped: boolean;
@@ -60,21 +61,26 @@ export interface BuildLabel {
 }
 
 /**
- * The periodic runs since the candidate's operator bundle was first built, by
+ * The periodic runs since the candidate's operator bundle was first built, or
+ * without a candidate since the first of the version's builds' bundles was, by
  * the build each installed; the newest bundle of the version's builds in CI,
- * by its label, unless it is the candidate's; and whether the candidate needs
- * refreshing.
+ * by its label, unless it is the candidate's; passed, the newest of them,
+ * newer than the candidate, that a run passed with; and what to do: with a
+ * candidate, rerun release-from-fbc with passed, wait on a newer build in CI,
+ * or nothing (current); without one, pick passed, or nothing (none).
  */
 export interface CandidateCI {
 	since: string;
 	builds: CIBuild[];
 	latest_in_ci: BuildLabel | null;
-	refresh: "refresh" | "needs_art" | "waiting" | "current";
+	passed: BuildLabel | null;
+	refresh: "rerun" | "waiting" | "current" | "pick" | "none";
 }
 
 /**
  * The runs that installed one build: the candidate, another build with its
- * label and CI state, an unknown build, or no Quay.
+ * label and CI state, an unknown build, or no Quay. Without a candidate, no
+ * row is the candidate's.
  */
 export interface CIBuild {
 	kind: "candidate" | "build" | "unknown" | "not_installed";

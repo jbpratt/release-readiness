@@ -37,7 +37,7 @@ const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
 const glossary: [string, string][] = [
 	[
 		"Release candidate",
-		"The pinned build that ships: the version's newest build whose stage Release succeeded.",
+		"The pinned build that ships: the build release-from-fbc last staged for the version, whose stage Release succeeded. Running release-from-fbc with a build picks it.",
 	],
 	[
 		"Staged",

@@ -28,7 +28,6 @@ import {
 	ExclamationCircleIcon,
 	ExclamationTriangleIcon,
 	ExternalLinkAltIcon,
-	InfoCircleIcon,
 	InProgressIcon,
 } from "@patternfly/react-icons";
 import {
@@ -76,7 +75,6 @@ import {
 	fixableLabels,
 	jobLabels,
 	missingCommits,
-	notVerified,
 	nvrLabel,
 	releaseLine,
 	SEVERITIES,
@@ -189,7 +187,7 @@ export default function ReleaseDetail() {
 				konflux={konflux}
 			/>
 
-			{candidate.data?.ci && (
+			{candidate.data?.ci && candidate.data.ci.builds.length > 0 && (
 				<CICard ci={candidate.data.ci} version={xyz} konflux={konflux} />
 			)}
 
@@ -340,7 +338,10 @@ const noNvr = (
 const lines = (...ls: (string | undefined)[]) =>
 	ls.filter(Boolean).map((l) => <div key={l}>{l}</div>);
 
-/** The version's release candidate, its STAGE build, or why it has none. */
+/**
+ * The version's release candidate, its STAGE build, or why it has none and
+ * the build to pick.
+ */
 function BuildsCard({
 	data,
 	error,
@@ -386,9 +387,19 @@ function BuildsCard({
 					/>
 				) : (
 					<>
-						{data.reason === "no release candidate yet"
-							? "No release candidate yet."
-							: data.reason.charAt(0).toUpperCase() + data.reason.slice(1)}
+						{`${data.reason.charAt(0).toUpperCase()}${data.reason.slice(1)}.`}
+						{data.ci?.refresh === "pick" && data.ci.passed && (
+							<div style={line}>
+								<Status status="warning">
+									Pick the candidate: the{" "}
+									<BuildLink build={data.ci.passed} konflux={konflux} /> build
+									passed CI.{" "}
+									<ClipboardCopy variant="inline-compact">
+										{data.ci.passed.snapshot}
+									</ClipboardCopy>
+								</Status>
+							</div>
+						)}
 						{data.newest && (
 							<NewestLine newest={data.newest} konflux={konflux} />
 						)}
@@ -400,8 +411,9 @@ function BuildsCard({
 }
 
 /**
- * The candidate: whether it is in stage and in prod, whether CI tested it and
- * it needs refreshing, a newer build, and its images.
+ * The candidate: whether it is in stage and in prod, whether CI tested it, a
+ * newer build to re-run release-from-fbc with or wait on, the newest build,
+ * and its images.
  */
 function Candidate({
 	candidate,
@@ -462,17 +474,15 @@ function Candidate({
 				</div>
 			)}
 			<div style={line}>
-				{ci.refresh === "refresh" ? (
+				{ci.refresh === "rerun" && ci.passed ? (
 					<Status status="warning">
-						Refresh the candidate: the {latest} build is newer and passed CI.{" "}
+						Re-run release-from-fbc with the{" "}
+						<BuildLink build={ci.passed} konflux={konflux} /> build, which is
+						newer and passed CI (optional).
+						{candidate.prod && " ART may refuse it after a prod attempt."}{" "}
 						<ClipboardCopy variant="inline-compact">
-							{ci.latest_in_ci?.snapshot ?? ""}
+							{ci.passed.snapshot}
 						</ClipboardCopy>
-					</Status>
-				) : ci.refresh === "needs_art" ? (
-					<Status status="warning">
-						Refresh needs ART: a prod release was attempted, so re-pinning is
-						manual on ART's side.
 					</Status>
 				) : ci.refresh === "waiting" ? (
 					<Status status="running">
@@ -735,8 +745,9 @@ const runState = (state: string) =>
 const nowrap = { whiteSpace: "nowrap" } as const;
 
 /**
- * The periodic runs since the candidate's bundle was first built, after the
- * OCP release controller: a row per build they installed, the candidate first.
+ * The periodic runs since the candidate's bundle was first built, or the
+ * version's builds' without one, after the OCP release controller: a row per
+ * build they installed, the candidate first.
  */
 function CICard({
 	ci,
@@ -753,13 +764,19 @@ function CICard({
 	];
 	const labels = jobLabels(jobs);
 	const label = (job: string) => labels[jobs.indexOf(job)];
+	const hasCandidate = ci.builds.some((b) => b.kind === "candidate");
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<CardTitle>CI · periodic runs since {when(ci.since)}</CardTitle>
 			<CardBody>
 				<div style={{ ...muted, marginBottom: "0.5rem" }}>
-					<strong>Release candidate</strong>: the pinned build that ships as{" "}
-					{version}. <strong>Staged</strong>: in the {version} stage release.{" "}
+					{hasCandidate && (
+						<>
+							<strong>Release candidate</strong>: the pinned build that ships as{" "}
+							{version}. <strong>Staged</strong>: in the {version} stage
+							release.{" "}
+						</>
+					)}
 					<strong>In CI</strong>: reached the catalog CI installs from.
 				</div>
 				<Table variant="compact" aria-label="CI runs by installed build">
@@ -793,12 +810,9 @@ function CICard({
 									) : (
 										b.ci && (
 											<>
-												{b.ci.state !== "unknown" && (
-													<>
-														<CIStateText ci={b.ci} konflux={konflux} />,{" "}
-													</>
-												)}
-												not in {version}
+												<CIStateText ci={b.ci} konflux={konflux} />
+												{hasCandidate &&
+													`${b.ci.state !== "unknown" ? ", " : ""}not in ${version}`}
 											</>
 										)
 									)}
@@ -865,9 +879,6 @@ function JobChips({
 	);
 }
 
-const notVerifiedTip =
-	"Tickets not yet Verified, Release Pending or Closed in Jira.";
-
 function TicketsCard({
 	data,
 	error,
@@ -883,7 +894,6 @@ function TicketsCard({
 }) {
 	const issues = data?.tickets;
 	const hasIssues = (issues ?? []).length > 0;
-	const open = notVerified(issues ?? []);
 	const jira = config?.jira_project
 		? jiraSearchUrl(
 				ticketsJql(config.jira_project, version, issues ?? []),
@@ -901,27 +911,8 @@ function TicketsCard({
 			<LinkedCardTitle href={jira} link="Jira">
 				Tickets
 				{hasIssues && ` (${issues!.length})`}
-				{open > 0 && (
-					<>
-						{` · ${open} not verified`}
-						<Tooltip content={notVerifiedTip} aria="none">
-							<Button
-								variant="plain"
-								hasNoPadding
-								aria-label={notVerifiedTip}
-								icon={<InfoCircleIcon />}
-								style={{ marginLeft: "0.25rem" }}
-							/>
-						</Tooltip>
-					</>
-				)}
 			</LinkedCardTitle>
 			<CardBody>
-				{data && !data.build && data.reason !== "shipped" && (
-					<div style={{ ...muted, marginBottom: "0.5rem" }}>
-						Not checked against a build: {data.reason}
-					</div>
-				)}
 				{data && data.not_compared.length > 0 && (
 					<div style={{ ...muted, marginBottom: "0.5rem" }}>
 						Not compared:{" "}

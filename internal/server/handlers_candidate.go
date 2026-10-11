@@ -28,8 +28,8 @@ var nvrXYZ = regexp.MustCompile(`^(\d+\.\d+\.\d+)(?:\.|$)`)
 // handleGetCandidate serves what decides whether an unshipped version can
 // ship: its release candidate, the STAGE build, with whether it reached stage
 // and the version's prod Release, the periodic runs since its operator bundle
-// was built by the build each installed, and the version's newest build when
-// it differs from the candidate or there is none.
+// was built, or its builds' without one, by the build each installed, and the
+// version's newest build when it differs from the candidate or there is none.
 func (s *Server) handleGetCandidate(w http.ResponseWriter, r *http.Request) {
 	version := r.PathValue("version")
 	release, err := s.db.GetReleaseVersion(r.Context(), version)
@@ -62,35 +62,41 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 	// Only the per-build stage Releases, of fbc-ri-* Snapshots, feed the
 	// catalog CI installs from; the version's own stage Releases do not.
 	releases = slices.DeleteFunc(releases, func(r model.StageRelease) bool { return !strings.HasPrefix(r.Snapshot, "fbc-ri-") })
-	var newest *model.NewestBuild
-	if c.newest != nil {
-		newest = &model.NewestBuild{Snapshot: c.newest.Name, CreatedAt: c.newest.CreatedAt, CI: ciState(bundleDigest(app, c.newest), releases)}
-	}
-	if c.build == nil || c.build.Source != "staged" {
-		resp.Reason = "no release candidate yet"
-		resp.Newest = newest
-		return resp, nil
-	}
-
-	cand := c.build
-	resp.Candidate = cand
 	held := map[string]string{}
-	for _, cc := range cand.Components {
-		held[cc.Name] = imageDigest(cc.Image)
-	}
-	// Its own stage Release succeeded with every image of it, and dates it:
-	// ART assembles a STAGE build from images it often staged before.
-	cand.Stage = model.StageFlag{State: "staged", StagedAt: c.stagedAt, Total: len(cand.Components), NotStaged: []string{}, NoBundle: []string{}, NoRelease: []string{}}
-	if cand.Prod, err = s.db.LatestProdRelease(ctx, c.assembly); err != nil {
-		return nil, err
+	if c.build != nil && c.build.Source == "staged" {
+		cand := c.build
+		resp.Candidate = cand
+		for _, cc := range cand.Components {
+			held[cc.Name] = imageDigest(cc.Image)
+		}
+		// Its own stage Release succeeded with every image of it, and dates it:
+		// ART assembles a STAGE build from images it often staged before.
+		cand.Stage = model.StageFlag{State: "staged", StagedAt: c.stagedAt, Total: len(cand.Components), NotStaged: []string{}, NoBundle: []string{}, NoRelease: []string{}}
+		if cand.Prod, err = s.db.LatestProdRelease(ctx, c.assembly); err != nil {
+			return nil, err
+		}
+	} else {
+		resp.Reason = "no release candidate yet"
+		if c.build == nil {
+			if c.art != "" && lowerVersion(c.art, c.assembly) {
+				resp.Reason = "no " + c.assembly + " builds yet: ART still builds " + c.art
+			}
+			return resp, nil
+		}
 	}
 	runs, err := s.db.ListProwRunsByApplication(ctx, app)
 	if err != nil {
 		return nil, err
 	}
-	var latest string
-	resp.CI, latest = candidateCI(app, c, held, runs, releases)
+	var latest, passed string
+	resp.CI, latest, passed = candidateCI(app, c, resp.Candidate, held, runs, releases)
 	if c.newest == nil {
+		return resp, nil
+	}
+	// The card names the build to pick or re-run with already, and beside the
+	// candidate the build CI tests.
+	bundle := bundleDigest(app, c.newest)
+	if bundle != "" && (bundle == passed || (resp.Candidate != nil && bundle == latest)) {
 		return resp, nil
 	}
 	// Only the components the candidate holds count: a stream builds images
@@ -99,9 +105,8 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 		d, ok := held[img.Name]
 		return ok && imageDigest(img.Image) != d
 	})
-	// The card names the build CI tests already.
-	if differs && (latest == "" || bundleDigest(app, c.newest) != latest) {
-		resp.Newest = newest
+	if resp.Candidate == nil || differs {
+		resp.Newest = &model.NewestBuild{Snapshot: c.newest.Name, CreatedAt: c.newest.CreatedAt, CI: ciState(bundle, releases)}
 	}
 	return resp, nil
 }
@@ -121,11 +126,14 @@ var olmComponents = map[string]string{
 }
 
 // candidateCI groups the application's periodic runs since the candidate's
-// operator bundle was first built by the build each installed, and finds the
-// version's newest build in the CI catalog, when that is not the candidate,
-// and whether the candidate needs refreshing. It also returns that build's
-// bundle. held is the candidate's image digests by component.
-func candidateCI(app string, c *candidate, held map[string]string, runs []prow.Run, releases []model.StageRelease) (*model.CandidateCI, string) {
+// operator bundle was first built, or without a candidate since the first of
+// the version's builds' bundles was, by the build each installed. It finds the
+// newest bundle of the version's builds in the CI catalog, when that is not
+// the candidate's, and the newest, newer than the candidate, that a run passed
+// with, and so whether to pick a candidate or re-run release-from-fbc; it also
+// returns those two bundles. cand is the release candidate, or nil, and held
+// its image digests by component.
+func candidateCI(app string, c *candidate, cand *model.CandidateBuild, held map[string]string, runs []prow.Run, releases []model.StageRelease) (ci *model.CandidateCI, latest, passed string) {
 	// A bundle is labelled by the oldest stream build holding it: no run can
 	// have installed it before.
 	labels := map[string]model.BuildLabel{}
@@ -134,10 +142,22 @@ func candidateCI(app string, c *candidate, held map[string]string, runs []prow.R
 			labels[d] = model.BuildLabel{Snapshot: c.stream[i].Name, CreatedAt: c.stream[i].CreatedAt}
 		}
 	}
-	cand, bundle := c.build, held[app+"-quay-operator-bundle"]
-	ci := &model.CandidateCI{Since: cand.CreatedAt, Refresh: "current"}
-	if l, ok := labels[bundle]; ok {
-		ci.Since = l.CreatedAt
+	bundle := held[app+"-quay-operator-bundle"]
+	ci = &model.CandidateCI{Builds: []model.CIBuild{}}
+	if cand != nil {
+		ci.Since = cand.CreatedAt
+		if l, ok := labels[bundle]; ok {
+			ci.Since = l.CreatedAt
+		}
+	} else {
+		for i := range c.builds {
+			if l, ok := labels[bundleDigest(app, &c.builds[i])]; ok && (ci.Since.IsZero() || l.CreatedAt.Before(ci.Since)) {
+				ci.Since = l.CreatedAt
+			}
+		}
+		if ci.Since.IsZero() {
+			ci.Since = c.builds[len(c.builds)-1].CreatedAt
+		}
 	}
 
 	var candRuns, unknown, none []prow.Run
@@ -157,7 +177,9 @@ func candidateCI(app string, c *candidate, held map[string]string, runs []prow.R
 			unknown = append(unknown, run)
 		}
 	}
-	ci.Builds = []model.CIBuild{{Kind: "candidate", Snapshot: cand.Snapshot, CreatedAt: &cand.CreatedAt, Jobs: jobRuns(candRuns)}}
+	if cand != nil {
+		ci.Builds = append(ci.Builds, model.CIBuild{Kind: "candidate", Snapshot: cand.Snapshot, CreatedAt: &cand.CreatedAt, Jobs: jobRuns(candRuns)})
+	}
 	bundles := slices.Collect(maps.Keys(others))
 	slices.SortFunc(bundles, func(a, b string) int {
 		return cmp.Or(labels[b].CreatedAt.Compare(labels[a].CreatedAt), strings.Compare(labels[b].Snapshot, labels[a].Snapshot))
@@ -173,37 +195,49 @@ func candidateCI(app string, c *candidate, held map[string]string, runs []prow.R
 		ci.Builds = append(ci.Builds, model.CIBuild{Kind: notInstalled, Jobs: jobRuns(none)})
 	}
 
+	// newestBundle returns, of the bundles of the version's builds that ok
+	// accepts, the one with the newest label.
+	newestBundle := func(ok func(d string) bool) string {
+		newest := ""
+		for i := range c.builds {
+			d := bundleDigest(app, &c.builds[i])
+			if d != "" && (newest == "" || labels[d].CreatedAt.After(labels[newest].CreatedAt)) && ok(d) {
+				newest = d
+			}
+		}
+		return newest
+	}
 	// The CI catalog serves the newest bundle of the version's builds that
 	// reached it: a newer build can pair rebuilt images with an older bundle.
-	var latest string
-	for i := range c.builds {
-		d := bundleDigest(app, &c.builds[i])
-		if d == "" || (latest != "" && !labels[d].CreatedAt.After(labels[latest].CreatedAt)) {
-			continue
-		}
-		if ciState(d, releases).State == "in" {
-			latest = d
-		}
-	}
+	latest = newestBundle(func(d string) bool { return ciState(d, releases).State == "in" })
 	if latest == bundle {
 		latest = ""
 	}
+	passed = newestBundle(func(d string) bool {
+		return (cand == nil || labels[d].CreatedAt.After(ci.Since)) &&
+			slices.ContainsFunc(others[d], func(r prow.Run) bool { return r.State == "success" })
+	})
 	if latest != "" {
 		l := labels[latest]
 		ci.LatestInCI = &l
 	}
-	if ci.LatestInCI != nil && ci.LatestInCI.CreatedAt.After(ci.Since) {
-		ci.Refresh = "waiting"
-		if slices.ContainsFunc(others[latest], func(r prow.Run) bool { return r.State == "success" }) {
-			ci.Refresh = "refresh"
-			// Once a prod Release was attempted, ART's shipment pins the
-			// candidate (art-tools lp_shipment.py).
-			if cand.Prod != nil {
-				ci.Refresh = "needs_art"
-			}
-		}
+	if passed != "" {
+		l := labels[passed]
+		ci.Passed = &l
 	}
-	return ci, latest
+	switch {
+	case cand == nil && passed != "":
+		ci.Refresh = "pick"
+	case cand == nil:
+		ci.Refresh = "none"
+	case passed != "":
+		ci.Refresh = "rerun"
+	case ci.LatestInCI != nil && ci.LatestInCI.CreatedAt.After(ci.Since):
+		ci.Refresh = "waiting"
+	default:
+		ci.Refresh = "current"
+	}
+	return ci, latest, passed
 }
 
 // installedBundle returns the operator bundle a run installed: the one it
@@ -293,6 +327,9 @@ type candidate struct {
 	newest         *model.ReleaseSnapshot
 	builds, stream []model.ReleaseSnapshot
 	assembly       string
+	// art is the version ART builds the stream at, that of its newest build
+	// whose version resolves, or "".
+	art string
 }
 
 // selectCandidate selects the version's build up for release, for its page
@@ -313,6 +350,9 @@ func (s *Server) selectCandidate(ctx context.Context, release *model.ReleaseVers
 		return nil, err
 	}
 	c := &candidate{assembly: m[1], builds: versionBuilds(app, builds, nvrs, m[1]), stream: builds}
+	for i := 0; i < len(builds) && c.art == ""; i++ {
+		c.art = buildVersion(app, &builds[i], nvrs)
+	}
 	if len(c.builds) > 0 {
 		c.newest = &c.builds[0]
 	}
