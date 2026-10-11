@@ -43,15 +43,10 @@ import type {
 } from "../api/types";
 import { seedCache, useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
-import { due } from "../utils/format";
+import { day } from "../utils/format";
 import { formatReleaseName, jiraIssueUrl } from "../utils/links";
 
 type ViewMode = "compact" | "expanded";
-
-const dueColor = {
-	red: "var(--pf-t--global--text--color--status--danger--default)",
-	orange: "var(--pf-t--global--text--color--status--warning--default)",
-};
 
 export default function ReleasesOverview() {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -191,12 +186,7 @@ function ReleaseCard({
 	jiraBaseUrl?: string;
 }) {
 	const target = release.due_date ?? release.release_date;
-	const targetDue = target ? due(target, shipped) : null;
-	const targetDate = targetDue && (
-		<span style={targetDue.color && { color: dueColor[targetDue.color] }}>
-			{targetDue.text}
-		</span>
-	);
+	const targetDate = target && day(target);
 
 	const signalColor = readinessSignal?.signal ?? "grey";
 	const signalIcon =
@@ -214,7 +204,7 @@ function ReleaseCard({
 			: 0;
 
 	const lastBuild = latestBuild ? (
-		<Tooltip content="Newest Konflux snapshot for this version's applications.">
+		<Tooltip content="Newest build of this version.">
 			<span>{new Date(latestBuild).toLocaleDateString()}</span>
 		</Tooltip>
 	) : (

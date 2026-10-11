@@ -10,26 +10,20 @@ test("due", () => {
 	const now = Date.parse("2026-10-10T21:35:00Z");
 	const at = (date: string, shipped = false) =>
 		due(`${date}T00:00:00Z`, shipped, now);
-	assert.deepEqual(at("2026-08-20"), {
-		text: "Aug 20, 2026 (51 days overdue)",
-		color: "red",
-	});
-	assert.deepEqual(at("2026-10-09"), {
-		text: "Oct 9, 2026 (1 day overdue)",
-		color: "red",
-	});
+	assert.deepEqual(at("2026-10-09"), { date: "Oct 9, 2026", kind: "past" });
 	assert.deepEqual(at("2026-10-10"), {
-		text: "Oct 10, 2026 (today)",
-		color: "orange",
+		date: "Oct 10, 2026",
+		kind: "soon",
+		days: 0,
 	});
-	assert.deepEqual(at("2026-10-11"), {
-		text: "Oct 11, 2026 (in 1 day)",
-		color: "orange",
+	assert.deepEqual(at("2026-10-13"), {
+		date: "Oct 13, 2026",
+		kind: "soon",
+		days: 3,
 	});
-	assert.deepEqual(at("2026-10-17"), {
-		text: "Oct 17, 2026 (in 7 days)",
-		color: "orange",
+	assert.deepEqual(at("2026-10-14"), { date: "Oct 14, 2026", kind: "none" });
+	assert.deepEqual(at("2026-10-09", true), {
+		date: "Oct 9, 2026",
+		kind: "none",
 	});
-	assert.deepEqual(at("2026-10-18"), { text: "Oct 18, 2026" });
-	assert.deepEqual(at("2026-08-20", true), { text: "Aug 20, 2026" });
 });

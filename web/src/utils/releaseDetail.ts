@@ -1,3 +1,13 @@
+import {
+	CheckCircleIcon,
+	CodeBranchIcon,
+	CodeIcon,
+	FlaskIcon,
+	InProgressIcon,
+	OutlinedCheckCircleIcon,
+	OutlinedCircleIcon,
+	QuestionCircleIcon,
+} from "@patternfly/react-icons";
 import type {
 	BuildCommit,
 	BuildRow,
@@ -15,6 +25,28 @@ const VERIFIED = new Set(["release pending", "verified", "closed", "done"]);
 /** How many tickets are not verified yet. */
 export const notVerified = (tickets: { status: string }[]) =>
 	tickets.filter((t) => !VERIFIED.has(t.status.toLowerCase())).length;
+
+const STATUS_ICONS: Record<string, typeof QuestionCircleIcon> = {
+	new: OutlinedCircleIcon,
+	assigned: InProgressIcon,
+	"in progress": InProgressIcon,
+	post: CodeBranchIcon,
+	modified: CodeIcon,
+	on_qa: FlaskIcon,
+	verified: OutlinedCheckCircleIcon,
+	"release pending": OutlinedCheckCircleIcon,
+	closed: CheckCircleIcon,
+	done: CheckCircleIcon,
+};
+
+/** A ticket status's icon, and whether it counts as verified, so green. */
+export function statusIcon(status: string) {
+	const s = status.toLowerCase();
+	return {
+		icon: STATUS_ICONS[s] ?? QuestionCircleIcon,
+		verified: VERIFIED.has(s),
+	};
+}
 
 // A "-nightly" segment, at the end or before a suffix like "-fips".
 const NIGHTLY = /-nightly(?=-|$)/;
