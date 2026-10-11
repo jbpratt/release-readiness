@@ -28,29 +28,26 @@ var concreteVersion = regexp.MustCompile(`^quay-v((\d+)\.(\d+)\.\d+)$`)
 // concrete version whose Konflux Release succeeded through a ReleasePlan
 // matching plans for the version's X-Y stream, ranked by that Release's
 // completion time, so a newer pending or failed Release never displaces the
-// last success. It returns nil and the reason when there is none.
-func (d *DB) SelectedStageBuild(ctx context.Context, release *model.ReleaseVersion, plans *regexp.Regexp) (*model.SelectedBuild, string, error) {
+// last success. It returns nil when there is none.
+func (d *DB) SelectedStageBuild(ctx context.Context, release *model.ReleaseVersion, plans *regexp.Regexp) (*model.SelectedBuild, error) {
 	m := concreteVersion.FindStringSubmatch(release.Name)
-	if m == nil {
-		return nil, "not a concrete quay-vX.Y.Z version", nil
-	}
-	if plans == nil {
-		return nil, "stage release plan not configured", nil
+	if m == nil || plans == nil {
+		return nil, nil
 	}
 	rows, err := d.queries().ListSuccessfulStageReleases(ctx, dbsqlc.ListSuccessfulStageReleasesParams{
 		Assembly:    m[1],
 		Application: release.KonfluxApplication,
 	})
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	stream := "-" + m[2] + "-" + m[3]
 	for _, r := range rows {
 		if plans.MatchString(r.ReleasePlan) && strings.HasSuffix(r.ReleasePlan, stream) {
-			return &model.SelectedBuild{SnapshotName: r.SnapshotName, CompletedAt: parseTime(r.CompletionTime)}, "", nil
+			return &model.SelectedBuild{SnapshotName: r.SnapshotName, CompletedAt: parseTime(r.CompletionTime)}, nil
 		}
 	}
-	return nil, "no successful stage release of a staged image snapshot", nil
+	return nil, nil
 }
 
 // StageReleases returns the Releases of release's application through a

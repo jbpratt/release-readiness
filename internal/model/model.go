@@ -2,10 +2,6 @@ package model
 
 import "time"
 
-type ComponentRecord struct {
-	Component, ImageURL string
-}
-
 // JiraIssueRecord represents a JIRA issue cached in the database.
 type JiraIssueRecord struct {
 	Key        string `json:"key"`
@@ -44,10 +40,9 @@ type ReleaseOverview struct {
 
 // ReleaseSnapshot is one Konflux Snapshot of a release's applications.
 type ReleaseSnapshot struct {
-	Application string
-	Name        string
-	CreatedAt   time.Time
-	Components  []SnapshotImage
+	Name       string
+	CreatedAt  time.Time
+	Components []SnapshotImage
 }
 
 // SnapshotImage is one component image exactly as a Snapshot records it.

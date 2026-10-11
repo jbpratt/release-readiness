@@ -60,12 +60,12 @@ func TestStreamBuilds(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []model.ReleaseSnapshot{
-		{Application: "quay-3-18", Name: "quay-3-18-b", CreatedAt: t0.Add(time.Hour), Components: []model.SnapshotImage{
+		{Name: "quay-3-18-b", CreatedAt: t0.Add(time.Hour), Components: []model.SnapshotImage{
 			{Name: "quay-3-18-quay-clair", Image: image("cccc")},
 			{Name: "quay-3-18-quay-operator", Image: image("dddd")},
 			{Name: "quay-3-18-quay-quay", Image: image("bbbb")},
 		}},
-		{Application: "quay-3-18", Name: "quay-3-18-a", CreatedAt: t0, Components: []model.SnapshotImage{
+		{Name: "quay-3-18-a", CreatedAt: t0, Components: []model.SnapshotImage{
 			{Name: "quay-3-18-quay-clair", Image: image("cccc")},
 			{Name: "quay-3-18-quay-quay", Image: image("aaaa")},
 		}},

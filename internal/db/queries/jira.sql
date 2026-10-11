@@ -24,13 +24,10 @@ ON CONFLICT(name) DO UPDATE SET
     due_date=excluded.due_date;
 
 -- name: GetReleaseVersion :one
-SELECT name, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
-FROM release_versions WHERE name = ?;
+SELECT * FROM release_versions WHERE name = ?;
 
 -- name: ListAllReleaseVersions :many
-SELECT name, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
-FROM release_versions
-ORDER BY name;
+SELECT * FROM release_versions ORDER BY name;
 
 -- name: DeleteAllJiraIssuesForVersion :exec
 DELETE FROM jira_issues WHERE fix_version = ?;

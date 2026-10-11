@@ -238,7 +238,7 @@ func (s *Server) latestBuild(ctx context.Context, release *model.ReleaseVersion,
 	if builds := versionBuilds(app, st.builds, st.nvrs, m[1]); len(builds) > 0 {
 		latest = &builds[0].CreatedAt
 	}
-	staged, _, err := s.db.SelectedStageBuild(ctx, release, s.StageReleasePlanPattern)
+	staged, err := s.db.SelectedStageBuild(ctx, release, s.StageReleasePlanPattern)
 	if err != nil || staged == nil {
 		return latest, err
 	}

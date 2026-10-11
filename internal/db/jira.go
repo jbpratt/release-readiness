@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/quay/release-readiness/internal/db/sqlc"
 	"github.com/quay/release-readiness/internal/model"
@@ -90,23 +89,15 @@ func (d *DB) GetIssueSummariesBatch(ctx context.Context, fixVersions []string) (
 }
 
 func (d *DB) UpsertReleaseVersion(ctx context.Context, v *model.ReleaseVersion) error {
-	relDate := ""
-	if v.ReleaseDate != nil {
-		relDate = v.ReleaseDate.UTC().Format(time.RFC3339)
-	}
-	dueDate := ""
-	if v.DueDate != nil {
-		dueDate = v.DueDate.UTC().Format(time.RFC3339)
-	}
 	return d.queries().UpsertReleaseVersion(ctx, dbsqlc.UpsertReleaseVersionParams{
 		Name:                  v.Name,
-		ReleaseDate:           relDate,
+		ReleaseDate:           formatOptionalTime(v.ReleaseDate),
 		Released:              boolToInt64(v.Released),
 		Archived:              boolToInt64(v.Archived),
 		ReleaseTicketKey:      v.ReleaseTicketKey,
 		ReleaseTicketAssignee: v.ReleaseTicketAssignee,
 		KonfluxApplication:    v.KonfluxApplication,
-		DueDate:               dueDate,
+		DueDate:               formatOptionalTime(v.DueDate),
 	})
 }
 
@@ -115,8 +106,7 @@ func (d *DB) GetReleaseVersion(ctx context.Context, name string) (*model.Release
 	if err != nil {
 		return nil, err
 	}
-	return toReleaseVersion(row.Name, row.ReleaseDate, row.Released, row.Archived,
-		row.ReleaseTicketKey, row.ReleaseTicketAssignee, row.KonfluxApplication, row.DueDate), nil
+	return toReleaseVersion(row), nil
 }
 
 func (d *DB) ListAllReleaseVersions(ctx context.Context) ([]model.ReleaseVersion, error) {
@@ -126,8 +116,7 @@ func (d *DB) ListAllReleaseVersions(ctx context.Context) ([]model.ReleaseVersion
 	}
 	versions := make([]model.ReleaseVersion, len(rows))
 	for i, r := range rows {
-		versions[i] = *toReleaseVersion(r.Name, r.ReleaseDate, r.Released, r.Archived,
-			r.ReleaseTicketKey, r.ReleaseTicketAssignee, r.KonfluxApplication, r.DueDate)
+		versions[i] = *toReleaseVersion(r)
 	}
 	return versions, nil
 }
@@ -150,15 +139,15 @@ func (d *DB) DeleteJiraIssuesNotIn(ctx context.Context, fixVersion string, keys 
 	return err
 }
 
-func toReleaseVersion(name, relDate string, released, archived int64, ticketKey, ticketAssignee, konfluxApp, dueDate string) *model.ReleaseVersion {
+func toReleaseVersion(r dbsqlc.ReleaseVersion) *model.ReleaseVersion {
 	return &model.ReleaseVersion{
-		Name:                  name,
-		ReleaseDate:           parseOptionalTime(relDate),
-		Released:              released == 1,
-		Archived:              archived == 1,
-		ReleaseTicketKey:      ticketKey,
-		ReleaseTicketAssignee: ticketAssignee,
-		KonfluxApplication:    konfluxApp,
-		DueDate:               parseOptionalTime(dueDate),
+		Name:                  r.Name,
+		ReleaseDate:           parseOptionalTime(r.ReleaseDate),
+		Released:              r.Released == 1,
+		Archived:              r.Archived == 1,
+		ReleaseTicketKey:      r.ReleaseTicketKey,
+		ReleaseTicketAssignee: r.ReleaseTicketAssignee,
+		KonfluxApplication:    r.KonfluxApplication,
+		DueDate:               parseOptionalTime(r.DueDate),
 	}
 }

@@ -43,7 +43,7 @@ The Vite dev server proxies `/api` requests to `localhost:8088` (the Go backend)
 ### Backend (`internal/`)
 - **`cmd/release-readiness/main.go`** — CLI entry point. Runs background sync loops for Konflux and JIRA.
 - **`internal/server/`** — HTTP server using Go stdlib `net/http`. Routes registered in `routes.go`, API handlers in `handlers_api.go`. The React SPA is served from embedded `web/dist/` via `go:embed` with SPA fallback routing.
-- **`internal/db/`** — SQLite data layer (pure-Go driver `modernc.org/sqlite`, no CGO). Schema migrations in `migrations.go`. WAL mode enabled.
+- **`internal/db/`** — SQLite data layer (pure-Go driver `modernc.org/sqlite`, no CGO). `schema.sql` is applied on open. WAL mode enabled.
 - **`internal/kube/`** — Kubernetes dynamic client. Syncs Konflux Snapshots and Releases from `-namespace` (kubeconfig or in-cluster service account); `created_at` comes from `creationTimestamp`.
 - **`internal/jira/`** — JIRA REST API client. Discovers active releases, syncs issues by fixVersion.
 - **`internal/prow/`** — Prow periodic CI runs from public GCS, keyed by Konflux application (`-prow-jobs job=quay-3-18`). A run counts for the release candidate when it recorded the candidate's operator bundle digest.
