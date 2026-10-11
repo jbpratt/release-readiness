@@ -19,7 +19,9 @@ INSERT INTO prow_run_images (job_name, build_id, role, digest)
 VALUES (?, ?, ?, ?);
 
 -- name: ListFinishedProwBuildIDs :many
-SELECT build_id FROM prow_runs WHERE job_name = ? AND completed_at != '';
+-- A finished run still "missing" was stored by a binary that did not read
+-- olm-csvs.yaml, so it is read once more.
+SELECT build_id FROM prow_runs WHERE job_name = ? AND completed_at != '' AND artifact_state != 'missing';
 
 -- name: ListProwRunsByApplication :many
 SELECT job_name, build_id, kind, application, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at

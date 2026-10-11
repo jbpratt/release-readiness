@@ -13,15 +13,17 @@ export interface KonfluxRelease {
 
 /**
  * What decides whether a version can ship. candidate is null with reason set
- * when there is none; a shipped version sets nothing else. newest is set when
- * the version's newest build holds, for a component the candidate holds,
- * another image than the candidate does, or when there is no candidate.
+ * when there is none; a shipped version sets nothing else. ci is set with the
+ * candidate. newest is set when the version's newest build holds, for a
+ * component the candidate holds, another image than the candidate does and is
+ * not ci's latest_in_ci, or when there is no candidate.
  */
 export interface ReleaseCandidate {
 	shipped: boolean;
 	candidate: CandidateBuild | null;
 	reason: string;
 	newest: NewestBuild | null;
+	ci: CandidateCI | null;
 }
 
 /** The release candidate: the version's STAGE build. */
@@ -32,18 +34,67 @@ export interface CandidateBuild {
 	stage: StageFlag;
 	/** The version's prod Release. */
 	prod: KonfluxRelease | null;
-	/** Per job, the periodic runs that installed the candidate's operator bundle. */
-	ci: CIJob[];
 }
 
-/**
- * The version's newest build. stage is its stage state over its images of the
- * components the candidate holds, or over all of them without a candidate.
- */
+/** The version's newest build and whether its operator bundle is in CI. */
 export interface NewestBuild {
 	snapshot: string;
 	created_at: string;
-	stage: StageFlag["state"];
+	ci: CIState;
+}
+
+/**
+ * Whether an operator bundle reached the catalog CI installs from, with the
+ * per-build stage Release that decides it; "unknown" without a bundle or such
+ * Releases.
+ */
+export interface CIState {
+	state: "in" | "failed" | "none" | "unknown";
+	release: KonfluxRelease | null;
+}
+
+/** A build named by the oldest stream Snapshot holding its operator bundle. */
+export interface BuildLabel {
+	snapshot: string;
+	created_at: string;
+}
+
+/**
+ * The periodic runs since the candidate's operator bundle was first built, by
+ * the build each installed; the newest bundle of the version's builds in CI,
+ * by its label, unless it is the candidate's; and whether the candidate needs
+ * refreshing.
+ */
+export interface CandidateCI {
+	since: string;
+	builds: CIBuild[];
+	latest_in_ci: BuildLabel | null;
+	refresh: "refresh" | "needs_art" | "waiting" | "current";
+}
+
+/**
+ * The runs that installed one build: the candidate, another build with its
+ * label and CI state, an unknown build, or no Quay.
+ */
+export interface CIBuild {
+	kind: "candidate" | "build" | "unknown" | "not_installed";
+	/** "" unless candidate or build. */
+	snapshot: string;
+	created_at: string | null;
+	ci: CIState | null;
+	jobs: CIJob[];
+}
+
+/** A job's runs of a build, newest first. */
+export interface CIJob {
+	job_name: string;
+	runs: CIRun[];
+}
+
+export interface CIRun {
+	state: string;
+	started_at: string;
+	prow_url: string;
 }
 
 /** A build image; nvr and build_url are "" until ART build history has it. */
@@ -90,15 +141,6 @@ export interface SeverityCounts {
 export interface StageFlag {
 	state: "staged" | "not_staged" | "unknown";
 	staged_at: string;
-}
-
-/** A job's newest run of a build and how many of its runs tested it. */
-export interface CIJob {
-	job_name: string;
-	state: string;
-	prow_url: string;
-	started_at: string | null;
-	runs: number;
 }
 
 /** An upstream commit in, or missing from, one component of a build. */

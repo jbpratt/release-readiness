@@ -10,6 +10,7 @@ import {
 } from "@patternfly/react-icons";
 import type {
 	BuildCommit,
+	CandidateCI,
 	ImageScan,
 	KonfluxRelease,
 	ScanCounts,
@@ -118,8 +119,37 @@ export function nvrLabel(nvr: string): string {
 
 /** A line of a build's box: a status icon and the text it explains. */
 export interface StatusLine {
-	status: "done" | "failed" | "running" | "none";
+	status: "done" | "failed" | "running" | "warning" | "none";
 	text: string;
+}
+
+/**
+ * The candidate card's CI warning, when the newest build is not the CI-tested
+ * candidate: a newer build is in CI, with the start of the newest run that
+ * installed the candidate, if any, and whether the warning names that build,
+ * which the refresh line names when it says refresh or waiting; or "no_pass"
+ * when no run that installed the candidate passed.
+ */
+export function ciWarning(
+	ci: CandidateCI,
+): { lastRun: string | null; namesLatest: boolean } | "no_pass" | undefined {
+	const runs =
+		ci.builds
+			.find((b) => b.kind === "candidate")
+			?.jobs.flatMap((j) => j.runs) ?? [];
+	if (!ci.latest_in_ci) {
+		return runs.some((r) => r.state === "success") ? undefined : "no_pass";
+	}
+	let lastRun: string | null = null;
+	for (const r of runs) {
+		if (!lastRun || Date.parse(r.started_at) > Date.parse(lastRun)) {
+			lastRun = r.started_at;
+		}
+	}
+	return {
+		lastRun,
+		namesLatest: ci.refresh !== "refresh" && ci.refresh !== "waiting",
+	};
 }
 
 // Why a failed Release failed, by the managed pipeline task it stopped at.

@@ -157,21 +157,22 @@ type StageRelease struct {
 
 // ReleaseCandidate is what decides whether a version can ship: its release
 // candidate, the selected STAGE build, or null with Reason set when there is
-// none, and its newest build when that holds, for a component the candidate
-// holds, another image than the candidate does, or when there is no
-// candidate. A shipped version sets nothing else.
+// none, with the periodic CI runs since its operator bundle was built, and its
+// newest build when that holds, for a component the candidate holds, another
+// image than the candidate does and is not the build CI names, or when there
+// is no candidate. A shipped version sets nothing else.
 type ReleaseCandidate struct {
 	Shipped   bool            `json:"shipped"`
 	Candidate *CandidateBuild `json:"candidate"`
 	Reason    string          `json:"reason"`
 	Newest    *NewestBuild    `json:"newest"`
+	CI        *CandidateCI    `json:"ci"`
 }
 
 // CandidateBuild is the Snapshot up for release: Source "staged" is the
 // version's selected STAGE build, "newest" its newest build, the newest stream
 // build whose images' NVRs carry the version. A STAGE build, the release
-// candidate, has whether it reached stage, the version's prod Release and, per
-// job, the periodic CI runs that installed its operator bundle.
+// candidate, has whether it reached stage and the version's prod Release.
 type CandidateBuild struct {
 	Snapshot   string               `json:"snapshot"`
 	Source     string               `json:"-"`
@@ -179,16 +180,65 @@ type CandidateBuild struct {
 	Components []CandidateComponent `json:"components"`
 	Stage      StageFlag            `json:"stage"`
 	Prod       *KonfluxRelease      `json:"prod"`
-	CI         []CIJob              `json:"ci"`
 }
 
-// NewestBuild is a version's newest build. Stage is the State of its stage
-// flag over its images of the components the candidate holds, or over all of
-// them when there is no candidate.
+// NewestBuild is a version's newest build and whether its operator bundle
+// reached the catalog CI installs from.
 type NewestBuild struct {
 	Snapshot  string    `json:"snapshot"`
 	CreatedAt time.Time `json:"created_at"`
-	Stage     string    `json:"stage"`
+	CI        CIState   `json:"ci"`
+}
+
+// CIState tells whether an operator bundle reached the catalog CI installs
+// from: State "in" with the per-build stage Release that succeeded with it,
+// "failed" with the one that failed, "none", or "unknown" for a build without
+// a bundle or a stream without such Releases.
+type CIState struct {
+	State   string          `json:"state"`
+	Release *KonfluxRelease `json:"release"`
+}
+
+// CandidateCI is the application's periodic runs since the candidate's
+// operator bundle was first built, by the build each installed, the newest
+// bundle of the version's builds in the CI catalog, when that is not the
+// candidate's, and Refresh, whether the candidate needs refreshing:
+// "refresh", "needs_art" once a prod Release was attempted, "waiting" while no
+// run of that build passed, or "current".
+type CandidateCI struct {
+	Since      time.Time   `json:"since"`
+	Builds     []CIBuild   `json:"builds"`
+	LatestInCI *BuildLabel `json:"latest_in_ci"`
+	Refresh    string      `json:"refresh"`
+}
+
+// BuildLabel names an operator bundle by the oldest stream build holding it.
+type BuildLabel struct {
+	Snapshot  string    `json:"snapshot"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// CIBuild is the runs, by job, that installed one build: Kind "candidate",
+// "build" with its label and CIState, "unknown", or "not_installed" for runs
+// that installed no Quay.
+type CIBuild struct {
+	Kind      string     `json:"kind"`
+	Snapshot  string     `json:"snapshot"`
+	CreatedAt *time.Time `json:"created_at"`
+	CI        *CIState   `json:"ci"`
+	Jobs      []CIJob    `json:"jobs"`
+}
+
+// CIJob is a job's runs of a build, newest first.
+type CIJob struct {
+	JobName string  `json:"job_name"`
+	Runs    []CIRun `json:"runs"`
+}
+
+type CIRun struct {
+	State     string    `json:"state"`
+	StartedAt time.Time `json:"started_at"`
+	ProwURL   string    `json:"prow_url"`
 }
 
 // CandidateComponent is a build image with its ART build and the upstream
@@ -240,13 +290,4 @@ type StageFlag struct {
 	Release   *KonfluxRelease `json:"release"`
 	NoBundle  []string        `json:"no_bundle"`
 	NoRelease []string        `json:"no_release"`
-}
-
-// CIJob is a job's newest run of a build and how many of its runs tested it.
-type CIJob struct {
-	JobName   string     `json:"job_name"`
-	State     string     `json:"state"`
-	ProwURL   string     `json:"prow_url"`
-	StartedAt *time.Time `json:"started_at"`
-	Runs      int        `json:"runs"`
 }

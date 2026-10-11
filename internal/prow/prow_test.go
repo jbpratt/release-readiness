@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -19,7 +20,10 @@ import (
 const (
 	periodicJob = "periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly"
 	periodicRun = "2100388335968063488" // tested-images.json present
+	olmRun      = "2108360975915683840" // olm-csvs.yaml only
+	noneRun     = "2106911479667101696" // neither
 	pendingRun  = "2108233750193115136" // no finished.json yet
+	olmCSVs     = "artifacts/aws-s3-nightly/quay-gather/artifacts/olm-csvs.yaml"
 )
 
 func readFixture(t *testing.T, name string) []byte {
@@ -128,6 +132,46 @@ func TestApplyArtifact(t *testing.T) {
 	}
 }
 
+// olm-csvs.yaml names the Quay images of the quay-operator CSV the run
+// installed, here quay-v3.18.1's release candidate's.
+func TestApplyOLMCSVs(t *testing.T) {
+	job := testJobs(t)[0]
+	quay := runFixture(t, job, olmRun, olmCSVs)
+	r := &Run{}
+	r.applyOLMCSVs(quay)
+	want := []Image{
+		{"quay-operator", "sha256:261469689b60b3c285fa9c3492ad83daf30b93d6b5a860845dc803af1075dbfb"},
+		{"quay", "sha256:4db6193f032e733fb80f8b83c5a3a0c4e43cda6fdbd7c9cbf150b1ee93bbab3c"},
+		{"clair", "sha256:4953b4a9a79ea732e585b04deab4d2595ae21a71f33c5dd6b0c1d360160e16d8"},
+		{"quay-builder", "sha256:ccae0d49a7795cf7e00a407441b4e404715b8fb21e575756d341467d59e12c04"},
+		{"quay-builder-qemu", "sha256:fb921ff5608a90658f2133d5e0885a41c498542e7ca363267db7d2c1810282ec"},
+	}
+	if r.ArtifactState != ArtifactOLMCSVs || !slices.Equal(r.Images, want) {
+		t.Errorf("quay CSV: state %q, images %v, want %v", r.ArtifactState, r.Images, want)
+	}
+
+	r = &Run{}
+	r.applyOLMCSVs(readFixture(t, "olm-csvs-no-quay.yaml"))
+	if r.ArtifactState != ArtifactOLMCSVs || len(r.Images) != 0 {
+		t.Errorf("no quay CSV: state %q, images %v, want none", r.ArtifactState, r.Images)
+	}
+
+	// The operator's repository before about Oct 1.
+	r = &Run{}
+	r.applyOLMCSVs([]byte(strings.ReplaceAll(string(quay), "/quay-rhel9-operator@", "/quay-operator-rhel9@")))
+	if !slices.Equal(r.Images, want) {
+		t.Errorf("quay-operator-rhel9: images %v, want %v", r.Images, want)
+	}
+
+	// The CSV names a second builder: which one ran is unknown.
+	two := strings.Replace(string(quay), want[3].Digest, "sha256:"+strings.Repeat("0", 64), 1)
+	r = &Run{}
+	r.applyOLMCSVs([]byte(two))
+	if wantFour := slices.Delete(slices.Clone(want), 3, 4); !slices.Equal(r.Images, wantFour) {
+		t.Errorf("two builders: images %v, want %v", r.Images, wantFour)
+	}
+}
+
 type memStore struct {
 	runs map[string]*Run
 }
@@ -135,7 +179,7 @@ type memStore struct {
 func (m *memStore) ListFinishedProwBuildIDs(_ context.Context, job string) ([]string, error) {
 	var ids []string
 	for _, r := range m.runs {
-		if r.JobName == job && r.CompletedAt != nil {
+		if r.JobName == job && r.CompletedAt != nil && r.ArtifactState != ArtifactMissing {
 			ids = append(ids, r.BuildID)
 		}
 	}
@@ -148,7 +192,7 @@ func (m *memStore) UpsertProwRun(_ context.Context, r *Run) error {
 }
 
 // fakeGCS serves recorded listing pages and objects from testdata, plus
-// extra objects, and counts object requests.
+// extra objects (a nil one answers 503), and counts object requests.
 func fakeGCS(t *testing.T, extra map[string][]byte) (*httptest.Server, map[string]int) {
 	t.Helper()
 	var mu sync.Mutex
@@ -174,6 +218,10 @@ func fakeGCS(t *testing.T, extra map[string][]byte) (*httptest.Server, map[strin
 		gets[name]++
 		mu.Unlock()
 		if data, ok := extra[name]; ok {
+			if data == nil {
+				http.Error(w, "unavailable", http.StatusServiceUnavailable)
+				return
+			}
 			_, _ = w.Write(data)
 			return
 		}
@@ -202,33 +250,71 @@ func TestSync(t *testing.T) {
 	if p := reg.Problems(time.Now()); len(p) != 0 {
 		t.Errorf("problems after a clean pass = %+v", p)
 	}
-	want := map[string]struct{ state, artifact string }{
-		periodicRun: {"failure", ArtifactPresent},
-		pendingRun:  {"pending", ArtifactMissing},
+	want := map[string]struct {
+		state, artifact string
+		images          int
+	}{
+		periodicRun: {"failure", ArtifactPresent, 13},
+		olmRun:      {"success", ArtifactOLMCSVs, 5},
+		noneRun:     {"failure", ArtifactNone, 0},
+		pendingRun:  {"pending", ArtifactMissing, 0},
 	}
 	if len(store.runs) != len(want) {
 		t.Fatalf("runs = %d, want %d", len(store.runs), len(want))
 	}
 	for id, w := range want {
 		r := store.runs[id]
-		if r == nil || r.State != w.state || r.ArtifactState != w.artifact {
-			t.Errorf("run %s = %+v, want %s/%s", id, r, w.state, w.artifact)
+		if r == nil || r.State != w.state || r.ArtifactState != w.artifact || len(r.Images) != w.images {
+			t.Errorf("run %s = %+v, want %s/%s with %d images", id, r, w.state, w.artifact, w.images)
 		}
 	}
 	if r := store.runs[periodicRun]; r.JobName != periodicJob || r.Application != "quay-3-18" {
 		t.Errorf("periodic run = %+v", r)
 	}
+	// olm-csvs.yaml is read only without tested-images.json.
+	for id, n := range map[string]int{periodicRun: 0, olmRun: 1, noneRun: 1} {
+		if got := gets["logs/"+periodicJob+"/"+id+"/"+olmCSVs]; got != n {
+			t.Errorf("olm-csvs.yaml fetches for %s = %d, want %d", id, got, n)
+		}
+	}
 
-	// The pending run finishes; finished runs are not fetched again.
-	extra["logs/"+periodicJob+"/"+pendingRun+"/finished.json"] = []byte(`{"timestamp":1791480000,"passed":true,"result":"SUCCESS"}`)
+	// The pending run finishes, but reading its olm-csvs.yaml fails: the pass
+	// reports it and the run stays missing, so the next pass reads it again.
+	pending := "logs/" + periodicJob + "/" + pendingRun + "/"
+	extra[pending+"finished.json"] = []byte(`{"timestamp":1791480000,"passed":true,"result":"SUCCESS"}`)
+	extra[pending+olmCSVs] = nil
 	s.SyncOnce(t.Context())
-	if r := store.runs[pendingRun]; r.State != "success" || r.CompletedAt == nil || !r.CompletedAt.Equal(time.Unix(1791480000, 0)) || r.ArtifactState != ArtifactMissing {
+	if p := reg.Problems(time.Now()); len(p) != 1 || !strings.Contains(p[0].Message, olmCSVs) {
+		t.Errorf("problems after a failed olm-csvs.yaml read = %+v", p)
+	}
+	if r := store.runs[pendingRun]; r.ArtifactState != ArtifactMissing {
+		t.Errorf("run after a failed olm-csvs.yaml read = %+v, want it missing", r)
+	}
+
+	// Finished runs are not fetched again.
+	delete(extra, pending+olmCSVs)
+	s.SyncOnce(t.Context())
+	if r := store.runs[pendingRun]; r.State != "success" || r.CompletedAt == nil || !r.CompletedAt.Equal(time.Unix(1791480000, 0)) || r.ArtifactState != ArtifactNone {
 		t.Errorf("finished run = %+v", r)
 	}
-	for id, n := range map[string]int{periodicRun: 1, pendingRun: 2} {
+	for id, n := range map[string]int{periodicRun: 1, olmRun: 1, noneRun: 1, pendingRun: 3} {
 		if got := gets["logs/"+periodicJob+"/"+id+"/prowjob.json"]; got != n {
 			t.Errorf("prowjob.json fetches for %s = %d, want %d", id, got, n)
 		}
+	}
+}
+
+// An invalid tested-images.json is the run's record: olm-csvs.yaml is not
+// read in its place.
+func TestSyncInvalidTestedImages(t *testing.T) {
+	run := "logs/" + periodicJob + "/" + olmRun + "/"
+	srv, gets := fakeGCS(t, map[string][]byte{
+		run + "artifacts/aws-s3-nightly/quay-gather/artifacts/tested-images.json": []byte(`{"schema_version": 1, "images": [{"role": "quay",`),
+	})
+	store := &memStore{runs: map[string]*Run{}}
+	NewSyncer(NewClient(srv.URL), store, testJobs(t), 15*time.Minute, slog.New(slog.DiscardHandler)).SyncOnce(t.Context())
+	if r, n := store.runs[olmRun], gets[run+olmCSVs]; r == nil || r.ArtifactState != ArtifactInvalid || n != 0 {
+		t.Errorf("run = %+v after %d olm-csvs.yaml fetches, want invalid after none", r, n)
 	}
 }
 

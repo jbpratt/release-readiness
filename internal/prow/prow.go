@@ -5,17 +5,24 @@ package prow
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
 
 const (
 	ArtifactPresent = "present"
+	// ArtifactMissing is a run not read yet; ArtifactNone one that published
+	// neither tested-images.json nor olm-csvs.yaml.
 	ArtifactMissing = "missing"
 	ArtifactInvalid = "invalid"
+	ArtifactOLMCSVs = "olm_csvs"
+	ArtifactNone    = "none"
 )
 
-// Run is one Prow job execution and the images its tested-images.json names.
+// Run is one Prow job execution and the images its tested-images.json, or
+// else its olm-csvs.yaml, names.
 type Run struct {
 	JobName, BuildID, Application, State string
 	StartedAt, CompletedAt               *time.Time
@@ -159,6 +166,54 @@ func (r *Run) applyArtifact(data []byte) {
 		if img.Source == "pod" {
 			add(img.Role, img.RequestedRef)
 		}
+	}
+}
+
+// olmRoles is the role of the image of each repository a quay-operator CSV
+// deploys. The operator's was quay-operator-rhel9 until about 2026-10-01.
+var olmRoles = map[string]string{
+	"quay-rhel9-operator":           "quay-operator",
+	"quay-operator-rhel9":           "quay-operator",
+	"quay-rhel9":                    "quay",
+	"clair-rhel9":                   "clair",
+	"quay-builder-rhel9":            "quay-builder",
+	"quay-builder-qemu-rhcos-rhel8": "quay-builder-qemu",
+}
+
+var (
+	quayCSV  = regexp.MustCompile(`(?m)^    name: quay-operator\.v`)
+	olmImage = regexp.MustCompile(`/([\w.-]+)@(sha256:[0-9a-f]{64})`)
+)
+
+// applyOLMCSVs records on r the Quay images of the quay-operator CSV in
+// olm-csvs.yaml, the CSVs installed on the test cluster, which runs published
+// before tested-images.json. A role is recorded only when the CSV names one
+// digest for it.
+func (r *Run) applyOLMCSVs(data []byte) {
+	r.ArtifactState = ArtifactOLMCSVs
+	// The List's items start at "- " in column 0; no YAML module is needed.
+	for item := range strings.SplitSeq(string(data), "\n- ") {
+		if !quayCSV.MatchString(item) {
+			continue
+		}
+		var roles []string
+		digests := map[string][]string{}
+		for _, m := range olmImage.FindAllStringSubmatch(item, -1) {
+			role, ok := olmRoles[m[1]]
+			if !ok || slices.Contains(digests[role], m[2]) {
+				continue
+			}
+			if digests[role] == nil {
+				roles = append(roles, role)
+			}
+			digests[role] = append(digests[role], m[2])
+		}
+		for _, role := range roles {
+			if len(digests[role]) == 1 {
+				r.Images = append(r.Images, Image{Role: role, Digest: digests[role][0]})
+			}
+		}
+		return
 	}
 }
 

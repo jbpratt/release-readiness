@@ -5,6 +5,7 @@ import {
 	Card,
 	CardBody,
 	CardTitle,
+	ClipboardCopy,
 	DescriptionList,
 	DescriptionListDescription,
 	DescriptionListGroup,
@@ -44,10 +45,13 @@ import { Link, useParams } from "react-router-dom";
 import { getBuildTickets, getCandidate, getRelease } from "../api/client";
 import type {
 	BuildCommit,
+	BuildLabel,
 	BuildTicket,
 	BuildTickets,
 	CandidateBuild,
+	CandidateCI,
 	CIJob,
+	CIState,
 	DashboardConfig,
 	ImageScan,
 	NewestBuild,
@@ -57,7 +61,7 @@ import type {
 } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
-import { days, due, relative } from "../utils/format";
+import { days, due } from "../utils/format";
 import {
 	formatReleaseName,
 	jiraIssueUrl,
@@ -67,6 +71,7 @@ import {
 } from "../utils/links";
 import {
 	BASES,
+	ciWarning,
 	componentLabel,
 	fixableLabels,
 	jobLabels,
@@ -93,6 +98,16 @@ const textColor = {
 	orange: "var(--pf-t--global--text--color--status--warning--default)",
 	grey: muted.color,
 };
+
+/** A local date and time to the minute: "Oct 9, 21:48". */
+const when = (iso: string) =>
+	new Date(iso).toLocaleString(undefined, {
+		month: "short",
+		day: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+		hourCycle: "h23",
+	});
 
 export default function ReleaseDetail() {
 	const { version } = useParams<{ version: string }>();
@@ -137,6 +152,7 @@ export default function ReleaseDetail() {
 
 	const displayName = formatReleaseName(release.name);
 	const app = release.konflux_application ?? "";
+	const xyz = release.name.replace(/^[a-z]+-v/, "");
 	// Every Release the candidate response names is in the version's application.
 	const konflux: KonfluxLink = (kind, name) =>
 		konfluxUrl(
@@ -168,10 +184,14 @@ export default function ReleaseDetail() {
 			<BuildsCard
 				data={candidate.data}
 				error={candidate.error}
-				version={release.name.replace(/^[a-z]+-v/, "")}
+				version={xyz}
 				app={app}
 				konflux={konflux}
 			/>
+
+			{candidate.data?.ci && (
+				<CICard ci={candidate.data.ci} version={xyz} konflux={konflux} />
+			)}
 
 			<TicketsCard
 				data={tickets}
@@ -342,15 +362,7 @@ function BuildsCard({
 				{c ? (
 					<>
 						{version} release candidate ·{" "}
-						<ExtLink href={konflux("snapshots", c.snapshot)} title={c.snapshot}>
-							{new Date(c.created_at).toLocaleString(undefined, {
-								month: "short",
-								day: "numeric",
-								hour: "2-digit",
-								minute: "2-digit",
-								hourCycle: "h23",
-							})}
-						</ExtLink>
+						<BuildLink build={c} konflux={konflux} />
 					</>
 				) : (
 					"Release candidate"
@@ -363,9 +375,10 @@ function BuildsCard({
 					<Spinner size="md" />
 				) : data.shipped ? (
 					"Shipped."
-				) : c ? (
+				) : c && data.ci ? (
 					<Candidate
 						candidate={c}
+						ci={data.ci}
 						newest={data.newest}
 						version={version}
 						app={app}
@@ -377,11 +390,7 @@ function BuildsCard({
 							? "No release candidate yet."
 							: data.reason.charAt(0).toUpperCase() + data.reason.slice(1)}
 						{data.newest && (
-							<NewestLine
-								label="Newest build"
-								newest={data.newest}
-								konflux={konflux}
-							/>
+							<NewestLine newest={data.newest} konflux={konflux} />
 						)}
 					</>
 				)}
@@ -390,15 +399,20 @@ function BuildsCard({
 	);
 }
 
-/** The candidate: whether it is in stage, in prod and tested, a newer build, and its images. */
+/**
+ * The candidate: whether it is in stage and in prod, whether CI tested it and
+ * it needs refreshing, a newer build, and its images.
+ */
 function Candidate({
 	candidate,
+	ci,
 	newest,
 	version,
 	app,
 	konflux,
 }: {
 	candidate: CandidateBuild;
+	ci: CandidateCI;
 	newest: NewestBuild | null;
 	version: string;
 	app: string;
@@ -409,6 +423,10 @@ function Candidate({
 		name: candidate.prod.name,
 		...releaseLine(candidate.prod),
 	};
+	const warning = ciWarning(ci);
+	const latest = ci.latest_in_ci && (
+		<BuildLink build={ci.latest_in_ci} konflux={konflux} />
+	);
 	return (
 		<>
 			<DescriptionList isHorizontal isCompact termWidth="5ch">
@@ -426,17 +444,46 @@ function Candidate({
 						</Status>
 					</BoxLine>
 				)}
-				<BoxLine term="CI">
-					<CICell jobs={candidate.ci} createdAt={candidate.created_at} />
-				</BoxLine>
 			</DescriptionList>
+			{warning && (
+				<div style={line}>
+					<Status status="warning">
+						{warning === "no_pass" ? (
+							"No passing CI run installed this candidate."
+						) : (
+							<>
+								CI has not tested this candidate
+								{warning.lastRun &&
+									` since ${new Date(warning.lastRun).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+								{warning.namesLatest && <>; CI now tests the {latest} build</>}.
+							</>
+						)}
+					</Status>
+				</div>
+			)}
+			<div style={line}>
+				{ci.refresh === "refresh" ? (
+					<Status status="warning">
+						Refresh the candidate: the {latest} build is newer and passed CI.{" "}
+						<ClipboardCopy variant="inline-compact">
+							{ci.latest_in_ci?.snapshot ?? ""}
+						</ClipboardCopy>
+					</Status>
+				) : ci.refresh === "needs_art" ? (
+					<Status status="warning">
+						Refresh needs ART: a prod release was attempted, so re-pinning is
+						manual on ART's side.
+					</Status>
+				) : ci.refresh === "waiting" ? (
+					<Status status="running">
+						Newer build {latest} is waiting on CI.
+					</Status>
+				) : (
+					<Status status="done">Candidate is current.</Status>
+				)}
+			</div>
 			{newest && (
-				<NewestLine
-					label="Newer build"
-					notIn={version}
-					newest={newest}
-					konflux={konflux}
-				/>
+				<NewestLine notIn={version} newest={newest} konflux={konflux} />
 			)}
 			<Table variant="compact" style={{ marginTop: "1rem" }}>
 				<Thead>
@@ -472,39 +519,58 @@ function Candidate({
 	);
 }
 
-const stageSuffix: Record<NewestBuild["stage"], string> = {
-	staged: " · staged",
-	not_staged: " · not staged",
-	unknown: "",
-};
+const line = { marginTop: "0.5rem" };
 
-/** The version's newest build: its date, linked to its Snapshot, and whether it is in stage. */
+/** A build's date and time, linked to its Snapshot. */
+function BuildLink({
+	build,
+	konflux,
+}: {
+	build: BuildLabel;
+	konflux: KonfluxLink;
+}) {
+	return (
+		<ExtLink href={konflux("snapshots", build.snapshot)} title={build.snapshot}>
+			{when(build.created_at)}
+		</ExtLink>
+	);
+}
+
+/** Whether a build is in CI, linked to the Release that decides it; nothing when unknown. */
+function CIStateText({ ci, konflux }: { ci: CIState; konflux: KonfluxLink }) {
+	const r = ci.release;
+	if (ci.state === "none") return "not in CI";
+	if (!r) return null;
+	return (
+		<ExtLink href={konflux("releases", r.name)} title={r.name}>
+			{ci.state === "in"
+				? "in CI"
+				: releaseLine(r).text.replace(/^Release failed/, "failed to reach CI")}
+		</ExtLink>
+	);
+}
+
+/** The version's newest build: its date and time, linked to its Snapshot, and whether it is in CI. */
 function NewestLine({
-	label,
 	notIn,
 	newest,
 	konflux,
 }: {
-	label: string;
 	/** The X.Y.Z of the candidate, which lacks the newest build's images. */
 	notIn?: string;
 	newest: NewestBuild;
 	konflux: KonfluxLink;
 }) {
 	return (
-		<div style={{ marginTop: "0.5rem" }}>
-			{label}{" "}
-			<ExtLink
-				href={konflux("snapshots", newest.snapshot)}
-				title={newest.snapshot}
-			>
-				{new Date(newest.created_at).toLocaleDateString("en-US", {
-					month: "short",
-					day: "numeric",
-				})}
-			</ExtLink>
+		<div style={line}>
+			Newest build <BuildLink build={newest} konflux={konflux} />
 			{notIn && `: not in ${notIn}`}
-			{stageSuffix[newest.stage]}
+			{newest.ci.state !== "unknown" && (
+				<>
+					{" · "}
+					<CIStateText ci={newest.ci} konflux={konflux} />
+				</>
+			)}
 		</div>
 	);
 }
@@ -532,6 +598,11 @@ const statusIcons: Record<StatusLine["status"], ReactNode> = {
 	running: (
 		<Icon status="info" isInline>
 			<InProgressIcon />
+		</Icon>
+	),
+	warning: (
+		<Icon status="warning" isInline>
+			<ExclamationTriangleIcon />
 		</Icon>
 	),
 	none: (
@@ -655,46 +726,129 @@ const ciStates: Record<string, [string, LabelProps["status"]]> = {
 	error: ["Error", "danger"],
 };
 
-// Periodic runs record the images they install (tested-images.json, openshift/release #86768) only since this date.
-const ciRecordedSince = Date.parse("2026-10-09T00:00:00Z");
+const runState = (state: string) =>
+	ciStates[state] ?? [
+		state.charAt(0).toUpperCase() + state.slice(1),
+		undefined,
+	];
 
-/** A label per job, opening its newest run of the build, the run on hover. */
-function CICell({ jobs, createdAt }: { jobs: CIJob[]; createdAt: string }) {
-	if (jobs.length === 0) {
-		return (
-			<Status status="none">
-				{Date.parse(createdAt) < ciRecordedSince
-					? "No CI record (before 2026-10-09)"
-					: "Not tested"}
-			</Status>
-		);
-	}
-	const labels = jobLabels(jobs.map((j) => j.job_name));
+const nowrap = { whiteSpace: "nowrap" } as const;
+
+/**
+ * The periodic runs since the candidate's bundle was first built, after the
+ * OCP release controller: a row per build they installed, the candidate first.
+ */
+function CICard({
+	ci,
+	version,
+	konflux,
+}: {
+	ci: CandidateCI;
+	/** The version's X.Y.Z. */
+	version: string;
+	konflux: KonfluxLink;
+}) {
+	const jobs = [
+		...new Set(ci.builds.flatMap((b) => b.jobs.map((j) => j.job_name))),
+	];
+	const labels = jobLabels(jobs);
+	const label = (job: string) => labels[jobs.indexOf(job)];
+	return (
+		<Card isCompact style={{ marginBottom: "1rem" }}>
+			<CardTitle>CI · periodic runs since {when(ci.since)}</CardTitle>
+			<CardBody>
+				<div style={{ ...muted, marginBottom: "0.5rem" }}>
+					<strong>Release candidate</strong>: the pinned build that ships as{" "}
+					{version}. <strong>Staged</strong>: in the {version} stage release.{" "}
+					<strong>In CI</strong>: reached the catalog CI installs from.
+				</div>
+				<Table variant="compact" aria-label="CI runs by installed build">
+					<Thead>
+						<Tr>
+							<Th modifier="fitContent">Installed build</Th>
+							<Th modifier="fitContent">State</Th>
+							<Th>Jobs</Th>
+						</Tr>
+					</Thead>
+					<Tbody>
+						{ci.builds.map((b) => (
+							<Tr key={`${b.kind} ${b.snapshot}`}>
+								<Td style={nowrap}>
+									{b.created_at ? (
+										<BuildLink
+											build={{ snapshot: b.snapshot, created_at: b.created_at }}
+											konflux={konflux}
+										/>
+									) : b.kind === "unknown" ? (
+										<span style={muted}>Unknown build</span>
+									) : (
+										"Quay not installed"
+									)}
+								</Td>
+								<Td style={nowrap}>
+									{b.kind === "candidate" ? (
+										<Label isCompact color="blue">
+											release candidate
+										</Label>
+									) : (
+										b.ci && (
+											<>
+												{b.ci.state !== "unknown" && (
+													<>
+														<CIStateText ci={b.ci} konflux={konflux} />,{" "}
+													</>
+												)}
+												not in {version}
+											</>
+										)
+									)}
+								</Td>
+								<Td>
+									{b.jobs.length > 0 ? (
+										<JobChips jobs={b.jobs} label={label} />
+									) : (
+										<span style={muted}>No runs</span>
+									)}
+								</Td>
+							</Tr>
+						))}
+					</Tbody>
+				</Table>
+			</CardBody>
+		</Card>
+	);
+}
+
+/** A chip per job, coloured by its newest run, opening it; every run on hover. */
+function JobChips({
+	jobs,
+	label,
+}: {
+	jobs: CIJob[];
+	label: (job: string) => string;
+}) {
 	return (
 		<Flex gap={{ default: "gapXs" }}>
-			{jobs.map((j, i) => {
-				const [state, status] = ciStates[j.state] ?? [
-					j.state.charAt(0).toUpperCase() + j.state.slice(1),
-					undefined,
-				];
-				return (
+			{[...jobs]
+				.sort((a, b) => label(a.job_name).localeCompare(label(b.job_name)))
+				.map(({ job_name, runs }) => (
 					<Tooltip
-						key={j.job_name}
+						key={job_name}
 						content={lines(
-							j.job_name,
-							state,
-							j.started_at ? relative(j.started_at) : undefined,
-							j.runs > 1 ? `${j.runs} runs of this build` : undefined,
+							job_name,
+							...runs.map(
+								(r) => `${when(r.started_at)} · ${runState(r.state)[0]}`,
+							),
 						)}
 					>
 						<Label
 							isCompact
-							status={status}
+							status={runState(runs[0].state)[1]}
 							isClickable
 							render={({ className, content, componentRef }) => (
 								<a
 									className={className}
-									href={j.prow_url}
+									href={runs[0].prow_url}
 									ref={componentRef}
 									{...external}
 								>
@@ -702,11 +856,11 @@ function CICell({ jobs, createdAt }: { jobs: CIJob[]; createdAt: string }) {
 								</a>
 							)}
 						>
-							{labels[i]}
+							{label(job_name)}
+							{runs.length > 1 && ` ×${runs.length}`}
 						</Label>
 					</Tooltip>
-				);
-			})}
+				))}
 		</Flex>
 	);
 }

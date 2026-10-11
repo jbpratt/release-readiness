@@ -36,16 +36,20 @@ const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
 
 const glossary: [string, string][] = [
 	[
-		"Candidate build",
-		"The version's build in stage, else its newest build: the newest build whose images' NVRs all carry the version.",
+		"Release candidate",
+		"The pinned build that ships: the version's newest build whose stage Release succeeded.",
 	],
 	[
-		"Stage",
-		"A Konflux Release through the stream's quay-advisory-stage-X-Y plan. A build is in stage once every image is in a Snapshot such a Release succeeded with.",
+		"Staged",
+		"In the version's stage release, a Konflux Release through the stream's quay-advisory-stage-X-Y plan. Only the release candidate is.",
+	],
+	[
+		"In CI",
+		"Reached the catalog CI installs from: a per-build fbc-ri-stage Release of its operator bundle succeeded.",
 	],
 	[
 		"CI",
-		"Periodic Prow jobs whose tested-images.json lists the build's quay, clair, operator and bundle digests.",
+		"Periodic Prow jobs, grouped by the build each installed: from its tested-images.json, or for runs before 2026-10-09 its olm-csvs.yaml.",
 	],
 	["In build", "The build's commits whose message names the ticket."],
 	[
