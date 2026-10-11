@@ -90,6 +90,11 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 	}
 	var latest, passed string
 	resp.CI, latest, passed = candidateCI(app, c, resp.Candidate, held, runs, releases)
+	if p := resp.CI.Passed; p != nil {
+		if resp.CI.FBC, err = s.buildFBC(ctx, c, p.Snapshot); err != nil {
+			return nil, err
+		}
+	}
 	if c.newest == nil {
 		return resp, nil
 	}
@@ -279,6 +284,66 @@ func jobRuns(runs []prow.Run) []model.CIJob {
 	return jobs
 }
 
+// buildFBC returns the FBCs of the stream build named snapshot: of the FBC
+// images of c's version for each operator and OCP version, the one ART built
+// last that holds a bundle of the build, else the pair as missing. It is nil
+// while the version has no FBC image or ART's record of one is unread.
+func (s *Server) buildFBC(ctx context.Context, c *candidate, snapshot string) (*model.BuildFBC, error) {
+	images, err := s.db.FBCImages(ctx, c.assembly)
+	if err != nil || len(images) == 0 {
+		return nil, err
+	}
+	// The ART NVRs of the build's images, of which only its bundles' can be
+	// an FBC's.
+	nvrs := map[string]bool{}
+	if i := slices.IndexFunc(c.stream, func(b model.ReleaseSnapshot) bool { return b.Name == snapshot }); i >= 0 {
+		for _, img := range c.stream[i].Components {
+			if nvr, ok := c.nvrs[img.Image]; ok {
+				nvrs[nvr] = true
+			}
+		}
+	}
+	type slot struct{ operator, ocp string }
+	// Of each operator and OCP version's FBCs holding a bundle of the build,
+	// the one ART built last: its build ended last, else it has the greater
+	// NVR, then digest; nil for none.
+	picks := map[slot]*artbuild.FBCImage{}
+	for i := range images {
+		img := &images[i]
+		if img.Record == nil {
+			return nil, nil
+		}
+		k := slot{img.Operator, img.OCP}
+		p, ok := picks[k]
+		if !ok {
+			picks[k] = nil
+		}
+		if !slices.ContainsFunc(img.Record.BundleNVRs, func(n string) bool { return nvrs[n] }) {
+			continue
+		}
+		if p == nil || cmp.Or(strings.Compare(img.Record.EndTime, p.Record.EndTime), strings.Compare(img.NVR, p.NVR),
+			strings.Compare(img.Record.Digest, p.Record.Digest)) > 0 {
+			picks[k] = img
+		}
+	}
+	group := "quay-" + c.assembly[:strings.LastIndex(c.assembly, ".")]
+	fbc := &model.BuildFBC{Pullspecs: []string{}, Missing: []model.MissingFBC{}}
+	for _, k := range slices.SortedFunc(maps.Keys(picks), func(a, b slot) int {
+		return cmp.Or(strings.Compare(a.operator, b.operator), compareVersions(a.ocp, b.ocp))
+	}) {
+		if p := picks[k]; p != nil {
+			fbc.Pullspecs = append(fbc.Pullspecs, p.Record.Pullspec)
+			continue
+		}
+		m := model.MissingFBC{Operator: k.operator, OCP: k.ocp}
+		if s.artBaseURL != "" {
+			m.URL = strings.TrimRight(s.artBaseURL, "/") + "/search?group=" + group + "&name=" + k.operator + "-fbc&assembly=stream"
+		}
+		fbc.Missing = append(fbc.Missing, m)
+	}
+	return fbc, nil
+}
+
 // ciState tells whether the operator bundle of digest bundle reached the
 // catalog CI installs from, by releases, the per-build stage Releases, newest
 // first.
@@ -327,6 +392,8 @@ type candidate struct {
 	newest         *model.ReleaseSnapshot
 	builds, stream []model.ReleaseSnapshot
 	assembly       string
+	// nvrs holds ART's resolved NVRs of the stream builds' images, by image.
+	nvrs map[string]string
 	// art is the version ART builds the stream at, that of its newest build
 	// whose version resolves, or "".
 	art string
@@ -349,7 +416,7 @@ func (s *Server) selectCandidate(ctx context.Context, release *model.ReleaseVers
 	if err != nil {
 		return nil, err
 	}
-	c := &candidate{assembly: m[1], builds: versionBuilds(app, builds, nvrs, m[1]), stream: builds}
+	c := &candidate{assembly: m[1], builds: versionBuilds(app, builds, nvrs, m[1]), stream: builds, nvrs: nvrs}
 	for i := 0; i < len(builds) && c.art == ""; i++ {
 		c.art = buildVersion(app, &builds[i], nvrs)
 	}
@@ -385,11 +452,17 @@ func versionBuilds(app string, builds []model.ReleaseSnapshot, nvrs map[string]s
 // lowerVersion reports whether X.Y.Z version a is numerically lower than b:
 // 3.18.9 is lower than 3.18.10.
 func lowerVersion(a, b string) bool {
+	return compareVersions(a, b) < 0
+}
+
+// compareVersions compares dot-separated versions numerically: OCP 4.9 is
+// lower than 4.12.
+func compareVersions(a, b string) int {
 	return slices.CompareFunc(strings.Split(a, "."), strings.Split(b, "."), func(x, y string) int {
 		i, _ := strconv.Atoi(x)
 		j, _ := strconv.Atoi(y)
 		return cmp.Compare(i, j)
-	}) < 0
+	})
 }
 
 // buildVersion returns the version of a stream build: the X.Y.Z that the NVR

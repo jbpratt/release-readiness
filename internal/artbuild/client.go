@@ -37,6 +37,10 @@ type record struct {
 	SourceRepo    string `json:"source_repo"`
 	// BuildPipelineURL is the build PipelineRun's Konflux UI page.
 	BuildPipelineURL string `json:"build_pipeline_url"`
+	// BundleNVRs is, for an FBC image, the operator bundles its catalog holds.
+	BundleNVRs []string `json:"bundle_nvrs"`
+	Outcome    string   `json:"outcome"`
+	EndTime    string   `json:"end_time"`
 }
 
 func (c *Client) search(ctx context.Context, q url.Values) ([]searchBuild, error) {

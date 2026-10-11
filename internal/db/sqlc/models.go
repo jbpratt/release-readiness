@@ -18,6 +18,13 @@ type ArtBuild struct {
 	CheckedAt    string
 }
 
+type ArtFbcRecord struct {
+	Digest     string
+	Pullspec   string
+	BundleNvrs string
+	EndTime    string
+}
+
 type ImageScan struct {
 	Digest      string
 	State       string

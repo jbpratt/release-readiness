@@ -72,6 +72,7 @@ import {
 	BASES,
 	ciWarning,
 	componentLabel,
+	fbcCopy,
 	fixableLabels,
 	jobLabels,
 	missingCommits,
@@ -393,10 +394,7 @@ function BuildsCard({
 								<Status status="warning">
 									Pick the candidate: the{" "}
 									<BuildLink build={data.ci.passed} konflux={konflux} /> build
-									passed CI.{" "}
-									<ClipboardCopy variant="inline-compact">
-										{data.ci.passed.snapshot}
-									</ClipboardCopy>
+									passed CI. <PassedCopy ci={data.ci} passed={data.ci.passed} />
 								</Status>
 							</div>
 						)}
@@ -480,9 +478,7 @@ function Candidate({
 						<BuildLink build={ci.passed} konflux={konflux} /> build, which is
 						newer and passed CI (optional).
 						{candidate.prod && " ART may refuse it after a prod attempt."}{" "}
-						<ClipboardCopy variant="inline-compact">
-							{ci.passed.snapshot}
-						</ClipboardCopy>
+						<PassedCopy ci={ci} passed={ci.passed} />
 					</Status>
 				) : ci.refresh === "waiting" ? (
 					<Status status="running">
@@ -530,6 +526,46 @@ function Candidate({
 }
 
 const line = { marginTop: "0.5rem" };
+
+/**
+ * What to copy to run release-from-fbc with ci's passed build: its FBC
+ * pullspecs, once it has one for every operator and OCP version, else its
+ * Snapshot; then the pairs it has no FBC of, each linked to ART's search.
+ */
+function PassedCopy({ ci, passed }: { ci: CandidateCI; passed: BuildLabel }) {
+	const copy = fbcCopy(ci);
+	const missing = ci.fbc?.missing ?? [];
+	return (
+		<>
+			{copy ? (
+				<>
+					{`FBC pullspecs (${ci.fbc?.pullspecs.length}):`}{" "}
+					<ClipboardCopy variant="inline-compact" truncation>
+						{copy}
+					</ClipboardCopy>
+				</>
+			) : (
+				<ClipboardCopy variant="inline-compact">
+					{passed.snapshot}
+				</ClipboardCopy>
+			)}
+			{missing.length > 0 && (
+				<div style={muted}>
+					Missing FBC:{" "}
+					{missing.map((m, i) => (
+						<span key={`${m.operator} ${m.ocp}`}>
+							{i > 0 && ", "}
+							<ExtLink href={m.url || null}>
+								{`${m.operator} OCP ${m.ocp}`}
+							</ExtLink>
+						</span>
+					))}
+					.
+				</div>
+			)}
+		</>
+	);
+}
 
 /** A build's date and time, linked to its Snapshot. */
 function BuildLink({

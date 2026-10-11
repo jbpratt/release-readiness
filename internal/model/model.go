@@ -206,15 +206,35 @@ type CIState struct {
 // the version's builds' bundles was, by the build each installed; the newest
 // bundle of the version's builds in the CI catalog, when that is not the
 // candidate's; Passed, the newest of them, newer than the candidate, that a run
-// passed with; and Refresh, what to do: with a candidate "rerun"
-// release-from-fbc with Passed, "waiting" while a newer build in CI has not
-// passed, or "current"; without one "pick" Passed, or "none".
+// passed with, and FBC, its FBCs, null until ART's record of each of the
+// version's FBC images is read; and Refresh, what to do: with a candidate
+// "rerun" release-from-fbc with Passed, "waiting" while a newer build in CI
+// has not passed, or "current"; without one "pick" Passed, or "none".
 type CandidateCI struct {
 	Since      time.Time   `json:"since"`
 	Builds     []CIBuild   `json:"builds"`
 	LatestInCI *BuildLabel `json:"latest_in_ci"`
 	Passed     *BuildLabel `json:"passed"`
+	FBC        *BuildFBC   `json:"fbc"`
 	Refresh    string      `json:"refresh"`
+}
+
+// BuildFBC is a build's FBCs for release-from-fbc: of the version's FBC images
+// of each operator and OCP version, by pullspec, the one ART built last that
+// holds a bundle of the build, and in Missing each pair without one, both by
+// operator, then OCP version.
+type BuildFBC struct {
+	Pullspecs []string     `json:"pullspecs"`
+	Missing   []MissingFBC `json:"missing"`
+}
+
+// MissingFBC is an operator and OCP version a build has no FBC of, with URL,
+// ART build history's search for the operator's FBCs, "" when ART links are
+// off.
+type MissingFBC struct {
+	Operator string `json:"operator"`
+	OCP      string `json:"ocp"`
+	URL      string `json:"url"`
 }
 
 // BuildLabel names an operator bundle by the oldest stream build holding it.

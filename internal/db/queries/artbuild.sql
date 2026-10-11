@@ -32,3 +32,27 @@ LIMIT ?;
 SELECT digest, state, nvr, record_id, upstream_repo, upstream_sha, checked_at
 FROM art_builds
 WHERE state = 'resolved' AND digest IN (sqlc.slice('digests'));
+
+-- name: UpsertArtFBCRecord :exec
+INSERT INTO art_fbc_records (digest, pullspec, bundle_nvrs, end_time)
+VALUES (?, ?, ?, ?)
+ON CONFLICT(digest) DO UPDATE SET
+    pullspec = excluded.pullspec,
+    bundle_nvrs = excluded.bundle_nvrs,
+    end_time = excluded.end_time;
+
+-- name: ListUnreadArtFBCImages :many
+-- Resolved images whose NVR may be an FBC image's, which the caller parses,
+-- with no FBC record yet.
+SELECT a.digest, a.nvr, a.record_id
+FROM art_builds a
+WHERE a.state = 'resolved' AND a.nvr LIKE '%-fbc-%'
+  AND NOT EXISTS (SELECT 1 FROM art_fbc_records f WHERE f.digest = a.digest);
+
+-- name: ListArtFBCImages :many
+-- Resolved images whose NVR may be an FBC image's, which the caller parses,
+-- each with its FBC record, NULL until read.
+SELECT a.digest, a.nvr, f.pullspec, f.bundle_nvrs, f.end_time
+FROM art_builds a
+LEFT JOIN art_fbc_records f ON f.digest = a.digest
+WHERE a.state = 'resolved' AND a.nvr LIKE '%-fbc-%';

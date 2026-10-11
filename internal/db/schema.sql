@@ -77,6 +77,16 @@ CREATE TABLE IF NOT EXISTS art_builds (
     checked_at    TEXT NOT NULL
 );
 
+-- What the ART build record of a resolved FBC image (art_builds) says of it:
+-- bundle_nvrs, a JSON array of the operator bundles it holds, is empty unless
+-- the build succeeded; end_time is as ART gives it.
+CREATE TABLE IF NOT EXISTS art_fbc_records (
+    digest      TEXT PRIMARY KEY,
+    pullspec    TEXT NOT NULL,
+    bundle_nvrs TEXT NOT NULL,
+    end_time    TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS prow_runs (
     job_name        TEXT NOT NULL,
     build_id        TEXT NOT NULL,
