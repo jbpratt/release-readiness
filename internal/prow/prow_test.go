@@ -145,18 +145,16 @@ func TestApplyArtifactCountsOnlyPodImages(t *testing.T) {
 			{"role": "builder", "requested_ref": "quay.io/x/art-images@` + builder + `", "source": "csv-related"}
 		]}`))
 	for _, tc := range []struct {
-		app, component, digest string
-		want                   bool
+		img  Image
+		want bool
 	}{
-		{"quay-3-18", "quay-3-18-quay-quay", quay, true},
-		{"fbc-quay-3-18", "fbc-quay-3-18-quay-operator", catalog, true},
-		{"quay-3-18", "quay-3-18-quay-operator-bundle", bundle, true},
-		{"quay-3-18", "quay-3-18-quay-builder", builder, false},
+		{Image{Role: "quay", Digest: quay}, true},
+		{Image{Role: "catalog", Digest: catalog}, true},
+		{Image{Role: "quay-operator-bundle", Digest: bundle}, true},
+		{Image{Role: "builder", Digest: builder}, false},
 	} {
-		key := ComponentKey(tc.app, tc.component, "quay.io/x/art-images@"+tc.digest)
-		role, d, _ := strings.Cut(key, "@")
-		if got := slices.Contains(r.Images, Image{Role: role, Digest: d}); got != tc.want {
-			t.Errorf("tested %s = %v, want %v", key, got, tc.want)
+		if got := slices.Contains(r.Images, tc.img); got != tc.want {
+			t.Errorf("tested %v = %v, want %v", tc.img, got, tc.want)
 		}
 	}
 }
@@ -289,22 +287,5 @@ func TestSyncReportsFailedListing(t *testing.T) {
 	p := reg.Problems(time.Now())
 	if len(p) != 1 || p[0].Source != "prow" || !strings.Contains(p[0].Message, "503") || !strings.Contains(p[0].Message, "2 errors this pass") {
 		t.Fatalf("problems = %+v, want one prow failure covering both jobs", p)
-	}
-}
-
-func TestComponentKey(t *testing.T) {
-	const d = "sha256:16703125878630f03d1781454b1da8212db6127c822f95c2cfe04e805210bb0d"
-	for _, tc := range []struct{ app, component, image, want string }{
-		{"quay-3-17", "quay-3-17-quay-quay", "quay.io/x/art-images@" + d, "quay@" + d},
-		{"quay-3-17", "quay-3-17-quay-operator-bundle", "quay.io/x/art-images@" + d, "quay-operator-bundle@" + d},
-		{"fbc-quay-3-17", "fbc-quay-3-17-quay-operator", "quay.io/x/art-fbc@" + d, "catalog@" + d},
-		{"fbc-quay-3-17", "fbc-quay-3-17-quay-bridge-operator", "quay.io/x/art-fbc@" + d, ""},
-		{"quay-3-17", "quay-3-17-base-rhel9", "quay.io/x/art-images@" + d, ""},
-		{"quay-images-base", "quay-3-17-quay-quay", "quay.io/x/art-images@" + d, ""},
-		{"quay-3-17", "quay-3-17-quay-quay", "quay.io/x/art-images:v3.17.6", ""},
-	} {
-		if got := ComponentKey(tc.app, tc.component, tc.image); got != tc.want {
-			t.Errorf("ComponentKey(%s, %s) = %q, want %q", tc.app, tc.component, got, tc.want)
-		}
 	}
 }

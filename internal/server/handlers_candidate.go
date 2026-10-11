@@ -24,15 +24,11 @@ var quayVersion = regexp.MustCompile(`^quay-v(\d+\.\d+\.\d+)$`)
 // or at the field's end: 3.18.10 is not 3.18.1.
 var nvrXYZ = regexp.MustCompile(`^(\d+\.\d+\.\d+)(?:\.|$)`)
 
-// ciRoles are the images every periodic run deploys. A run tested a build
-// only when it recorded the build's digest for all four: builds that share a
-// bundle can differ in the others.
-var ciRoles = []string{"quay", "clair", "quay-operator", "quay-operator-bundle"}
-
 // handleGetCandidate serves what decides whether an unshipped version can
-// ship: the build up for release and, per build that matters, whether it
-// reached stage, the version's prod Release and the periodic jobs that tested
-// it.
+// ship: its release candidate, the STAGE build, with whether it reached stage,
+// the version's prod Release and the periodic jobs that installed its operator
+// bundle, and the version's newest build when it differs from the candidate or
+// there is none.
 func (s *Server) handleGetCandidate(w http.ResponseWriter, r *http.Request) {
 	version := r.PathValue("version")
 	release, err := s.db.GetReleaseVersion(r.Context(), version)
@@ -53,8 +49,8 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 	if err != nil {
 		return nil, err
 	}
-	resp := &model.ReleaseCandidate{Shipped: c.shipped, Candidate: c.build, Reason: c.reason, Builds: []model.BuildRow{}}
-	if c.build == nil {
+	resp := &model.ReleaseCandidate{Shipped: c.shipped, Reason: c.reason}
+	if c.assembly == "" {
 		return resp, nil
 	}
 	app := release.KonfluxApplication
@@ -62,34 +58,27 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 	if err != nil {
 		return nil, err
 	}
-	runs, err := s.db.ListProwRunsByApplication(ctx, app)
-	if err != nil {
-		return nil, err
+	newest := func(images []model.SnapshotImage) *model.NewestBuild {
+		return &model.NewestBuild{Snapshot: c.newest.Name, CreatedAt: c.newest.CreatedAt, Stage: stageFlag(app, images, releases).State}
 	}
-	row := func(snap *model.ReleaseSnapshot, roles ...string) model.BuildRow {
-		images := buildImages(app, snap)
-		b := model.BuildRow{Snapshot: snap.Name, CreatedAt: snap.CreatedAt, Roles: roles, Stage: stageFlag(app, images, releases), CI: []model.CIJob{}}
-		var imgs []prow.Image
-		for _, img := range images {
-			role, d, _ := strings.Cut(prow.ComponentKey(app, img.Name, img.Image), "@")
-			imgs = append(imgs, prow.Image{Role: role, Digest: d})
+	if c.build == nil || c.build.Source != "staged" {
+		resp.Reason = "no release candidate yet"
+		if c.newest != nil {
+			resp.Newest = newest(buildImages(app, c.newest))
 		}
-		if build := ciBuild(imgs); build != nil {
-			b.CI = ciJobs(runs, build)
-		}
-		return b
+		return resp, nil
 	}
 
-	snap := &model.ReleaseSnapshot{Name: c.build.Snapshot, CreatedAt: c.build.CreatedAt}
-	for _, cc := range c.build.Components {
-		snap.Components = append(snap.Components, model.SnapshotImage{Name: cc.Name, Image: cc.Image})
+	cand := c.build
+	resp.Candidate = cand
+	images := make([]model.SnapshotImage, len(cand.Components))
+	held := map[string]string{}
+	for i, cc := range cand.Components {
+		images[i] = model.SnapshotImage{Name: cc.Name, Image: cc.Image}
+		held[cc.Name] = imageDigest(cc.Image)
 	}
-	roles := []string{"candidate"}
-	if c.newest != nil && c.newest.Name == snap.Name {
-		roles = append(roles, "newest")
-	}
-	cand := row(snap, roles...)
-	if c.build.Source == "staged" && cand.Stage.State == "staged" {
+	cand.Stage = stageFlag(app, images, releases)
+	if cand.Stage.State == "staged" {
 		// ART assembles a STAGE build from images it often staged before,
 		// so its own stage Release dates it.
 		cand.Stage.StagedAt = c.stagedAt
@@ -97,15 +86,29 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 	if cand.Prod, err = s.db.LatestProdRelease(ctx, c.assembly); err != nil {
 		return nil, err
 	}
-	resp.Builds = append(resp.Builds, cand)
-	if c.newest != nil && c.newest.Name != snap.Name {
-		resp.Builds = append(resp.Builds, row(c.newest, "newest"))
+	cand.CI = []model.CIJob{}
+	if bundle := held[app+"-quay-operator-bundle"]; bundle != "" {
+		runs, err := s.db.ListProwRunsByApplication(ctx, app)
+		if err != nil {
+			return nil, err
+		}
+		cand.CI = ciJobs(runs, bundle)
 	}
-	if slices.ContainsFunc(resp.Builds, func(b model.BuildRow) bool { return len(b.CI) > 0 }) {
+	if c.newest == nil {
 		return resp, nil
 	}
-	if tested := lastTested(runs, c.builds); tested != nil {
-		resp.Builds = append(resp.Builds, row(tested, "last_tested"))
+	// Only the components the candidate holds count: a stream builds images
+	// its STAGE build can leave out.
+	var imgs []model.SnapshotImage
+	differs := false
+	for _, img := range buildImages(app, c.newest) {
+		if d, ok := held[img.Name]; ok {
+			imgs = append(imgs, img)
+			differs = differs || imageDigest(img.Image) != d
+		}
+	}
+	if differs {
+		resp.Newest = newest(imgs)
 	}
 	return resp, nil
 }
@@ -117,13 +120,12 @@ type candidate struct {
 	// reason says why the version has no build.
 	reason string
 	// build is the version's selected STAGE build, else newest, its newest
-	// build. stagedAt is the STAGE build's stage Release's completion time.
-	// builds are its stream builds, newest first, as versionBuilds selects
-	// them for its assembly.
+	// build: the first of its stream builds, newest first, as versionBuilds
+	// selects them for its assembly. stagedAt is the STAGE build's stage
+	// Release's completion time.
 	build    *model.CandidateBuild
 	stagedAt *time.Time
 	newest   *model.ReleaseSnapshot
-	builds   []model.ReleaseSnapshot
 	assembly string
 }
 
@@ -144,9 +146,9 @@ func (s *Server) selectCandidate(ctx context.Context, release *model.ReleaseVers
 	if err != nil {
 		return nil, err
 	}
-	c := &candidate{builds: versionBuilds(app, builds, nvrs, m[1]), assembly: m[1]}
-	if len(c.builds) > 0 {
-		c.newest = &c.builds[0]
+	c := &candidate{assembly: m[1]}
+	if vb := versionBuilds(app, builds, nvrs, m[1]); len(vb) > 0 {
+		c.newest = &vb[0]
 	}
 	if c.build, c.stagedAt, err = s.candidateBuild(ctx, release, c.newest); err != nil {
 		return nil, err
@@ -221,8 +223,9 @@ func nvrVersion(nvr string) string {
 	return ""
 }
 
-// CandidateDigests returns the image digests of the build up for release of
-// every version that is not archived; released versions select none.
+// CandidateDigests returns the image digests of the release candidate, the
+// selected STAGE build, of every version that is not archived: the page shows
+// the CVEs of no other build. Released versions select none.
 func (s *Server) CandidateDigests(ctx context.Context) ([]string, error) {
 	versions, err := s.db.ListAllReleaseVersions(ctx)
 	if err != nil {
@@ -237,7 +240,7 @@ func (s *Server) CandidateDigests(ctx context.Context) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if c.build == nil {
+		if c.build == nil || c.build.Source != "staged" {
 			continue
 		}
 		for _, cc := range c.build.Components {
@@ -374,54 +377,12 @@ func stageFlag(app string, images []model.SnapshotImage, releases []model.StageR
 	return f
 }
 
-// lastTested returns the newest of builds, newest first, that a periodic run
-// tested: of the runs, newest first, that recorded all of ciRoles, the first
-// whose build one of builds holds gives the newest such build. It is nil when
-// none does.
-func lastTested(runs []prow.Run, builds []model.ReleaseSnapshot) *model.ReleaseSnapshot {
-	for _, run := range runs {
-		build := ciBuild(run.Images)
-		if build == nil {
-			continue
-		}
-		for i, b := range builds {
-			holds := true
-			for _, d := range build {
-				holds = holds && slices.ContainsFunc(b.Components, func(c model.SnapshotImage) bool { return imageDigest(c.Image) == d })
-			}
-			if holds {
-				return &builds[i]
-			}
-		}
-	}
-	return nil
-}
-
-// ciBuild returns the first digest imgs hold for each of ciRoles, or nil when
-// one is missing.
-func ciBuild(imgs []prow.Image) map[string]string {
-	build := map[string]string{}
-	for _, img := range imgs {
-		if _, ok := build[img.Role]; !ok && img.Digest != "" && slices.Contains(ciRoles, img.Role) {
-			build[img.Role] = img.Digest
-		}
-	}
-	if len(build) < len(ciRoles) {
-		return nil
-	}
-	return build
-}
-
-// ciJobs returns, per job, the newest of runs (newest first) that recorded
-// every digest of build and how many did, sorted by job name.
-func ciJobs(runs []prow.Run, build map[string]string) []model.CIJob {
+// ciJobs returns, per job, the newest of runs (newest first) that installed
+// the operator bundle of digest bundle and how many did, sorted by job name.
+func ciJobs(runs []prow.Run, bundle string) []model.CIJob {
 	jobs := []model.CIJob{}
 	for _, run := range runs {
-		tested := true
-		for role, d := range build {
-			tested = tested && slices.Contains(run.Images, prow.Image{Role: role, Digest: d})
-		}
-		if !tested {
+		if !slices.Contains(run.Images, prow.Image{Role: "quay-operator-bundle", Digest: bundle}) {
 			continue
 		}
 		i := slices.IndexFunc(jobs, func(j model.CIJob) bool { return j.JobName == run.JobName })

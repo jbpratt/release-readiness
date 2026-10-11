@@ -161,26 +161,40 @@ type StageRelease struct {
 	Images []string
 }
 
-// ReleaseCandidate is what decides whether a version can ship: the build up
-// for release and, per build that matters, whether it reached stage, the
-// version's prod Release and the periodic CI runs that tested it. Candidate
-// is null with Reason set, and Builds empty, when there is none. A shipped
-// version sets nothing else.
+// ReleaseCandidate is what decides whether a version can ship: its release
+// candidate, the selected STAGE build, or null with Reason set when there is
+// none, and its newest build when that holds, for a component the candidate
+// holds, another image than the candidate does, or when there is no
+// candidate. A shipped version sets nothing else.
 type ReleaseCandidate struct {
 	Shipped   bool            `json:"shipped"`
 	Candidate *CandidateBuild `json:"candidate"`
 	Reason    string          `json:"reason"`
-	Builds    []BuildRow      `json:"builds"`
+	Newest    *NewestBuild    `json:"newest"`
 }
 
 // CandidateBuild is the Snapshot up for release: Source "staged" is the
 // version's selected STAGE build, "newest" its newest build, the newest stream
-// build whose images' NVRs carry the version.
+// build whose images' NVRs carry the version. A STAGE build, the release
+// candidate, has whether it reached stage, the version's prod Release and, per
+// job, the periodic CI runs that installed its operator bundle.
 type CandidateBuild struct {
 	Snapshot   string               `json:"snapshot"`
-	Source     string               `json:"source"`
+	Source     string               `json:"-"`
 	CreatedAt  time.Time            `json:"created_at"`
 	Components []CandidateComponent `json:"components"`
+	Stage      StageFlag            `json:"stage"`
+	Prod       *KonfluxRelease      `json:"prod"`
+	CI         []CIJob              `json:"ci"`
+}
+
+// NewestBuild is a version's newest build. Stage is the State of its stage
+// flag over its images of the components the candidate holds, or over all of
+// them when there is no candidate.
+type NewestBuild struct {
+	Snapshot  string    `json:"snapshot"`
+	CreatedAt time.Time `json:"created_at"`
+	Stage     string    `json:"stage"`
 }
 
 // CandidateComponent is a build image with its ART build and the upstream
@@ -219,21 +233,6 @@ type SeverityCounts struct {
 	Medium   int `json:"medium"`
 	Low      int `json:"low"`
 	Unknown  int `json:"unknown"`
-}
-
-// BuildRow is a build that matters to a version. Roles are "candidate", the
-// build up for release, "newest", the version's newest build, and
-// "last_tested", the version's newest build a periodic run tested, listed
-// only when neither of the others was. Prod, the version's prod Release, is
-// set on the candidate only. CI is, per job, the periodic runs that tested the
-// build.
-type BuildRow struct {
-	Snapshot  string          `json:"snapshot"`
-	CreatedAt time.Time       `json:"created_at"`
-	Roles     []string        `json:"roles"`
-	Stage     StageFlag       `json:"stage"`
-	Prod      *KonfluxRelease `json:"prod"`
-	CI        []CIJob         `json:"ci"`
 }
 
 // StageFlag tells whether every image of a build is in a Snapshot a STAGE

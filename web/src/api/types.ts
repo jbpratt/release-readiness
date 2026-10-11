@@ -12,22 +12,38 @@ export interface KonfluxRelease {
 }
 
 /**
- * What decides whether a version can ship. candidate is null with reason set,
- * and builds empty, when there is none; a shipped version sets nothing else.
+ * What decides whether a version can ship. candidate is null with reason set
+ * when there is none; a shipped version sets nothing else. newest is set when
+ * the version's newest build holds, for a component the candidate holds,
+ * another image than the candidate does, or when there is no candidate.
  */
 export interface ReleaseCandidate {
 	shipped: boolean;
 	candidate: CandidateBuild | null;
 	reason: string;
-	builds: BuildRow[];
+	newest: NewestBuild | null;
 }
 
-/** The Snapshot up for release: the version's STAGE build, else its newest. */
+/** The release candidate: the version's STAGE build. */
 export interface CandidateBuild {
 	snapshot: string;
-	source: "staged" | "newest";
 	created_at: string;
 	components: CandidateComponent[];
+	stage: StageFlag;
+	/** The version's prod Release. */
+	prod: KonfluxRelease | null;
+	/** Per job, the periodic runs that installed the candidate's operator bundle. */
+	ci: CIJob[];
+}
+
+/**
+ * The version's newest build. stage is its stage state over its images of the
+ * components the candidate holds, or over all of them without a candidate.
+ */
+export interface NewestBuild {
+	snapshot: string;
+	created_at: string;
+	stage: StageFlag["state"];
 }
 
 /** A build image; nvr and build_url are "" until ART build history has it. */
@@ -64,21 +80,6 @@ export interface SeverityCounts {
 	medium: number;
 	low: number;
 	unknown: number;
-}
-
-/**
- * A build that matters to the version: the candidate, its newest build, and
- * when neither was tested, its newest build a periodic run tested.
- */
-export interface BuildRow {
-	snapshot: string;
-	created_at: string;
-	roles: ("candidate" | "newest" | "last_tested")[];
-	stage: StageFlag;
-	/** The version's prod Release, on the candidate only. */
-	prod: KonfluxRelease | null;
-	/** Per job, the periodic runs that tested the build. */
-	ci: CIJob[];
 }
 
 /**
