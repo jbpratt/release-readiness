@@ -19,7 +19,6 @@ import (
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
-	"github.com/quay/release-readiness/internal/fbc"
 	"github.com/quay/release-readiness/internal/github"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/syncstatus"
@@ -116,31 +115,6 @@ func seedSnapshot(t *testing.T, srv *Server, app, name string, created time.Time
 	}
 }
 
-// seedReleaseView seeds quay, FBC and base-image snapshots for 3.18 plus
-// unrelated 3.9 and 3.14 data.
-func seedReleaseView(t *testing.T, srv *Server) time.Time {
-	t.Helper()
-	t0 := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
-	hour := func(n int) time.Time { return t0.Add(time.Duration(n) * time.Hour) }
-	seedSnapshot(t, srv, "quay-3-18", "quay-3-18-a", hour(0), "quay-3-18-quay", "quay-3-18-base-rhel9")
-	seedSnapshot(t, srv, "quay-3-18", "quay-3-18-b", hour(0), "quay-3-18-clair")
-	seedSnapshot(t, srv, "fbc-quay-3-18", "fbc-quay-3-18-a", hour(1), "fbc-quay-3-18-index")
-	seedSnapshot(t, srv, "quay-images-base", "base-a", hour(2), "quay-3-18-base-rhel9", "quay-3-9-base-rhel9")
-	seedSnapshot(t, srv, "quay-images-base", "base-b", hour(3), "quay-3-9-base-rhel9")
-	seedSnapshot(t, srv, "quay-3-9", "quay-3-9-a", hour(3), "quay-3-9-quay")
-	seedSnapshot(t, srv, "quay-3-14", "quay-3-14-a", hour(0), "quay-3-14-quay")
-	for name, app := range map[string]string{
-		"quay-v3.18.0": "quay-3-18",
-		"quay-v3.14.0": "quay-3-14",
-		"quay-v3.20.0": "quay-3-20",
-	} {
-		if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: name, KonfluxApplication: app}); err != nil {
-			t.Fatalf("upsert release %s: %v", name, err)
-		}
-	}
-	return t0
-}
-
 func getJSON(t *testing.T, srv *Server, url string, wantStatus int, v any) {
 	t.Helper()
 	req := httptest.NewRequest("GET", url, nil)
@@ -154,414 +128,6 @@ func getJSON(t *testing.T, srv *Server, url string, wantStatus int, v any) {
 			t.Fatalf("GET %s: decode: %v", url, err)
 		}
 	}
-}
-
-func TestListReleaseSnapshots(t *testing.T) {
-	srv := setupTestServer(t)
-	t0 := seedReleaseView(t, srv)
-	for i, r := range []struct{ name, app, snapshot string }{
-		{"fbc-release", "fbc-quay-3-18", "fbc-quay-3-18-a"},
-		// Same name, other application: not a Release of quay-3-18-a.
-		{"cross-app", "fbc-quay-3-18", "quay-3-18-a"},
-		{"stage-gone", "fbc-quay-3-18", "fbc-quay-3-18-gone"},
-		{"stage-gone-retry", "fbc-quay-3-18", "fbc-quay-3-18-gone"},
-	} {
-		if err := srv.db.UpsertKonfluxRelease(t.Context(), &model.KonfluxRelease{
-			Name: r.name, Application: r.app, Snapshot: r.snapshot, ReleasedStatus: "Succeeded",
-			CreatedAt: t0.Add(time.Duration(4+i) * time.Hour),
-		}); err != nil {
-			t.Fatalf("upsert release %s: %v", r.name, err)
-		}
-	}
-
-	type row struct {
-		name     string
-		count    int
-		missing  bool
-		releases int
-	}
-	page := func(url string) ([]row, bool) {
-		t.Helper()
-		var p model.ReleaseSnapshotPage
-		getJSON(t, srv, url, http.StatusOK, &p)
-		out := []row{}
-		for _, s := range p.Snapshots {
-			out = append(out, row{s.Name, s.ComponentCount, s.Missing, len(s.Releases)})
-		}
-		return out, p.HasMore
-	}
-
-	// base-b only carries a 3.9 base image, so 3.18 skips it. The gone
-	// Snapshot is dated by its oldest Release.
-	all := []row{
-		{"fbc-quay-3-18-gone", 0, true, 2},
-		{"base-a", 2, false, 0},
-		{"fbc-quay-3-18-a", 1, false, 1},
-		{"quay-3-18-b", 1, false, 0},
-		{"quay-3-18-a", 2, false, 0},
-	}
-	tests := []struct {
-		query   string
-		want    []row
-		hasMore bool
-	}{
-		{"", all, false},
-		{"?limit=2&offset=1", all[1:3], true},
-		{"?limit=2&offset=3", all[3:], false},
-		{"?application=quay-images-base", all[1:2], false},
-		{"?application=fbc-quay-3-18", []row{all[0], all[2]}, false},
-		// quay-3-18-a is only named by a Release of another application.
-		{"?with_release=true", []row{all[0], all[2]}, false},
-		{"?application=fbc-quay-3-18&with_release=true&offset=1", all[2:3], false},
-		{"?application=quay-3-18&with_release=true", []row{}, false},
-	}
-	for _, tt := range tests {
-		got, hasMore := page("/api/v1/releases/quay-v3.18.0/snapshots" + tt.query)
-		if !slices.Equal(got, tt.want) || hasMore != tt.hasMore {
-			t.Errorf("%q: got %v has_more=%v, want %v has_more=%v", tt.query, got, hasMore, tt.want, tt.hasMore)
-		}
-	}
-
-	if got, _ := page("/api/v1/releases/quay-v3.20.0/snapshots"); len(got) != 0 {
-		t.Errorf("no-data snapshots: got %v, want none", got)
-	}
-	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots?application=quay-3-9", http.StatusBadRequest, nil)
-	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/snapshots", http.StatusNotFound, nil)
-}
-
-func TestGetReleaseSnapshot(t *testing.T) {
-	srv := setupTestServer(t)
-	t0 := seedReleaseView(t, srv)
-	if err := srv.db.UpsertKonfluxRelease(t.Context(), &model.KonfluxRelease{
-		Name: "fbc-release", Application: "fbc-quay-3-18", Snapshot: "fbc-quay-3-18-a", ReleasedStatus: "Succeeded", CreatedAt: t0,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := srv.db.UpsertKonfluxRelease(t.Context(), &model.KonfluxRelease{
-		Name: "fbc-retry", Application: "fbc-quay-3-18", Snapshot: "fbc-quay-3-18-a", ReleasedStatus: "False", ReleasedReason: "Failed",
-		FailedTask: "verify-conforma", FailedStep: "assert", CreatedAt: t0.Add(time.Hour),
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	var snap model.ReleaseSnapshot
-	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/fbc-quay-3-18-a", http.StatusOK, &snap)
-	wantImages := []model.SnapshotImage{{Name: "fbc-quay-3-18-index", Image: "quay.io/x/fbc-quay-3-18-index@fbc-quay-3-18-a"}}
-	if !slices.Equal(snap.Components, wantImages) || len(snap.Releases) != 2 || snap.Releases[1].Name != "fbc-release" {
-		t.Fatalf("snapshot: got %+v", snap)
-	}
-	if newest := snap.Releases[0]; newest.Name != "fbc-retry" || newest.FailedTask != "verify-conforma" || newest.FailedStep != "assert" {
-		t.Errorf("newest release: got %+v", newest)
-	}
-
-	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/base-a", http.StatusOK, &snap)
-	for _, name := range []string{
-		"base-b",       // base Snapshot without a 3.18 image
-		"quay-3-9-a",   // another release's application
-		"no-such-snap", // never stored
-	} {
-		getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/"+name, http.StatusNotFound, nil)
-	}
-}
-
-func TestArtBuildLinks(t *testing.T) {
-	srv := setupTestServer(t)
-	seedReleaseView(t, srv)
-	// seedSnapshot pins each image to the digest "@<snapshot name>".
-	if err := srv.db.UpsertArtBuild(t.Context(), artbuild.Build{
-		Digest: "quay-3-18-b", State: artbuild.StateResolved, NVR: "clair-1", RecordID: "rec-1",
-		UpstreamRepo: "https://github.com/quay/clair", UpstreamSHA: "abc123", CheckedAt: time.Now(),
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := srv.db.UpsertArtBuild(t.Context(), artbuild.Build{Digest: "quay-3-18-a", State: artbuild.StateUnresolved, CheckedAt: time.Now()}); err != nil {
-		t.Fatal(err)
-	}
-	want := &model.ArtBuild{
-		NVR:          "clair-1",
-		BuildURL:     "https://art.example/build?nvr=clair-1&record_id=rec-1",
-		UpstreamRepo: "https://github.com/quay/clair",
-		UpstreamSHA:  "abc123",
-	}
-
-	var snap model.ReleaseSnapshot
-	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/quay-3-18-b", http.StatusOK, &snap)
-	if len(snap.Components) != 1 || snap.Components[0].Art == nil || *snap.Components[0].Art != *want {
-		t.Errorf("snapshot art: got %+v, want %+v", snap.Components, want)
-	}
-
-	var unresolved model.ReleaseSnapshot
-	getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/quay-3-18-a", http.StatusOK, &unresolved)
-	if len(unresolved.Components) == 0 {
-		t.Fatal("unresolved snapshot: no components")
-	}
-	for _, c := range unresolved.Components {
-		if c.Art != nil {
-			t.Errorf("%s art: got %+v, want null (unresolved)", c.Name, c.Art)
-		}
-	}
-}
-
-// The Quay Snapshot's bundle is current when the newest quay-operator FBC
-// catalog's stable channel names its digest, behind when a fully read channel
-// does not, and unknown when the catalog cannot settle it.
-func TestFBCCatalogStatus(t *testing.T) {
-	const (
-		bundleImage = "quay.io/x/art-images@sha256:b24"
-		catImage    = "quay.io/x/art-fbc@sha256:fbc"
-	)
-	inChannel := fbc.Bundle{Package: fbc.Package, Channel: "stable-3.18", Name: "quay-operator.v3.18.1",
-		Image: "registry.redhat.io/quay/quay-operator-bundle@sha256:b24", Digest: "sha256:b24"}
-	older := fbc.Bundle{Package: fbc.Package, Channel: "stable-3.18", Name: "quay-operator.v3.18.1",
-		Image: "registry.redhat.io/quay/quay-operator-bundle@sha256:old", Digest: "sha256:old"}
-	tagged := fbc.Bundle{Package: fbc.Package, Channel: "stable-3.18", Name: "quay-operator.v3.18.2",
-		Image: "registry.redhat.io/quay/quay-operator-bundle:v3.18.2"}
-	prev := fbc.Bundle{Package: fbc.Package, Channel: "stable-3.18", Name: "quay-operator.v3.18.0",
-		Image: "registry.redhat.io/quay/quay-operator-bundle@sha256:030", Digest: "sha256:030"}
-	otherChannel := inChannel
-	otherChannel.Channel = "stable-3.17"
-	for _, tc := range []struct {
-		name          string
-		snapshotImage string
-		catalog       *[]fbc.Bundle // nil leaves the catalog unread
-		state         string
-		want          model.FBCCatalog
-	}{
-		{"current", bundleImage, &[]fbc.Bundle{prev, inChannel}, fbc.StateParsed,
-			model.FBCCatalog{Status: "current", CatalogBundleImage: inChannel.Image}},
-		{"behind", bundleImage, &[]fbc.Bundle{older}, fbc.StateParsed,
-			model.FBCCatalog{Status: "behind", CatalogBundleImage: older.Image}},
-		{"unread catalog", bundleImage, nil, "", model.FBCCatalog{Status: "unknown"}},
-		{"failed read", bundleImage, &[]fbc.Bundle{}, fbc.StateFailed, model.FBCCatalog{Status: "unknown"}},
-		{"bundle only in another channel", bundleImage, &[]fbc.Bundle{otherChannel}, fbc.StateParsed, model.FBCCatalog{Status: "unknown"}},
-		{"tag ref in channel", bundleImage, &[]fbc.Bundle{older, tagged}, fbc.StateParsed,
-			model.FBCCatalog{Status: "unknown", CatalogBundleImage: older.Image}},
-		{"snapshot bundle by tag", "quay.io/x/art-images:v3.18.1", &[]fbc.Bundle{inChannel}, fbc.StateParsed, model.FBCCatalog{Status: "unknown"}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			srv := setupTestServer(t)
-			ctx := t.Context()
-			t0 := time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC)
-			if err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}); err != nil {
-				t.Fatal(err)
-			}
-			add := func(app, name string, created time.Time, component, image string) {
-				t.Helper()
-				id, err := srv.db.CreateSnapshot(ctx, app, name, created)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err := srv.db.CreateSnapshotComponent(ctx, id, component, image); err != nil {
-					t.Fatal(err)
-				}
-			}
-			add("fbc-quay-3-18", "fbc-3-18-op", t0, "fbc-quay-3-18-quay-operator", catImage)
-			// Newer, but not the quay-operator catalog.
-			add("fbc-quay-3-18", "fbc-3-18-cso", t0.Add(time.Hour), "fbc-quay-3-18-container-security-operator", "quay.io/x/art-fbc@sha256:c50")
-			add("quay-3-18", "quay-3-18-a", t0.Add(2*time.Hour), "quay-3-18-quay-operator-bundle", tc.snapshotImage)
-			// Newer, but ART's stage fragment of the quay-operator catalog.
-			add("fbc-quay-3-18", "quay-stage-3-18-1-fbc", t0.Add(3*time.Hour), "fbc-quay-3-18-quay-operator", "quay.io/x/art-fbc@sha256:5f0")
-			if err := srv.db.UpsertStagedSnapshot(ctx, "quay-stage-3-18-1-fbc", "3.18.1", "fbc", "stage", t0.Add(3*time.Hour)); err != nil {
-				t.Fatal(err)
-			}
-			if tc.catalog != nil {
-				if err := srv.db.ReplaceFBCCatalog(ctx, "sha256:fbc", tc.state, *tc.catalog, t0); err != nil {
-					t.Fatal(err)
-				}
-			}
-
-			var snap model.ReleaseSnapshot
-			getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/snapshots/quay-3-18-a", http.StatusOK, &snap)
-			want := tc.want
-			want.CatalogSnapshot, want.SnapshotBundleImage = "fbc-3-18-op", tc.snapshotImage
-			if snap.FBCCatalog == nil || *snap.FBCCatalog != want {
-				t.Errorf("fbc_catalog = %+v, want %+v", snap.FBCCatalog, want)
-			}
-			var fbcSnap model.ReleaseSnapshot
-			getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/snapshots/fbc-3-18-op", http.StatusOK, &fbcSnap)
-			if fbcSnap.FBCCatalog != nil {
-				t.Errorf("FBC Snapshot fbc_catalog = %+v, want none", fbcSnap.FBCCatalog)
-			}
-		})
-	}
-}
-
-// A component row shows a newer ART build in progress only when it started
-// after the Snapshot, from another upstream commit, and was seen recently.
-func TestPendingArtBuild(t *testing.T) {
-	srv := setupTestServer(t)
-	t0 := seedReleaseView(t, srv) // quay-3-18-b is created at t0
-	const nvr = "quay-clair-container-3.18.1-202610010000.p2.gabc1234.assembly.stream.el9"
-	if err := srv.db.UpsertArtBuild(t.Context(), artbuild.Build{
-		Digest: "quay-3-18-b", State: artbuild.StateResolved, NVR: nvr, RecordID: "rec-1", UpstreamSHA: "abc123", CheckedAt: time.Now(),
-	}); err != nil {
-		t.Fatal(err)
-	}
-	pending := artbuild.PendingBuild{
-		Version: "3.18.1", Name: "quay-clair-container",
-		NVR: "quay-clair-container-3.18.1-202610010100.p2.gdef4567.assembly.stream.el9", RecordID: "rec-2",
-		UpstreamSHA: "def456", StartedAt: t0.Add(time.Hour),
-	}
-	want := &model.PendingArtBuild{
-		BuildURL:    "https://art.example/build?nvr=quay-clair-container-3.18.1-202610010100.p2.gdef4567.assembly.stream.el9&record_id=rec-2",
-		UpstreamSHA: "def456",
-		StartedAt:   t0.Add(time.Hour),
-	}
-	for _, tc := range []struct {
-		name    string
-		edit    func(p *artbuild.PendingBuild)
-		checked time.Duration
-		want    *model.PendingArtBuild
-	}{
-		{"newer build", func(*artbuild.PendingBuild) {}, 0, want},
-		{"same upstream commit", func(p *artbuild.PendingBuild) { p.UpstreamSHA = "abc123" }, 0, nil},
-		{"started before the snapshot", func(p *artbuild.PendingBuild) { p.StartedAt = t0.Add(-time.Hour) }, 0, nil},
-		{"another z-stream", func(p *artbuild.PendingBuild) { p.Version = "3.18.2" }, 0, nil},
-		{"stale", func(*artbuild.PendingBuild) {}, -11 * time.Minute, nil},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			p := pending
-			tc.edit(&p)
-			if err := srv.db.ReplaceArtPendingBuilds(t.Context(), "quay-3.18", []artbuild.PendingBuild{p}, time.Now().Add(tc.checked)); err != nil {
-				t.Fatal(err)
-			}
-			var snap model.ReleaseSnapshot
-			getJSON(t, srv, "/api/v1/releases/quay-v3.18.0/snapshots/quay-3-18-b", http.StatusOK, &snap)
-			if len(snap.Components) != 1 {
-				t.Fatalf("components: got %d, want 1", len(snap.Components))
-			}
-			got := snap.Components[0].PendingArtBuild
-			if (got == nil) != (tc.want == nil) || got != nil && (got.BuildURL != tc.want.BuildURL || got.UpstreamSHA != tc.want.UpstreamSHA || !got.StartedAt.Equal(tc.want.StartedAt)) {
-				t.Errorf("pending_art_build: got %+v, want %+v", got, tc.want)
-			}
-		})
-	}
-}
-
-// Build attempts are the release's z-version only, with a link to each
-// record; a stream never searched has no coverage, which reads as unknown.
-func TestListBuildAttempts(t *testing.T) {
-	srv := setupTestServer(t)
-	t0 := seedReleaseView(t, srv)
-	const url = "/api/v1/releases/quay-v3.18.0/build-attempts"
-	var resp model.BuildAttempts
-	getJSON(t, srv, url, http.StatusOK, &resp)
-	if resp.CoveredFrom != nil || resp.Attempts == nil || len(resp.Attempts) != 0 {
-		t.Errorf("before any search: got %+v, want null coverage and no attempts", resp)
-	}
-
-	const nvr = "quay-clair-container-3.18.0-202610010000.p2.gabc1234.assembly.stream.el9"
-	attempts := []artbuild.Attempt{
-		{Version: "3.18.0", Name: "quay-clair-container", NVR: nvr, RecordID: "rec-1", Outcome: "build_error", StartedAt: t0},
-		{Version: "3.18.1", Name: "quay-clair-container", NVR: "quay-clair-container-3.18.1-1.el9", RecordID: "rec-2", Outcome: "success", StartedAt: t0},
-	}
-	if err := srv.db.StoreArtBuildAttempts(t.Context(), "quay-3.18", attempts, t0.Add(-time.Hour), t0.Add(time.Hour)); err != nil {
-		t.Fatal(err)
-	}
-	getJSON(t, srv, url, http.StatusOK, &resp)
-	if resp.CoveredFrom == nil || !resp.CoveredFrom.Equal(t0.Add(-time.Hour)) {
-		t.Errorf("coverage: got from %v", resp.CoveredFrom)
-	}
-	want := model.BuildAttempt{
-		Component: "quay-clair-container", Outcome: "build_error", StartedAt: t0,
-		BuildURL: "https://art.example/build?nvr=" + nvr + "&record_id=rec-1",
-	}
-	if len(resp.Attempts) != 1 || resp.Attempts[0] != want {
-		t.Errorf("attempts:\n got %+v\nwant [%+v]", resp.Attempts, want)
-	}
-	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/build-attempts", http.StatusNotFound, nil)
-}
-
-func TestGetStaged(t *testing.T) {
-	srv := setupTestServer(t)
-	ctx := t.Context()
-	t0 := time.Date(2026, 10, 7, 20, 0, 0, 0, time.UTC)
-	// Two z-versions of one application each select their own assembly's
-	// Snapshots. ART stages no 3.16 version.
-	for _, v := range []model.ReleaseVersion{
-		{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"},
-		{Name: "quay-v3.18.2", KonfluxApplication: "quay-3-18"},
-		{Name: "quay-v3.18.3", KonfluxApplication: "quay-3-18"},
-		{Name: "quay-v3.16.8", KonfluxApplication: "quay-3-16"},
-	} {
-		if err := srv.db.UpsertReleaseVersion(ctx, &v); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for i, s := range []struct{ name, assembly, kind, component string }{
-		{"quay-stage-3-18-1-image", "3.18.1", "image", ""},
-		{"quay-stage-3-18-1-fbc", "3.18.1", "fbc", "fbc-quay-3-18-quay-operator"},
-		// Staged later, but the other operators' catalogs.
-		{"quay-stage-3-18-1-fbc-cso", "3.18.1", "fbc", "fbc-quay-3-18-container-security-operator"},
-		{"quay-stage-3-18-1-fbc-qbo", "3.18.1", "fbc", "fbc-quay-3-18-quay-bridge-operator"},
-		{"quay-stage-3-18-2-image", "3.18.2", "image", ""},
-	} {
-		created := t0.Add(time.Duration(i) * time.Minute)
-		if err := srv.db.UpsertStagedSnapshot(ctx, s.name, s.assembly, s.kind, "stage", created); err != nil {
-			t.Fatal(err)
-		}
-		if s.component == "" {
-			continue
-		}
-		id, err := srv.db.CreateSnapshot(ctx, "fbc-quay-3-18", s.name, created)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := srv.db.CreateSnapshotComponent(ctx, id, s.component, ""); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := srv.db.UpsertKonfluxRelease(ctx, &model.KonfluxRelease{
-		Name: "quay-stage-3-18-1-image", Application: "quay-3-18", Snapshot: "quay-stage-3-18-1-image",
-		ReleasedStatus: "False", ReleasedReason: "Failed", FailedTask: "verify-conforma", CreatedAt: t0,
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	var got model.StagedSnapshots
-	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/staged", http.StatusOK, &got)
-	if !got.StreamStaged || got.Image == nil || got.Image.Name != "quay-stage-3-18-1-image" ||
-		got.Image.Release == nil || got.Image.Release.ReleasedReason != "Failed" || got.Image.Release.FailedTask != "verify-conforma" {
-		t.Errorf("3.18.1: got %+v", got)
-	}
-	wantCatalogs := []struct{ operator, name string }{
-		{"quay-operator", "quay-stage-3-18-1-fbc"},
-		{"container-security-operator", "quay-stage-3-18-1-fbc-cso"},
-		{"quay-bridge-operator", "quay-stage-3-18-1-fbc-qbo"},
-	}
-	if len(got.Catalogs) != len(wantCatalogs) {
-		t.Fatalf("3.18.1 catalogs = %+v, want %d", got.Catalogs, len(wantCatalogs))
-	}
-	for i, w := range wantCatalogs {
-		if c := got.Catalogs[i]; c.Operator != w.operator || c.Staged == nil || c.Staged.Name != w.name || c.Staged.Release != nil {
-			t.Errorf("3.18.1 catalogs[%d] = %s %+v, want %s %s without a Release", i, c.Operator, c.Staged, w.operator, w.name)
-		}
-	}
-
-	got = model.StagedSnapshots{}
-	getJSON(t, srv, "/api/v1/releases/quay-v3.18.2/staged", http.StatusOK, &got)
-	if !got.StreamStaged || got.Image == nil || got.Image.Name != "quay-stage-3-18-2-image" {
-		t.Errorf("3.18.2: got %+v", got)
-	}
-
-	// Nothing staged for the version: only the stream tells whether ART stages it.
-	for version, stream := range map[string]bool{"quay-v3.18.3": true, "quay-v3.16.8": false} {
-		var raw map[string]any
-		getJSON(t, srv, "/api/v1/releases/"+version+"/staged", http.StatusOK, &raw)
-		want := map[string]any{
-			"stream_staged": stream,
-			"staged_image":  nil,
-			"catalogs": []any{
-				map[string]any{"operator": "quay-operator", "staged": nil},
-				map[string]any{"operator": "container-security-operator", "staged": nil},
-				map[string]any{"operator": "quay-bridge-operator", "staged": nil},
-			},
-		}
-		if !reflect.DeepEqual(raw, want) {
-			t.Errorf("%s: got %v, want %v", version, raw, want)
-		}
-	}
-	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/staged", http.StatusNotFound, nil)
 }
 
 // The ticket list is the release's Target Version tickets plus the .z stream
@@ -853,17 +419,10 @@ func TestGetIssueSummariesBatch(t *testing.T) {
 	if s170 == nil {
 		t.Fatal("3.17.0 summary: got nil")
 	}
-	// Release Pending counts as verified, in the batch and for one version.
+	// Release Pending counts as verified.
 	want := model.IssueSummary{Total: 2, Verified: 2}
 	if *s170 != want {
 		t.Errorf("3.17.0: got %+v, want %+v", *s170, want)
-	}
-	one, err := srv.db.GetIssueSummary(ctx, "3.17.0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if *one != want {
-		t.Errorf("GetIssueSummary 3.17.0: got %+v, want %+v", *one, want)
 	}
 
 	if summaries["nonexistent"] != nil {
@@ -871,7 +430,7 @@ func TestGetIssueSummariesBatch(t *testing.T) {
 	}
 }
 
-func TestGetReleaseReadiness(t *testing.T) {
+func TestReleasesOverviewReadiness(t *testing.T) {
 	srv := setupTestServer(t)
 	ctx := t.Context()
 
@@ -888,17 +447,12 @@ func TestGetReleaseReadiness(t *testing.T) {
 
 	getReadiness := func() model.ReadinessResponse {
 		t.Helper()
-		req := httptest.NewRequest("GET", "/api/v1/releases/3.16.3/readiness", nil)
-		w := httptest.NewRecorder()
-		srv.http.Handler.ServeHTTP(w, req)
-		if w.Code != http.StatusOK {
-			t.Fatalf("get readiness: got %d, body: %s", w.Code, w.Body.String())
+		var overviews []model.ReleaseOverview
+		getJSON(t, srv, "/api/v1/releases/overview", http.StatusOK, &overviews)
+		if len(overviews) != 1 {
+			t.Fatalf("overviews: got %d, want 1", len(overviews))
 		}
-		var readiness model.ReadinessResponse
-		if err := json.NewDecoder(w.Body).Decode(&readiness); err != nil {
-			t.Fatal(err)
-		}
-		return readiness
+		return overviews[0].Readiness
 	}
 
 	if got := getReadiness(); got.Signal != "yellow" || got.Message != "No build snapshots yet" {

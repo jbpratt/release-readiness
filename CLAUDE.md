@@ -46,15 +46,15 @@ The Vite dev server proxies `/api` requests to `localhost:8088` (the Go backend)
 - **`internal/db/`** — SQLite data layer (pure-Go driver `modernc.org/sqlite`, no CGO). Schema migrations in `migrations.go`. WAL mode enabled.
 - **`internal/kube/`** — Kubernetes dynamic client. Syncs Konflux Snapshots and Releases from `-namespace` (kubeconfig or in-cluster service account); `created_at` comes from `creationTimestamp`.
 - **`internal/jira/`** — JIRA REST API client. Discovers active releases, syncs issues by fixVersion.
-- **`internal/releaseview/`** — Release component set. A fixVersion maps to a Konflux application (`quay-v3.16.2` → `quay-3-16`); a release merges `fbc-quay-X-Y`, `quay-X-Y` and the `quay-X-Y-*` components of `quay-images-base`, keeping the newest image per component. Served at `/api/v1/releases/{version}/snapshots`.
-- **`internal/prow/`** — Prow periodic CI runs from public GCS, keyed by Konflux application (`-prow-jobs job=quay-3-18`). A run tests a Snapshot component only on an exact (role, digest) match (`ComponentKey`). Served at `/api/v1/releases/{version}/prow-runs` and `/api/v1/releases/{version}/snapshots/{name}/prow-runs`.
+- **`internal/releaseview/`** — Release component set. A fixVersion maps to a Konflux application (`quay-v3.16.2` → `quay-3-16`); a release merges `fbc-quay-X-Y`, `quay-X-Y` and the `quay-X-Y-*` components of `quay-images-base`, keeping the newest image per component.
+- **`internal/prow/`** — Prow periodic CI runs from public GCS, keyed by Konflux application (`-prow-jobs job=quay-3-18`). A run tests a Snapshot component only on an exact (role, digest) match (`ComponentKey`).
 - **`internal/model/`** — Shared data types used across packages.
 
 ### Frontend (`web/`)
 - React 19 + TypeScript, built with Vite 6
 - UI framework: **PatternFly 6** (Red Hat design system)
 - API client in `web/src/api/client.ts`, types in `web/src/api/types.ts`
-- Pages: `ReleasesOverview`, `ReleaseDetail`, `ReleaseSnapshotHistory`
+- Pages: `ReleasesOverview`, `ReleaseDetail`
 
 ### Data Flow
 1. Konflux sync loop lists Snapshots and Releases in the namespace → ingests into SQLite (snapshot components, releases). Test results are not ingested.

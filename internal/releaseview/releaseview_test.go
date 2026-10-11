@@ -22,24 +22,6 @@ func TestApplications(t *testing.T) {
 	}
 }
 
-func TestContains(t *testing.T) {
-	tests := []struct {
-		app, application string
-		components       []string
-		want             bool
-	}{
-		{"quay-3-18", "fbc-quay-3-18", nil, true},
-		{"quay-3-18", "quay-images-base", []string{"quay-3-9-base-rhel9", "quay-3-18-base-rhel9"}, true},
-		{"quay-3-18", "quay-images-base", []string{"quay-3-9-base-rhel9"}, false},
-		{"quay-3-18", "quay-3-17", nil, false},
-	}
-	for _, tt := range tests {
-		if got := Contains(tt.app, tt.application, tt.components); got != tt.want {
-			t.Errorf("Contains(%q, %q, %v) = %v, want %v", tt.app, tt.application, tt.components, got, tt.want)
-		}
-	}
-}
-
 func TestSelect(t *testing.T) {
 	t0 := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	t1 := t0.Add(time.Hour)

@@ -18,50 +18,6 @@ type ArtBuild struct {
 	CheckedAt    string
 }
 
-type ArtBuildAttempt struct {
-	GroupName      string
-	RecordID       string
-	ReleaseVersion string
-	Component      string
-	Nvr            string
-	Outcome        string
-	StartTime      string
-	FirstSeen      string
-	LastSeen       string
-}
-
-type ArtBuildCoverage struct {
-	GroupName   string
-	CoveredFrom string
-	CoveredTo   string
-}
-
-type ArtPendingBuild struct {
-	GroupName      string
-	ReleaseVersion string
-	Component      string
-	Nvr            string
-	RecordID       string
-	UpstreamSha    string
-	StartedAt      string
-	CheckedAt      string
-}
-
-type FbcCatalog struct {
-	Digest    string
-	State     string
-	CheckedAt string
-}
-
-type FbcCatalogBundle struct {
-	CatalogDigest string
-	Package       string
-	Channel       string
-	BundleName    string
-	BundleRef     string
-	BundleDigest  string
-}
-
 type ImageScan struct {
 	Digest      string
 	State       string

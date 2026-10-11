@@ -92,20 +92,3 @@ func (d *DB) UpsertProwSync(ctx context.Context, s prow.SyncState) error {
 		LastSuccessfulSync: s.LastSuccessfulSync.UTC().Format(time.RFC3339),
 	})
 }
-
-func (d *DB) ListProwSyncs(ctx context.Context) ([]prow.SyncState, error) {
-	rows, err := d.queries().ListProwSyncs(ctx)
-	if err != nil {
-		return nil, err
-	}
-	states := make([]prow.SyncState, len(rows))
-	for i, r := range rows {
-		states[i] = prow.SyncState{
-			JobName:            r.JobName,
-			Application:        r.Application,
-			Interval:           time.Duration(r.IntervalSeconds) * time.Second,
-			LastSuccessfulSync: parseTime(r.LastSuccessfulSync),
-		}
-	}
-	return states, nil
-}

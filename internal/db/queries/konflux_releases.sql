@@ -13,12 +13,6 @@ ON CONFLICT(name) DO UPDATE SET
     start_time=excluded.start_time,
     completion_time=excluded.completion_time;
 
--- name: ListKonfluxReleasesBySnapshots :many
-SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, start_time, completion_time
-FROM konflux_releases
-WHERE snapshot IN (sqlc.slice('snapshots'))
-ORDER BY created_at DESC, id DESC;
-
 -- name: ListKonfluxReleasesByApplication :many
 SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, start_time, completion_time
 FROM konflux_releases

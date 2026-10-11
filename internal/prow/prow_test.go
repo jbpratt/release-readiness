@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -153,8 +154,9 @@ func TestApplyArtifactCountsOnlyPodImages(t *testing.T) {
 		{"quay-3-18", "quay-3-18-quay-builder", builder, false},
 	} {
 		key := ComponentKey(tc.app, tc.component, "quay.io/x/art-images@"+tc.digest)
-		if got := r.Tested(map[string]bool{key: true}); got != tc.want {
-			t.Errorf("Tested(%s) = %v, want %v", key, got, tc.want)
+		role, d, _ := strings.Cut(key, "@")
+		if got := slices.Contains(r.Images, Image{Role: role, Digest: d}); got != tc.want {
+			t.Errorf("tested %s = %v, want %v", key, got, tc.want)
 		}
 	}
 }
