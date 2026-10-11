@@ -22,11 +22,13 @@ const (
 )
 
 // Run is one Prow job execution and the images its tested-images.json, or
-// else its olm-csvs.yaml, names.
+// else its olm-csvs.yaml, names. InstallFailed is a run whose Quay install
+// step failed after quay-gather saw its quay-operator Subscription.
 type Run struct {
 	JobName, BuildID, Application, State string
 	StartedAt, CompletedAt               *time.Time
 	ProwURL, ArtifactState, CatalogRef   string
+	InstallFailed                        bool
 	FetchedAt                            time.Time
 	Images                               []Image
 }
@@ -87,7 +89,10 @@ type finished struct {
 // quay-gather). Unknown fields are ignored.
 type testedImages struct {
 	SchemaVersion int `json:"schema_version"`
-	Catalog       struct {
+	// Missing lists "subscription" when the cluster has no quay-operator
+	// Subscription.
+	Missing []string `json:"missing"`
+	Catalog struct {
 		ResolvedRef string `json:"resolved_ref"`
 	} `json:"catalog"`
 	Operator struct {
@@ -142,14 +147,15 @@ func parseRun(job Job, buildID string, pjData, finData []byte) (*Run, string, er
 	return r, pj.target(), nil
 }
 
-// applyArtifact records tested-images.json on r. The catalog and operator
-// bundle are stored as images too so a digest lookup finds them; of the rest,
-// only images that ran in a pod count, not those the CSV merely references.
-func (r *Run) applyArtifact(data []byte) {
+// applyArtifact records tested-images.json on r and reports whether it saw a
+// quay-operator Subscription. The catalog and operator bundle are stored as
+// images too so a digest lookup finds them; of the rest, only images that ran
+// in a pod count, not those the CSV merely references.
+func (r *Run) applyArtifact(data []byte) (subscribed bool) {
 	var ti testedImages
 	if err := json.Unmarshal(data, &ti); err != nil || ti.SchemaVersion != 1 {
 		r.ArtifactState = ArtifactInvalid
-		return
+		return false
 	}
 	r.ArtifactState = ArtifactPresent
 	r.CatalogRef = ti.Catalog.ResolvedRef
@@ -167,6 +173,7 @@ func (r *Run) applyArtifact(data []byte) {
 			add(img.Role, img.RequestedRef)
 		}
 	}
+	return !slices.Contains(ti.Missing, "subscription")
 }
 
 // olmRoles is the role of the image of each repository a quay-operator CSV

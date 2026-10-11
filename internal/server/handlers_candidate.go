@@ -88,8 +88,16 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 	if err != nil {
 		return nil, err
 	}
+	catalogs := map[string][]string{}
+	for _, run := range runs {
+		if d := imageDigest(run.CatalogRef); run.InstallFailed && d != "" {
+			if catalogs[d], err = s.db.FBCBundleNVRs(ctx, d); err != nil {
+				return nil, err
+			}
+		}
+	}
 	var latest, passed string
-	resp.CI, latest, passed = candidateCI(app, c, resp.Candidate, held, runs, releases)
+	resp.CI, latest, passed = candidateCI(app, c, resp.Candidate, held, runs, releases, catalogs)
 	if p := resp.CI.Passed; p != nil {
 		if resp.CI.FBC, err = s.buildFBC(ctx, c, p.Snapshot); err != nil {
 			return nil, err
@@ -132,13 +140,15 @@ var olmComponents = map[string]string{
 
 // candidateCI groups the application's periodic runs since the candidate's
 // operator bundle was first built, or without a candidate since the first of
-// the version's builds' bundles was, by the build each installed. It finds the
-// newest bundle of the version's builds in the CI catalog, when that is not
-// the candidate's, and the newest, newer than the candidate, that a run passed
-// with, and so whether to pick a candidate or re-run release-from-fbc; it also
-// returns those two bundles. cand is the release candidate, or nil, and held
-// its image digests by component.
-func candidateCI(app string, c *candidate, cand *model.CandidateBuild, held map[string]string, runs []prow.Run, releases []model.StageRelease) (ci *model.CandidateCI, latest, passed string) {
+// the version's builds' bundles was, by the build each installed; a run that
+// installed no Quay counts only when it failed to install the build it tried.
+// It finds the newest bundle of the version's builds in the CI catalog, when
+// that is not the candidate's, and the newest, newer than the candidate, that
+// a run passed with, and so whether to pick a candidate or re-run
+// release-from-fbc; it also returns those two bundles. cand is the release
+// candidate, or nil, held its image digests by component, and catalogs the
+// bundle NVRs of ART's FBC records by digest.
+func candidateCI(app string, c *candidate, cand *model.CandidateBuild, held map[string]string, runs []prow.Run, releases []model.StageRelease, catalogs map[string][]string) (ci *model.CandidateCI, latest, passed string) {
 	// A bundle is labelled by the oldest stream build holding it: no run can
 	// have installed it before.
 	labels := map[string]model.BuildLabel{}
@@ -165,15 +175,19 @@ func candidateCI(app string, c *candidate, cand *model.CandidateBuild, held map[
 		}
 	}
 
-	var candRuns, unknown, none []prow.Run
+	var candRuns, unknown []prow.Run
 	others := map[string][]prow.Run{}
 	for _, run := range runs {
 		if run.StartedAt == nil || run.StartedAt.Before(ci.Since) {
 			continue
 		}
-		switch b := installedBundle(run, app, held); {
-		case b == notInstalled:
-			none = append(none, run)
+		b := installedBundle(run, app, held)
+		if b == notInstalled {
+			if b = triedBundle(app, c, run, catalogs); b == "" {
+				continue
+			}
+		}
+		switch {
 		case b == bundle && bundle != "":
 			candRuns = append(candRuns, run)
 		case labels[b].Snapshot != "":
@@ -195,9 +209,6 @@ func candidateCI(app string, c *candidate, cand *model.CandidateBuild, held map[
 	}
 	if len(unknown) > 0 {
 		ci.Builds = append(ci.Builds, model.CIBuild{Kind: unknownBuild, Jobs: jobRuns(unknown)})
-	}
-	if len(none) > 0 {
-		ci.Builds = append(ci.Builds, model.CIBuild{Kind: notInstalled, Jobs: jobRuns(none)})
 	}
 
 	// newestBundle returns, of the bundles of the version's builds that ok
@@ -269,6 +280,30 @@ func installedBundle(run prow.Run, app string, held map[string]string) string {
 	return notInstalled
 }
 
+// triedBundle returns the operator bundle a run that failed to install Quay
+// tried: of the stream builds' bundles, the one whose ART NVR the FBC record
+// of its catalog lists, by catalogs, or "" for any other run, for no FBC
+// record, and for none or several bundles.
+func triedBundle(app string, c *candidate, run prow.Run, catalogs map[string][]string) string {
+	if !run.InstallFailed {
+		return ""
+	}
+	nvrs, tried := catalogs[imageDigest(run.CatalogRef)], ""
+	for i := range c.stream {
+		for _, img := range c.stream[i].Components {
+			if img.Name != app+"-quay-operator-bundle" || !slices.Contains(nvrs, c.nvrs[img.Image]) {
+				continue
+			}
+			if d := imageDigest(img.Image); tried == "" {
+				tried = d
+			} else if d != tried {
+				return ""
+			}
+		}
+	}
+	return tried
+}
+
 // jobRuns returns runs, newest first, by job, sorted by job name.
 func jobRuns(runs []prow.Run) []model.CIJob {
 	jobs := []model.CIJob{}
@@ -278,7 +313,7 @@ func jobRuns(runs []prow.Run) []model.CIJob {
 			i = len(jobs)
 			jobs = append(jobs, model.CIJob{JobName: run.JobName})
 		}
-		jobs[i].Runs = append(jobs[i].Runs, model.CIRun{State: run.State, StartedAt: *run.StartedAt, ProwURL: run.ProwURL})
+		jobs[i].Runs = append(jobs[i].Runs, model.CIRun{State: run.State, StartedAt: *run.StartedAt, ProwURL: run.ProwURL, InstallFailed: run.InstallFailed})
 	}
 	slices.SortFunc(jobs, func(a, b model.CIJob) int { return strings.Compare(a.JobName, b.JobName) })
 	return jobs

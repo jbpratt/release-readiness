@@ -198,7 +198,11 @@ func (s *Syncer) fetchRun(ctx context.Context, job Job, id string) (*Run, error)
 		return nil, err
 	}
 	if data != nil {
-		run.applyArtifact(data)
+		if run.applyArtifact(data) && run.State != "success" {
+			if run.InstallFailed, err = s.installFailed(ctx, job, id, target); err != nil {
+				return nil, err
+			}
+		}
 		return run, nil
 	}
 	if data, err = s.client.object(ctx, artifacts+"olm-csvs.yaml"); err != nil {
@@ -208,4 +212,31 @@ func (s *Syncer) fetchRun(ctx context.Context, job Job, id string) (*Run, error)
 		run.applyOLMCSVs(data)
 	}
 	return run, nil
+}
+
+// installSteps is the Quay install step of each ci-operator target: the
+// storage's quay-deploy step creates the quay-operator Subscription, then
+// waits for its CSV and the QuayRegistry.
+var installSteps = map[string]string{
+	"aws-s3-nightly":      "quay-deploy-aws-s3",
+	"aws-s3-nightly-fips": "quay-deploy-aws-s3",
+	"libvirt-s3-nightly":  "quay-deploy-aws-s3",
+	"aws-odf-nightly":     "quay-deploy-odf",
+	"azure-blob-nightly":  "quay-deploy-azure-blob",
+	"gcp-gcs-nightly":     "quay-deploy-gcp-gcs",
+}
+
+// installFailed reports whether the run's Quay install step failed.
+func (s *Syncer) installFailed(ctx context.Context, job Job, id, target string) (bool, error) {
+	step, ok := installSteps[target]
+	if !ok {
+		s.logger.Warn("no Quay install step for target", "job", job.Name, "build_id", id, "target", target)
+		return false, nil
+	}
+	data, err := s.client.object(ctx, job.Prefix+id+"/artifacts/"+target+"/"+step+"/finished.json")
+	if err != nil || data == nil {
+		return false, err
+	}
+	var fin finished
+	return json.Unmarshal(data, &fin) == nil && fin.Result == "FAILURE", nil
 }

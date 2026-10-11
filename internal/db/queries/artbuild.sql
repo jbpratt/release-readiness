@@ -41,6 +41,9 @@ ON CONFLICT(digest) DO UPDATE SET
     bundle_nvrs = excluded.bundle_nvrs,
     end_time = excluded.end_time;
 
+-- name: GetArtFBCBundleNVRs :one
+SELECT bundle_nvrs FROM art_fbc_records WHERE digest = ?;
+
 -- name: ListUnreadArtFBCImages :many
 -- Resolved images whose NVR may be an FBC image's, which the caller parses,
 -- with no FBC record yet.

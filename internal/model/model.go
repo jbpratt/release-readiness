@@ -240,9 +240,8 @@ type BuildLabel struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-// CIBuild is the runs, by job, that installed one build: Kind "candidate",
-// "build" with its label and CIState, "unknown", or "not_installed" for runs
-// that installed no Quay.
+// CIBuild is the runs, by job, that installed one build, or failed to install
+// it: Kind "candidate", "build" with its label and CIState, or "unknown".
 type CIBuild struct {
 	Kind      string     `json:"kind"`
 	Snapshot  string     `json:"snapshot"`
@@ -258,9 +257,10 @@ type CIJob struct {
 }
 
 type CIRun struct {
-	State     string    `json:"state"`
-	StartedAt time.Time `json:"started_at"`
-	ProwURL   string    `json:"prow_url"`
+	State         string    `json:"state"`
+	StartedAt     time.Time `json:"started_at"`
+	ProwURL       string    `json:"prow_url"`
+	InstallFailed bool      `json:"install_failed,omitempty"`
 }
 
 // CandidateComponent is a build image with its ART build and the upstream

@@ -2,7 +2,9 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -73,6 +75,23 @@ func (d *DB) UpsertFBCRecord(ctx context.Context, r artbuild.FBCRecord) error {
 		BundleNvrs: string(bundles),
 		EndTime:    r.EndTime,
 	})
+}
+
+// FBCBundleNVRs returns the bundle NVRs the FBC record of the image of digest
+// lists, nil without a record.
+func (d *DB) FBCBundleNVRs(ctx context.Context, digest string) ([]string, error) {
+	data, err := d.queries().GetArtFBCBundleNVRs(ctx, digest)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var nvrs []string
+	if err := json.Unmarshal([]byte(data), &nvrs); err != nil {
+		return nil, err
+	}
+	return nvrs, nil
 }
 
 // ListUnreadFBCImages returns up to limit resolved FBC images without an FBC

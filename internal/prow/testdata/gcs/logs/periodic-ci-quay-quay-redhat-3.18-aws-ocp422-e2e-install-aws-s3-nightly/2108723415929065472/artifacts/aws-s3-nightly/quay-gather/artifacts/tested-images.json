@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "job_name": "periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly",
+  "build_id": "2108723415929065472",
+  "captured_at": "2026-10-10T03:00:04Z",
+  "complete": false,
+  "missing": [
+    "operator.csv",
+    "quay_version",
+    "operator.bundle_ref",
+    "csv-related",
+    "images",
+    "builder"
+  ],
+  "quay_version": null,
+  "catalog": {
+    "requested_ref": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc:quay-3.18__v4.22__quay-rhel9-operator",
+    "resolved_ref": "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:ad31272aaca16af12af09c5ae04e356586442a4bdac09d94e33de5492367d955",
+    "channel": "stable-3.18"
+  },
+  "operator": {
+    "csv": null,
+    "bundle_ref": null
+  },
+  "images": [],
+  "provenance": []
+}

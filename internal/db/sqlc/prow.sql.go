@@ -9,6 +9,20 @@ import (
 	"context"
 )
 
+const deleteProwInstallFailure = `-- name: DeleteProwInstallFailure :exec
+DELETE FROM prow_install_failures WHERE job_name = ? AND build_id = ?
+`
+
+type DeleteProwInstallFailureParams struct {
+	JobName string
+	BuildID string
+}
+
+func (q *Queries) DeleteProwInstallFailure(ctx context.Context, arg DeleteProwInstallFailureParams) error {
+	_, err := q.db.ExecContext(ctx, deleteProwInstallFailure, arg.JobName, arg.BuildID)
+	return err
+}
+
 const deleteProwRunImages = `-- name: DeleteProwRunImages :exec
 DELETE FROM prow_run_images WHERE job_name = ? AND build_id = ?
 `
@@ -20,6 +34,20 @@ type DeleteProwRunImagesParams struct {
 
 func (q *Queries) DeleteProwRunImages(ctx context.Context, arg DeleteProwRunImagesParams) error {
 	_, err := q.db.ExecContext(ctx, deleteProwRunImages, arg.JobName, arg.BuildID)
+	return err
+}
+
+const insertProwInstallFailure = `-- name: InsertProwInstallFailure :exec
+INSERT INTO prow_install_failures (job_name, build_id) VALUES (?, ?)
+`
+
+type InsertProwInstallFailureParams struct {
+	JobName string
+	BuildID string
+}
+
+func (q *Queries) InsertProwInstallFailure(ctx context.Context, arg InsertProwInstallFailureParams) error {
+	_, err := q.db.ExecContext(ctx, insertProwInstallFailure, arg.JobName, arg.BuildID)
 	return err
 }
 
@@ -115,21 +143,38 @@ func (q *Queries) ListProwRunImages(ctx context.Context, arg ListProwRunImagesPa
 }
 
 const listProwRunsByApplication = `-- name: ListProwRunsByApplication :many
-SELECT job_name, build_id, kind, application, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at
-FROM prow_runs
-WHERE application = ?
-ORDER BY started_at DESC, build_id DESC
+SELECT r.job_name, r.build_id, r.kind, r.application, r.state, r.started_at, r.completed_at, r.prow_url, r.artifact_state, r.catalog_ref, r.fetched_at,
+       f.build_id IS NOT NULL AS install_failed
+FROM prow_runs r
+LEFT JOIN prow_install_failures f ON f.job_name = r.job_name AND f.build_id = r.build_id
+WHERE r.application = ?
+ORDER BY r.started_at DESC, r.build_id DESC
 `
 
-func (q *Queries) ListProwRunsByApplication(ctx context.Context, application string) ([]ProwRun, error) {
+type ListProwRunsByApplicationRow struct {
+	JobName       string
+	BuildID       string
+	Kind          string
+	Application   string
+	State         string
+	StartedAt     string
+	CompletedAt   string
+	ProwUrl       string
+	ArtifactState string
+	CatalogRef    string
+	FetchedAt     string
+	InstallFailed bool
+}
+
+func (q *Queries) ListProwRunsByApplication(ctx context.Context, application string) ([]ListProwRunsByApplicationRow, error) {
 	rows, err := q.db.QueryContext(ctx, listProwRunsByApplication, application)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ProwRun
+	var items []ListProwRunsByApplicationRow
 	for rows.Next() {
-		var i ProwRun
+		var i ListProwRunsByApplicationRow
 		if err := rows.Scan(
 			&i.JobName,
 			&i.BuildID,
@@ -142,6 +187,7 @@ func (q *Queries) ListProwRunsByApplication(ctx context.Context, application str
 			&i.ArtifactState,
 			&i.CatalogRef,
 			&i.FetchedAt,
+			&i.InstallFailed,
 		); err != nil {
 			return nil, err
 		}

@@ -304,6 +304,76 @@ func TestSync(t *testing.T) {
 	}
 }
 
+// The Quay install step's finished.json is read only for a finished run that
+// failed after quay-gather saw its quay-operator Subscription, and tells
+// whether the install failed.
+func TestSyncInstallFailed(t *testing.T) {
+	job := testJobs(t)[0]
+	const (
+		// Synthetic: run 2108723415929065472, which passed, made to fail its
+		// Quay install before OLM installed a CSV.
+		installRun = "2108723415929065472"
+		// Died before the Quay install: no Subscription.
+		preInstallRun = "2109085596919009280"
+		deploy        = "artifacts/aws-s3-nightly/quay-deploy-aws-s3/finished.json"
+	)
+	dir := func(id string) string { return "logs/" + periodicJob + "/" + id + "/" }
+	for _, tc := range []struct {
+		desc  string
+		id    string
+		extra map[string][]byte
+		want  bool
+		reads int    // of step outcomes
+		warn  string // in the log, which is otherwise empty
+	}{
+		{desc: "install failed before a CSV", id: installRun, want: true, reads: 1},
+		{desc: "died before the install", id: preInstallRun},
+		{desc: "install failed after the CSV", id: periodicRun, want: true, reads: 1, extra: map[string][]byte{
+			dir(periodicRun) + deploy: []byte(`{"timestamp":1789612696,"passed":false,"result":"FAILURE"}`),
+		}},
+		{desc: "installed, then failed", id: periodicRun, reads: 1},
+		{desc: "passed", id: installRun, extra: map[string][]byte{
+			dir(installRun) + "finished.json": []byte(`{"timestamp":1791602726,"passed":true,"result":"SUCCESS"}`),
+		}},
+		{desc: "no tested-images.json", id: noneRun},
+		{desc: "invalid tested-images.json", id: periodicRun, extra: map[string][]byte{
+			dir(periodicRun) + "artifacts/aws-s3-nightly/quay-gather/artifacts/tested-images.json": []byte(`{"schema_version": 1, "images": [{"role": "quay",`),
+		}},
+		{desc: "unmapped target", id: periodicRun, warn: "job=" + periodicJob + " build_id=" + periodicRun + " target=other-nightly", extra: map[string][]byte{
+			dir(periodicRun) + "prowjob.json": []byte(`{"spec": {"pod_spec": {"containers": [{"args": ["--target=other-nightly"]}]}}, "status": {"state": "failure"}}`),
+			dir(periodicRun) + "artifacts/other-nightly/quay-gather/artifacts/tested-images.json": runFixture(t, job, periodicRun, "artifacts/aws-s3-nightly/quay-gather/artifacts/tested-images.json"),
+		}},
+	} {
+		srv, gets := fakeGCS(t, tc.extra)
+		var log strings.Builder
+		s := NewSyncer(NewClient(srv.URL), nil, []Job{job}, 15*time.Minute, slog.New(slog.NewTextHandler(&log, nil)))
+		r, err := s.fetchRun(t.Context(), job, tc.id)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.desc, err)
+		}
+		reads := 0
+		for name, n := range gets {
+			if strings.Contains(name, "/artifacts/") && !strings.Contains(name, "/quay-gather/") {
+				reads += n
+			}
+		}
+		if r.InstallFailed != tc.want || reads != tc.reads {
+			t.Errorf("%s: install failed %v after %d step reads, want %v after %d", tc.desc, r.InstallFailed, reads, tc.want, tc.reads)
+		}
+		if got := log.String(); (got == "") != (tc.warn == "") || !strings.Contains(got, tc.warn) {
+			t.Errorf("%s: log %q, want %q", tc.desc, got, tc.warn)
+		}
+	}
+
+	// An unreadable step outcome fails the read, so the next pass reads the
+	// run again.
+	srv, _ := fakeGCS(t, map[string][]byte{dir(periodicRun) + deploy: nil})
+	s := NewSyncer(NewClient(srv.URL), nil, []Job{job}, 15*time.Minute, slog.New(slog.DiscardHandler))
+	if _, err := s.fetchRun(t.Context(), job, periodicRun); err == nil || !strings.Contains(err.Error(), "503") {
+		t.Errorf("unreadable step outcome: error %v, want a 503", err)
+	}
+}
+
 // An invalid tested-images.json is the run's record: olm-csvs.yaml is not
 // read in its place.
 func TestSyncInvalidTestedImages(t *testing.T) {

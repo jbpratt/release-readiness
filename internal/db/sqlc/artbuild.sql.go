@@ -11,6 +11,17 @@ import (
 	"strings"
 )
 
+const getArtFBCBundleNVRs = `-- name: GetArtFBCBundleNVRs :one
+SELECT bundle_nvrs FROM art_fbc_records WHERE digest = ?
+`
+
+func (q *Queries) GetArtFBCBundleNVRs(ctx context.Context, digest string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getArtFBCBundleNVRs, digest)
+	var bundle_nvrs string
+	err := row.Scan(&bundle_nvrs)
+	return bundle_nvrs, err
+}
+
 const listArtBuildCandidates = `-- name: ListArtBuildCandidates :many
 SELECT sc.image_url,
        CAST(GROUP_CONCAT(DISTINCT s.application) AS TEXT) AS applications,

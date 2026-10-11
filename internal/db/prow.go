@@ -8,7 +8,8 @@ import (
 	"github.com/quay/release-readiness/internal/prow"
 )
 
-// UpsertProwRun stores a run by (job_name, build_id) and replaces its images.
+// UpsertProwRun stores a run by (job_name, build_id) and replaces its images
+// and whether its install failed.
 func (d *DB) UpsertProwRun(ctx context.Context, r *prow.Run) error {
 	return d.InTx(ctx, func(tx *DB) error {
 		q := tx.queries()
@@ -39,7 +40,13 @@ func (d *DB) UpsertProwRun(ctx context.Context, r *prow.Run) error {
 				return err
 			}
 		}
-		return nil
+		if err := q.DeleteProwInstallFailure(ctx, dbsqlc.DeleteProwInstallFailureParams{JobName: r.JobName, BuildID: r.BuildID}); err != nil {
+			return err
+		}
+		if !r.InstallFailed {
+			return nil
+		}
+		return q.InsertProwInstallFailure(ctx, dbsqlc.InsertProwInstallFailureParams{JobName: r.JobName, BuildID: r.BuildID})
 	})
 }
 
@@ -70,6 +77,7 @@ func (d *DB) ListProwRunsByApplication(ctx context.Context, application string) 
 			ProwURL:       r.ProwUrl,
 			ArtifactState: r.ArtifactState,
 			CatalogRef:    r.CatalogRef,
+			InstallFailed: r.InstallFailed,
 			FetchedAt:     parseTime(r.FetchedAt),
 			Images:        make([]prow.Image, len(imgs)),
 		}
