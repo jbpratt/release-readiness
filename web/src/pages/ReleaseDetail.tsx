@@ -7,10 +7,6 @@ import {
 	CardBody,
 	CardTitle,
 	ClipboardCopy,
-	DescriptionList,
-	DescriptionListDescription,
-	DescriptionListGroup,
-	DescriptionListTerm,
 	EmptyState,
 	EmptyStateBody,
 	Flex,
@@ -20,6 +16,9 @@ import {
 	type LabelProps,
 	PageSection,
 	Popover,
+	ProgressStep,
+	type ProgressStepProps,
+	ProgressStepper,
 	Spinner,
 	Title,
 	Tooltip,
@@ -71,7 +70,7 @@ import {
 } from "../utils/links";
 import {
 	BASES,
-	ciWarning,
+	ciStep,
 	componentLabel,
 	fbcCopy,
 	fixableLabels,
@@ -360,14 +359,7 @@ function BuildsCard({
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<LinkedCardTitle href={konflux()} link="Konflux">
-				{c ? (
-					<>
-						{version} release candidate ·{" "}
-						<BuildLink build={c} konflux={konflux} />
-					</>
-				) : (
-					"Release candidate"
-				)}
+				{c ? `${version} release candidate` : "Release candidate"}
 			</LinkedCardTitle>
 			<CardBody>
 				{error ? (
@@ -407,7 +399,7 @@ function BuildsCard({
 }
 
 /**
- * The candidate: whether it is in stage and in prod, whether CI tested it, a
+ * The candidate: where it is, from its build through CI and stage to prod, a
  * newer build to re-run release-from-fbc with or wait on, the newest build,
  * and its images.
  */
@@ -429,44 +421,40 @@ function Candidate({
 		name: candidate.prod.name,
 		...releaseLine(candidate.prod),
 	};
-	const warning = ciWarning(ci);
+	const tested = ciStep(ci);
 	const latest = ci.latest_in_ci && (
 		<BuildLink build={ci.latest_in_ci} konflux={konflux} />
 	);
 	return (
 		<>
-			<DescriptionList isHorizontal isCompact termWidth="5ch">
-				<BoxLine term="Stage">
-					<Status status="done">
-						{`Staged ${new Date(candidate.stage.staged_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
-					</Status>
-				</BoxLine>
-				{prod && (
-					<BoxLine term="Prod">
-						<Status status={prod.status}>
+			<ProgressStepper aria-label="Where the release candidate is">
+				<Step
+					title="Build"
+					variant="success"
+					description={<BuildLink build={candidate} konflux={konflux} />}
+				/>
+				<Step title="CI" variant={tested.variant} description={tested.text} />
+				<Step
+					title="Stage"
+					variant="success"
+					isCurrent={!prod}
+					description={`Pinned ${new Date(candidate.stage.staged_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+				/>
+				<Step
+					title="Prod"
+					variant={prod ? releaseVariants[prod.status] : "pending"}
+					isCurrent={!!prod}
+					description={
+						prod ? (
 							<ExtLink href={konflux("releases", prod.name)} title={prod.name}>
 								{prod.text}
 							</ExtLink>
-						</Status>
-					</BoxLine>
-				)}
-			</DescriptionList>
-			{warning && (
-				<div style={line}>
-					<Status status="warning">
-						{warning === "no_pass" ? (
-							"No passing CI run installed this candidate."
 						) : (
-							<>
-								CI has not tested this candidate
-								{warning.lastRun &&
-									` since ${new Date(warning.lastRun).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
-								{warning.namesLatest && <>; CI now tests the {latest} build</>}.
-							</>
-						)}
-					</Status>
-				</div>
-			)}
+							"Not started"
+						)
+					}
+				/>
+			</ProgressStepper>
 			<div style={line}>
 				{ci.refresh === "rerun" && ci.passed ? (
 					<Status status="warning">
@@ -615,12 +603,43 @@ function NewestLine({
 	);
 }
 
-function BoxLine({ term, children }: { term: string; children: ReactNode }) {
+// What a step's variant means, read out after its title: only its icon shows it.
+const stepStates = {
+	success: "done",
+	warning: "warning",
+	danger: "failed",
+	info: "in progress",
+	pending: "not started",
+} as const;
+
+const releaseVariants: Record<StatusLine["status"], keyof typeof stepStates> = {
+	done: "success",
+	failed: "danger",
+	running: "info",
+	warning: "warning",
+	none: "pending",
+};
+
+/** A step of the candidate's stepper, read out as "<title>: <state>". */
+function Step({
+	title,
+	variant,
+	...props
+}: Pick<ProgressStepProps, "isCurrent" | "description"> & {
+	title: string;
+	variant: keyof typeof stepStates;
+}) {
+	const id = `candidate-${title.toLowerCase()}`;
 	return (
-		<DescriptionListGroup>
-			<DescriptionListTerm>{term}</DescriptionListTerm>
-			<DescriptionListDescription>{children}</DescriptionListDescription>
-		</DescriptionListGroup>
+		<ProgressStep
+			id={id}
+			titleId={`${id}-title`}
+			variant={variant}
+			aria-label={`${title}: ${stepStates[variant]}`}
+			{...props}
+		>
+			{title}
+		</ProgressStep>
 	);
 }
 

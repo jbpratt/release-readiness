@@ -34,6 +34,8 @@ export function jobLabels(jobs: string[]): string[] {
 	);
 }
 
+const failedState = (s: string) => s === "failure" || s === "error";
+
 /**
  * A job's status by its runs' Prow states: success when every run that passed
  * or failed passed, danger when none did, warning when both. Aborted and other
@@ -43,10 +45,31 @@ export function runsStatus(
 	states: string[],
 ): "success" | "warning" | "danger" | undefined {
 	const passed = states.includes("success");
-	const failed = states.some((s) => s === "failure" || s === "error");
+	const failed = states.some(failedState);
 	if (passed && failed) return "warning";
 	if (passed) return "success";
 	return failed ? "danger" : undefined;
+}
+
+/**
+ * The candidate's CI step: runsStatus of every run that installed it, and
+ * when some passed and some failed, how many of those passed.
+ */
+export function ciStep(ci: CandidateCI): {
+	variant: "success" | "warning" | "danger";
+	text: string;
+} {
+	const states =
+		ci.builds
+			.find((b) => b.kind === "candidate")
+			?.jobs.flatMap((j) => j.runs.map((r) => r.state)) ?? [];
+	const s = runsStatus(states);
+	if (!s) return { variant: "warning", text: "Not tested" };
+	if (s === "success") return { variant: s, text: "Passed" };
+	if (s === "danger") return { variant: s, text: "Failed" };
+	const passed = states.filter((st) => st === "success").length;
+	const counted = passed + states.filter(failedState).length;
+	return { variant: s, text: `${passed} of ${counted} runs passed` };
 }
 
 /**
@@ -125,39 +148,6 @@ export function nvrLabel(nvr: string): string {
 export interface StatusLine {
 	status: "done" | "failed" | "running" | "warning" | "none";
 	text: string;
-}
-
-/**
- * The candidate card's CI warning, when the newest build is not the CI-tested
- * candidate: a newer build is in CI, with the start of the newest run that
- * installed the candidate, if any, and whether the warning names that build,
- * which the action line names when it waits on it or re-runs with it; or
- * "no_pass" when no run that installed the candidate passed.
- */
-export function ciWarning(
-	ci: CandidateCI,
-): { lastRun: string | null; namesLatest: boolean } | "no_pass" | undefined {
-	const runs =
-		ci.builds
-			.find((b) => b.kind === "candidate")
-			?.jobs.flatMap((j) => j.runs) ?? [];
-	if (!ci.latest_in_ci) {
-		return runs.some((r) => r.state === "success") ? undefined : "no_pass";
-	}
-	let lastRun: string | null = null;
-	for (const r of runs) {
-		if (!lastRun || Date.parse(r.started_at) > Date.parse(lastRun)) {
-			lastRun = r.started_at;
-		}
-	}
-	return {
-		lastRun,
-		namesLatest: !(
-			ci.refresh === "waiting" ||
-			(ci.refresh === "rerun" &&
-				ci.passed?.snapshot === ci.latest_in_ci.snapshot)
-		),
-	};
 }
 
 /**

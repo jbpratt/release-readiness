@@ -1,14 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type {
-	BuildLabel,
 	CandidateCI,
-	CIRun,
+	CIBuild,
 	ImageScan,
 	KonfluxRelease,
 } from "../api/types.ts";
 import {
-	ciWarning,
+	ciStep,
 	componentLabel,
 	fbcCopy,
 	fixableLabels,
@@ -290,88 +289,77 @@ test("scanCell", () => {
 	assert.deepEqual(scanCell(null), { text: "-", color: "grey" });
 });
 
-test("ciWarning", () => {
-	const run = (state: string, started_at: string): CIRun => ({
-		state,
-		started_at,
-		prow_url: "https://prow.example/1",
+test("ciStep: the candidate row's runs, as runsStatus counts them", () => {
+	const row = (kind: CIBuild["kind"], ...jobs: string[][]): CIBuild => ({
+		kind,
+		snapshot: "quay-stage-3-18-1-image-20261007200243",
+		created_at: "2026-10-07T20:02:43Z",
+		ci: null,
+		jobs: jobs.map((states, i) => ({
+			job_name: `job-${i}`,
+			runs: states.map((state) => ({
+				state,
+				started_at: "2026-10-08T00:56:37Z",
+				prow_url: "https://prow.example/1",
+			})),
+		})),
 	});
-	const latest: BuildLabel = {
-		snapshot: "quay-3-18-20261009-042614-000",
-		created_at: "2026-10-09T04:28:09Z",
-	};
-	const older: BuildLabel = {
-		snapshot: "quay-3-18-20261008-131611-000",
-		created_at: "2026-10-08T13:22:40Z",
-	};
-	const ci = (
-		refresh: CandidateCI["refresh"],
-		latest_in_ci: BuildLabel | null,
-		passed: BuildLabel | null,
-		...jobs: CIRun[][]
-	): CandidateCI => ({
+	const ci = (...builds: CIBuild[]): CandidateCI => ({
 		since: "2026-10-06T17:10:27Z",
-		builds: [
-			{
-				kind: "candidate",
-				snapshot: "quay-stage-3-18-1-image-20261007200243",
-				created_at: "2026-10-07T20:02:43Z",
-				ci: null,
-				jobs: jobs.map((runs, i) => ({ job_name: `job-${i}`, runs })),
-			},
-		],
-		latest_in_ci,
-		passed,
+		builds,
+		latest_in_ci: null,
+		passed: null,
 		fbc: null,
-		refresh,
+		refresh: "current",
 	});
-	// A newer build in CI: the candidate's newest run of any job, and the
-	// build named unless the action line names it.
-	assert.deepEqual(
-		ciWarning(
+	const notTested: ReturnType<typeof ciStep> = {
+		variant: "warning",
+		text: "Not tested",
+	};
+	const want: [string, CandidateCI, ReturnType<typeof ciStep>][] = [
+		["no candidate row", ci(), notTested],
+		["a candidate row without jobs", ci(row("candidate")), notTested],
+		[
+			"success, success",
+			ci(row("candidate", ["success", "success"])),
+			{ variant: "success", text: "Passed" },
+		],
+		[
+			"failure, error",
+			ci(row("candidate", ["failure", "error"])),
+			{ variant: "danger", text: "Failed" },
+		],
+		[
+			"a mix across three jobs",
 			ci(
-				"current",
-				latest,
-				null,
-				[run("success", "2026-10-07T23:49:38Z")],
-				[
-					run("success", "2026-10-09T00:56:39Z"),
-					run("failure", "2026-10-07T00:56:56Z"),
-				],
+				row(
+					"candidate",
+					["success", "success"],
+					["failure", "failure"],
+					["success", "failure"],
+				),
 			),
-		),
-		{ lastRun: "2026-10-09T00:56:39Z", namesLatest: true },
-	);
-	for (const [refresh, passed, namesLatest] of [
-		["waiting", null, false],
-		["rerun", latest, false],
-		["rerun", older, true],
-	] as const) {
-		assert.deepEqual(
-			ciWarning(ci(refresh, latest, passed)),
-			{ lastRun: null, namesLatest },
-			`${refresh}, passed ${passed?.snapshot}`,
-		);
+			{ variant: "warning", text: "3 of 6 runs passed" },
+		],
+		[
+			"success, aborted",
+			ci(row("candidate", ["success", "aborted"])),
+			{ variant: "success", text: "Passed" },
+		],
+		[
+			"success, failure, aborted",
+			ci(row("candidate", ["success", "failure", "aborted"])),
+			{ variant: "warning", text: "1 of 2 runs passed" },
+		],
+		[
+			"a passing run only on a non-candidate row",
+			ci(row("build", ["success"]), row("candidate")),
+			notTested,
+		],
+	];
+	for (const [name, c, step] of want) {
+		assert.deepEqual(ciStep(c), step, name);
 	}
-	// None newer: only whether a run that installed the candidate passed.
-	assert.equal(
-		ciWarning(
-			ci("current", null, null, [run("failure", "2026-10-08T00:56:37Z")]),
-		),
-		"no_pass",
-	);
-	assert.equal(
-		ciWarning(
-			ci(
-				"current",
-				null,
-				null,
-				[run("failure", "2026-10-08T00:56:37Z")],
-				[run("success", "2026-10-07T23:49:38Z")],
-			),
-		),
-		undefined,
-	);
 });
 
 test("fbcCopy: the pullspecs, comma-separated, unless one is missing or unread", () => {
