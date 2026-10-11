@@ -1,14 +1,18 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { ImageScan } from "../api/types.ts";
+import type { ImageScan, KonfluxRelease, StageFlag } from "../api/types.ts";
 import {
+	buildTitle,
 	componentLabel,
+	fixableLabels,
 	jobLabels,
 	jobShortName,
 	missingCommits,
 	notVerified,
 	nvrLabel,
+	releaseLine,
 	scanCell,
+	stageLines,
 } from "./releaseDetail.ts";
 
 test("jobShortName", () => {
@@ -135,48 +139,168 @@ test("notVerified: Release Pending, Verified, Closed and Done, in any case, are 
 	assert.equal(notVerified(tickets), 2);
 });
 
+test("buildTitle", () => {
+	assert.equal(buildTitle(["candidate"], "staged"), "Staged build");
+	assert.equal(
+		buildTitle(["candidate", "newest"], "staged"),
+		"Staged build · Latest",
+	);
+	assert.equal(buildTitle(["candidate", "newest"], "newest"), "Latest");
+	assert.equal(buildTitle(["newest"], "staged"), "Latest");
+	assert.equal(buildTitle(["last_tested"], "staged"), "Last tested");
+});
+
+const release = (r: Partial<KonfluxRelease>): KonfluxRelease => ({
+	name: "fbc-ri-stage-quay-3-18-quay-operator-ssrlx",
+	release_plan: "quay-advisory-stage-3-18",
+	released_status: "False",
+	released_reason: "Failed",
+	failed_task: "verify-conforma",
+	failed_step: "assert",
+	created_at: "2026-10-10T01:49:22Z",
+	...r,
+});
+
+test("releaseLine: a released prod Release is done", () => {
+	assert.deepEqual(
+		releaseLine(
+			release({
+				name: "quay-prod-3-18-1",
+				released_status: "True",
+				released_reason: "Succeeded",
+			}),
+		),
+		{ status: "done", text: "Released", release: "quay-prod-3-18-1" },
+	);
+});
+
+test("stageLines", () => {
+	const app = "quay-3-18";
+	const c = (name: string) => `${app}-${name}`;
+	const flag = (f: Partial<StageFlag>): StageFlag => ({
+		state: "not_staged",
+		staged_at: null,
+		total: 10,
+		not_staged: [],
+		release: null,
+		no_bundle: [],
+		no_release: [],
+		...f,
+	});
+	assert.deepEqual(
+		stageLines(
+			flag({ state: "staged", staged_at: "2026-10-07T12:00:00Z" }),
+			app,
+		),
+		[{ status: "done", text: "Staged Oct 7" }],
+	);
+	assert.deepEqual(stageLines(flag({ state: "unknown" }), app), [
+		{ status: "none", text: "No stage Release for quay-3-18 yet" },
+	]);
+	// 3.18.1's newest build on Oct 10.
+	const noBundle = [
+		c("container-security-operator"),
+		c("quay-bridge-operator"),
+	];
+	assert.deepEqual(
+		stageLines(
+			flag({
+				not_staged: [
+					...noBundle,
+					c("quay-clair"),
+					c("quay-operator"),
+					c("quay-quay"),
+				],
+				release: release({}),
+				no_bundle: noBundle,
+			}),
+			app,
+		),
+		[
+			{
+				status: "failed",
+				text: "Release failed: Enterprise Contract policy (verify-conforma/assert)",
+				release: "fbc-ri-stage-quay-3-18-quay-operator-ssrlx",
+			},
+			{
+				status: "waiting",
+				text: "container-security-operator, bridge-operator: built, no bundle yet",
+				info: "ART builds a bundle only after a clean build-layered-products run.",
+			},
+		],
+	);
+	assert.deepEqual(
+		stageLines(
+			flag({
+				not_staged: [c("quay-clair"), c("quay-quay")],
+				release: release({ released_reason: "Progressing" }),
+				no_release: [c("quay-clair")],
+			}),
+			app,
+		),
+		[
+			{
+				status: "running",
+				text: "Release in progress",
+				release: "fbc-ri-stage-quay-3-18-quay-operator-ssrlx",
+			},
+			{ status: "waiting", text: "clair: not in a stage Release yet" },
+		],
+	);
+	assert.deepEqual(
+		stageLines(
+			flag({
+				total: 2,
+				not_staged: [c("quay-clair"), c("quay-quay")],
+				no_release: [c("quay-clair"), c("quay-quay")],
+			}),
+			app,
+		),
+		[{ status: "waiting", text: "Not in a stage Release yet" }],
+	);
+});
+
+test("fixableLabels", () => {
+	const zero = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 };
+	assert.deepEqual(
+		fixableLabels({
+			basis: "unique_cves",
+			fixable: { critical: 1, high: 4, medium: 2, low: 3, unknown: 5 },
+			no_fix: zero,
+		}),
+		[
+			{ text: "1 critical", color: "red" },
+			{ text: "4 high", color: "red" },
+			{ text: "2 medium", color: "orange" },
+			{ text: "3 low", color: "yellow" },
+			{ text: "5 unknown", color: "grey" },
+		],
+	);
+	assert.deepEqual(
+		fixableLabels({
+			basis: "scanner_arch_findings",
+			fixable: { ...zero, high: 4 },
+			no_fix: { ...zero, high: 102, medium: 684, low: 651 },
+		}),
+		[{ text: "4 high", color: "red" }],
+	);
+	assert.deepEqual(
+		fixableLabels({
+			basis: "scanner_arch_findings",
+			fixable: zero,
+			no_fix: { ...zero, high: 24 },
+		}),
+		[],
+	);
+});
+
 test("scanCell", () => {
 	const scan = (s: Partial<ImageScan>): ImageScan => ({
-		state: "scanned",
+		state: "scan_failed",
 		counts: null,
 		url: "https://konflux.example/plr",
 		...s,
 	});
-	const zero = { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 };
-	assert.deepEqual(
-		scanCell(
-			scan({
-				counts: {
-					basis: "scanner_arch_findings",
-					fixable: zero,
-					no_fix: { ...zero, high: 24, medium: 264, low: 232 },
-				},
-			}),
-		),
-		{
-			text: "0 fixable",
-			color: undefined,
-			url: "https://konflux.example/plr",
-			detail: [
-				"Fixable: 0 critical, 0 high, 0 medium, 0 low, 0 unknown",
-				"No fix: 0 critical, 24 high, 264 medium, 232 low, 0 unknown",
-				"Counted per architecture",
-			],
-		},
-	);
-	const fixable = scanCell(
-		scan({
-			counts: {
-				basis: "unique_cves",
-				fixable: { ...zero, high: 4, unknown: 1 },
-				no_fix: zero,
-			},
-		}),
-	);
-	assert.deepEqual(
-		[fixable.text, fixable.color, fixable.detail?.[2]],
-		["5 fixable", "red", "Unique CVEs across architectures"],
-	);
 	assert.deepEqual(scanCell(scan({ state: "scan_failed" })), {
 		text: "scan failed",
 		color: "orange",

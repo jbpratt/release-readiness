@@ -31,8 +31,20 @@ test("releaseStatus", () => {
 			released_status: "False",
 			released_reason: "Failed",
 			failed_task: "verify-conforma",
+			failed_step: "assert",
 		}),
-		["red", "Release failed: Enterprise Contract policy"],
+		[
+			"red",
+			"Release failed: Enterprise Contract policy (verify-conforma/assert)",
+		],
+	);
+	assert.deepEqual(
+		status({
+			released_status: "False",
+			released_reason: "Failed",
+			failed_task: "verify-conforma",
+		}),
+		["red", "Release failed: Enterprise Contract policy (verify-conforma)"],
 	);
 	assert.deepEqual(
 		status({

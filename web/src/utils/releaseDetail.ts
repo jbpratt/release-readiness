@@ -1,9 +1,13 @@
 import type {
 	BuildCommit,
+	BuildRow,
+	CandidateBuild,
 	ImageScan,
+	KonfluxRelease,
 	ScanCounts,
-	SeverityCounts,
+	StageFlag,
 } from "../api/types";
+import { releaseStatus } from "./releaseStatus.ts";
 
 // Ticket statuses counted as verified.
 const VERIFIED = new Set(["release pending", "verified", "closed", "done"]);
@@ -83,41 +87,128 @@ export function nvrLabel(nvr: string): string {
 		: nvr.slice(i + CONTAINER.length).replace(/\.assembly\..+?\.el\d+/, "");
 }
 
-const SEVERITIES = ["critical", "high", "medium", "low", "unknown"] as const;
+// A build's titles by role, in the order a build with several joins them.
+const TITLES = ["Staged build", "Latest", "Last tested"] as const;
 
-const BASES: Record<ScanCounts["basis"], string> = {
+/**
+ * A build's box title from its roles: the candidate is the staged build, or
+ * when none is in stage the latest.
+ */
+export function buildTitle(
+	roles: BuildRow["roles"],
+	source: CandidateBuild["source"],
+): string {
+	const titles = roles.map((r) =>
+		r === "last_tested"
+			? "Last tested"
+			: r === "candidate" && source === "staged"
+				? "Staged build"
+				: "Latest",
+	);
+	return TITLES.filter((t) => titles.includes(t)).join(" · ");
+}
+
+/** A line of a build's box: a status icon and the text it explains. */
+export interface StatusLine {
+	status: "done" | "failed" | "waiting" | "running" | "none";
+	text: string;
+	/** The Release the line words, linked to its Konflux page. */
+	release?: string;
+	/** Why, on an info icon. */
+	info?: string;
+}
+
+const RELEASE_LINE = { green: "done", red: "failed", blue: "running" } as const;
+
+/** A Release's status and where its managed pipeline failed. */
+export function releaseLine(r: KonfluxRelease): StatusLine {
+	const { color, text } = releaseStatus(r);
+	return { status: RELEASE_LINE[color], text, release: r.name };
+}
+
+/**
+ * Whether a build is in stage, else one line per reason its images are not:
+ * a STAGE Release that holds some failed or is running, a bundle ART has not
+ * built, no STAGE Release at all. Only images a STAGE Release holds set
+ * release.
+ */
+export function stageLines(stage: StageFlag, app: string): StatusLine[] {
+	if (stage.state === "staged") {
+		const on = stage.staged_at
+			? ` ${new Date(stage.staged_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+			: "";
+		return [{ status: "done", text: `Staged${on}` }];
+	}
+	if (stage.state === "unknown") {
+		return [{ status: "none", text: `No stage Release for ${app} yet` }];
+	}
+	const names = (cs: string[]) =>
+		cs.map((c) => componentLabel(c, app)).join(", ");
+	const lines: StatusLine[] = [];
+	if (stage.release) {
+		lines.push(releaseLine(stage.release));
+	}
+	if (stage.no_bundle.length > 0) {
+		lines.push({
+			status: "waiting",
+			text: `${names(stage.no_bundle)}: built, no bundle yet`,
+			info: "ART builds a bundle only after a clean build-layered-products run.",
+		});
+	}
+	if (stage.no_release.length > 0) {
+		lines.push({
+			status: "waiting",
+			text:
+				stage.no_release.length === stage.total
+					? "Not in a stage Release yet"
+					: `${names(stage.no_release)}: not in a stage Release yet`,
+		});
+	}
+	return lines;
+}
+
+export const SEVERITIES = [
+	"critical",
+	"high",
+	"medium",
+	"low",
+	"unknown",
+] as const;
+
+/** A severity's label colour, as master's scan view has it. */
+export const SEVERITY_COLORS = {
+	critical: "red",
+	high: "red",
+	medium: "orange",
+	low: "yellow",
+	unknown: "grey",
+} as const;
+
+export const BASES: Record<ScanCounts["basis"], string> = {
 	scanner_arch_findings: "Counted per architecture",
 	unique_cves: "Unique CVEs across architectures",
 };
 
-const bySeverity = (c: SeverityCounts) =>
-	SEVERITIES.map((s) => `${c[s]} ${s}`).join(", ");
+/**
+ * A scanned image's cell: a label per severity with fixable CVEs. The no-fix
+ * ones, hundreds per image, would drown it.
+ */
+export const fixableLabels = ({ fixable }: ScanCounts) =>
+	SEVERITIES.filter((s) => fixable[s] > 0).map((s) => ({
+		text: `${fixable[s]} ${s}`,
+		color: SEVERITY_COLORS[s],
+	}));
 
 /**
- * A candidate image's CVEs cell: its text and colour, the link, and the
- * counts on hover when scanned. A pending or unread scan is a muted dash.
+ * The CVEs cell of a candidate image without counts: its text, colour and
+ * link. A pending or unread scan is a muted dash.
  */
 export function scanCell(scan: ImageScan | null): {
 	text: string;
-	color?: "red" | "orange" | "grey";
+	color: "orange" | "grey";
 	url?: string;
-	detail?: string[];
 } {
 	switch (scan?.state) {
-		case "scanned": {
-			const { basis, fixable, no_fix } = scan.counts!;
-			const n = SEVERITIES.reduce((sum, s) => sum + fixable[s], 0);
-			return {
-				text: `${n} fixable`,
-				color: n > 0 ? "red" : undefined,
-				url: scan.url,
-				detail: [
-					`Fixable: ${bySeverity(fixable)}`,
-					`No fix: ${bySeverity(no_fix)}`,
-					BASES[basis],
-				],
-			};
-		}
 		case "scan_failed":
 			return { text: "scan failed", color: "orange", url: scan.url };
 		case "not_scanned":

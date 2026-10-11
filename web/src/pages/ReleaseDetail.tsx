@@ -5,18 +5,34 @@ import {
 	Card,
 	CardBody,
 	CardTitle,
+	DescriptionList,
+	DescriptionListDescription,
+	DescriptionListGroup,
+	DescriptionListTerm,
 	EmptyState,
 	EmptyStateBody,
 	Flex,
 	FlexItem,
+	Icon,
 	Label,
 	type LabelProps,
 	PageSection,
+	Panel,
+	PanelMain,
+	PanelMainBody,
+	Popover,
 	Spinner,
 	Title,
 	Tooltip,
 } from "@patternfly/react-core";
-import { ExternalLinkAltIcon } from "@patternfly/react-icons";
+import {
+	CheckCircleIcon,
+	ExclamationCircleIcon,
+	ExclamationTriangleIcon,
+	ExternalLinkAltIcon,
+	InfoCircleIcon,
+	InProgressIcon,
+} from "@patternfly/react-icons";
 import {
 	Table,
 	Tbody,
@@ -38,9 +54,8 @@ import type {
 	CIJob,
 	DashboardConfig,
 	ImageScan,
-	KonfluxRelease,
 	ReleaseCandidate,
-	StageFlag,
+	ScanCounts,
 } from "../api/types";
 import StatusLabel from "../components/StatusLabel";
 import { useCachedFetch } from "../hooks/useCachedFetch";
@@ -54,14 +69,21 @@ import {
 	ticketsJql,
 } from "../utils/links";
 import {
+	BASES,
+	buildTitle,
 	componentLabel,
+	fixableLabels,
 	jobLabels,
 	missingCommits,
 	notVerified,
 	nvrLabel,
+	releaseLine,
+	SEVERITIES,
+	SEVERITY_COLORS,
+	type StatusLine,
 	scanCell,
+	stageLines,
 } from "../utils/releaseDetail";
-import { releaseStatus } from "../utils/releaseStatus";
 
 /** A Konflux UI page of the version's application. */
 type KonfluxLink = (
@@ -72,10 +94,8 @@ type KonfluxLink = (
 const external = { target: "_blank", rel: "noopener noreferrer" };
 const muted = { color: "var(--pf-t--global--text--color--subtle)" };
 const textColor = {
-	green: "var(--pf-t--global--text--color--status--success--default)",
 	red: "var(--pf-t--global--text--color--status--danger--default)",
 	orange: "var(--pf-t--global--text--color--status--warning--default)",
-	blue: "var(--pf-t--global--text--color--status--info--default)",
 	grey: muted.color,
 };
 
@@ -251,7 +271,7 @@ const noNvr = (
 const lines = (...ls: (string | undefined)[]) =>
 	ls.filter(Boolean).map((l) => <div key={l}>{l}</div>);
 
-/** The builds that matter to the version, one row each, and the candidate's images. */
+/** The builds that matter to the version, one box each, and the candidate's images. */
 function BuildsCard({
 	data,
 	error,
@@ -276,7 +296,7 @@ function BuildsCard({
 				) : data.shipped ? (
 					"Shipped."
 				) : !data.candidate ? (
-					data.reason
+					data.reason.charAt(0).toUpperCase() + data.reason.slice(1)
 				) : (
 					<Builds
 						builds={data.builds}
@@ -301,69 +321,31 @@ function Builds({
 	app: string;
 	konflux: KonfluxLink;
 }) {
-	const hasProd = builds.some((b) => b.prod);
 	const hasScans = candidate.components.some((c) => c.scan);
+	const oldestFirst = [...builds].sort(
+		(a, b) => Date.parse(a.created_at) - Date.parse(b.created_at),
+	);
 	return (
 		<>
-			<Table variant="compact">
-				<Thead>
-					<Tr>
-						<Th>Build</Th>
-						<Th>Stage</Th>
-						{hasProd && <Th>Prod</Th>}
-						<Th>CI</Th>
-					</Tr>
-				</Thead>
-				<Tbody>
-					{builds.map((b) => (
-						<Tr key={b.snapshot}>
-							<Td style={{ whiteSpace: "nowrap" }}>
-								<ExtLink
-									href={konflux("snapshots", b.snapshot)}
-									title={b.snapshot}
-								>
-									{new Date(b.created_at).toLocaleString(undefined, {
-										month: "short",
-										day: "numeric",
-										hour: "2-digit",
-										minute: "2-digit",
-										hourCycle: "h23",
-									})}
-								</ExtLink>
-								{b.roles.map((role) => (
-									<RoleLabel
-										key={role}
-										role={role}
-										source={candidate.source}
-										app={app}
-									/>
-								))}
-							</Td>
-							<Td>
-								<StageCell stage={b.stage} app={app} konflux={konflux} />
-							</Td>
-							{hasProd && (
-								<Td>
-									{b.prod && (
-										<Tooltip
-											content={lines(b.prod.name, releaseDetail(b.prod))}
-										>
-											<span>
-												<ReleaseLink release={b.prod} konflux={konflux} />
-											</span>
-										</Tooltip>
-									)}
-								</Td>
-							)}
-							<Td>
-								<CICell jobs={b.ci} />
-							</Td>
-						</Tr>
-					))}
-				</Tbody>
-			</Table>
+			<Flex alignItems={{ default: "alignItemsStretch" }}>
+				{oldestFirst.map((b) => (
+					<FlexItem
+						key={b.snapshot}
+						flex={{ default: "flex_1" }}
+						style={{ minWidth: "18rem" }}
+					>
+						<BuildBox
+							build={b}
+							source={candidate.source}
+							app={app}
+							konflux={konflux}
+						/>
+					</FlexItem>
+				))}
+			</Flex>
 			<Title headingLevel="h3" size="md" style={{ marginTop: "1rem" }}>
-				Images in the candidate
+				Images in the {candidate.source === "staged" ? "staged" : "latest"}{" "}
+				build
 			</Title>
 			<Table variant="compact">
 				<Thead>
@@ -388,7 +370,7 @@ function Builds({
 							</Td>
 							{hasScans && (
 								<Td>
-									<ScanCell scan={c.scan} />
+									<ScanCell scan={c.scan} label={componentLabel(c.name, app)} />
 								</Td>
 							)}
 						</Tr>
@@ -399,123 +381,240 @@ function Builds({
 	);
 }
 
-/** A build's role, what it means on hover. */
-function RoleLabel({
-	role,
+/** A build by its role: when it was built, and whether it is in stage, in prod and tested. */
+function BuildBox({
+	build,
 	source,
 	app,
+	konflux,
 }: {
-	role: BuildRow["roles"][number];
+	build: BuildRow;
 	source: CandidateBuild["source"];
 	app: string;
-}) {
-	const tip =
-		role === "newest"
-			? `The newest build of ${app}.`
-			: role === "last_tested"
-				? "The newest build a periodic CI run tested."
-				: source === "staged"
-					? "This version's build in stage. Its images are listed below."
-					: "No build of this version is in stage yet, so the stream's newest build. Its images are listed below.";
-	return (
-		<Tooltip content={tip}>
-			<Label
-				isCompact
-				color={role === "candidate" ? "blue" : "grey"}
-				style={{ marginLeft: "0.5rem" }}
-			>
-				{role === "last_tested" ? "last tested" : role}
-			</Label>
-		</Tooltip>
-	);
-}
-
-/** A Release's status in its colour, linked to its Konflux page. */
-function ReleaseLink({
-	release,
-	konflux,
-}: {
-	release: KonfluxRelease;
 	konflux: KonfluxLink;
 }) {
-	const status = releaseStatus(release);
 	return (
-		<ExtLink href={konflux("releases", release.name)}>
-			<span style={{ color: textColor[status.color] }}>{status.text}</span>
-		</ExtLink>
+		<Panel variant="bordered" style={{ height: "100%" }}>
+			<PanelMain>
+				<PanelMainBody>
+					<Title headingLevel="h3" size="md">
+						{buildTitle(build.roles, source)}
+					</Title>
+					<ExtLink
+						href={konflux("snapshots", build.snapshot)}
+						title={build.snapshot}
+					>
+						{new Date(build.created_at).toLocaleString(undefined, {
+							month: "short",
+							day: "numeric",
+							hour: "2-digit",
+							minute: "2-digit",
+							hourCycle: "h23",
+						})}
+					</ExtLink>
+					<DescriptionList
+						isHorizontal
+						isCompact
+						termWidth="5ch"
+						style={{ marginTop: "0.75rem" }}
+					>
+						<BoxLine term="Stage">
+							<StatusLines
+								lines={stageLines(build.stage, app)}
+								konflux={konflux}
+							/>
+						</BoxLine>
+						{build.prod && (
+							<BoxLine term="Prod">
+								<StatusLines
+									lines={[releaseLine(build.prod)]}
+									konflux={konflux}
+								/>
+							</BoxLine>
+						)}
+						<BoxLine term="CI">
+							<CICell jobs={build.ci} />
+						</BoxLine>
+					</DescriptionList>
+				</PanelMainBody>
+			</PanelMain>
+		</Panel>
 	);
 }
 
-const releaseDetail = (r: KonfluxRelease) => {
-	const status = releaseStatus(r);
-	return "detail" in status ? status.detail : undefined;
+function BoxLine({ term, children }: { term: string; children: ReactNode }) {
+	return (
+		<DescriptionListGroup>
+			<DescriptionListTerm>{term}</DescriptionListTerm>
+			<DescriptionListDescription>{children}</DescriptionListDescription>
+		</DescriptionListGroup>
+	);
+}
+
+const statusIcons: Record<StatusLine["status"], ReactNode> = {
+	done: (
+		<Icon status="success" isInline>
+			<CheckCircleIcon />
+		</Icon>
+	),
+	failed: (
+		<Icon status="danger" isInline>
+			<ExclamationCircleIcon />
+		</Icon>
+	),
+	waiting: (
+		<Icon status="warning" isInline>
+			<ExclamationTriangleIcon />
+		</Icon>
+	),
+	running: (
+		<Icon status="info" isInline>
+			<InProgressIcon />
+		</Icon>
+	),
+	none: (
+		<Icon isInline>
+			<span style={muted}>-</span>
+		</Icon>
+	),
 };
 
-/** Whether a build reached stage, with what keeps it out on hover. */
-function StageCell({
-	stage,
-	app,
-	konflux,
+/** A status icon, then its text, which wraps clear of it. */
+function Status({
+	status,
+	children,
 }: {
-	stage: StageFlag;
-	app: string;
-	konflux: KonfluxLink;
+	status: StatusLine["status"];
+	children: ReactNode;
 }) {
-	if (stage.state === "staged") {
-		const at = stage.staged_at ? new Date(stage.staged_at) : null;
-		return (
-			<span style={{ color: textColor.green }} title={at?.toLocaleString()}>
-				Staged
-				{at &&
-					` ${at.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`}
-			</span>
-		);
-	}
-	const r = stage.release;
 	return (
-		<Tooltip
-			content={
-				stage.state === "unknown"
-					? `No stage Release for ${app} yet.`
-					: lines(
-							`${stage.not_staged.length} of ${stage.total} images not in stage: ${stage.not_staged.map((c) => componentLabel(c, app)).join(", ")}`,
-							r?.name,
-							r ? releaseDetail(r) : undefined,
-						)
-			}
-		>
-			<span>
-				{stage.state === "unknown" ? (
-					<span style={muted}>-</span>
-				) : r ? (
-					<ReleaseLink release={r} konflux={konflux} />
-				) : (
-					<span style={{ color: textColor.orange }}>Not in stage</span>
-				)}
-			</span>
-		</Tooltip>
+		<Flex gap={{ default: "gapSm" }} flexWrap={{ default: "nowrap" }}>
+			<FlexItem>{statusIcons[status]}</FlexItem>
+			<FlexItem style={status === "none" ? muted : undefined}>
+				{children}
+			</FlexItem>
+		</Flex>
 	);
 }
 
-/** An image's CVE scan linked to its build PipelineRun, the counts on hover. */
-function ScanCell({ scan }: { scan: ImageScan | null }) {
+/** Status lines, a line about a Release linked to it, a line's why on an info icon. */
+function StatusLines({
+	lines,
+	konflux,
+}: {
+	lines: StatusLine[];
+	konflux: KonfluxLink;
+}) {
+	return lines.map((l) => (
+		<Status key={l.text} status={l.status}>
+			{l.release ? (
+				<ExtLink href={konflux("releases", l.release)} title={l.release}>
+					{l.text}
+				</ExtLink>
+			) : (
+				l.text
+			)}
+			{l.info && (
+				<Tooltip content={l.info}>
+					<Button
+						variant="plain"
+						hasNoPadding
+						aria-label={l.info}
+						icon={<InfoCircleIcon />}
+						style={{ marginLeft: "0.25rem" }}
+					/>
+				</Tooltip>
+			)}
+		</Status>
+	));
+}
+
+/** An image's fixable CVEs by severity, all its counts on click. */
+function ScanCell({ scan, label }: { scan: ImageScan | null; label: string }) {
+	if (scan?.state === "scanned" && scan.counts) {
+		const fixable = fixableLabels(scan.counts);
+		return (
+			<Popover
+				headerContent={label}
+				bodyContent={<ScanDetail counts={scan.counts} url={scan.url} />}
+				maxWidth="30rem"
+			>
+				<Button variant="plain" hasNoPadding>
+					{fixable.length > 0 ? (
+						<Flex component="span" gap={{ default: "gapXs" }}>
+							{fixable.map((l) => (
+								<Label key={l.text} isCompact color={l.color}>
+									{l.text}
+								</Label>
+							))}
+						</Flex>
+					) : (
+						<span style={muted}>0 fixable</span>
+					)}
+				</Button>
+			</Popover>
+		);
+	}
 	const cell = scanCell(scan);
-	const link = (
+	return (
 		<ExtLink href={cell.url || null}>
-			<span style={cell.color && { color: textColor[cell.color] }}>
-				{cell.text}
-			</span>
+			<span style={{ color: textColor[cell.color] }}>{cell.text}</span>
 		</ExtLink>
 	);
-	return cell.detail ? (
-		<Tooltip
-			maxWidth="30rem"
-			content={cell.detail.map((line) => <div key={line}>{line}</div>)}
-		>
-			<span>{link}</span>
-		</Tooltip>
-	) : (
-		link
+}
+
+/** A scan's CVEs by severity, with and without a fix, and its Konflux page. */
+function ScanDetail({ counts, url }: { counts: ScanCounts; url: string }) {
+	const rows = [
+		["Fixable", counts.fixable],
+		["No fix", counts.no_fix],
+	] as const;
+	return (
+		<>
+			<Table
+				variant="compact"
+				borders={false}
+				gridBreakPoint=""
+				aria-label="CVEs by severity"
+			>
+				<Thead>
+					<Tr>
+						<Td />
+						{SEVERITIES.map((s) => (
+							<Th key={s} modifier="fitContent">
+								{s.charAt(0).toUpperCase() + s.slice(1)}
+							</Th>
+						))}
+					</Tr>
+				</Thead>
+				<Tbody>
+					{rows.map(([row, n]) => (
+						<Tr key={row}>
+							<Th scope="row" modifier="fitContent">
+								{row}
+							</Th>
+							{SEVERITIES.map((s) => (
+								<Td key={s}>
+									{n[s] > 0 ? (
+										<Label isCompact color={SEVERITY_COLORS[s]}>
+											{n[s]}
+										</Label>
+									) : (
+										"—"
+									)}
+								</Td>
+							))}
+						</Tr>
+					))}
+				</Tbody>
+			</Table>
+			<div style={{ ...muted, marginTop: "0.5rem" }}>{BASES[counts.basis]}</div>
+			{url && (
+				<div style={{ marginTop: "0.5rem" }}>
+					<ExtLink href={url}>Scan in Konflux</ExtLink>
+				</div>
+			)}
+		</>
 	);
 }
 
@@ -529,7 +628,7 @@ const ciStates: Record<string, [string, LabelProps["status"]]> = {
 /** A label per job, opening its newest run of the build, the run on hover. */
 function CICell({ jobs }: { jobs: CIJob[] }) {
 	if (jobs.length === 0) {
-		return <span style={muted}>Not tested</span>;
+		return <Status status="none">Not tested</Status>;
 	}
 	const labels = jobLabels(jobs.map((j) => j.job_name));
 	return (

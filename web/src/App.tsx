@@ -37,7 +37,7 @@ const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
 const glossary: [string, string][] = [
 	[
 		"Candidate build",
-		"The version's build in stage, else the stream's newest build.",
+		"The version's build in stage, else its newest build: the newest build whose images' NVRs all carry the version.",
 	],
 	[
 		"Stage",
