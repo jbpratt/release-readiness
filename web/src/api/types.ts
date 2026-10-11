@@ -202,9 +202,6 @@ export interface BuildTickets {
 }
 
 export interface IssueSummary {
-	total: number;
-	verified: number;
-	open: number;
 	cves: number;
 }
 
@@ -219,7 +216,8 @@ export interface ReleaseVersion {
 }
 
 export interface ReadinessResponse {
-	signal: "green" | "yellow" | "red";
+	/** "", as is message, when there is nothing to flag. */
+	signal: "green" | "yellow" | "red" | "";
 	message: string;
 	/** Released in Jira or published in the Red Hat catalog. */
 	shipped: boolean;

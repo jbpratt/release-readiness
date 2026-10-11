@@ -293,7 +293,7 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 		overviews[i] = model.ReleaseOverview{
 			Release:      rel,
 			IssueSummary: summary,
-			Readiness:    computeReadiness(&rel, summary, latest != nil, catalogShipped, time.Now()),
+			Readiness:    computeReadiness(&rel, latest != nil, catalogShipped, time.Now()),
 			LatestBuild:  latest,
 			Shipped:      catalogShipped || rel.Released,
 		}
@@ -330,9 +330,10 @@ func markNextInStream(overviews []model.ReleaseOverview) {
 }
 
 // computeReadiness derives a readiness signal from release metadata,
-// issue summary, whether a build snapshot exists, and whether the catalog
-// already publishes it (JIRA can lag a shipped release).
-func computeReadiness(release *model.ReleaseVersion, issueSummary *model.IssueSummary, hasSnapshot, catalogShipped bool, now time.Time) model.ReadinessResponse {
+// whether a build snapshot exists, and whether the catalog already
+// publishes it (JIRA can lag a shipped release). A version with nothing to
+// flag gets an empty signal and message.
+func computeReadiness(release *model.ReleaseVersion, hasSnapshot, catalogShipped bool, now time.Time) model.ReadinessResponse {
 	if release.Released {
 		return model.ReadinessResponse{Signal: "green", Message: "Released", Shipped: true}
 	}
@@ -340,10 +341,8 @@ func computeReadiness(release *model.ReleaseVersion, issueSummary *model.IssueSu
 		return model.ReadinessResponse{Signal: "green", Message: "Shipped", Shipped: true}
 	}
 
-	signal := "green"
-	message := "No open issues"
+	var signal, message string
 
-	openIssues := issueSummary != nil && issueSummary.Open > 0
 	// Due dates are midnight UTC. Count whole UTC days, as the version page
 	// does, so a version is due today until its due day ends.
 	const day = 24 * time.Hour
@@ -358,9 +357,6 @@ func computeReadiness(release *model.ReleaseVersion, issueSummary *model.IssueSu
 	if release.DueDate != nil && daysUntil < 0 {
 		signal = "red"
 		message = "Past due date"
-	} else if openIssues {
-		signal = "yellow"
-		message = "Open issues remain"
 	} else if tracked && !hasSnapshot {
 		signal = "yellow"
 		message = "No build snapshots yet"

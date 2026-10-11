@@ -62,9 +62,6 @@ func (d *DB) GetIssueSummariesBatch(ctx context.Context, fixVersions []string) (
 
 	query := `
 		SELECT fix_version,
-			COUNT(*) AS total,
-			SUM(CASE WHEN LOWER(status) IN ('closed', 'verified', 'done', 'release pending') THEN 1 ELSE 0 END) AS verified,
-			SUM(CASE WHEN LOWER(status) NOT IN ('closed', 'verified', 'done', 'release pending') THEN 1 ELSE 0 END) AS open,
 			SUM(CASE WHEN LOWER(issue_type) = 'vulnerability' OR LOWER(labels) LIKE '%cve%' THEN 1 ELSE 0 END) AS cves
 		FROM jira_issues
 		WHERE fix_version IN (` + strings.Join(placeholders, ",") + `)
@@ -80,7 +77,7 @@ func (d *DB) GetIssueSummariesBatch(ctx context.Context, fixVersions []string) (
 	for rows.Next() {
 		var fixVersion string
 		var s model.IssueSummary
-		if err := rows.Scan(&fixVersion, &s.Total, &s.Verified, &s.Open, &s.CVEs); err != nil {
+		if err := rows.Scan(&fixVersion, &s.CVEs); err != nil {
 			return nil, err
 		}
 		result[fixVersion] = &s
