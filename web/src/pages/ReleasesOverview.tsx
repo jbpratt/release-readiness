@@ -13,8 +13,6 @@ import {
 	Gallery,
 	Label,
 	PageSection,
-	Progress,
-	ProgressMeasureLocation,
 	Spinner,
 	Switch,
 	Title,
@@ -176,16 +174,11 @@ function ReleaseCard({
 	const target = release.due_date ?? release.release_date;
 	const targetDate = target && day(target);
 
-	const signalIcon = {
+	const signalIcons = {
 		green: <CheckCircleIcon />,
 		red: <ExclamationCircleIcon />,
 		yellow: <ExclamationTriangleIcon />,
-	}[readinessSignal.signal];
-
-	const verifiedPercent =
-		issueSummary && issueSummary.total > 0
-			? Math.round((issueSummary.verified / issueSummary.total) * 100)
-			: 0;
+	};
 
 	const lastBuild = latestBuild ? (
 		<Tooltip content="Newest build of this version.">
@@ -228,11 +221,17 @@ function ReleaseCard({
 					alignItems={{ default: "alignItemsCenter" }}
 				>
 					<FlexItem>{displayName}</FlexItem>
-					<FlexItem>
-						<Label color={readinessSignal.signal} icon={signalIcon} isCompact>
-							{readinessSignal.message}
-						</Label>
-					</FlexItem>
+					{readinessSignal.signal && (
+						<FlexItem>
+							<Label
+								color={readinessSignal.signal}
+								icon={signalIcons[readinessSignal.signal]}
+								isCompact
+							>
+								{readinessSignal.message}
+							</Label>
+						</FlexItem>
+					)}
 				</Flex>
 			</CardTitle>
 			<CardBody>
@@ -289,16 +288,6 @@ function ReleaseCard({
 								)}
 							</Flex>
 						</FlexItem>
-						{issueSummary && issueSummary.total > 0 && (
-							<FlexItem>
-								<Progress
-									value={verifiedPercent}
-									title={`${issueSummary.verified}/${issueSummary.total} verified`}
-									measureLocation={ProgressMeasureLocation.outside}
-									size="sm"
-								/>
-							</FlexItem>
-						)}
 					</Flex>
 				)}
 			</CardBody>

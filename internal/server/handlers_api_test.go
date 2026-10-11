@@ -369,14 +369,14 @@ func TestReleasesOverview(t *testing.T) {
 	if ov.IssueSummary == nil {
 		t.Fatal("issue_summary: got nil")
 	}
-	if ov.IssueSummary.Total != 1 {
-		t.Errorf("issue_summary: got total=%d, want 1", ov.IssueSummary.Total)
+	if ov.IssueSummary.CVEs != 0 {
+		t.Errorf("issue_summary: got cves=%d, want 0", ov.IssueSummary.CVEs)
 	}
 	if ov.LatestBuild == nil || !ov.LatestBuild.Equal(built) {
 		t.Errorf("latest_build: got %v, want %v", ov.LatestBuild, built)
 	}
-	if ov.Readiness.Signal != "yellow" {
-		t.Errorf("readiness: got %q, want yellow (open issues remain)", ov.Readiness.Signal)
+	if ov.Readiness != (model.ReadinessResponse{}) {
+		t.Errorf("readiness: got %+v, want none for an open issue", ov.Readiness)
 	}
 }
 
@@ -405,9 +405,6 @@ func TestGetIssueSummariesBatch(t *testing.T) {
 	if s163 == nil {
 		t.Fatal("3.16.3 summary: got nil")
 	}
-	if s163.Total != 2 {
-		t.Errorf("3.16.3 total: got %d, want 2", s163.Total)
-	}
 	if s163.CVEs != 1 {
 		t.Errorf("3.16.3 cves: got %d, want 1", s163.CVEs)
 	}
@@ -416,10 +413,8 @@ func TestGetIssueSummariesBatch(t *testing.T) {
 	if s170 == nil {
 		t.Fatal("3.17.0 summary: got nil")
 	}
-	// Release Pending counts as verified.
-	want := model.IssueSummary{Total: 2, Verified: 2}
-	if *s170 != want {
-		t.Errorf("3.17.0: got %+v, want %+v", *s170, want)
+	if s170.CVEs != 0 {
+		t.Errorf("3.17.0 cves: got %d, want 0", s170.CVEs)
 	}
 
 	if summaries["nonexistent"] != nil {
@@ -459,8 +454,8 @@ func TestReleasesOverviewReadiness(t *testing.T) {
 	seedSnapshot(t, srv, "quay-3-16", "quay-3-16-snap-1", time.Now(), "quay-3-16-quay")
 	resolveNVR(t, srv, "quay-3-16-snap-1/quay-3-16-quay", testNVR("quay-quay", "3.16.3"))
 
-	if got := getReadiness(); got.Signal != "green" || got.Message != "No open issues" {
-		t.Errorf("with snapshot: got %+v, want green/No open issues", got)
+	if got := getReadiness(); got != (model.ReadinessResponse{}) {
+		t.Errorf("with snapshot: got %+v, want none", got)
 	}
 }
 
@@ -472,7 +467,7 @@ func TestReleasesOverviewReadinessUntracked(t *testing.T) {
 	}
 	var overviews []model.ReleaseOverview
 	getJSON(t, srv, "/api/v1/releases/overview", http.StatusOK, &overviews)
-	want := model.ReadinessResponse{Signal: "green", Message: "No open issues"}
+	want := model.ReadinessResponse{}
 	if len(overviews) != 1 || overviews[0].Readiness != want {
 		t.Errorf("overviews = %+v, want omr-v2.0.13 readiness %+v", overviews, want)
 	}
@@ -517,7 +512,6 @@ func TestReleasesOverviewLatestBuild(t *testing.T) {
 
 func TestComputeReadiness(t *testing.T) {
 	past := time.Now().Add(-24 * time.Hour)
-	open := &model.IssueSummary{Total: 2, Open: 1}
 	for _, tc := range []struct {
 		desc           string
 		released       bool
@@ -530,7 +524,7 @@ func TestComputeReadiness(t *testing.T) {
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			release := &model.ReleaseVersion{Name: "quay-v3.17.5", Released: tc.released, DueDate: &past}
-			if got := computeReadiness(release, open, true, tc.catalogShipped, time.Now()); got != tc.want {
+			if got := computeReadiness(release, true, tc.catalogShipped, time.Now()); got != tc.want {
 				t.Errorf("got %+v, want %+v", got, tc.want)
 			}
 		})
@@ -541,24 +535,21 @@ func TestComputeReadiness(t *testing.T) {
 // 23:59Z a version due that day is due today, not past due.
 func TestComputeReadinessDue(t *testing.T) {
 	now := mustTime(t, "2026-10-10T23:59:00Z")
-	open := &model.IssueSummary{Total: 2, Open: 1}
 	for _, tc := range []struct {
-		desc   string
-		due    string
-		issues *model.IssueSummary
-		want   model.ReadinessResponse
+		desc string
+		due  string
+		want model.ReadinessResponse
 	}{
-		{"due yesterday", "2026-10-09", nil, model.ReadinessResponse{Signal: "red", Message: "Past due date"}},
-		{"due today", "2026-10-10", nil, model.ReadinessResponse{Signal: "yellow", Message: "Due today"}},
-		{"due today, open issues", "2026-10-10", open, model.ReadinessResponse{Signal: "yellow", Message: "Open issues remain"}},
-		{"due tomorrow", "2026-10-11", nil, model.ReadinessResponse{Signal: "yellow", Message: "Due in 1 day"}},
-		{"due in 3 days", "2026-10-13", nil, model.ReadinessResponse{Signal: "yellow", Message: "Due in 3 days"}},
-		{"due in 4 days", "2026-10-14", nil, model.ReadinessResponse{Signal: "green", Message: "No open issues"}},
+		{"due yesterday", "2026-10-09", model.ReadinessResponse{Signal: "red", Message: "Past due date"}},
+		{"due today", "2026-10-10", model.ReadinessResponse{Signal: "yellow", Message: "Due today"}},
+		{"due tomorrow", "2026-10-11", model.ReadinessResponse{Signal: "yellow", Message: "Due in 1 day"}},
+		{"due in 3 days", "2026-10-13", model.ReadinessResponse{Signal: "yellow", Message: "Due in 3 days"}},
+		{"due in 4 days", "2026-10-14", model.ReadinessResponse{}},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			due := mustTime(t, tc.due+"T00:00:00Z")
 			release := &model.ReleaseVersion{Name: "quay-v3.17.5", KonfluxApplication: "quay-3-17", DueDate: &due}
-			if got := computeReadiness(release, tc.issues, true, false, now); got != tc.want {
+			if got := computeReadiness(release, true, false, now); got != tc.want {
 				t.Errorf("got %+v, want %+v", got, tc.want)
 			}
 		})

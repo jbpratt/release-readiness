@@ -18,10 +18,7 @@ type JiraIssueRecord struct {
 
 // IssueSummary provides aggregate counts of JIRA issues for a release.
 type IssueSummary struct {
-	Total    int `json:"total"`
-	Verified int `json:"verified"`
-	Open     int `json:"open"`
-	CVEs     int `json:"cves"`
+	CVEs int `json:"cves"`
 }
 
 // ReleaseOverview is a combined view of a release with its issue summary,
@@ -52,7 +49,7 @@ type SnapshotImage struct {
 
 // ReadinessResponse represents the computed readiness signal for a release.
 type ReadinessResponse struct {
-	Signal  string `json:"signal"`  // "green", "yellow", "red"
+	Signal  string `json:"signal"`  // "green", "yellow", "red", or "" if nothing to flag
 	Message string `json:"message"` // human-readable reason
 	// Shipped is set when JIRA marks it released or the catalog published it.
 	Shipped bool `json:"shipped"`
