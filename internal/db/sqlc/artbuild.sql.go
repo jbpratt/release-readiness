@@ -7,6 +7,7 @@ package dbsqlc
 
 import (
 	"context"
+	"database/sql"
 	"strings"
 )
 
@@ -72,6 +73,52 @@ func (q *Queries) ListArtBuildCandidates(ctx context.Context, arg ListArtBuildCa
 	return items, nil
 }
 
+const listArtFBCImages = `-- name: ListArtFBCImages :many
+SELECT a.digest, a.nvr, f.pullspec, f.bundle_nvrs, f.end_time
+FROM art_builds a
+LEFT JOIN art_fbc_records f ON f.digest = a.digest
+WHERE a.state = 'resolved' AND a.nvr LIKE '%-fbc-%'
+`
+
+type ListArtFBCImagesRow struct {
+	Digest     string
+	Nvr        string
+	Pullspec   sql.NullString
+	BundleNvrs sql.NullString
+	EndTime    sql.NullString
+}
+
+// Resolved images whose NVR may be an FBC image's, which the caller parses,
+// each with its FBC record, NULL until read.
+func (q *Queries) ListArtFBCImages(ctx context.Context) ([]ListArtFBCImagesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtFBCImages)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtFBCImagesRow
+	for rows.Next() {
+		var i ListArtFBCImagesRow
+		if err := rows.Scan(
+			&i.Digest,
+			&i.Nvr,
+			&i.Pullspec,
+			&i.BundleNvrs,
+			&i.EndTime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listResolvedArtBuilds = `-- name: ListResolvedArtBuilds :many
 SELECT digest, state, nvr, record_id, upstream_repo, upstream_sha, checked_at
 FROM art_builds
@@ -119,6 +166,44 @@ func (q *Queries) ListResolvedArtBuilds(ctx context.Context, digests []string) (
 	return items, nil
 }
 
+const listUnreadArtFBCImages = `-- name: ListUnreadArtFBCImages :many
+SELECT a.digest, a.nvr, a.record_id
+FROM art_builds a
+WHERE a.state = 'resolved' AND a.nvr LIKE '%-fbc-%'
+  AND NOT EXISTS (SELECT 1 FROM art_fbc_records f WHERE f.digest = a.digest)
+`
+
+type ListUnreadArtFBCImagesRow struct {
+	Digest   string
+	Nvr      string
+	RecordID string
+}
+
+// Resolved images whose NVR may be an FBC image's, which the caller parses,
+// with no FBC record yet.
+func (q *Queries) ListUnreadArtFBCImages(ctx context.Context) ([]ListUnreadArtFBCImagesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUnreadArtFBCImages)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUnreadArtFBCImagesRow
+	for rows.Next() {
+		var i ListUnreadArtFBCImagesRow
+		if err := rows.Scan(&i.Digest, &i.Nvr, &i.RecordID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertArtBuild = `-- name: UpsertArtBuild :exec
 INSERT INTO art_builds (digest, state, nvr, record_id, upstream_repo, upstream_sha, checked_at)
 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -150,6 +235,32 @@ func (q *Queries) UpsertArtBuild(ctx context.Context, arg UpsertArtBuildParams) 
 		arg.UpstreamRepo,
 		arg.UpstreamSha,
 		arg.CheckedAt,
+	)
+	return err
+}
+
+const upsertArtFBCRecord = `-- name: UpsertArtFBCRecord :exec
+INSERT INTO art_fbc_records (digest, pullspec, bundle_nvrs, end_time)
+VALUES (?, ?, ?, ?)
+ON CONFLICT(digest) DO UPDATE SET
+    pullspec = excluded.pullspec,
+    bundle_nvrs = excluded.bundle_nvrs,
+    end_time = excluded.end_time
+`
+
+type UpsertArtFBCRecordParams struct {
+	Digest     string
+	Pullspec   string
+	BundleNvrs string
+	EndTime    string
+}
+
+func (q *Queries) UpsertArtFBCRecord(ctx context.Context, arg UpsertArtFBCRecordParams) error {
+	_, err := q.db.ExecContext(ctx, upsertArtFBCRecord,
+		arg.Digest,
+		arg.Pullspec,
+		arg.BundleNvrs,
+		arg.EndTime,
 	)
 	return err
 }

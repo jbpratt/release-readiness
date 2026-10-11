@@ -152,6 +152,18 @@ export function ciWarning(
 	};
 }
 
+/**
+ * The --fbc-pullspecs value to run release-from-fbc with ci's passed build:
+ * its FBC pullspecs, comma-separated, when it has one for every operator and
+ * OCP version; else null.
+ */
+export function fbcCopy(ci: CandidateCI): string | null {
+	const fbc = ci.fbc;
+	return fbc && fbc.missing.length === 0 && fbc.pullspecs.length > 0
+		? fbc.pullspecs.join(",")
+		: null;
+}
+
 // Why a failed Release failed, by the managed pipeline task it stopped at.
 const failedTasks: Record<string, string> = {
 	"apply-mapping": "Release failed: mapping config (ART)",

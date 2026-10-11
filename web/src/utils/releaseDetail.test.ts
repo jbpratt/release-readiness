@@ -20,6 +20,7 @@ import type {
 import {
 	ciWarning,
 	componentLabel,
+	fbcCopy,
 	fixableLabels,
 	jobLabels,
 	jobShortName,
@@ -303,6 +304,7 @@ test("ciWarning", () => {
 		],
 		latest_in_ci,
 		passed,
+		fbc: null,
 		refresh,
 	});
 	// A newer build in CI: the candidate's newest run of any job, and the
@@ -352,4 +354,42 @@ test("ciWarning", () => {
 		),
 		undefined,
 	);
+});
+
+test("fbcCopy: the pullspecs, comma-separated, unless one is missing or unread", () => {
+	const ci = (fbc: CandidateCI["fbc"]): CandidateCI => ({
+		since: "2026-10-06T17:10:27Z",
+		builds: [],
+		latest_in_ci: null,
+		passed: {
+			snapshot: "quay-3-18-20261009-042614-000",
+			created_at: "2026-10-09T04:28:09Z",
+		},
+		fbc,
+		refresh: "rerun",
+	});
+	const pullspecs = [
+		"quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:52b9f23c5edd4a1097cc6e3e0fac64e5de5ff68af76af97395397b1a39f20c9e",
+		"quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:be4568f034f763465e06852349a4ebd7153f251d04d4a1b4e27b83e059c8f792",
+	];
+	assert.equal(
+		fbcCopy(ci({ pullspecs, missing: [] })),
+		`${pullspecs[0]},${pullspecs[1]}`,
+	);
+	assert.equal(
+		fbcCopy(
+			ci({
+				pullspecs,
+				missing: [
+					{
+						operator: "quay-bridge-operator",
+						ocp: "4.12",
+						url: "https://art.example/search?group=quay-3.18&name=quay-bridge-operator-fbc&assembly=stream",
+					},
+				],
+			}),
+		),
+		null,
+	);
+	assert.equal(fbcCopy(ci(null)), null);
 });

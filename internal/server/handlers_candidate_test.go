@@ -68,6 +68,18 @@ func resolveNVR(t *testing.T, srv *Server, label, nvr string) {
 	}
 }
 
+// seedFBC stores the resolved FBC image of nvr with its FBC record: its ART
+// build ended at end, holding bundles. It returns the image's pullspec.
+func seedFBC(t *testing.T, srv *Server, nvr, end string, bundles ...string) string {
+	t.Helper()
+	resolveNVR(t, srv, "fbc/"+nvr, nvr)
+	r := artbuild.FBCRecord{Digest: testDigest("fbc/" + nvr), Pullspec: testImage("fbc/" + nvr), EndTime: end, BundleNVRs: bundles}
+	if err := srv.db.UpsertFBCRecord(t.Context(), r); err != nil {
+		t.Fatal(err)
+	}
+	return r.Pullspec
+}
+
 func mustTime(t *testing.T, s string) time.Time {
 	t.Helper()
 	v, err := time.Parse(time.RFC3339, s)
@@ -369,7 +381,7 @@ func TestGetCandidate(t *testing.T) {
 	getJSON(t, srv, "/api/v1/releases/quay-v3.14.10/candidate", http.StatusOK, &raw)
 	want := map[string]any{
 		"shipped": false, "candidate": nil, "reason": "no release candidate yet",
-		"ci": map[string]any{"since": "2026-10-09T19:27:56Z", "builds": []any{}, "latest_in_ci": nil, "passed": nil, "refresh": "none"},
+		"ci": map[string]any{"since": "2026-10-09T19:27:56Z", "builds": []any{}, "latest_in_ci": nil, "passed": nil, "fbc": nil, "refresh": "none"},
 		"newest": map[string]any{
 			"snapshot": "quay-3-14-20261009-185801-000", "created_at": "2026-10-09T19:27:56Z",
 			"ci": map[string]any{"state": "unknown", "release": nil},
@@ -553,6 +565,7 @@ func TestGetCandidatePick(t *testing.T) {
 	seedRun(t, srv, "gcp-ocp422-e2e-install-gcp-gcs-nightly", "31", "failure", "2026-10-10T07:49:00Z", runImages("p2", "p2", "p2", "p2"))
 	// No candidate's images to match.
 	seedRun(t, srv, "azure-ocp422-e2e-install-azure-blob-nightly", "32", "success", "2026-10-10T07:27:00Z", olmImages("p2", "p2", "p2", "p2", "p2"))
+	seedFBC(t, srv, "quay-operator-fbc-3.18.2-20261010070000.ocp4.14", "2026-10-10T07:30:00", testNVR("quay-operator-metadata", "3.18.2"))
 	get := func() model.ReleaseCandidate {
 		t.Helper()
 		var got model.ReleaseCandidate
@@ -575,8 +588,9 @@ func TestGetCandidatePick(t *testing.T) {
 	if rows := ciRows(got.CI.Builds); !slices.Equal(rows, want) {
 		t.Fatalf("builds:\n%s\nwant:\n%s", strings.Join(rows, "\n"), strings.Join(want, "\n"))
 	}
-	if got.CI.Passed != nil || got.CI.Refresh != "none" || got.Newest == nil || got.Newest.Snapshot != "quay-3-18-20261010-070000-000" {
-		t.Errorf("no run passed: passed %+v, refresh %q, newest %+v; want none, none, quay-3-18-20261010-070000-000", got.CI.Passed, got.CI.Refresh, got.Newest)
+	if got.CI.Passed != nil || got.CI.FBC != nil || got.CI.Refresh != "none" || got.Newest == nil || got.Newest.Snapshot != "quay-3-18-20261010-070000-000" {
+		t.Errorf("no run passed: passed %+v, fbc %+v, refresh %q, newest %+v; want none, none, none, quay-3-18-20261010-070000-000",
+			got.CI.Passed, got.CI.FBC, got.CI.Refresh, got.Newest)
 	}
 
 	// A run of the first build passes.
@@ -591,6 +605,61 @@ func TestGetCandidatePick(t *testing.T) {
 	seedRun(t, srv, "gcp-ocp422-e2e-install-gcp-gcs-nightly", "34", "success", "2026-10-10T08:49:00Z", runImages("p2", "p2", "p2", "p2"))
 	if got := get(); got.CI.Passed == nil || got.CI.Passed.Snapshot != "quay-3-18-20261010-070000-000" || got.CI.Refresh != "pick" || got.Newest != nil {
 		t.Errorf("the newest build passed: passed %+v, refresh %q, newest %+v; want quay-3-18-20261010-070000-000, pick, none", got.CI.Passed, got.CI.Refresh, got.Newest)
+	}
+}
+
+// The FBCs of the build CI passed with, to re-run release-from-fbc with: of
+// the version's FBC images of each operator and OCP version, the one ART
+// built last that holds a bundle of the build, by operator, then OCP version,
+// and the pairs without one; none while one of them is unread.
+func TestGetCandidateFBC(t *testing.T) {
+	srv := setupTestServer(t)
+	seedQuay318(t, srv)
+	bundle := func(operator, built string) string {
+		return operator + "-metadata-container-3.18.1." + built + ".p2.g35cf767.assembly.stream.el9-1"
+	}
+	quay, cso := bundle("quay-operator", "202610090339"), bundle("container-security-operator", "202610090339")
+	resolveNVR(t, srv, "tested/quay-3-18-quay-operator-bundle", quay)
+	resolveNVR(t, srv, "tested/quay-3-18-container-security-operator-bundle", cso)
+	resolveNVR(t, srv, "tested/quay-3-18-quay-bridge-operator-bundle", bundle("quay-bridge-operator", "202610060910"))
+	get := func() *model.BuildFBC {
+		t.Helper()
+		var got model.ReleaseCandidate
+		getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
+		if got.CI == nil || got.CI.Passed == nil || got.CI.Passed.Snapshot != "quay-3-18-20261009-042610-000" {
+			t.Fatalf("3.18.1 ci = %+v, want the tested build passed", got.CI)
+		}
+		return got.CI.FBC
+	}
+
+	// Two FBCs of the operator for OCP 4.12 hold its bundle, and ART built
+	// the one of the older NVR last. 3.18.2's FBC adds no pair.
+	seedFBC(t, srv, "quay-operator-fbc-3.18.1-20261009050000.ocp4.12", "2026-10-09T05:30:00", quay)
+	want := []string{
+		seedFBC(t, srv, "container-security-operator-fbc-3.18.1-20261009044154.ocp5.0", "2026-10-09T05:42:26", cso),
+		seedFBC(t, srv, "quay-operator-fbc-3.18.1-20261009044841.ocp4.9", "2026-10-09T06:14:00", "quay-operator-metadata-container-3.18.1.202610060910.p2.g35cf767.assembly.stream.el9-1", quay),
+		seedFBC(t, srv, "quay-operator-fbc-3.18.1-20261009044841.ocp4.12", "2026-10-09T06:14:00", quay),
+		seedFBC(t, srv, "quay-operator-fbc-3.18.1-20261009044841.ocp5.0", "2026-10-09T06:14:00", quay),
+	}
+	seedFBC(t, srv, "quay-operator-fbc-3.18.2-20261010120000.ocp4.14", "2026-10-10T12:30:00", testNVR("quay-operator-metadata", "3.18.2"))
+	if got := get(); got == nil || !slices.Equal(got.Pullspecs, want) || len(got.Missing) != 0 {
+		t.Errorf("fbc = %+v, want pullspecs %v, none missing", got, want)
+	}
+
+	// The bridge operator's FBC for OCP 4.12 holds a newer bundle than the build.
+	seedFBC(t, srv, "quay-bridge-operator-fbc-3.18.1-20261009044154.ocp4.12", "2026-10-09T05:42:26", bundle("quay-bridge-operator", "202610090339"))
+	missing := []model.MissingFBC{{
+		Operator: "quay-bridge-operator", OCP: "4.12",
+		URL: "https://art.example/search?group=quay-3.18&name=quay-bridge-operator-fbc&assembly=stream",
+	}}
+	if got := get(); got == nil || !slices.Equal(got.Pullspecs, want) || !slices.Equal(got.Missing, missing) {
+		t.Errorf("fbc = %+v, want pullspecs %v, missing %+v", got, want, missing)
+	}
+
+	// ART's record of a new FBC image of 3.18.1 is not read yet.
+	resolveNVR(t, srv, "fbc/quay-operator-fbc-3.18.1-20261010013000.ocp4.12", "quay-operator-fbc-3.18.1-20261010013000.ocp4.12")
+	if got := get(); got != nil {
+		t.Errorf("fbc = %+v, want none until each FBC record is read", got)
 	}
 }
 

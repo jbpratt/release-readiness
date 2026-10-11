@@ -1,11 +1,15 @@
 package artbuild
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -16,6 +20,8 @@ const operatorImage = "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@s
 type fakeStore struct {
 	cands []Candidate
 	got   []Build
+	// fbcs is the stored FBC records, by digest.
+	fbcs map[string]FBCRecord
 }
 
 func (f *fakeStore) ListArtBuildCandidates(context.Context, time.Time, int) ([]Candidate, error) {
@@ -24,6 +30,25 @@ func (f *fakeStore) ListArtBuildCandidates(context.Context, time.Time, int) ([]C
 
 func (f *fakeStore) UpsertArtBuild(_ context.Context, b Build) error {
 	f.got = append(f.got, b)
+	return nil
+}
+
+func (f *fakeStore) ListUnreadFBCImages(_ context.Context, limit int) ([]Build, error) {
+	var unread []Build
+	for _, b := range f.got {
+		_, _, _, fbc := ParseFBC(b.NVR)
+		if _, read := f.fbcs[b.Digest]; fbc && !read && len(unread) < limit {
+			unread = append(unread, b)
+		}
+	}
+	return unread, nil
+}
+
+func (f *fakeStore) UpsertFBCRecord(_ context.Context, r FBCRecord) error {
+	if f.fbcs == nil {
+		f.fbcs = map[string]FBCRecord{}
+	}
+	f.fbcs[r.Digest] = r
 	return nil
 }
 
@@ -67,6 +92,9 @@ func resolveWith(t *testing.T, c Candidate, fixture func(group string) string) (
 	r.ResolveOnce(t.Context())
 	if len(store.got) != 1 {
 		t.Fatalf("stored %d builds, want 1", len(store.got))
+	}
+	if len(store.fbcs) != 0 {
+		t.Errorf("stored FBC records %v, want none: not an FBC image", store.fbcs)
 	}
 	return store.got[0], searches
 }
@@ -138,5 +166,91 @@ func TestResolveOtherStream(t *testing.T) {
 	}
 	if b.State != StateResolved {
 		t.Errorf("build: got %+v, want resolved", b)
+	}
+}
+
+// The FBC image of fbc_record.json.
+const (
+	fbcImageNVR = "quay-operator-fbc-3.18.1-20261009044841.ocp4.21"
+	fbcDigest   = "sha256:4de723583d790cd4d680216f6fb88bd564189e3b18bfb8b0b49b7f45ff589425"
+	fbcImage    = "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@" + fbcDigest
+)
+
+// fbcService is an ART build history service whose one build is the FBC image
+// of fbc_record.json, its outcome set to outcome. /search lists the record as
+// its row. It returns a client of it and the count of requests it answered.
+func fbcService(t *testing.T, outcome string) (*Client, *int) {
+	t.Helper()
+	rec, err := os.ReadFile("testdata/fbc_record.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec = bytes.Replace(rec, []byte(`"outcome": "success"`), []byte(`"outcome": "`+outcome+`"`), 1)
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		switch r.URL.Path {
+		case "/search":
+			_, _ = fmt.Fprintf(w, `{"builds": [%s], "warnings": []}`, rec)
+		case "/build":
+			if q := r.URL.Query(); q.Get("nvr") != fbcImageNVR || q.Get("record_id") != "875a2a69-8e3e-9e13-4432-fe10e617c1f3" {
+				t.Errorf("build query: %v", q)
+			}
+			_, _ = w.Write(rec)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return NewClient(srv.URL, srv.Client()), &requests
+}
+
+func resolveOnce(t *testing.T, client *Client, store *fakeStore) {
+	r := NewResolver(client, store, slog.Default())
+	r.gap = time.Millisecond
+	r.ResolveOnce(t.Context())
+}
+
+// Resolving an FBC image stores the bundles it holds, from the /build read
+// that resolves it.
+func TestResolveFBC(t *testing.T) {
+	client, requests := fbcService(t, "success")
+	store := &fakeStore{cands: []Candidate{{
+		Image:        fbcImage,
+		Component:    "fbc-quay-3-18-quay-operator",
+		Applications: []string{"fbc-quay-3-18"},
+		FirstSeen:    time.Date(2026, 10, 9, 5, 17, 4, 0, time.UTC),
+	}}}
+	resolveOnce(t, client, store)
+	if len(store.got) != 1 || store.got[0].State != StateResolved || store.got[0].NVR != fbcImageNVR {
+		t.Fatalf("builds = %+v, want %s resolved", store.got, fbcImageNVR)
+	}
+	want := map[string]FBCRecord{fbcDigest: {
+		Digest:     fbcDigest,
+		Pullspec:   fbcImage,
+		EndTime:    "2026-10-09T06:14:00",
+		BundleNVRs: []string{"quay-operator-metadata-container-3.18.1.202610090339.p2.g35cf767.assembly.stream.el9-1"},
+	}}
+	if !reflect.DeepEqual(store.fbcs, want) {
+		t.Errorf("FBC records = %+v, want %+v", store.fbcs, want)
+	}
+	if *requests != 2 {
+		t.Errorf("requests = %d, want 2: the search and the /build read", *requests)
+	}
+}
+
+// An FBC image resolved without its FBC record has its /build record read
+// once; a failed build holds no bundle.
+func TestReadFBCRecords(t *testing.T) {
+	client, requests := fbcService(t, "failure")
+	store := &fakeStore{got: []Build{{Digest: fbcDigest, State: StateResolved, NVR: fbcImageNVR, RecordID: "875a2a69-8e3e-9e13-4432-fe10e617c1f3"}}}
+	resolveOnce(t, client, store)
+	want := map[string]FBCRecord{fbcDigest: {Digest: fbcDigest, Pullspec: fbcImage, EndTime: "2026-10-09T06:14:00", BundleNVRs: []string{}}}
+	if !reflect.DeepEqual(store.fbcs, want) || *requests != 1 {
+		t.Errorf("FBC records = %+v after %d requests, want %+v after 1", store.fbcs, *requests, want)
+	}
+	resolveOnce(t, client, store)
+	if *requests != 1 {
+		t.Errorf("requests after a second pass = %d, want still 1", *requests)
 	}
 }

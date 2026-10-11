@@ -65,16 +65,30 @@ export interface BuildLabel {
  * without a candidate since the first of the version's builds' bundles was, by
  * the build each installed; the newest bundle of the version's builds in CI,
  * by its label, unless it is the candidate's; passed, the newest of them,
- * newer than the candidate, that a run passed with; and what to do: with a
- * candidate, rerun release-from-fbc with passed, wait on a newer build in CI,
- * or nothing (current); without one, pick passed, or nothing (none).
+ * newer than the candidate, that a run passed with, and fbc, its FBCs, null
+ * until ART's record of each of the version's FBC images is read; and what to
+ * do: with a candidate, rerun release-from-fbc with passed, wait on a newer
+ * build in CI, or nothing (current); without one, pick passed, or nothing
+ * (none).
  */
 export interface CandidateCI {
 	since: string;
 	builds: CIBuild[];
 	latest_in_ci: BuildLabel | null;
 	passed: BuildLabel | null;
+	fbc: BuildFBC | null;
 	refresh: "rerun" | "waiting" | "current" | "pick" | "none";
+}
+
+/**
+ * A build's FBCs for release-from-fbc: of the version's FBC images of each
+ * operator and OCP version, the pullspec of the one ART built last that holds
+ * a bundle of the build, and the pairs without one, each with ART build
+ * history's search for the operator's FBCs ("" when ART links are off).
+ */
+export interface BuildFBC {
+	pullspecs: string[];
+	missing: { operator: string; ocp: string; url: string }[];
 }
 
 /**
