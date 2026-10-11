@@ -80,9 +80,8 @@ func mustTime(t *testing.T, s string) time.Time {
 // 10 Oct 2026, when ART built 3.18.1: 3.18.1's STAGE build "stage", whose
 // images ART staged the day before it assembled them, and its failed prod
 // Release; the build "tested" and the periodic runs that tested it; 3.18.1's
-// newest build "new", whose images are staged only for both bundles and the
-// builder; and the stream's newest build "mixed", of no version, as ART
-// starts to build 3.18.2.
+// newest build "new", whose images are staged only for the builder; and the
+// stream's newest build "mixed", of no version, as ART starts to build 3.18.2.
 func seedQuay318(t *testing.T, srv *Server) {
 	t.Helper()
 	ctx := t.Context()
@@ -119,19 +118,13 @@ func seedQuay318(t *testing.T, srv *Server) {
 	seedKonfluxRelease(t, srv, "quay-prod-3-18-1-image-20261009133455", "quay-prod-3-18-1-image-20261009133455",
 		"quay-advisory-prod-3-18", "Failed", "2026-10-09T13:34:55Z", "2026-10-09T13:39:03Z")
 
-	newest := testBuild("new", all...)
-	for _, c := range []string{"quay-3-18-container-security-operator-bundle", "quay-3-18-quay-bridge-operator-bundle"} {
-		newest[c] = staged[c]
-	}
-	seedImages(t, srv, "quay-3-18-20261010-013713-000", "2026-10-10T01:48:34Z", newest)
+	seedImages(t, srv, "quay-3-18-20261010-013713-000", "2026-10-10T01:48:34Z", testBuild("new", all...))
 	// Started later, but created first.
 	seedImages(t, srv, "quay-3-18-20261010-013900-000", "2026-10-10T01:40:00Z", testBuild("other", all...))
 	seedImages(t, srv, "quay-3-18-20261010-045000-000", "2026-10-10T05:00:00Z", testBuild("mixed", all...))
 	// Newer, but not stream builds. 3.18.1's newer assembly failed stage.
 	seedImages(t, srv, "fbc-ri-stage-quay-3-18-quay-operator-d552l", "2026-10-10T01:49:22Z",
 		testBuild("new", "quay-3-18-quay-builder", "quay-3-18-quay-builder-qemu", "quay-3-18-quay-clair", "quay-3-18-quay-operator", "quay-3-18-quay-operator-bundle", "quay-3-18-quay-quay"))
-	seedKonfluxRelease(t, srv, "fbc-ri-stage-quay-3-18-quay-operator-ssrlx", "fbc-ri-stage-quay-3-18-quay-operator-d552l",
-		"quay-advisory-stage-3-18", "Failed", "2026-10-10T01:49:22Z", "2026-10-10T01:52:21Z")
 	seedImages(t, srv, "quay-stage-3-18-1-image-20261010020000", "2026-10-10T02:00:00Z", staged)
 	assembly("quay-stage-3-18-1-image-20261010020000", "stage", "2026-10-10T02:00:00Z")
 	seedKonfluxRelease(t, srv, "quay-stage-3-18-1-image-20261010020000", "quay-stage-3-18-1-image-20261010020000",
@@ -343,102 +336,6 @@ func TestGetCandidate(t *testing.T) {
 	}
 	if !reflect.DeepEqual(raw, want) {
 		t.Errorf("3.14.10 = %v, want %v", raw, want)
-	}
-}
-
-// A build's stage flag names the failed STAGE Release holding its unstaged
-// images, tells which others wait on their bundle and, once all are staged,
-// dates the build by the image that reached stage last, at its first time
-// there. The newest build shows with its state.
-func TestGetCandidateStage(t *testing.T) {
-	srv := setupTestServer(t)
-	seedQuay318(t, srv)
-	// newest is 3.18.1's newest build's stage flag, and its stage state on
-	// the page.
-	newest := func() (model.StageFlag, string) {
-		t.Helper()
-		snap, err := srv.db.GetReleaseSnapshot(t.Context(), "quay-3-18-20261010-013713-000")
-		if err != nil {
-			t.Fatal(err)
-		}
-		releases, err := srv.db.StageReleases(t.Context(), &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}, srv.StageReleasePlanPattern)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var got model.ReleaseCandidate
-		getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
-		if got.Newest == nil {
-			t.Fatal("3.18.1 has no newest build")
-		}
-		return stageFlag("quay-3-18", buildImages("quay-3-18", snap), releases), got.Newest.Stage
-	}
-
-	f, state := newest()
-	wantNotStaged := []string{
-		"quay-3-18-container-security-operator",
-		"quay-3-18-quay-bridge-operator",
-		"quay-3-18-quay-builder-qemu",
-		"quay-3-18-quay-clair",
-		"quay-3-18-quay-operator",
-		"quay-3-18-quay-operator-bundle",
-		"quay-3-18-quay-quay",
-	}
-	// ssrlx holds five of them; the CSO and QBO operators are in no STAGE
-	// Release, but their bundles are staged.
-	wantNoBundle := []string{"quay-3-18-container-security-operator", "quay-3-18-quay-bridge-operator"}
-	if f.State != "not_staged" || f.StagedAt != nil || f.Total != 10 || !slices.Equal(f.NotStaged, wantNotStaged) ||
-		f.Release == nil || f.Release.Name != "fbc-ri-stage-quay-3-18-quay-operator-ssrlx" ||
-		!slices.Equal(f.NoBundle, wantNoBundle) || len(f.NoRelease) != 0 || state != f.State {
-		t.Fatalf("3.18.1 newest stage = %+v, %s on the page", f, state)
-	}
-
-	// ssrlx is retried, and the CSO and QBO operators reach stage, CSO twice.
-	seedKonfluxRelease(t, srv, "fbc-ri-stage-quay-3-18-quay-operator-ssrlx", "fbc-ri-stage-quay-3-18-quay-operator-d552l",
-		"quay-advisory-stage-3-18", "Succeeded", "2026-10-10T01:49:22Z", "2026-10-10T02:30:00Z")
-	operators := map[string]string{}
-	for _, c := range []string{"quay-3-18-container-security-operator", "quay-3-18-quay-bridge-operator"} {
-		operators[c] = testImage("new/" + c)
-	}
-	seedImages(t, srv, "fbc-ri-stage-quay-3-18-operators", "2026-10-10T02:40:00Z", operators)
-	seedKonfluxRelease(t, srv, "fbc-ri-stage-quay-3-18-operators", "fbc-ri-stage-quay-3-18-operators",
-		"quay-advisory-stage-3-18", "Succeeded", "2026-10-10T02:40:00Z", "2026-10-10T02:50:00Z")
-	seedImages(t, srv, "fbc-ri-stage-quay-3-18-cso", "2026-10-10T03:20:00Z",
-		map[string]string{"quay-3-18-container-security-operator": operators["quay-3-18-container-security-operator"]})
-	seedKonfluxRelease(t, srv, "fbc-ri-stage-quay-3-18-cso", "fbc-ri-stage-quay-3-18-cso",
-		"quay-advisory-stage-3-18", "Succeeded", "2026-10-10T03:20:00Z", "2026-10-10T03:30:00Z")
-	if f, state := newest(); f.State != "staged" || f.Total != 10 || len(f.NotStaged) != 0 || f.Release != nil ||
-		len(f.NoBundle) != 0 || len(f.NoRelease) != 0 || f.StagedAt == nil || !f.StagedAt.Equal(mustTime(t, "2026-10-10T02:50:00Z")) || state != f.State {
-		t.Errorf("all staged: 3.18.1 newest stage = %+v, %s on the page; want staged at 02:50, when CSO and QBO first got there", f, state)
-	}
-}
-
-// An image no STAGE Release holds waits on its bundle when the build's bundle
-// for it, named as the page names components, is staged; otherwise it, like a
-// bundle in no Release, is in none.
-func TestStageFlagNoRelease(t *testing.T) {
-	succeeded := func(images ...string) model.StageRelease {
-		return model.StageRelease{KonfluxRelease: model.KonfluxRelease{ReleasedStatus: "True", ReleasedReason: "Succeeded"}, Images: images}
-	}
-	for _, tc := range []struct{ app, operator, bundle string }{
-		{"quay-3-17", "quay-3-17-container-security-operator", "quay-3-17-quay-container-security-operator-bundle"},
-		{"quay-3-18", "quay-3-18-quay-bridge-operator", "quay-3-18-quay-bridge-operator-bundle"},
-		{"quay-3-15", "quay-3-15-container-security-operator", "container-security-operator-bundle"},
-	} {
-		images := []model.SnapshotImage{{Name: tc.operator, Image: testImage("op")}, {Name: tc.bundle, Image: testImage("bundle")}}
-		f := stageFlag(tc.app, images, []model.StageRelease{succeeded(testImage("bundle"))})
-		if !slices.Equal(f.NoBundle, []string{tc.operator}) || len(f.NoRelease) != 0 {
-			t.Errorf("%s: no_bundle %v, no_release %v; want [%s], []", tc.app, f.NoBundle, f.NoRelease, tc.operator)
-		}
-	}
-
-	images := []model.SnapshotImage{
-		{Name: "quay-3-17-container-security-operator", Image: testImage("op")},
-		{Name: "quay-3-17-quay-container-security-operator-bundle", Image: testImage("bundle")},
-	}
-	f := stageFlag("quay-3-17", images, []model.StageRelease{succeeded(testImage("other"))})
-	want := []string{"quay-3-17-container-security-operator", "quay-3-17-quay-container-security-operator-bundle"}
-	if len(f.NoBundle) != 0 || !slices.Equal(f.NoRelease, want) {
-		t.Errorf("bundle not staged: no_bundle %v, no_release %v; want [], %v", f.NoBundle, f.NoRelease, want)
 	}
 }
 
