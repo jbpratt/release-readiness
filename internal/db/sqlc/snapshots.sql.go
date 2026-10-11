@@ -7,7 +7,6 @@ package dbsqlc
 
 import (
 	"context"
-	"strings"
 )
 
 const createSnapshot = `-- name: CreateSnapshot :execlastid
@@ -62,63 +61,6 @@ func (q *Queries) GetSnapshotRow(ctx context.Context, name string) (Snapshot, er
 	return i, err
 }
 
-const listComponentCandidates = `-- name: ListComponentCandidates :many
-SELECT sc.id, sc.component, sc.image_url,
-       s.id AS snapshot_id, s.application, s.created_at
-FROM snapshot_components sc
-JOIN snapshots s ON s.id = sc.snapshot_id
-WHERE s.application IN (/*SLICE:applications*/?)
-`
-
-type ListComponentCandidatesRow struct {
-	ID          int64
-	Component   string
-	ImageUrl    string
-	SnapshotID  int64
-	Application string
-	CreatedAt   string
-}
-
-func (q *Queries) ListComponentCandidates(ctx context.Context, applications []string) ([]ListComponentCandidatesRow, error) {
-	query := listComponentCandidates
-	var queryParams []interface{}
-	if len(applications) > 0 {
-		for _, v := range applications {
-			queryParams = append(queryParams, v)
-		}
-		query = strings.Replace(query, "/*SLICE:applications*/?", strings.Repeat(",?", len(applications))[1:], 1)
-	} else {
-		query = strings.Replace(query, "/*SLICE:applications*/?", "NULL", 1)
-	}
-	rows, err := q.db.QueryContext(ctx, query, queryParams...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListComponentCandidatesRow
-	for rows.Next() {
-		var i ListComponentCandidatesRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Component,
-			&i.ImageUrl,
-			&i.SnapshotID,
-			&i.Application,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listSnapshotComponents = `-- name: ListSnapshotComponents :many
 SELECT id, snapshot_id, component, image_url
 FROM snapshot_components
@@ -154,37 +96,48 @@ func (q *Queries) ListSnapshotComponents(ctx context.Context, snapshotID int64) 
 	return items, nil
 }
 
-const listStreamSnapshotsWithDigest = `-- name: ListStreamSnapshotsWithDigest :many
-SELECT name
+const listStreamBuildImages = `-- name: ListStreamBuildImages :many
+SELECT s.name, s.created_at, sc.component, sc.image_url, CAST(COALESCE(a.nvr, '') AS TEXT) AS nvr
 FROM snapshots s
-WHERE application = ?1 AND name NOT LIKE 'fbc-ri-%'
+JOIN snapshot_components sc ON sc.snapshot_id = s.id
+LEFT JOIN art_builds a ON a.state = 'resolved'
+  AND a.digest = substr(sc.image_url, instr(sc.image_url, '@') + 1)
+WHERE s.application = ? AND s.name NOT LIKE 'fbc-ri-%'
   AND NOT EXISTS (SELECT 1 FROM staged_snapshots ss WHERE ss.name = s.name)
-  AND EXISTS (SELECT 1 FROM snapshot_components sc
-              WHERE sc.snapshot_id = s.id
-                AND substr(sc.image_url, instr(sc.image_url, '@') + 1) = CAST(?2 AS TEXT))
-ORDER BY created_at DESC, name DESC
+ORDER BY s.created_at DESC, s.name DESC, sc.component
 `
 
-type ListStreamSnapshotsWithDigestParams struct {
-	Application string
-	Digest      string
+type ListStreamBuildImagesRow struct {
+	Name      string
+	CreatedAt string
+	Component string
+	ImageUrl  string
+	Nvr       string
 }
 
-// The stream builds, as NewestStreamSnapshot filters them, holding an image
-// of the digest, newest first.
-func (q *Queries) ListStreamSnapshotsWithDigest(ctx context.Context, arg ListStreamSnapshotsWithDigestParams) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, listStreamSnapshotsWithDigest, arg.Application, arg.Digest)
+// The component images of the application's stream builds, newest first, each
+// with the NVR of its digest's resolved ART build, or ”. ART's assembly
+// Snapshots (staged_snapshots) and its fbc-ri-* re-releases of a bundle's
+// related images are not stream builds.
+func (q *Queries) ListStreamBuildImages(ctx context.Context, application string) ([]ListStreamBuildImagesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listStreamBuildImages, application)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListStreamBuildImagesRow
 	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
+		var i ListStreamBuildImagesRow
+		if err := rows.Scan(
+			&i.Name,
+			&i.CreatedAt,
+			&i.Component,
+			&i.ImageUrl,
+			&i.Nvr,
+		); err != nil {
 			return nil, err
 		}
-		items = append(items, name)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -193,24 +146,6 @@ func (q *Queries) ListStreamSnapshotsWithDigest(ctx context.Context, arg ListStr
 		return nil, err
 	}
 	return items, nil
-}
-
-const newestStreamSnapshot = `-- name: NewestStreamSnapshot :one
-SELECT name
-FROM snapshots s
-WHERE application = ? AND name NOT LIKE 'fbc-ri-%'
-  AND NOT EXISTS (SELECT 1 FROM staged_snapshots ss WHERE ss.name = s.name)
-ORDER BY created_at DESC, name DESC
-LIMIT 1
-`
-
-// ART's assembly Snapshots (staged_snapshots) and its fbc-ri-* re-releases of
-// a bundle's related images are not stream builds.
-func (q *Queries) NewestStreamSnapshot(ctx context.Context, application string) (string, error) {
-	row := q.db.QueryRowContext(ctx, newestStreamSnapshot, application)
-	var name string
-	err := row.Scan(&name)
-	return name, err
 }
 
 const snapshotExistsByName = `-- name: SnapshotExistsByName :one
