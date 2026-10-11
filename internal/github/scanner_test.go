@@ -63,12 +63,14 @@ func commits(n int, msg func(i int) string) []commitJSON {
 }
 
 // reply is GitHub's answer to a compare: an HTTP error code, or its status and
-// commits, of which there are total when set.
+// commits, of which there are total when set. With reset set, it spends the
+// rate limit, which resets then.
 type reply struct {
 	code    int
 	status  string
 	total   int
 	commits []commitJSON
+	reset   time.Time
 }
 
 // fakeGitHub serves each compare, keyed "<repo> <base>...<head>", from replies,
@@ -86,6 +88,10 @@ func (f *fakeGitHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	key := repo + " " + span
 	f.requests = append(f.requests, key)
 	c, ok := f.replies[key]
+	if !c.reset.IsZero() {
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(c.reset.Unix(), 10))
+	}
 	if !ok || c.code != 0 {
 		w.WriteHeader(cmp.Or(c.code, http.StatusNotFound))
 		return
@@ -232,27 +238,112 @@ func TestScanOnce(t *testing.T) {
 				t.Errorf("Tickets = %+v, %+v; want %+v, %+v", e.InBuild, e.NotCompared, tc.found, wantNotCompared)
 			}
 
-			// A second pass reuses every outcome; an API error waits out
-			// retryAfter.
+			// A second pass reuses every outcome but an API error, which it
+			// reads again.
 			s.ScanOnce(context.Background())
-			if requests := gh.take(); len(requests) != 0 {
-				t.Errorf("second pass requests = %v, want none", requests)
+			want := 0
+			if tc.reason == ReasonAPIError {
+				want = tc.requests
+			}
+			if requests := gh.take(); len(requests) != want {
+				t.Errorf("second pass requests = %v, want %d", requests, want)
 			}
 		})
 	}
 }
 
-// An API error is compared again once retryAfter has passed.
+// An API error is compared again by the next pass.
 func TestScanOnceRetry(t *testing.T) {
 	gh := &fakeGitHub{replies: map[string]reply{}}
 	s := newScanner(t, gh, build(repoURL, headSHA))
 	t0 := time.Now()
 	s.now = func() time.Time { return t0 }
 	s.ScanOnce(context.Background())
-	s.now = func() time.Time { return t0.Add(retryAfter) }
 	s.ScanOnce(context.Background())
 	if requests := gh.take(); len(requests) != 2 {
 		t.Errorf("requests = %v, want 2", requests)
+	}
+}
+
+// A response that spends the rate limit, refused or not, holds every later
+// compare until the first pass at or after its reset. A held compare is an
+// API error, and the pass's one error for all of them.
+func TestScanOnceRateLimit(t *testing.T) {
+	quayFwd, quayRev := "quay HEAD..."+headSHA, "quay "+headSHA+"...HEAD"
+	clairFwd, clairRev := "clair HEAD..."+clairSHA, "clair "+clairSHA+"...HEAD"
+	t0 := time.Date(2026, 10, 11, 2, 45, 0, 0, time.UTC)
+	reset := t0.Add(30 * time.Minute)
+	fix := []commitJSON{commit("quay", 1, "PROJQUAY-1: fix")}
+	for _, tc := range []struct {
+		name        string
+		first       reply
+		inBuild     bool
+		notCompared []model.NotCompared
+		reread      []string
+	}{
+		{
+			name:  "refused",
+			first: reply{code: http.StatusForbidden, reset: reset},
+			notCompared: []model.NotCompared{
+				{Component: "quay", Reason: ReasonAPIError},
+				{Component: "quay", Reason: defaultBranch + ReasonAPIError},
+				{Component: "clair", Reason: ReasonAPIError},
+				{Component: "clair", Reason: defaultBranch + ReasonAPIError},
+			},
+			reread: []string{quayFwd, quayRev, clairFwd, clairRev},
+		},
+		{
+			name:    "last allowed",
+			first:   reply{status: "diverged", commits: fix, reset: reset},
+			inBuild: true,
+			notCompared: []model.NotCompared{
+				{Component: "quay", Reason: defaultBranch + ReasonAPIError},
+				{Component: "clair", Reason: ReasonAPIError},
+				{Component: "clair", Reason: defaultBranch + ReasonAPIError},
+			},
+			reread: []string{quayRev, clairFwd, clairRev},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			gh := &fakeGitHub{replies: map[string]reply{
+				quayFwd:  tc.first,
+				quayRev:  {status: "behind"},
+				clairFwd: {status: "ahead"},
+				clairRev: {status: "behind"},
+			}}
+			b := &model.TicketBuild{Targets: true, Components: []model.TicketComponent{
+				{Name: "quay", UpstreamRepo: repoURL, UpstreamSHA: headSHA},
+				{Name: "clair", UpstreamRepo: "https://github.com/quay/clair", UpstreamSHA: clairSHA},
+			}}
+			s := newScanner(t, gh, b)
+			reg := syncstatus.New()
+			s.Status = reg.Track("github-evidence", 0)
+			s.now = func() time.Time { return t0 }
+			s.ScanOnce(context.Background())
+			if requests := gh.take(); !slices.Equal(requests, []string{quayFwd}) {
+				t.Errorf("requests = %v, want %s alone", requests, quayFwd)
+			}
+			e := s.Tickets(b)
+			if _, ok := e.InBuild["PROJQUAY-1"]; ok != tc.inBuild || !slices.Equal(e.NotCompared, tc.notCompared) {
+				t.Errorf("in build %+v, not compared %+v; want PROJQUAY-1 %v, %+v", e.InBuild, e.NotCompared, tc.inBuild, tc.notCompared)
+			}
+
+			s.now = func() time.Time { return reset.Add(-time.Second) }
+			s.ScanOnce(context.Background())
+			if requests := gh.take(); len(requests) != 0 {
+				t.Errorf("before reset: requests = %v, want none", requests)
+			}
+			if p := reg.Problems(time.Now()); len(p) != 1 || !strings.HasSuffix(p[0].Message, errHeld.Error()) {
+				t.Errorf("before reset: problems = %+v, want one error for the held compares", p)
+			}
+
+			gh.set(quayFwd, reply{status: "diverged", commits: fix})
+			s.now = func() time.Time { return reset }
+			s.ScanOnce(context.Background())
+			if requests := gh.take(); !slices.Equal(requests, tc.reread) {
+				t.Errorf("at reset: requests = %v, want %v", requests, tc.reread)
+			}
+		})
 	}
 }
 
@@ -370,6 +461,21 @@ func TestScanOnceRereadsDefaultBranch(t *testing.T) {
 		}
 		if _, red := s.Tickets(b).NotInBuild["PROJQUAY-9"]; red != step.red {
 			t.Errorf("after %v: PROJQUAY-9 not in build = %v, want %v", step.after, red, step.red)
+		}
+	}
+
+	// A failed re-read keeps the last complete read, and the next pass reads
+	// it again.
+	red := s.Tickets(b).NotInBuild
+	gh.set(rev, reply{code: http.StatusBadGateway})
+	for _, after := range []time.Duration{2 * retryAfter, 2*retryAfter + 10*time.Minute} {
+		s.now = func() time.Time { return t0.Add(after) }
+		s.ScanOnce(context.Background())
+		if requests := gh.take(); !slices.Equal(requests, []string{rev}) {
+			t.Errorf("after %v: requests = %v, want %s", after, requests, rev)
+		}
+		if e := s.Tickets(b); !maps.EqualFunc(e.NotInBuild, red, slices.Equal) || len(e.NotCompared) != 0 {
+			t.Errorf("after %v: not in build %+v, not compared %+v; want %+v, none", after, e.NotInBuild, e.NotCompared, red)
 		}
 	}
 }

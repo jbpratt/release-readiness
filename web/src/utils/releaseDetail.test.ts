@@ -25,6 +25,7 @@ import {
 	jobLabels,
 	jobShortName,
 	missingCommits,
+	notComparedLines,
 	nvrLabel,
 	releaseLine,
 	scanCell,
@@ -125,6 +126,39 @@ test("missingCommits: one link per commit, titled with the components lacking it
 		],
 	);
 	assert.deepEqual(missingCommits([], "quay-3-18"), []);
+});
+
+test("notComparedLines: GitHub API errors folded into one line", () => {
+	const nc = (component: string, reason: string) => ({
+		component: `quay-3-18-${component}`,
+		reason,
+	});
+	const fold = "Not compared with GitHub: API error (retrying)";
+	assert.deepEqual(
+		notComparedLines(
+			[
+				nc("quay-quay", "github api error"),
+				nc("quay-clair", "default branch: github api error"),
+			],
+			"quay-3-18",
+		),
+		[fold],
+	);
+	assert.deepEqual(
+		notComparedLines(
+			[
+				nc("quay-builder", "upstream repo is not on github.com"),
+				nc("quay-clair", "default branch: github api error"),
+				nc("quay-quay", "not scanned yet"),
+			],
+			"quay-3-18",
+		),
+		[
+			"Not compared: builder (upstream repo is not on github.com), quay (not scanned yet)",
+			fold,
+		],
+	);
+	assert.deepEqual(notComparedLines([], "quay-3-18"), []);
 });
 
 test("nvrLabel", () => {

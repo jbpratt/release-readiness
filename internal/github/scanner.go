@@ -2,6 +2,7 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -27,8 +28,8 @@ const (
 	// component lacks were not read.
 	defaultBranch = "default branch: "
 
-	// retryAfter spaces out compares that failed on an API error, and reads
-	// of the commits a default branch, which moves, has that a build lacks.
+	// retryAfter spaces out the reads of the commits a default branch, which
+	// moves, has that a build lacks.
 	retryAfter = time.Hour
 )
 
@@ -90,8 +91,11 @@ func (s *Scanner) Run(ctx context.Context, interval time.Duration) {
 // gained after leaving its repo's default branch; base...sha, those since its
 // base, unless that is sha; and when its build has Target Version tickets,
 // sha...HEAD, the default branch's commits it lacks. A compare is read again
-// only after an API error, retryAfter later, or for sha...HEAD, retryAfter
-// after its last read. It forgets the compares no build uses.
+// by the next pass after an API error, and for sha...HEAD, retryAfter after
+// its last read; a failed re-read keeps the last complete read. Once a
+// response spends the rate limit, no compare is sent until the first pass at
+// or after its reset: each is held, an API error. It forgets the compares no
+// build uses.
 func (s *Scanner) ScanOnce(ctx context.Context) {
 	var pass syncstatus.Pass
 	defer func() { s.Status.Report(pass.Err()) }()
@@ -101,6 +105,10 @@ func (s *Scanner) ScanOnce(ctx context.Context) {
 		return
 	}
 	now := s.now().UTC()
+	if !now.Before(s.client.reset) {
+		s.client.reset = time.Time{}
+	}
+	held := 0
 	used := make(map[span]bool)
 	for _, b := range builds {
 		for _, c := range b.Components {
@@ -123,16 +131,24 @@ func (s *Scanner) ScanOnce(ctx context.Context) {
 				s.mu.RLock()
 				old, ok := s.results[id]
 				s.mu.RUnlock()
-				if ok && (now.Sub(old.checked) < retryAfter || old.reason != ReasonAPIError && id.head != "HEAD") {
+				if ok && old.reason != ReasonAPIError && (id.head != "HEAD" || now.Sub(old.checked) < retryAfter) {
 					continue
 				}
 				res, err := s.compare(ctx, owner, repo, id.base, id.head)
 				if ctx.Err() != nil {
 					return
 				}
-				if err != nil {
+				switch {
+				case errors.Is(err, errHeld):
+					held++
+				case err != nil:
 					s.logger.Warn("compare", "repo", c.UpstreamRepo, "base", id.base, "head", id.head, "error", err)
 					pass.Add(fmt.Errorf("compare %s %s...%s: %w", c.UpstreamRepo, id.base, id.head, err))
+				}
+				// Its checked time kept, a complete read whose re-read
+				// failed is read again by the next pass.
+				if err != nil && ok && old.reason == "" {
+					continue
 				}
 				res.checked = now
 				s.mu.Lock()
@@ -140,6 +156,11 @@ func (s *Scanner) ScanOnce(ctx context.Context) {
 				s.mu.Unlock()
 			}
 		}
+	}
+	if held > 0 {
+		err := fmt.Errorf("%d compares held until %s: %w", held, s.client.reset.UTC().Format(time.RFC3339), errHeld)
+		s.logger.Warn("compare", "error", err)
+		pass.Add(err)
 	}
 	s.mu.Lock()
 	maps.DeleteFunc(s.results, func(id span, _ compared) bool { return !used[id] })
