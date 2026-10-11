@@ -1,0 +1,1 @@
+- [shots.py](shots.py): full-page screenshots and card text of the app's pages. Needs `pip install --user playwright && python3 -m playwright install chromium`.
