@@ -17,31 +17,17 @@ const (
 
 // Run is one Prow job execution and the images its tested-images.json names.
 type Run struct {
-	JobName       string     `json:"job_name"`
-	BuildID       string     `json:"build_id"`
-	Application   string     `json:"-"`
-	State         string     `json:"state"`
-	StartedAt     *time.Time `json:"started_at"`
-	CompletedAt   *time.Time `json:"completed_at"`
-	ProwURL       string     `json:"prow_url"`
-	ArtifactState string     `json:"artifact_state"`
-	CatalogRef    string     `json:"catalog_ref"`
-	FetchedAt     time.Time  `json:"fetched_at"`
-	Images        []Image    `json:"-"`
+	JobName, BuildID, Application, State string
+	StartedAt, CompletedAt               *time.Time
+	ProwURL, ArtifactState, CatalogRef   string
+	FetchedAt                            time.Time
+	Images                               []Image
 }
 
 // Image is a requested image a run tested. Digest is the join key against
 // Snapshot components.
 type Image struct {
 	Role, Digest string
-}
-
-// SyncState records when a job's runs were last listed without error.
-type SyncState struct {
-	JobName            string
-	Application        string
-	Interval           time.Duration
-	LastSuccessfulSync time.Time
 }
 
 // Job is a configured GCS run prefix mapped to the Konflux application whose

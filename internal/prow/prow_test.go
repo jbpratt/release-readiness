@@ -160,8 +160,7 @@ func TestApplyArtifactCountsOnlyPodImages(t *testing.T) {
 }
 
 type memStore struct {
-	runs  map[string]*Run
-	syncs map[string]SyncState
+	runs map[string]*Run
 }
 
 func (m *memStore) ListFinishedProwBuildIDs(_ context.Context, job string) ([]string, error) {
@@ -176,11 +175,6 @@ func (m *memStore) ListFinishedProwBuildIDs(_ context.Context, job string) ([]st
 
 func (m *memStore) UpsertProwRun(_ context.Context, r *Run) error {
 	m.runs[r.BuildID] = r
-	return nil
-}
-
-func (m *memStore) UpsertProwSync(_ context.Context, s SyncState) error {
-	m.syncs[s.JobName] = s
 	return nil
 }
 
@@ -229,7 +223,7 @@ func fakeGCS(t *testing.T, extra map[string][]byte) (*httptest.Server, map[strin
 func TestSync(t *testing.T) {
 	extra := map[string][]byte{}
 	srv, gets := fakeGCS(t, extra)
-	store := &memStore{runs: map[string]*Run{}, syncs: map[string]SyncState{}}
+	store := &memStore{runs: map[string]*Run{}}
 	s := NewSyncer(NewClient(srv.URL), store, testJobs(t), 15*time.Minute, slog.New(slog.DiscardHandler))
 	reg := syncstatus.New()
 	s.Status = reg.Track("prow", 15*time.Minute)
@@ -255,9 +249,6 @@ func TestSync(t *testing.T) {
 	if r := store.runs[periodicRun]; r.JobName != periodicJob || r.Application != "quay-3-18" {
 		t.Errorf("periodic run = %+v", r)
 	}
-	if len(store.syncs) != 1 {
-		t.Errorf("syncs = %v, want the job", store.syncs)
-	}
 
 	// The pending run finishes; finished runs are not fetched again.
 	extra["logs/"+periodicJob+"/"+pendingRun+"/finished.json"] = []byte(`{"timestamp":1791480000,"passed":true,"result":"SUCCESS"}`)
@@ -279,7 +270,7 @@ func TestSyncReportsFailedListing(t *testing.T) {
 	defer srv.Close()
 	jobs := append(testJobs(t), Job{Name: "other", Prefix: "logs/other/"})
 	reg := syncstatus.New()
-	s := NewSyncer(NewClient(srv.URL), &memStore{runs: map[string]*Run{}, syncs: map[string]SyncState{}}, jobs, 15*time.Minute, slog.New(slog.DiscardHandler))
+	s := NewSyncer(NewClient(srv.URL), &memStore{runs: map[string]*Run{}}, jobs, 15*time.Minute, slog.New(slog.DiscardHandler))
 	s.Status = reg.Track("prow", 15*time.Minute)
 
 	s.SyncOnce(t.Context())
