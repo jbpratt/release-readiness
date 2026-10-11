@@ -18,7 +18,6 @@ import (
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/prow"
-	"github.com/quay/release-readiness/internal/scan"
 )
 
 // quay318 is a quay-3-18 build's components less its base image, by name.
@@ -882,107 +881,4 @@ func TestGetCandidateNone(t *testing.T) {
 		}
 	}
 	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/candidate", http.StatusNotFound, nil)
-}
-
-// A component's scan is its image's stored scan, null without one.
-func TestGetCandidateScan(t *testing.T) {
-	srv := setupTestServer(t)
-	seedQuay318(t, srv)
-	const page = "https://konflux-ui.example/ns/art-quay-tenant/applications/quay-3-18/pipelineruns/"
-	for _, sc := range []scan.Scan{
-		{
-			Digest: testDigest("stage/quay-3-18-quay-operator"), State: scan.StateScanned,
-			PipelineRun: "quay-3-18-quay-operator-7mbwk", DetailURL: page + "quay-3-18-quay-operator-7mbwk",
-			Counts:  &model.ScanCounts{Basis: scan.BasisArchFindings, NoFix: model.SeverityCounts{High: 24, Medium: 264, Low: 232}},
-			Reports: map[string]string{"sha256:arch": "sha256:report"},
-		},
-		{
-			Digest: testDigest("stage/quay-3-18-quay-quay"), State: scan.StateScanFailed,
-			PipelineRun: "quay-3-18-quay-quay-zwvxj", DetailURL: page + "quay-3-18-quay-quay-zwvxj",
-		},
-	} {
-		sc.CheckedAt = time.Now()
-		if err := srv.db.UpsertImageScan(t.Context(), sc); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	var got struct {
-		Candidate struct {
-			Components []map[string]any `json:"components"`
-		} `json:"candidate"`
-	}
-	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
-	severities := func(high, medium, low float64) map[string]any {
-		return map[string]any{"critical": 0.0, "high": high, "medium": medium, "low": low, "unknown": 0.0}
-	}
-	for name, want := range map[string]any{
-		"quay-3-18-quay-operator": map[string]any{
-			"state": "scanned", "url": page + "quay-3-18-quay-operator-7mbwk",
-			"counts": map[string]any{"basis": "scanner_arch_findings", "fixable": severities(0, 0, 0), "no_fix": severities(24, 264, 232)},
-		},
-		"quay-3-18-quay-quay":  map[string]any{"state": "scan_failed", "url": page + "quay-3-18-quay-quay-zwvxj", "counts": nil},
-		"quay-3-18-quay-clair": nil,
-	} {
-		i := slices.IndexFunc(got.Candidate.Components, func(c map[string]any) bool { return c["name"] == name })
-		if i < 0 {
-			t.Fatalf("%s: no such component", name)
-		}
-		if sc, ok := got.Candidate.Components[i]["scan"]; !ok || !reflect.DeepEqual(sc, want) {
-			t.Errorf("%s scan = %v, want %v", name, sc, want)
-		}
-	}
-}
-
-// The scan sync reads the images of the release candidate, the STAGE build,
-// of every version not archived, once each; a version whose candidate is its
-// newest build, or that has no build, reads none.
-func TestCandidateDigests(t *testing.T) {
-	srv := setupTestServer(t)
-	seedQuay318(t, srv)
-	for _, v := range []string{"quay-v3.18.3", "quay-v3.18.4"} {
-		if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: v, KonfluxApplication: "quay-3-18"}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	// 3.18.2's STAGE build keeps 3.18.1's container-security-operator bundle.
-	const kept = "quay-3-18-container-security-operator-bundle"
-	stage2 := testBuild("stage2", quay318...)
-	stage2[kept] = testImage("stage/" + kept)
-	const snap = "quay-stage-3-18-2-image-20261010120000"
-	seedImages(t, srv, snap, "2026-10-10T12:00:00Z", stage2)
-	if err := srv.db.UpsertStagedSnapshot(t.Context(), snap, "3.18.2", "image", "stage", mustTime(t, "2026-10-10T12:00:00Z")); err != nil {
-		t.Fatal(err)
-	}
-	seedKonfluxRelease(t, srv, snap, snap, "quay-advisory-stage-3-18", "Succeeded", "2026-10-10T12:00:00Z", "2026-10-10T12:12:00Z")
-	seedImages(t, srv, "quay-3-18-20261011-000000-000", "2026-10-11T00:00:00Z", testBuild("next", quay318...))
-	resolveNVR(t, srv, "next/quay-3-18-quay-quay", testNVR("quay-quay", "3.18.3"))
-
-	got, err := srv.CandidateDigests(t.Context())
-	if err != nil {
-		t.Fatal(err)
-	}
-	// 3.18.1's and 3.18.2's STAGE builds: 3.18.3's candidate is its newest
-	// build, and 3.18.4 has no build.
-	var want []string
-	for _, c := range quay318 {
-		want = append(want, testDigest("stage/"+c))
-		if c != kept {
-			want = append(want, testDigest("stage2/"+c))
-		}
-	}
-	slices.Sort(got)
-	slices.Sort(want)
-	if !slices.Equal(got, want) {
-		t.Errorf("digests = %v, want %v", got, want)
-	}
-
-	for _, v := range []string{"quay-v3.18.1", "quay-v3.18.2"} {
-		if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: v, KonfluxApplication: "quay-3-18", Archived: true}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if got, err := srv.CandidateDigests(t.Context()); err != nil || len(got) != 0 {
-		t.Errorf("3.18.1 and 3.18.2 archived: digests = %v, %v; want none", got, err)
-	}
 }

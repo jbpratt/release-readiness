@@ -2,9 +2,7 @@ import type {
 	BuildCommit,
 	BuildTickets,
 	CandidateCI,
-	ImageScan,
 	KonfluxRelease,
-	ScanCounts,
 } from "../api/types";
 import { relative } from "./format.ts";
 
@@ -196,55 +194,4 @@ export function releaseLine(r: KonfluxRelease): StatusLine {
 		};
 	}
 	return { status: "running", text: "Release in progress" };
-}
-
-export const SEVERITIES = [
-	"critical",
-	"high",
-	"medium",
-	"low",
-	"unknown",
-] as const;
-
-/** A severity's label colour, as master's scan view has it. */
-export const SEVERITY_COLORS = {
-	critical: "red",
-	high: "red",
-	medium: "orange",
-	low: "yellow",
-	unknown: "grey",
-} as const;
-
-export const BASES: Record<ScanCounts["basis"], string> = {
-	scanner_arch_findings: "Counted per architecture",
-	unique_cves: "Unique CVEs across architectures",
-};
-
-/**
- * A scanned image's cell: a label per severity with fixable CVEs. The no-fix
- * ones, hundreds per image, would drown it.
- */
-export const fixableLabels = ({ fixable }: ScanCounts) =>
-	SEVERITIES.filter((s) => fixable[s] > 0).map((s) => ({
-		text: `${fixable[s]} ${s}`,
-		color: SEVERITY_COLORS[s],
-	}));
-
-/**
- * The CVEs cell of a candidate image without counts: its text, colour and
- * link. A pending or unread scan is a muted dash.
- */
-export function scanCell(scan: ImageScan | null): {
-	text: string;
-	color: "orange" | "grey";
-	url?: string;
-} {
-	switch (scan?.state) {
-		case "scan_failed":
-			return { text: "scan failed", color: "orange", url: scan.url };
-		case "not_scanned":
-			return { text: "not scanned", color: "grey", url: scan.url };
-		default:
-			return { text: "-", color: "grey" };
-	}
 }

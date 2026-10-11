@@ -46,45 +46,6 @@ func (d *DB) ListJiraIssues(ctx context.Context, fixVersion string) ([]model.Jir
 	return issues, rows.Err()
 }
 
-// GetIssueSummariesBatch returns aggregate counts for multiple fixVersions in a single query.
-// Stays hand-written due to variable IN clause.
-func (d *DB) GetIssueSummariesBatch(ctx context.Context, fixVersions []string) (map[string]*model.IssueSummary, error) {
-	if len(fixVersions) == 0 {
-		return map[string]*model.IssueSummary{}, nil
-	}
-
-	placeholders := make([]string, len(fixVersions))
-	args := make([]interface{}, len(fixVersions))
-	for i, v := range fixVersions {
-		placeholders[i] = "?"
-		args[i] = v
-	}
-
-	query := `
-		SELECT fix_version,
-			SUM(CASE WHEN LOWER(issue_type) = 'vulnerability' OR LOWER(labels) LIKE '%cve%' THEN 1 ELSE 0 END) AS cves
-		FROM jira_issues
-		WHERE fix_version IN (` + strings.Join(placeholders, ",") + `)
-		GROUP BY fix_version`
-
-	rows, err := d.dbtx.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-
-	result := make(map[string]*model.IssueSummary, len(fixVersions))
-	for rows.Next() {
-		var fixVersion string
-		var s model.IssueSummary
-		if err := rows.Scan(&fixVersion, &s.CVEs); err != nil {
-			return nil, err
-		}
-		result[fixVersion] = &s
-	}
-	return result, rows.Err()
-}
-
 func (d *DB) UpsertReleaseVersion(ctx context.Context, v *model.ReleaseVersion) error {
 	return d.queries().UpsertReleaseVersion(ctx, dbsqlc.UpsertReleaseVersionParams{
 		Name:                  v.Name,

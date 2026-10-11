@@ -366,59 +366,11 @@ func TestReleasesOverview(t *testing.T) {
 	if ov.Release.Name != "quay-v3.16.3" {
 		t.Errorf("release name: got %q, want quay-v3.16.3", ov.Release.Name)
 	}
-	if ov.IssueSummary == nil {
-		t.Fatal("issue_summary: got nil")
-	}
-	if ov.IssueSummary.CVEs != 0 {
-		t.Errorf("issue_summary: got cves=%d, want 0", ov.IssueSummary.CVEs)
-	}
 	if ov.LatestBuild == nil || !ov.LatestBuild.Equal(built) {
 		t.Errorf("latest_build: got %v, want %v", ov.LatestBuild, built)
 	}
 	if ov.Readiness != (model.ReadinessResponse{}) {
 		t.Errorf("readiness: got %+v, want none for an open issue", ov.Readiness)
-	}
-}
-
-func TestGetIssueSummariesBatch(t *testing.T) {
-	srv := setupTestServer(t)
-	ctx := t.Context()
-
-	issues := []model.JiraIssueRecord{
-		{Key: "Q-1", Summary: "bug1", Status: "Open", Priority: "Major", FixVersion: "3.16.3", IssueType: "Bug"},
-		{Key: "Q-2", Summary: "cve1", Status: "Closed", Priority: "Critical", FixVersion: "3.16.3", IssueType: "Vulnerability"},
-		{Key: "Q-3", Summary: "task1", Status: "Verified", Priority: "Minor", FixVersion: "3.17.0", IssueType: "Story"},
-		{Key: "Q-4", Summary: "bug2", Status: "Release Pending", Priority: "Major", FixVersion: "3.17.0", IssueType: "Bug"},
-	}
-	for _, issue := range issues {
-		if err := srv.db.UpsertJiraIssue(ctx, &issue); err != nil {
-			t.Fatalf("upsert issue %s: %v", issue.Key, err)
-		}
-	}
-
-	summaries, err := srv.db.GetIssueSummariesBatch(ctx, []string{"3.16.3", "3.17.0", "nonexistent"})
-	if err != nil {
-		t.Fatalf("batch: %v", err)
-	}
-
-	s163 := summaries["3.16.3"]
-	if s163 == nil {
-		t.Fatal("3.16.3 summary: got nil")
-	}
-	if s163.CVEs != 1 {
-		t.Errorf("3.16.3 cves: got %d, want 1", s163.CVEs)
-	}
-
-	s170 := summaries["3.17.0"]
-	if s170 == nil {
-		t.Fatal("3.17.0 summary: got nil")
-	}
-	if s170.CVEs != 0 {
-		t.Errorf("3.17.0 cves: got %d, want 0", s170.CVEs)
-	}
-
-	if summaries["nonexistent"] != nil {
-		t.Errorf("nonexistent: got %+v, want nil", summaries["nonexistent"])
 	}
 }
 
