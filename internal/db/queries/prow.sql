@@ -32,11 +32,3 @@ SELECT role, digest
 FROM prow_run_images
 WHERE job_name = ? AND build_id = ?
 ORDER BY id;
-
--- name: UpsertProwSync :exec
-INSERT INTO prow_syncs (job_name, application, interval_seconds, last_successful_sync)
-VALUES (?, ?, ?, ?)
-ON CONFLICT(job_name) DO UPDATE SET
-    application=excluded.application,
-    interval_seconds=excluded.interval_seconds,
-    last_successful_sync=excluded.last_successful_sync;

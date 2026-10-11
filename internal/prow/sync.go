@@ -32,12 +32,8 @@ func NewClient(baseURL string) *Client {
 // listBuildIDs returns the run directories under prefix, following page tokens.
 func (c *Client) listBuildIDs(ctx context.Context, prefix string) ([]string, error) {
 	var ids []string
-	pageToken := ""
+	q := url.Values{"prefix": {prefix}, "delimiter": {"/"}, "fields": {"prefixes,nextPageToken"}}
 	for {
-		q := url.Values{"prefix": {prefix}, "delimiter": {"/"}, "fields": {"prefixes,nextPageToken"}}
-		if pageToken != "" {
-			q.Set("pageToken", pageToken)
-		}
 		data, err := c.get(ctx, c.baseURL+"/storage/v1/b/"+bucket+"/o?"+q.Encode())
 		if err != nil {
 			return nil, err
@@ -58,7 +54,7 @@ func (c *Client) listBuildIDs(ctx context.Context, prefix string) ([]string, err
 		if page.NextPageToken == "" {
 			return ids, nil
 		}
-		pageToken = page.NextPageToken
+		q.Set("pageToken", page.NextPageToken)
 	}
 }
 
@@ -90,7 +86,6 @@ func (c *Client) get(ctx context.Context, u string) ([]byte, error) {
 type Store interface {
 	ListFinishedProwBuildIDs(ctx context.Context, jobName string) ([]string, error)
 	UpsertProwRun(ctx context.Context, r *Run) error
-	UpsertProwSync(ctx context.Context, s SyncState) error
 }
 
 // Syncer polls configured job prefixes and upserts their runs.
@@ -170,12 +165,7 @@ func (s *Syncer) syncJob(ctx context.Context, job Job) (int, error) {
 		}
 		n++
 	}
-	return n, s.store.UpsertProwSync(ctx, SyncState{
-		JobName:            job.Name,
-		Application:        job.Application,
-		Interval:           s.interval,
-		LastSuccessfulSync: time.Now().UTC(),
-	})
+	return n, nil
 }
 
 // fetchRun returns nil when the run has no readable prowjob.json yet.

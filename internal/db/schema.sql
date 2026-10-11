@@ -106,13 +106,6 @@ CREATE TABLE IF NOT EXISTS prow_run_images (
 
 CREATE INDEX IF NOT EXISTS idx_prow_run_images_run ON prow_run_images(job_name, build_id);
 
-CREATE TABLE IF NOT EXISTS prow_syncs (
-    job_name             TEXT PRIMARY KEY,
-    application          TEXT NOT NULL,
-    interval_seconds     INTEGER NOT NULL,
-    last_successful_sync TEXT NOT NULL
-);
-
 -- ART assembly annotations (art.redhat.com/assembly, kind, env) of a Konflux
 -- Snapshot, for Snapshots that carry all three.
 CREATE TABLE IF NOT EXISTS staged_snapshots (

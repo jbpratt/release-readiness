@@ -79,12 +79,3 @@ func (d *DB) ListProwRunsByApplication(ctx context.Context, application string) 
 	}
 	return runs, nil
 }
-
-func (d *DB) UpsertProwSync(ctx context.Context, s prow.SyncState) error {
-	return d.queries().UpsertProwSync(ctx, dbsqlc.UpsertProwSyncParams{
-		JobName:            s.JobName,
-		Application:        s.Application,
-		IntervalSeconds:    int64(s.Interval / time.Second),
-		LastSuccessfulSync: s.LastSuccessfulSync.UTC().Format(time.RFC3339),
-	})
-}

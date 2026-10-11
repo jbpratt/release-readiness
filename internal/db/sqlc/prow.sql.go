@@ -196,29 +196,3 @@ func (q *Queries) UpsertProwRun(ctx context.Context, arg UpsertProwRunParams) er
 	)
 	return err
 }
-
-const upsertProwSync = `-- name: UpsertProwSync :exec
-INSERT INTO prow_syncs (job_name, application, interval_seconds, last_successful_sync)
-VALUES (?, ?, ?, ?)
-ON CONFLICT(job_name) DO UPDATE SET
-    application=excluded.application,
-    interval_seconds=excluded.interval_seconds,
-    last_successful_sync=excluded.last_successful_sync
-`
-
-type UpsertProwSyncParams struct {
-	JobName            string
-	Application        string
-	IntervalSeconds    int64
-	LastSuccessfulSync string
-}
-
-func (q *Queries) UpsertProwSync(ctx context.Context, arg UpsertProwSyncParams) error {
-	_, err := q.db.ExecContext(ctx, upsertProwSync,
-		arg.JobName,
-		arg.Application,
-		arg.IntervalSeconds,
-		arg.LastSuccessfulSync,
-	)
-	return err
-}

@@ -79,13 +79,6 @@ type ProwRunImage struct {
 	Digest  string
 }
 
-type ProwSync struct {
-	JobName            string
-	Application        string
-	IntervalSeconds    int64
-	LastSuccessfulSync string
-}
-
 type ReleaseVersion struct {
 	ID                    int64
 	Name                  string
