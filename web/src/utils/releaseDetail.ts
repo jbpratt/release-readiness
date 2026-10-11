@@ -20,10 +20,6 @@ import { relative } from "./format.ts";
 // Ticket statuses counted as verified.
 const VERIFIED = new Set(["release pending", "verified", "closed", "done"]);
 
-/** How many tickets are not verified yet. */
-export const notVerified = (tickets: { status: string }[]) =>
-	tickets.filter((t) => !VERIFIED.has(t.status.toLowerCase())).length;
-
 const STATUS_ICONS: Record<string, typeof QuestionCircleIcon> = {
 	new: OutlinedCircleIcon,
 	assigned: InProgressIcon,
@@ -127,8 +123,8 @@ export interface StatusLine {
  * The candidate card's CI warning, when the newest build is not the CI-tested
  * candidate: a newer build is in CI, with the start of the newest run that
  * installed the candidate, if any, and whether the warning names that build,
- * which the refresh line names when it says refresh or waiting; or "no_pass"
- * when no run that installed the candidate passed.
+ * which the action line names when it waits on it or re-runs with it; or
+ * "no_pass" when no run that installed the candidate passed.
  */
 export function ciWarning(
 	ci: CandidateCI,
@@ -148,7 +144,11 @@ export function ciWarning(
 	}
 	return {
 		lastRun,
-		namesLatest: ci.refresh !== "refresh" && ci.refresh !== "waiting",
+		namesLatest: !(
+			ci.refresh === "waiting" ||
+			(ci.refresh === "rerun" &&
+				ci.passed?.snapshot === ci.latest_in_ci.snapshot)
+		),
 	};
 }
 

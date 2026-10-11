@@ -157,10 +157,12 @@ type StageRelease struct {
 
 // ReleaseCandidate is what decides whether a version can ship: its release
 // candidate, the selected STAGE build, or null with Reason set when there is
-// none, with the periodic CI runs since its operator bundle was built, and its
+// none, with the periodic CI runs since its operator bundle was built, or
+// without a candidate since its builds' were, when it has builds, and its
 // newest build when that holds, for a component the candidate holds, another
-// image than the candidate does and is not the build CI names, or when there
-// is no candidate. A shipped version sets nothing else.
+// image than the candidate does, or when there is no candidate, and is not a
+// build CI names to pick, re-run with or, beside the candidate, in CI. A
+// shipped version sets nothing else.
 type ReleaseCandidate struct {
 	Shipped   bool            `json:"shipped"`
 	Candidate *CandidateBuild `json:"candidate"`
@@ -200,15 +202,18 @@ type CIState struct {
 }
 
 // CandidateCI is the application's periodic runs since the candidate's
-// operator bundle was first built, by the build each installed, the newest
+// operator bundle was first built, or without a candidate since the first of
+// the version's builds' bundles was, by the build each installed; the newest
 // bundle of the version's builds in the CI catalog, when that is not the
-// candidate's, and Refresh, whether the candidate needs refreshing:
-// "refresh", "needs_art" once a prod Release was attempted, "waiting" while no
-// run of that build passed, or "current".
+// candidate's; Passed, the newest of them, newer than the candidate, that a run
+// passed with; and Refresh, what to do: with a candidate "rerun"
+// release-from-fbc with Passed, "waiting" while a newer build in CI has not
+// passed, or "current"; without one "pick" Passed, or "none".
 type CandidateCI struct {
 	Since      time.Time   `json:"since"`
 	Builds     []CIBuild   `json:"builds"`
 	LatestInCI *BuildLabel `json:"latest_in_ci"`
+	Passed     *BuildLabel `json:"passed"`
 	Refresh    string      `json:"refresh"`
 }
 

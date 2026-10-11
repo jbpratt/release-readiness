@@ -11,6 +11,7 @@ import {
 	QuestionCircleIcon,
 } from "@patternfly/react-icons";
 import type {
+	BuildLabel,
 	CandidateCI,
 	CIRun,
 	ImageScan,
@@ -23,7 +24,6 @@ import {
 	jobLabels,
 	jobShortName,
 	missingCommits,
-	notVerified,
 	nvrLabel,
 	releaseLine,
 	scanCell,
@@ -140,18 +140,6 @@ test("nvrLabel", () => {
 		"3.18.1.202610061637.p2.g35cf767-1",
 	);
 	assert.equal(nvrLabel("quay-builder-3.18.1-1"), "quay-builder-3.18.1-1");
-});
-
-test("notVerified: Release Pending, Verified, Closed and Done, in any case, are verified", () => {
-	const tickets = [
-		"Release Pending",
-		"VERIFIED",
-		"closed",
-		"Done",
-		"ON_QA",
-		"New",
-	].map((status) => ({ status }));
-	assert.equal(notVerified(tickets), 2);
 });
 
 test("statusIcon: each Jira status its icon, in any case, the verified ones green", () => {
@@ -289,9 +277,18 @@ test("ciWarning", () => {
 		started_at,
 		prow_url: "https://prow.example/1",
 	});
+	const latest: BuildLabel = {
+		snapshot: "quay-3-18-20261009-042614-000",
+		created_at: "2026-10-09T04:28:09Z",
+	};
+	const older: BuildLabel = {
+		snapshot: "quay-3-18-20261008-131611-000",
+		created_at: "2026-10-08T13:22:40Z",
+	};
 	const ci = (
 		refresh: CandidateCI["refresh"],
-		inCI: boolean,
+		latest_in_ci: BuildLabel | null,
+		passed: BuildLabel | null,
 		...jobs: CIRun[][]
 	): CandidateCI => ({
 		since: "2026-10-06T17:10:27Z",
@@ -304,21 +301,18 @@ test("ciWarning", () => {
 				jobs: jobs.map((runs, i) => ({ job_name: `job-${i}`, runs })),
 			},
 		],
-		latest_in_ci: inCI
-			? {
-					snapshot: "quay-3-18-20261009-042614-000",
-					created_at: "2026-10-09T04:28:09Z",
-				}
-			: null,
+		latest_in_ci,
+		passed,
 		refresh,
 	});
 	// A newer build in CI: the candidate's newest run of any job, and the
-	// build named unless the refresh line names it.
+	// build named unless the action line names it.
 	assert.deepEqual(
 		ciWarning(
 			ci(
-				"needs_art",
-				true,
+				"current",
+				latest,
+				null,
 				[run("success", "2026-10-07T23:49:38Z")],
 				[
 					run("success", "2026-10-09T00:56:39Z"),
@@ -328,23 +322,30 @@ test("ciWarning", () => {
 		),
 		{ lastRun: "2026-10-09T00:56:39Z", namesLatest: true },
 	);
-	for (const refresh of ["refresh", "waiting"] as const) {
+	for (const [refresh, passed, namesLatest] of [
+		["waiting", null, false],
+		["rerun", latest, false],
+		["rerun", older, true],
+	] as const) {
 		assert.deepEqual(
-			ciWarning(ci(refresh, true)),
-			{ lastRun: null, namesLatest: false },
-			refresh,
+			ciWarning(ci(refresh, latest, passed)),
+			{ lastRun: null, namesLatest },
+			`${refresh}, passed ${passed?.snapshot}`,
 		);
 	}
 	// None newer: only whether a run that installed the candidate passed.
 	assert.equal(
-		ciWarning(ci("current", false, [run("failure", "2026-10-08T00:56:37Z")])),
+		ciWarning(
+			ci("current", null, null, [run("failure", "2026-10-08T00:56:37Z")]),
+		),
 		"no_pass",
 	);
 	assert.equal(
 		ciWarning(
 			ci(
 				"current",
-				false,
+				null,
+				null,
 				[run("failure", "2026-10-08T00:56:37Z")],
 				[run("success", "2026-10-07T23:49:38Z")],
 			),
