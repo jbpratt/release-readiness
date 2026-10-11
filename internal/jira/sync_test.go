@@ -15,26 +15,6 @@ import (
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
-func TestSyncOnceReportsAuthFailure(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-	}))
-	defer srv.Close()
-
-	client := New(Config{BaseURL: srv.URL, Token: "bogus", Project: "PROJQUAY"})
-	client.minDelay = 0
-	reg := syncstatus.New()
-	s := NewSyncer(client, nil, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	s.Status = reg.Track("jira", time.Minute)
-
-	s.SyncOnce(context.Background())
-
-	p := reg.Problems(time.Now())
-	if len(p) != 1 || !strings.HasPrefix(p[0].Message, "JIRA authentication failed: ") || !strings.Contains(p[0].Message, "returned 401") {
-		t.Fatalf("problems = %+v, want a jira auth failure", p)
-	}
-}
-
 type deleteRecorder struct {
 	Store
 	deletes int

@@ -39,19 +39,8 @@ func setupTestServer(t *testing.T) *Server {
 }
 
 func TestHealthEndpoint(t *testing.T) {
-	srv := setupTestServer(t)
-	req := httptest.NewRequest("GET", "/api/v1/health", nil)
-	w := httptest.NewRecorder()
-	srv.http.Handler.ServeHTTP(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Errorf("status: got %d, want %d", w.Code, http.StatusOK)
-	}
-
 	var resp map[string]string
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatal(err)
-	}
+	getJSON(t, setupTestServer(t), "/api/v1/health", http.StatusOK, &resp)
 	if resp["status"] != "healthy" {
 		t.Errorf("status: got %q, want healthy", resp["status"])
 	}
@@ -635,15 +624,8 @@ func TestReleasesOverviewShipped(t *testing.T) {
 		}
 	}
 
-	w := httptest.NewRecorder()
-	srv.http.Handler.ServeHTTP(w, httptest.NewRequest("GET", "/api/v1/releases/overview", nil))
-	if w.Code != http.StatusOK {
-		t.Fatalf("overview: got %d, body: %s", w.Code, w.Body.String())
-	}
 	var overviews []model.ReleaseOverview
-	if err := json.NewDecoder(w.Body).Decode(&overviews); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	getJSON(t, srv, "/api/v1/releases/overview", http.StatusOK, &overviews)
 	type flags struct{ shipped, next bool }
 	want := map[string]flags{
 		"quay-v3.17.5": {true, false},

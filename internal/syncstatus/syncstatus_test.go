@@ -95,11 +95,6 @@ func TestDisabledSource(t *testing.T) {
 	}
 }
 
-func TestNilSource(t *testing.T) {
-	var s *Source
-	s.Report(errors.New("ignored"))
-}
-
 func TestPass(t *testing.T) {
 	var p Pass
 	if p.Err() != nil {

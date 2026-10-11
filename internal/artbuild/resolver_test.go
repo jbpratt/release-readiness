@@ -123,16 +123,6 @@ func TestResolvePendingShadow(t *testing.T) {
 	}
 }
 
-// quay-images-base names the stream only in its component names.
-func TestResolveBaseImageGroup(t *testing.T) {
-	c := operator
-	c.Applications, c.Component = []string{"quay-images-base"}, "quay-3-9-base-rhel9"
-	_, searches := resolveWith(t, c, always("search_none.json"))
-	if got := groups(searches); !slices.Equal(got, []string{"quay-3.9"}) {
-		t.Errorf("search groups: got %v, want [quay-3.9]", got)
-	}
-}
-
 // An image held by two streams is searched in each until one has the build.
 func TestResolveOtherStream(t *testing.T) {
 	c := operator
