@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/rest"
 
@@ -96,7 +97,7 @@ func TestSyncReleases(t *testing.T) {
 		release("fbc-quay-3-18-r1", "fbc-quay-3-18", created, progressing),
 		release("unlabelled-r1", "", created.Add(time.Hour), progressing),
 	)
-	s := NewSyncer(client, testNamespace, database, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	s := NewSyncer(client, testNamespace, database, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	s.SyncOnce(ctx)
 
 	got := releases(t, database, "fbc-quay-3-18")
@@ -167,7 +168,7 @@ func TestSyncReleaseFailedTask(t *testing.T) {
 			}
 			client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
 				map[schema.GroupVersionResource]string{snapshotGVR: "SnapshotList", releaseGVR: "ReleaseList"}, r)
-			NewSyncer(client, testNamespace, database, nil, slog.New(slog.NewTextHandler(io.Discard, nil))).SyncOnce(ctx)
+			NewSyncer(client, testNamespace, database, slog.New(slog.NewTextHandler(io.Discard, nil))).SyncOnce(ctx)
 
 			got := releases(t, database, "quay-3-18")
 			if len(got) != 1 {
@@ -200,10 +201,7 @@ func TestSyncOnce(t *testing.T) {
 		snapshot("orphan", "", created2),
 	)
 
-	withTx := func(ctx context.Context, fn func(Store) error) error {
-		return database.InTx(ctx, func(tx *db.DB) error { return fn(tx) })
-	}
-	s := NewSyncer(client, testNamespace, database, withTx, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	s := NewSyncer(client, testNamespace, database, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	// Each Snapshot is stored once, under its application, with its images.
 	check := func() {
 		t.Helper()
@@ -256,10 +254,7 @@ func TestSyncStagedSnapshots(t *testing.T) {
 	if _, err := database.CreateSnapshot(ctx, "quay-3-18", "quay-stage-3-18-1-image", t0); err != nil {
 		t.Fatal(err)
 	}
-	withTx := func(ctx context.Context, fn func(Store) error) error {
-		return database.InTx(ctx, func(tx *db.DB) error { return fn(tx) })
-	}
-	NewSyncer(client, testNamespace, database, withTx, slog.New(slog.NewTextHandler(io.Discard, nil))).SyncOnce(ctx)
+	NewSyncer(client, testNamespace, database, slog.New(slog.NewTextHandler(io.Discard, nil))).SyncOnce(ctx)
 
 	// Each Snapshot's Release succeeded through the STAGE plan, the newest
 	// last: only the one annotated for stage is selected.
@@ -331,7 +326,7 @@ func TestSyncListContinueExpired(t *testing.T) {
 			})
 			srv := httptest.NewServer(mux)
 			t.Cleanup(srv.Close)
-			client, err := NewClient(&rest.Config{Host: srv.URL})
+			client, err := dynamic.NewForConfig(&rest.Config{Host: srv.URL})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -340,11 +335,8 @@ func TestSyncListContinueExpired(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Cleanup(func() { _ = database.Close() })
-			withTx := func(ctx context.Context, fn func(Store) error) error {
-				return database.InTx(ctx, func(tx *db.DB) error { return fn(tx) })
-			}
 			reg := syncstatus.New()
-			s := NewSyncer(client, testNamespace, database, withTx, slog.New(slog.NewTextHandler(io.Discard, nil)))
+			s := NewSyncer(client, testNamespace, database, slog.New(slog.NewTextHandler(io.Discard, nil)))
 			s.Status = reg.Track("konflux", 0)
 			s.SyncOnce(ctx)
 
@@ -390,12 +382,5 @@ current-context: x
 	rc, err := RESTConfig(kc + string(filepath.ListSeparator) + filepath.Join(dir, "missing.yaml"))
 	if err != nil || rc.BearerToken != "t" {
 		t.Fatalf("RESTConfig: %+v, %v; want the token t", rc, err)
-	}
-}
-
-func TestNewClientError(t *testing.T) {
-	c, err := NewClient(&rest.Config{Host: "https://example.invalid", TLSClientConfig: rest.TLSClientConfig{CAData: []byte("not PEM")}})
-	if err == nil || c != nil {
-		t.Fatalf("NewClient = %#v, %v; want a nil client and an error", c, err)
 	}
 }

@@ -99,9 +99,9 @@ func main() {
 	status := syncstatus.New()
 
 	kubeCfg, err := kube.RESTConfig(*kubeconfig)
-	var kc dynamic.Interface
+	var kc *dynamic.DynamicClient
 	if err == nil {
-		kc, err = kube.NewClient(kubeCfg)
+		kc, err = dynamic.NewForConfig(kubeCfg)
 	}
 	if err != nil {
 		logger.Error("create kubernetes client, konflux sync disabled", "error", err)
@@ -109,12 +109,7 @@ func main() {
 	} else {
 		konfluxLog := logger.With("component", "konflux-sync")
 		logger.Info("konflux sync enabled", "namespace", *namespace, "interval", *konfluxPollInterval)
-		konfluxTx := func(ctx context.Context, fn func(kube.Store) error) error {
-			return database.InTx(ctx, func(txDB *db.DB) error {
-				return fn(txDB)
-			})
-		}
-		syncer := kube.NewSyncer(kc, *namespace, database, konfluxTx, konfluxLog)
+		syncer := kube.NewSyncer(kc, *namespace, database, konfluxLog)
 		syncer.Status = status.Track("konflux", *konfluxPollInterval)
 		wg.Add(1)
 		go func() {

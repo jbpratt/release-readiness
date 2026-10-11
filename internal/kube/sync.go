@@ -17,6 +17,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 
+	"github.com/quay/release-readiness/internal/db"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
@@ -41,42 +42,19 @@ func RESTConfig(kubeconfig string) (*rest.Config, error) {
 	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, nil).ClientConfig()
 }
 
-// NewClient builds a dynamic client from cfg.
-func NewClient(cfg *rest.Config) (dynamic.Interface, error) {
-	c, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		// A nil *DynamicClient would make the returned interface non-nil.
-		return nil, err
-	}
-	return c, nil
-}
-
-// Store is the subset of the database layer needed by the Konflux syncer.
-type Store interface {
-	SnapshotExistsByName(ctx context.Context, name string) (bool, error)
-	CreateSnapshot(ctx context.Context, application, name string, createdAt time.Time) (id int64, err error)
-	CreateSnapshotComponent(ctx context.Context, snapshotID int64, component, imageURL string) error
-	UpsertKonfluxRelease(ctx context.Context, r *model.KonfluxRelease) error
-	UpsertStagedSnapshot(ctx context.Context, name, assembly, kind, env string, createdAt time.Time) error
-}
-
-// TxFunc wraps a function in a database transaction, passing a tx-scoped Store.
-type TxFunc func(ctx context.Context, fn func(Store) error) error
-
-// Syncer periodically ingests Konflux Snapshots and Releases from a namespace into a Store.
+// Syncer periodically ingests Konflux Snapshots and Releases from a namespace into the database.
 type Syncer struct {
 	client    dynamic.Interface
 	namespace string
-	store     Store
-	withTx    TxFunc
+	db        *db.DB
 	logger    *slog.Logger
 	// Status receives each pass's outcome; nil reports nowhere.
 	Status *syncstatus.Source
 }
 
-// NewSyncer creates a Syncer that lists Snapshots in namespace and persists them to store.
-func NewSyncer(client dynamic.Interface, namespace string, store Store, withTx TxFunc, logger *slog.Logger) *Syncer {
-	return &Syncer{client: client, namespace: namespace, store: store, withTx: withTx, logger: logger}
+// NewSyncer creates a Syncer that lists Snapshots in namespace and persists them to database.
+func NewSyncer(client dynamic.Interface, namespace string, database *db.DB, logger *slog.Logger) *Syncer {
+	return &Syncer{client: client, namespace: namespace, db: database, logger: logger}
 }
 
 // Run performs an immediate sync and then repeats every interval until ctx is cancelled.
@@ -141,11 +119,11 @@ func (s *Syncer) sync(ctx context.Context, obj *unstructured.Unstructured) error
 	a := obj.GetAnnotations()
 	assembly, kind, env := a["art.redhat.com/assembly"], a["art.redhat.com/kind"], a["art.redhat.com/env"]
 	if assembly != "" && kind != "" && env != "" {
-		if err := s.store.UpsertStagedSnapshot(ctx, name, assembly, kind, env, obj.GetCreationTimestamp().UTC()); err != nil {
+		if err := s.db.UpsertStagedSnapshot(ctx, name, assembly, kind, env, obj.GetCreationTimestamp().UTC()); err != nil {
 			return fmt.Errorf("store staged snapshot: %w", err)
 		}
 	}
-	exists, err := s.store.SnapshotExistsByName(ctx, name)
+	exists, err := s.db.SnapshotExistsByName(ctx, name)
 	if err != nil || exists {
 		return err
 	}
@@ -171,7 +149,7 @@ func (s *Syncer) sync(ctx context.Context, obj *unstructured.Unstructured) error
 
 	s.logger.Info("new snapshot", "snapshot", name, "application", spec.Application)
 
-	return s.withTx(ctx, func(tx Store) error {
+	return s.db.InTx(ctx, func(tx *db.DB) error {
 		id, err := tx.CreateSnapshot(ctx, spec.Application, name, obj.GetCreationTimestamp().UTC())
 		if err != nil {
 			return fmt.Errorf("create snapshot: %w", err)
@@ -216,7 +194,7 @@ func (s *Syncer) syncRelease(ctx context.Context, obj *unstructured.Unstructured
 		}
 	}
 
-	return s.store.UpsertKonfluxRelease(ctx, r)
+	return s.db.UpsertKonfluxRelease(ctx, r)
 }
 
 func nestedTime(obj *unstructured.Unstructured, fields ...string) *time.Time {
