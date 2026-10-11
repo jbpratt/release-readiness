@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import {
+	CheckCircleIcon,
+	CodeBranchIcon,
+	CodeIcon,
+	FlaskIcon,
+	InProgressIcon,
+	OutlinedCheckCircleIcon,
+	OutlinedCircleIcon,
+	QuestionCircleIcon,
+} from "@patternfly/react-icons";
 import type { ImageScan, KonfluxRelease, StageFlag } from "../api/types.ts";
 import {
 	buildTitle,
@@ -13,6 +23,7 @@ import {
 	releaseLine,
 	scanCell,
 	stageLines,
+	statusIcon,
 } from "./releaseDetail.ts";
 
 test("jobShortName", () => {
@@ -137,6 +148,26 @@ test("notVerified: Release Pending, Verified, Closed and Done, in any case, are 
 		"New",
 	].map((status) => ({ status }));
 	assert.equal(notVerified(tickets), 2);
+});
+
+test("statusIcon: each Jira status its icon, in any case, the verified ones green", () => {
+	const want = [
+		["New", OutlinedCircleIcon, false],
+		["ASSIGNED", InProgressIcon, false],
+		["In Progress", InProgressIcon, false],
+		["POST", CodeBranchIcon, false],
+		["MODIFIED", CodeIcon, false],
+		["ON_QA", FlaskIcon, false],
+		["on_qa", FlaskIcon, false],
+		["Verified", OutlinedCheckCircleIcon, true],
+		["Release Pending", OutlinedCheckCircleIcon, true],
+		["Closed", CheckCircleIcon, true],
+		["Done", CheckCircleIcon, true],
+		["Refinement", QuestionCircleIcon, false],
+	] as const;
+	for (const [status, icon, verified] of want) {
+		assert.deepEqual(statusIcon(status), { icon, verified }, status);
+	}
 });
 
 test("buildTitle", () => {

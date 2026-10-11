@@ -55,12 +55,12 @@ import type {
 	DashboardConfig,
 	ImageScan,
 	ReleaseCandidate,
+	ReleaseVersion,
 	ScanCounts,
 } from "../api/types";
-import StatusLabel from "../components/StatusLabel";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
-import { due, relative } from "../utils/format";
+import { days, due, relative } from "../utils/format";
 import {
 	formatReleaseName,
 	jiraIssueUrl,
@@ -83,6 +83,7 @@ import {
 	type StatusLine,
 	scanCell,
 	stageLines,
+	statusIcon,
 } from "../utils/releaseDetail";
 
 /** A Konflux UI page of the version's application. */
@@ -94,7 +95,6 @@ type KonfluxLink = (
 const external = { target: "_blank", rel: "noopener noreferrer" };
 const muted = { color: "var(--pf-t--global--text--color--subtle)" };
 const textColor = {
-	red: "var(--pf-t--global--text--color--status--danger--default)",
 	orange: "var(--pf-t--global--text--color--status--warning--default)",
 	grey: muted.color,
 };
@@ -142,12 +142,7 @@ export default function ReleaseDetail() {
 	}
 
 	const displayName = formatReleaseName(release.name);
-	const ticket = release.release_ticket_key;
 	const app = release.konflux_application ?? "";
-	const target = release.due_date ?? release.release_date;
-	const dueDate = target
-		? due(target, candidate.data?.shipped ?? release.released)
-		: undefined;
 	// Every Release the candidate response names is in the version's application.
 	const konflux: KonfluxLink = (kind, name) =>
 		konfluxUrl(
@@ -164,28 +159,17 @@ export default function ReleaseDetail() {
 				<BreadcrumbItem>
 					<Link to="/">Releases</Link>
 				</BreadcrumbItem>
+				<BreadcrumbItem isActive>{displayName}</BreadcrumbItem>
 			</Breadcrumb>
-			<Flex
-				alignItems={{ default: "alignItemsBaseline" }}
-				style={{ marginBottom: "1rem" }}
-			>
-				<Title headingLevel="h1">{displayName}</Title>
-				<span style={dueDate?.color && { color: textColor[dueDate.color] }}>
-					{dueDate ? `Due ${dueDate.text}` : "No due date"}
-				</span>
-				{ticket && (
-					<a
-						href={jiraIssueUrl(
-							ticket,
-							config?.jira_base_url || "https://redhat.atlassian.net",
-						)}
-						{...external}
-					>
-						{ticket}
-					</a>
-				)}
-				<span>{release.release_ticket_assignee || "Unassigned"}</span>
-			</Flex>
+			<Title headingLevel="h1" style={{ marginBottom: "1rem" }}>
+				{displayName}
+			</Title>
+
+			<ReleaseStatusCard
+				release={release}
+				shipped={candidate.data?.shipped ?? release.released}
+				jiraBaseUrl={config?.jira_base_url}
+			/>
 
 			<BuildsCard
 				data={candidate.data}
@@ -202,6 +186,76 @@ export default function ReleaseDetail() {
 				config={config}
 			/>
 		</PageSection>
+	);
+}
+
+/** The target date, flagged while unshipped once past or within 3 days, the ticket and its assignee. */
+function ReleaseStatusCard({
+	release,
+	shipped,
+	jiraBaseUrl,
+}: {
+	release: ReleaseVersion;
+	shipped: boolean;
+	jiraBaseUrl?: string;
+}) {
+	const ticket = release.release_ticket_key;
+	const target = release.due_date ?? release.release_date;
+	const dueDate = target ? due(target, shipped) : undefined;
+	return (
+		<Card isCompact style={{ marginBottom: "1rem" }}>
+			<CardTitle>Release Status</CardTitle>
+			<CardBody>
+				<Flex justifyContent={{ default: "justifyContentSpaceEvenly" }}>
+					<FlexItem style={{ textAlign: "center" }}>
+						<div className="rr-label">Target</div>
+						<div>
+							{dueDate?.date ?? "TBD"}
+							{dueDate?.kind === "past" && (
+								<Label
+									color="red"
+									icon={<ExclamationCircleIcon />}
+									isCompact
+									style={{ marginLeft: "0.5rem" }}
+								>
+									Past due date
+								</Label>
+							)}
+							{dueDate?.kind === "soon" && (
+								<Label
+									color="yellow"
+									icon={<ExclamationTriangleIcon />}
+									isCompact
+									style={{ marginLeft: "0.5rem" }}
+								>
+									{dueDate.days === 0
+										? "Due today"
+										: `Due in ${days(dueDate.days)}`}
+								</Label>
+							)}
+						</div>
+					</FlexItem>
+					{ticket && (
+						<FlexItem style={{ textAlign: "center" }}>
+							<div className="rr-label">Ticket</div>
+							<a
+								href={jiraIssueUrl(
+									ticket,
+									jiraBaseUrl || "https://redhat.atlassian.net",
+								)}
+								{...external}
+							>
+								{ticket}
+							</a>
+						</FlexItem>
+					)}
+					<FlexItem style={{ textAlign: "center" }}>
+						<div className="rr-label">Assignee</div>
+						<div>{release.release_ticket_assignee || "Unassigned"}</div>
+					</FlexItem>
+				</Flex>
+			</CardBody>
+		</Card>
 	);
 }
 
@@ -672,6 +726,9 @@ function CICell({ jobs }: { jobs: CIJob[] }) {
 	);
 }
 
+const notVerifiedTip =
+	"Tickets not yet Verified, Release Pending or Closed in Jira.";
+
 function TicketsCard({
 	data,
 	error,
@@ -705,7 +762,20 @@ function TicketsCard({
 			<LinkedCardTitle href={jira} link="Jira">
 				Tickets
 				{hasIssues && ` (${issues!.length})`}
-				{open > 0 && ` · ${open} not verified`}
+				{open > 0 && (
+					<>
+						{` · ${open} not verified`}
+						<Tooltip content={notVerifiedTip} aria="none">
+							<Button
+								variant="plain"
+								hasNoPadding
+								aria-label={notVerifiedTip}
+								icon={<InfoCircleIcon />}
+								style={{ marginLeft: "0.25rem" }}
+							/>
+						</Tooltip>
+					</>
+				)}
 			</LinkedCardTitle>
 			<CardBody>
 				{data && !data.build && data.reason !== "shipped" && (
@@ -739,6 +809,23 @@ function TicketsCard({
 				)}
 			</CardBody>
 		</Card>
+	);
+}
+
+/** A ticket's status as its icon, named on hover. */
+function TicketStatus({ status }: { status: string }) {
+	const { icon: StatusIcon, verified } = statusIcon(status);
+	return (
+		<Tooltip content={status} aria="none">
+			<Icon
+				status={verified ? "success" : undefined}
+				isInline
+				role="img"
+				aria-label={status}
+			>
+				<StatusIcon />
+			</Icon>
+		</Tooltip>
 	);
 }
 
@@ -826,14 +913,11 @@ function IssuesTable({
 			<Thead>
 				<Tr>
 					<Th style={{ whiteSpace: "nowrap" }}>Key</Th>
-					<Th sort={getSortParams("type")} style={{ whiteSpace: "nowrap" }}>
+					<Th sort={getSortParams("type")} modifier="fitContent">
 						Type
 					</Th>
 					<Th>Summary</Th>
-					<Th
-						sort={getSortParams("status")}
-						style={{ whiteSpace: "nowrap", minWidth: "110px" }}
-					>
+					<Th sort={getSortParams("status")} modifier="fitContent">
 						Status
 					</Th>
 					<Th info={zTip ? { tooltip: zTip } : undefined} modifier="fitContent">
@@ -863,7 +947,7 @@ function IssuesTable({
 							{issue.summary}
 						</Td>
 						<Td>
-							<StatusLabel status={issue.status} />
+							<TicketStatus status={issue.status} />
 						</Td>
 						<Td>{issue.fix_version.replace(/^[a-z]+-v/, "")}</Td>
 						{hasBuild && (
