@@ -228,13 +228,13 @@ func TestSyncOnce(t *testing.T) {
 	}
 
 	s.SyncOnce(ctx)
-	for app, want := range map[string]int{"quay-3-18": 2, "fbc-quay-3-18": 1} {
-		comps, err := database.ListComponentCandidates(ctx, []string{app})
+	for name, want := range map[string]int{"quay-3-18-abc": 2, "fbc-quay-3-18-def": 1} {
+		got, err := database.GetReleaseSnapshot(ctx, name)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(comps) != want {
-			t.Errorf("%s: %d components after second sync, want %d", app, len(comps), want)
+		if len(got.Components) != want {
+			t.Errorf("%s: %d components after second sync, want %d", name, len(got.Components), want)
 		}
 	}
 }

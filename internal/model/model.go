@@ -29,7 +29,7 @@ type IssueSummary struct {
 }
 
 // ReleaseOverview is a combined view of a release with its issue summary,
-// readiness signal, and the age of its current component set.
+// readiness signal, and when its newest build, stream or STAGE, was created.
 type ReleaseOverview struct {
 	Release      ReleaseVersion    `json:"release"`
 	IssueSummary *IssueSummary     `json:"issue_summary,omitempty"`
@@ -101,11 +101,10 @@ type SelectedBuild struct {
 }
 
 // TicketBuild is the build a version's tickets are checked against, its
-// candidate: Source "staged" is its selected STAGE build, "newest" the
-// stream's newest build. Since is the previous version of its X.Y when that
-// one is unshipped and has a candidate, whose commits are the bases the .z
-// tickets are found from, else "". Targets is set when the version has
-// Target Version tickets.
+// candidate: Source "staged" is its selected STAGE build, "newest" its newest
+// build. Since is the previous version of its X.Y when that one is unshipped
+// and has a candidate, whose commits are the bases the .z tickets are found
+// from, else "". Targets is set when the version has Target Version tickets.
 type TicketBuild struct {
 	Snapshot   string            `json:"snapshot"`
 	Source     string            `json:"source"`
@@ -175,7 +174,8 @@ type ReleaseCandidate struct {
 }
 
 // CandidateBuild is the Snapshot up for release: Source "staged" is the
-// version's selected STAGE build, "newest" the stream's newest build.
+// version's selected STAGE build, "newest" its newest build, the newest stream
+// build whose images' NVRs carry the version.
 type CandidateBuild struct {
 	Snapshot   string               `json:"snapshot"`
 	Source     string               `json:"source"`
@@ -222,10 +222,11 @@ type SeverityCounts struct {
 }
 
 // BuildRow is a build that matters to a version. Roles are "candidate", the
-// build up for release, "newest", the stream's newest build, and
-// "last_tested", the newest build a periodic run tested, listed only when
-// neither of the others was. Prod, the version's prod Release, is set on the
-// candidate only. CI is, per job, the periodic runs that tested the build.
+// build up for release, "newest", the version's newest build, and
+// "last_tested", the version's newest build a periodic run tested, listed
+// only when neither of the others was. Prod, the version's prod Release, is
+// set on the candidate only. CI is, per job, the periodic runs that tested the
+// build.
 type BuildRow struct {
 	Snapshot  string          `json:"snapshot"`
 	CreatedAt time.Time       `json:"created_at"`
@@ -240,12 +241,17 @@ type BuildRow struct {
 // the build reached stage, "not_staged" with the components that are not, or
 // "unknown" when the stream has no STAGE Release. Release is the newest STAGE
 // Release that did not succeed whose Snapshot holds an image that is not staged.
+// The not staged components no STAGE Release holds are in NoBundle when the
+// build's bundle for them is staged, as ART builds an operator's bundle only
+// after a clean build run, and otherwise in NoRelease.
 type StageFlag struct {
 	State     string          `json:"state"`
 	StagedAt  *time.Time      `json:"staged_at"`
 	Total     int             `json:"total"`
 	NotStaged []string        `json:"not_staged"`
 	Release   *KonfluxRelease `json:"release"`
+	NoBundle  []string        `json:"no_bundle"`
+	NoRelease []string        `json:"no_release"`
 }
 
 // CIJob is a job's newest run of a build and how many of its runs tested it.

@@ -101,7 +101,8 @@ func TestSyncStatus(t *testing.T) {
 	}
 }
 
-// seedSnapshot creates a snapshot whose components are named comps.
+// seedSnapshot creates a snapshot whose components are named comps, each
+// image labelled <name>/<component>.
 func seedSnapshot(t *testing.T, srv *Server, app, name string, created time.Time, comps ...string) {
 	t.Helper()
 	id, err := srv.db.CreateSnapshot(t.Context(), app, name, created)
@@ -109,7 +110,7 @@ func seedSnapshot(t *testing.T, srv *Server, app, name string, created time.Time
 		t.Fatalf("create snapshot %s: %v", name, err)
 	}
 	for _, c := range comps {
-		if err := srv.db.CreateSnapshotComponent(t.Context(), id, c, "quay.io/x/"+c+"@"+name); err != nil {
+		if err := srv.db.CreateSnapshotComponent(t.Context(), id, c, testImage(name+"/"+c)); err != nil {
 			t.Fatalf("create component %s: %v", c, err)
 		}
 	}
@@ -164,8 +165,8 @@ func TestGetBuildTickets(t *testing.T) {
 		}
 	}
 
-	// 3.18.1's STAGE build, and the stream's newest build: a newer quay
-	// beside the same clair.
+	// 3.18.1's STAGE build, and 3.18.2's build: a newer quay beside the same
+	// clair.
 	seedImages(t, srv, "stage-image", "2026-10-07T20:02:43Z", map[string]string{"quay-3-18-quay-quay": testImage("stage/quay"), "quay-3-18-quay-clair": testImage("clair")})
 	if err := srv.db.UpsertStagedSnapshot(ctx, "stage-image", "3.18.1", "image", "stage", mustTime(t, "2026-10-07T20:02:43Z")); err != nil {
 		t.Fatal(err)
@@ -175,7 +176,7 @@ func TestGetBuildTickets(t *testing.T) {
 	quay1, quay2, clair := strings.Repeat("1", 40), strings.Repeat("2", 40), strings.Repeat("c", 40)
 	for _, b := range []artbuild.Build{
 		{Digest: testDigest("stage/quay"), UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: quay1},
-		{Digest: testDigest("new/quay"), UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: quay2},
+		{Digest: testDigest("new/quay"), NVR: testNVR("quay-quay", "3.18.2"), UpstreamRepo: "https://github.com/quay/quay", UpstreamSHA: quay2},
 		{Digest: testDigest("clair"), UpstreamRepo: "https://github.com/quay/clair", UpstreamSHA: clair},
 	} {
 		b.State, b.CheckedAt = artbuild.StateResolved, time.Now()
@@ -221,7 +222,8 @@ func TestGetBuildTickets(t *testing.T) {
 	srv.Scanner.ScanOnce(ctx)
 	// 3.18.2 has no STAGE build: its newest build's quay is compared, and
 	// since 3.18.1's, but not with the default branch, as it has no Target
-	// Version tickets. The archived 3.18.0 is not scanned.
+	// Version tickets. The archived 3.18.0, and 3.18.3, which has no build,
+	// are not scanned.
 	slices.Sort(requested)
 	wantRequested := []string{
 		"/repos/quay/clair/compare/" + clair + "...HEAD",
@@ -274,16 +276,21 @@ func TestGetBuildTickets(t *testing.T) {
 		{"PROJQUAY-3", "quay-v3.18.1", nil, nil},
 		{"PROJQUAY-4", "quay-v3.18.z", []model.BuildCommit{commit(2)}, nil},
 	})
-	// 3.18.2's .z tickets are only those named since 3.18.1's build, and
-	// 3.18.3's since 3.18.2's, the same build. PROJQUAY-8 came with the
-	// merge, so no In build commit names it, but a .z ticket is never red,
-	// even when a default-branch commit the build lacks names it.
+	// 3.18.2's .z tickets are only those named since 3.18.1's build.
+	// PROJQUAY-8 came with the merge, so no In build commit names it, but a
+	// .z ticket is never red, even when a default-branch commit the build
+	// lacks names it.
 	check("quay-v3.18.2", newest, "quay-v3.18.1", []row{
 		{"PROJQUAY-9", "quay-v3.18.2", nil, nil},
 		{"PROJQUAY-5", "quay-v3.18.z", []model.BuildCommit{commit(5)}, nil},
 		{"PROJQUAY-8", "quay-v3.18.z", nil, nil},
 	})
-	check("quay-v3.18.3", newest, "quay-v3.18.2", nil)
+	// 3.18.3 has no build, so nothing is checked against one.
+	var none model.BuildTickets
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.3/build-tickets", http.StatusOK, &none)
+	if none.Build != nil || none.Reason != "no build of 3.18.3 yet" || len(none.Tickets) != 0 {
+		t.Errorf("3.18.3: got %+v", none)
+	}
 
 	var raw struct {
 		Build       json.RawMessage `json:"build"`
@@ -325,7 +332,7 @@ func TestReleasesOverview(t *testing.T) {
 
 	dueDate := time.Now().Add(10 * 24 * time.Hour)
 	err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{
-		Name:               "3.16.3",
+		Name:               "quay-v3.16.3",
 		KonfluxApplication: "quay-3-16",
 		DueDate:            &dueDate,
 	})
@@ -335,10 +342,11 @@ func TestReleasesOverview(t *testing.T) {
 
 	built := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	seedSnapshot(t, srv, "quay-3-16", "quay-3-16-snap-1", built, "quay-3-16-quay")
+	resolveNVR(t, srv, "quay-3-16-snap-1/quay-3-16-quay", testNVR("quay-quay", "3.16.3"))
 
 	err = srv.db.UpsertJiraIssue(ctx, &model.JiraIssueRecord{
 		Key: "PROJQUAY-1", Summary: "fix bug", Status: "Open",
-		Priority: "Major", FixVersion: "3.16.3", IssueType: "Bug",
+		Priority: "Major", FixVersion: "quay-v3.16.3", IssueType: "Bug",
 		Link: "https://redhat.atlassian.net/browse/PROJQUAY-1",
 	})
 	if err != nil {
@@ -366,8 +374,8 @@ func TestReleasesOverview(t *testing.T) {
 	}
 
 	ov := overviews[0]
-	if ov.Release.Name != "3.16.3" {
-		t.Errorf("release name: got %q, want 3.16.3", ov.Release.Name)
+	if ov.Release.Name != "quay-v3.16.3" {
+		t.Errorf("release name: got %q, want quay-v3.16.3", ov.Release.Name)
 	}
 	if ov.IssueSummary == nil {
 		t.Fatal("issue_summary: got nil")
@@ -437,7 +445,7 @@ func TestReleasesOverviewReadiness(t *testing.T) {
 	// Create a release with a future due date
 	dueDate := time.Now().Add(10 * 24 * time.Hour)
 	err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{
-		Name:               "3.16.3",
+		Name:               "quay-v3.16.3",
 		KonfluxApplication: "quay-3-16",
 		DueDate:            &dueDate,
 	})
@@ -460,9 +468,47 @@ func TestReleasesOverviewReadiness(t *testing.T) {
 	}
 
 	seedSnapshot(t, srv, "quay-3-16", "quay-3-16-snap-1", time.Now(), "quay-3-16-quay")
+	resolveNVR(t, srv, "quay-3-16-snap-1/quay-3-16-quay", testNVR("quay-quay", "3.16.3"))
 
 	if got := getReadiness(); got.Signal != "green" || got.Message != "No open issues" {
 		t.Errorf("with snapshot: got %+v, want green/No open issues", got)
+	}
+}
+
+// A version's latest build is its newest build or its STAGE build, whichever
+// is newer, shipped or not; one with neither has none.
+func TestReleasesOverviewLatestBuild(t *testing.T) {
+	srv := setupTestServer(t)
+	seedQuay318(t, srv)
+	overviews := func() map[string]model.ReleaseOverview {
+		t.Helper()
+		var list []model.ReleaseOverview
+		getJSON(t, srv, "/api/v1/releases/overview", http.StatusOK, &list)
+		byName := map[string]model.ReleaseOverview{}
+		for _, ov := range list {
+			byName[ov.Release.Name] = ov
+		}
+		return byName
+	}
+
+	// 3.18.1's newest build is newer than its STAGE build; 3.18.2 has neither.
+	got := overviews()
+	if lb := got["quay-v3.18.1"].LatestBuild; lb == nil || !lb.Equal(mustTime(t, "2026-10-10T01:48:34Z")) {
+		t.Errorf("3.18.1 latest_build = %v, want its newest build's", lb)
+	}
+	if ov := got["quay-v3.18.2"]; ov.LatestBuild != nil || ov.Readiness.Message != "No build snapshots yet" {
+		t.Errorf("3.18.2 latest_build = %v, readiness %+v; want none", ov.LatestBuild, ov.Readiness)
+	}
+
+	// Once shipped, 3.18.1 keeps it; its newer assembly's stage Release
+	// succeeds.
+	if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18", Released: true}); err != nil {
+		t.Fatal(err)
+	}
+	seedKonfluxRelease(t, srv, "quay-stage-3-18-1-image-20261010020000", "quay-stage-3-18-1-image-20261010020000",
+		"quay-advisory-stage-3-18", "Succeeded", "2026-10-10T02:00:00Z", "2026-10-10T02:05:00Z")
+	if ov := overviews()["quay-v3.18.1"]; !ov.Shipped || ov.LatestBuild == nil || !ov.LatestBuild.Equal(mustTime(t, "2026-10-10T02:00:00Z")) {
+		t.Errorf("shipped 3.18.1 latest_build = %v, want its STAGE build's", ov.LatestBuild)
 	}
 }
 

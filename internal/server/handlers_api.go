@@ -14,7 +14,6 @@ import (
 	"github.com/quay/release-readiness/internal/github"
 	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/model"
-	"github.com/quay/release-readiness/internal/releaseview"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
@@ -210,17 +209,47 @@ func splitZ(name string) (xy string, z int, ok bool) {
 	return m[1][:i], z, err == nil
 }
 
-// componentSet counts the release's newest image per component across its
-// applications and returns when the newest of them was built. The images may
-// come from different snapshots, so they are not one coherent build.
-func componentSet(release *model.ReleaseVersion, candidates []releaseview.Component) (count int, latest *time.Time) {
-	selected := releaseview.Select(release.KonfluxApplication, candidates)
-	for _, c := range selected {
-		if latest == nil || c.CreatedAt.After(*latest) {
-			latest = &c.CreatedAt
-		}
+// streamBuilds is an application's stream builds, newest first, and the NVRs
+// of their images, as db.StreamBuilds returns them.
+type streamBuilds struct {
+	builds []model.ReleaseSnapshot
+	nvrs   map[string]string
+}
+
+// latestBuild returns when the version's newest build was created: the newer
+// of its newest build and its selected STAGE build, or nil when it has
+// neither. streams keeps each application's stream builds once read.
+func (s *Server) latestBuild(ctx context.Context, release *model.ReleaseVersion, streams map[string]streamBuilds) (*time.Time, error) {
+	app := release.KonfluxApplication
+	m := quayVersion.FindStringSubmatch(release.Name)
+	if app == "" || m == nil {
+		return nil, nil
 	}
-	return len(selected), latest
+	st, ok := streams[app]
+	if !ok {
+		builds, nvrs, err := s.db.StreamBuilds(ctx, app)
+		if err != nil {
+			return nil, err
+		}
+		st = streamBuilds{builds, nvrs}
+		streams[app] = st
+	}
+	var latest *time.Time
+	if builds := versionBuilds(app, st.builds, st.nvrs, m[1]); len(builds) > 0 {
+		latest = &builds[0].CreatedAt
+	}
+	staged, _, err := s.db.SelectedStageBuild(ctx, release, s.StageReleasePlanPattern)
+	if err != nil || staged == nil {
+		return latest, err
+	}
+	snap, err := s.db.GetReleaseSnapshot(ctx, staged.SnapshotName)
+	if err != nil {
+		return nil, err
+	}
+	if latest == nil || snap.CreatedAt.After(*latest) {
+		latest = &snap.CreatedAt
+	}
+	return latest, nil
 }
 
 // catalogShipped reports whether the catalog publishes the fixVersion, e.g.
@@ -241,17 +270,6 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 		releases = []model.ReleaseVersion{}
 	}
 
-	var apps []string
-	for _, rel := range releases {
-		apps = append(apps, releaseview.Applications(rel.KonfluxApplication)...)
-	}
-	slices.Sort(apps)
-	candidates, err := s.db.ListComponentCandidates(ctx, slices.Compact(apps))
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-
 	fixVersions := make([]string, len(releases))
 	for i, rel := range releases {
 		fixVersions[i] = rel.Name
@@ -262,15 +280,20 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	streams := map[string]streamBuilds{}
 	overviews := make([]model.ReleaseOverview, len(releases))
 	for i, rel := range releases {
 		summary := issueSummaries[rel.Name]
-		count, latest := componentSet(&rel, candidates)
+		latest, err := s.latestBuild(ctx, &rel, streams)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err)
+			return
+		}
 		catalogShipped := s.catalogShipped(rel.Name)
 		overviews[i] = model.ReleaseOverview{
 			Release:      rel,
 			IssueSummary: summary,
-			Readiness:    computeReadiness(&rel, summary, count > 0, catalogShipped),
+			Readiness:    computeReadiness(&rel, summary, latest != nil, catalogShipped),
 			LatestBuild:  latest,
 			Shipped:      catalogShipped || rel.Released,
 		}

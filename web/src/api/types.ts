@@ -22,7 +22,7 @@ export interface ReleaseCandidate {
 	builds: BuildRow[];
 }
 
-/** The Snapshot up for release: the version's STAGE build, else the stream's newest. */
+/** The Snapshot up for release: the version's STAGE build, else its newest. */
 export interface CandidateBuild {
 	snapshot: string;
 	source: "staged" | "newest";
@@ -67,8 +67,8 @@ export interface SeverityCounts {
 }
 
 /**
- * A build that matters to the version: the candidate, the stream's newest
- * build, and when neither was tested, the newest build a periodic run tested.
+ * A build that matters to the version: the candidate, its newest build, and
+ * when neither was tested, its newest build a periodic run tested.
  */
 export interface BuildRow {
 	snapshot: string;
@@ -93,6 +93,10 @@ export interface StageFlag {
 	not_staged: string[];
 	/** The newest STAGE Release that did not succeed holding a not-staged image. */
 	release: KonfluxRelease | null;
+	/** Not-staged images in no STAGE Release whose bundle in the build is staged. */
+	no_bundle: string[];
+	/** The other not-staged images in no STAGE Release. */
+	no_release: string[];
 }
 
 /** A job's newest run of a build and how many of its runs tested it. */
