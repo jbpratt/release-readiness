@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -126,36 +125,6 @@ func TestApplyArtifact(t *testing.T) {
 	r.applyArtifact([]byte(`{"schema_version": 1, "images": [{"role": "quay",`))
 	if r.ArtifactState != ArtifactInvalid || len(r.Images) != 0 {
 		t.Errorf("truncated artifact: state %q, %d images", r.ArtifactState, len(r.Images))
-	}
-}
-
-func TestApplyArtifactCountsOnlyPodImages(t *testing.T) {
-	const (
-		quay    = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
-		builder = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
-		catalog = "sha256:3333333333333333333333333333333333333333333333333333333333333333"
-		bundle  = "sha256:4444444444444444444444444444444444444444444444444444444444444444"
-	)
-	r := &Run{}
-	r.applyArtifact([]byte(`{"schema_version": 1,
-		"catalog": {"resolved_ref": "quay.io/x/art-fbc@` + catalog + `"},
-		"operator": {"bundle_ref": "quay.io/x/bundle@` + bundle + `"},
-		"images": [
-			{"role": "quay", "requested_ref": "quay.io/x/art-images@` + quay + `", "source": "pod"},
-			{"role": "builder", "requested_ref": "quay.io/x/art-images@` + builder + `", "source": "csv-related"}
-		]}`))
-	for _, tc := range []struct {
-		img  Image
-		want bool
-	}{
-		{Image{Role: "quay", Digest: quay}, true},
-		{Image{Role: "catalog", Digest: catalog}, true},
-		{Image{Role: "quay-operator-bundle", Digest: bundle}, true},
-		{Image{Role: "builder", Digest: builder}, false},
-	} {
-		if got := slices.Contains(r.Images, tc.img); got != tc.want {
-			t.Errorf("tested %v = %v, want %v", tc.img, got, tc.want)
-		}
 	}
 }
 

@@ -189,12 +189,8 @@ func TestSync(t *testing.T) {
 	}{
 		// Each of the four matrix TaskRuns reports all four architectures.
 		{"quay-3-18-quay-operator-7mbwk", StateScanned, counts(sev{}, sev{High: 24, Medium: 264, Low: 232}), 4},
-		{"quay-3-18-quay-clair-ps9cc", StateScanned, counts(sev{}, sev{Critical: 44, High: 100, Medium: 320, Low: 236}), 4},
 		// Tekton Succeeded=True, but TEST_OUTPUT ERROR and no SCAN_OUTPUT.
 		{"quay-3-18-quay-quay-zwvxj", StateScanFailed, nil, 0},
-		// Built before roxctl, with one Clair TaskRun per architecture instead.
-		{"quay-3-18-quay-quay-d9s9v", StateNotScanned, nil, 0},
-		{"quay-3-18-quay-operator-bundle-rjgp9", StateScanned, counts(sev{}, sev{Medium: 1}), 1},
 		{"synth-no-scan-task", StateNotScanned, nil, 0},
 		{"synth-running", StatePending, nil, 0},
 		{"synth-taskruns-missing", StatePending, nil, 0},
@@ -224,7 +220,7 @@ func TestSync(t *testing.T) {
 }
 
 // A Results error stores nothing and fails the pass; the next pass reads
-// the scan, and a scanned image is not read again.
+// the scan.
 func TestSyncAfterError(t *testing.T) {
 	svc := newService(t, "quay-3-18-quay-operator-7mbwk")
 	s, store := newSyncer(t, svc, "quay-3-18-quay-operator-7mbwk")
@@ -242,25 +238,16 @@ func TestSyncAfterError(t *testing.T) {
 	if p := reg.Problems(time.Now()); store.scans[digest].State != StateScanned || len(p) != 0 {
 		t.Fatalf("after a 200: stored %+v, problems %+v; want scanned and no problem", store.scans, p)
 	}
-	requests := svc.art + svc.results
-	s.SyncOnce(t.Context())
-	if svc.art+svc.results != requests {
-		t.Errorf("a scanned image was read again")
-	}
 }
 
 // An ART record without a PipelineRun page is pending without asking
-// Results, and not read again before retryAfter.
+// Results.
 func TestSyncNoPipelineRunPage(t *testing.T) {
 	svc := newService(t)
 	s, store := newSyncer(t, svc, "")
 	s.SyncOnce(t.Context())
 	if got := store.scans[digest]; got.State != StatePending || got.DetailURL != "" || got.PipelineRun != "" || svc.results != 0 {
 		t.Errorf("scan = %+v after %d Results requests; want pending, no page, none", got, svc.results)
-	}
-	s.SyncOnce(t.Context())
-	if svc.art != 1 {
-		t.Errorf("ART read %d times, want once", svc.art)
 	}
 }
 

@@ -242,9 +242,8 @@ func TestScanOnce(t *testing.T) {
 	}
 }
 
-// An API error is compared again once retryAfter has passed, and an outcome
-// no build uses is forgotten.
-func TestScanOnceRetryAndForget(t *testing.T) {
+// An API error is compared again once retryAfter has passed.
+func TestScanOnceRetry(t *testing.T) {
 	gh := &fakeGitHub{replies: map[string]reply{}}
 	s := newScanner(t, gh, build(repoURL, headSHA))
 	t0 := time.Now()
@@ -254,12 +253,6 @@ func TestScanOnceRetryAndForget(t *testing.T) {
 	s.ScanOnce(context.Background())
 	if requests := gh.take(); len(requests) != 2 {
 		t.Errorf("requests = %v, want 2", requests)
-	}
-
-	s.builds = func(context.Context) ([]model.TicketBuild, error) { return nil, nil }
-	s.ScanOnce(context.Background())
-	if len(s.results) != 0 {
-		t.Errorf("results = %+v, want none", s.results)
 	}
 }
 

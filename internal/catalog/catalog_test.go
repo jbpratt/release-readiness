@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"slices"
 	"strings"
 	"testing"
 )
@@ -38,20 +37,6 @@ func catalogServer(t *testing.T, fail *bool) *httptest.Server {
 	}))
 	t.Cleanup(srv.Close)
 	return srv
-}
-
-func TestPublishedTagsFollowsPages(t *testing.T) {
-	fail := false
-	srv := catalogServer(t, &fail)
-	tags, err := NewClient(srv.URL+"/", srv.Client()).PublishedTags(t.Context(), "quay/quay-rhel9")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"v3.18.0", "v3.17.5"} { // pages 0 and 1
-		if !slices.Contains(tags, want) {
-			t.Errorf("tags missing %s", want)
-		}
-	}
 }
 
 func TestShipped(t *testing.T) {

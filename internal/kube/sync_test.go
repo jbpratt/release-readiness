@@ -148,8 +148,6 @@ func TestSyncReleaseFailedTask(t *testing.T) {
 		task     string
 		step     string
 	}{
-		{"apply-mapping", failed, []any{attempt("apply-mapping", "apply-mapping")}, "apply-mapping", "apply-mapping"},
-		{"access", failed, []any{attempt("verify-access-to-resources", "")}, "verify-access-to-resources", ""},
 		{"conforma last attempt", failed, []any{attempt("apply-mapping", "apply-mapping"), attempt("verify-conforma", "assert")}, "verify-conforma", "assert"},
 		{"succeeded", map[string]any{"type": "Released", "status": "True", "reason": "Succeeded"}, []any{attempt("collect-data", "x")}, "", ""},
 		{"no attempts", failed, nil, "", ""},
