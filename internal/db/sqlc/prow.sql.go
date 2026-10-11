@@ -46,9 +46,11 @@ func (q *Queries) InsertProwRunImage(ctx context.Context, arg InsertProwRunImage
 }
 
 const listFinishedProwBuildIDs = `-- name: ListFinishedProwBuildIDs :many
-SELECT build_id FROM prow_runs WHERE job_name = ? AND completed_at != ''
+SELECT build_id FROM prow_runs WHERE job_name = ? AND completed_at != '' AND artifact_state != 'missing'
 `
 
+// A finished run still "missing" was stored by a binary that did not read
+// olm-csvs.yaml, so it is read once more.
 func (q *Queries) ListFinishedProwBuildIDs(ctx context.Context, jobName string) ([]string, error) {
 	rows, err := q.db.QueryContext(ctx, listFinishedProwBuildIDs, jobName)
 	if err != nil {

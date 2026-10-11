@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"regexp"
 	"slices"
@@ -25,10 +26,10 @@ var quayVersion = regexp.MustCompile(`^quay-v(\d+\.\d+\.\d+)$`)
 var nvrXYZ = regexp.MustCompile(`^(\d+\.\d+\.\d+)(?:\.|$)`)
 
 // handleGetCandidate serves what decides whether an unshipped version can
-// ship: its release candidate, the STAGE build, with whether it reached stage,
-// the version's prod Release and the periodic jobs that installed its operator
-// bundle, and the version's newest build when it differs from the candidate or
-// there is none.
+// ship: its release candidate, the STAGE build, with whether it reached stage
+// and the version's prod Release, the periodic runs since its operator bundle
+// was built by the build each installed, and the version's newest build when
+// it differs from the candidate or there is none.
 func (s *Server) handleGetCandidate(w http.ResponseWriter, r *http.Request) {
 	version := r.PathValue("version")
 	release, err := s.db.GetReleaseVersion(r.Context(), version)
@@ -58,14 +59,16 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 	if err != nil {
 		return nil, err
 	}
-	newest := func(images []model.SnapshotImage) *model.NewestBuild {
-		return &model.NewestBuild{Snapshot: c.newest.Name, CreatedAt: c.newest.CreatedAt, Stage: stageState(images, releases)}
+	// Only the per-build stage Releases, of fbc-ri-* Snapshots, feed the
+	// catalog CI installs from; the version's own stage Releases do not.
+	releases = slices.DeleteFunc(releases, func(r model.StageRelease) bool { return !strings.HasPrefix(r.Snapshot, "fbc-ri-") })
+	var newest *model.NewestBuild
+	if c.newest != nil {
+		newest = &model.NewestBuild{Snapshot: c.newest.Name, CreatedAt: c.newest.CreatedAt, CI: ciState(bundleDigest(app, c.newest), releases)}
 	}
 	if c.build == nil || c.build.Source != "staged" {
 		resp.Reason = "no release candidate yet"
-		if c.newest != nil {
-			resp.Newest = newest(buildImages(app, c.newest))
-		}
+		resp.Newest = newest
 		return resp, nil
 	}
 
@@ -81,31 +84,197 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 	if cand.Prod, err = s.db.LatestProdRelease(ctx, c.assembly); err != nil {
 		return nil, err
 	}
-	cand.CI = []model.CIJob{}
-	if bundle := held[app+"-quay-operator-bundle"]; bundle != "" {
-		runs, err := s.db.ListProwRunsByApplication(ctx, app)
-		if err != nil {
-			return nil, err
-		}
-		cand.CI = ciJobs(runs, bundle)
+	runs, err := s.db.ListProwRunsByApplication(ctx, app)
+	if err != nil {
+		return nil, err
 	}
+	var latest string
+	resp.CI, latest = candidateCI(app, c, held, runs, releases)
 	if c.newest == nil {
 		return resp, nil
 	}
 	// Only the components the candidate holds count: a stream builds images
 	// its STAGE build can leave out.
-	var imgs []model.SnapshotImage
-	differs := false
-	for _, img := range buildImages(app, c.newest) {
-		if d, ok := held[img.Name]; ok {
-			imgs = append(imgs, img)
-			differs = differs || imageDigest(img.Image) != d
-		}
-	}
-	if differs {
-		resp.Newest = newest(imgs)
+	differs := slices.ContainsFunc(buildImages(app, c.newest), func(img model.SnapshotImage) bool {
+		d, ok := held[img.Name]
+		return ok && imageDigest(img.Image) != d
+	})
+	// The card names the build CI tests already.
+	if differs && (latest == "" || bundleDigest(app, c.newest) != latest) {
+		resp.Newest = newest
 	}
 	return resp, nil
+}
+
+const (
+	notInstalled = "not_installed"
+	unknownBuild = "unknown"
+)
+
+// olmComponents is the component of each role a run's olm-csvs.yaml records.
+var olmComponents = map[string]string{
+	"quay-operator":     "quay-operator",
+	"quay":              "quay-quay",
+	"clair":             "quay-clair",
+	"quay-builder":      "quay-builder",
+	"quay-builder-qemu": "quay-builder-qemu",
+}
+
+// candidateCI groups the application's periodic runs since the candidate's
+// operator bundle was first built by the build each installed, and finds the
+// version's newest build in the CI catalog, when that is not the candidate,
+// and whether the candidate needs refreshing. It also returns that build's
+// bundle. held is the candidate's image digests by component.
+func candidateCI(app string, c *candidate, held map[string]string, runs []prow.Run, releases []model.StageRelease) (*model.CandidateCI, string) {
+	// A bundle is labelled by the oldest stream build holding it: no run can
+	// have installed it before.
+	labels := map[string]model.BuildLabel{}
+	for i := range c.stream {
+		if d := bundleDigest(app, &c.stream[i]); d != "" {
+			labels[d] = model.BuildLabel{Snapshot: c.stream[i].Name, CreatedAt: c.stream[i].CreatedAt}
+		}
+	}
+	cand, bundle := c.build, held[app+"-quay-operator-bundle"]
+	ci := &model.CandidateCI{Since: cand.CreatedAt, Refresh: "current"}
+	if l, ok := labels[bundle]; ok {
+		ci.Since = l.CreatedAt
+	}
+
+	var candRuns, unknown, none []prow.Run
+	others := map[string][]prow.Run{}
+	for _, run := range runs {
+		if run.StartedAt == nil || run.StartedAt.Before(ci.Since) {
+			continue
+		}
+		switch b := installedBundle(run, app, held); {
+		case b == notInstalled:
+			none = append(none, run)
+		case b == bundle && bundle != "":
+			candRuns = append(candRuns, run)
+		case labels[b].Snapshot != "":
+			others[b] = append(others[b], run)
+		default:
+			unknown = append(unknown, run)
+		}
+	}
+	ci.Builds = []model.CIBuild{{Kind: "candidate", Snapshot: cand.Snapshot, CreatedAt: &cand.CreatedAt, Jobs: jobRuns(candRuns)}}
+	bundles := slices.Collect(maps.Keys(others))
+	slices.SortFunc(bundles, func(a, b string) int {
+		return cmp.Or(labels[b].CreatedAt.Compare(labels[a].CreatedAt), strings.Compare(labels[b].Snapshot, labels[a].Snapshot))
+	})
+	for _, b := range bundles {
+		l, state := labels[b], ciState(b, releases)
+		ci.Builds = append(ci.Builds, model.CIBuild{Kind: "build", Snapshot: l.Snapshot, CreatedAt: &l.CreatedAt, CI: &state, Jobs: jobRuns(others[b])})
+	}
+	if len(unknown) > 0 {
+		ci.Builds = append(ci.Builds, model.CIBuild{Kind: unknownBuild, Jobs: jobRuns(unknown)})
+	}
+	if len(none) > 0 {
+		ci.Builds = append(ci.Builds, model.CIBuild{Kind: notInstalled, Jobs: jobRuns(none)})
+	}
+
+	// The CI catalog serves the newest bundle of the version's builds that
+	// reached it: a newer build can pair rebuilt images with an older bundle.
+	var latest string
+	for i := range c.builds {
+		d := bundleDigest(app, &c.builds[i])
+		if d == "" || (latest != "" && !labels[d].CreatedAt.After(labels[latest].CreatedAt)) {
+			continue
+		}
+		if ciState(d, releases).State == "in" {
+			latest = d
+		}
+	}
+	if latest == bundle {
+		latest = ""
+	}
+	if latest != "" {
+		l := labels[latest]
+		ci.LatestInCI = &l
+	}
+	if ci.LatestInCI != nil && ci.LatestInCI.CreatedAt.After(ci.Since) {
+		ci.Refresh = "waiting"
+		if slices.ContainsFunc(others[latest], func(r prow.Run) bool { return r.State == "success" }) {
+			ci.Refresh = "refresh"
+			// Once a prod Release was attempted, ART's shipment pins the
+			// candidate (art-tools lp_shipment.py).
+			if cand.Prod != nil {
+				ci.Refresh = "needs_art"
+			}
+		}
+	}
+	return ci, latest
+}
+
+// installedBundle returns the operator bundle a run installed: the one it
+// recorded, else the candidate's when it recorded the candidate's image of
+// each role olm-csvs.yaml records, which runs that recorded no bundle did;
+// unknownBuild for another Quay operator, and notInstalled without one.
+func installedBundle(run prow.Run, app string, held map[string]string) string {
+	for _, img := range run.Images {
+		if img.Role == "quay-operator-bundle" {
+			return img.Digest
+		}
+	}
+	candidate := true
+	for role, comp := range olmComponents {
+		d := held[app+"-"+comp]
+		candidate = candidate && d != "" && slices.Contains(run.Images, prow.Image{Role: role, Digest: d})
+	}
+	switch {
+	case candidate:
+		return held[app+"-quay-operator-bundle"]
+	case slices.ContainsFunc(run.Images, func(img prow.Image) bool { return img.Role == "quay-operator" }):
+		return unknownBuild
+	}
+	return notInstalled
+}
+
+// jobRuns returns runs, newest first, by job, sorted by job name.
+func jobRuns(runs []prow.Run) []model.CIJob {
+	jobs := []model.CIJob{}
+	for _, run := range runs {
+		i := slices.IndexFunc(jobs, func(j model.CIJob) bool { return j.JobName == run.JobName })
+		if i < 0 {
+			i = len(jobs)
+			jobs = append(jobs, model.CIJob{JobName: run.JobName})
+		}
+		jobs[i].Runs = append(jobs[i].Runs, model.CIRun{State: run.State, StartedAt: *run.StartedAt, ProwURL: run.ProwURL})
+	}
+	slices.SortFunc(jobs, func(a, b model.CIJob) int { return strings.Compare(a.JobName, b.JobName) })
+	return jobs
+}
+
+// ciState tells whether the operator bundle of digest bundle reached the
+// catalog CI installs from, by releases, the per-build stage Releases, newest
+// first.
+func ciState(bundle string, releases []model.StageRelease) model.CIState {
+	if bundle == "" || len(releases) == 0 {
+		return model.CIState{State: "unknown"}
+	}
+	state := model.CIState{State: "none"}
+	for _, r := range releases {
+		if !slices.ContainsFunc(r.Images, func(img string) bool { return imageDigest(img) == bundle }) {
+			continue
+		}
+		switch {
+		case r.ReleasedStatus == "True" && r.ReleasedReason == "Succeeded":
+			return model.CIState{State: "in", Release: &r.KonfluxRelease}
+		case r.ReleasedReason == "Failed" && state.Release == nil:
+			state = model.CIState{State: "failed", Release: &r.KonfluxRelease}
+		}
+	}
+	return state
+}
+
+// bundleDigest returns the digest of a build's operator bundle, or "".
+func bundleDigest(app string, snap *model.ReleaseSnapshot) string {
+	for _, c := range snap.Components {
+		if c.Name == app+"-quay-operator-bundle" {
+			return imageDigest(c.Image)
+		}
+	}
+	return ""
 }
 
 // candidate is a version's build up for release. A version that shipped, or
@@ -115,13 +284,15 @@ type candidate struct {
 	// reason says why the version has no build.
 	reason string
 	// build is the version's selected STAGE build, else newest, its newest
-	// build: the first of its stream builds, newest first, as versionBuilds
-	// selects them for its assembly. stagedAt is the STAGE build's stage
-	// Release's completion time.
-	build    *model.CandidateBuild
-	stagedAt *time.Time
-	newest   *model.ReleaseSnapshot
-	assembly string
+	// build: the first of builds, its stream builds, newest first, as
+	// versionBuilds selects them for its assembly from stream, all of the
+	// application's. stagedAt is the STAGE build's stage Release's completion
+	// time.
+	build          *model.CandidateBuild
+	stagedAt       *time.Time
+	newest         *model.ReleaseSnapshot
+	builds, stream []model.ReleaseSnapshot
+	assembly       string
 }
 
 // selectCandidate selects the version's build up for release, for its page
@@ -141,9 +312,9 @@ func (s *Server) selectCandidate(ctx context.Context, release *model.ReleaseVers
 	if err != nil {
 		return nil, err
 	}
-	c := &candidate{assembly: m[1]}
-	if vb := versionBuilds(app, builds, nvrs, m[1]); len(vb) > 0 {
-		c.newest = &vb[0]
+	c := &candidate{assembly: m[1], builds: versionBuilds(app, builds, nvrs, m[1]), stream: builds}
+	if len(c.builds) > 0 {
+		c.newest = &c.builds[0]
 	}
 	if c.build, c.stagedAt, err = s.candidateBuild(ctx, release, c.newest); err != nil {
 		return nil, err
@@ -292,49 +463,6 @@ func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersi
 		}
 	}
 	return c, stagedAt, nil
-}
-
-// stageState tells whether every image of a build is in a Snapshot a STAGE
-// Release of the stream succeeded with: "staged" or "not_staged", or
-// "unknown" when the stream has no STAGE Release at all: nothing shows it
-// goes through stage.
-func stageState(images []model.SnapshotImage, releases []model.StageRelease) string {
-	if len(releases) == 0 {
-		return "unknown"
-	}
-	staged := map[string]bool{}
-	for _, r := range releases {
-		if r.ReleasedStatus == "True" && r.ReleasedReason == "Succeeded" {
-			for _, img := range r.Images {
-				staged[imageDigest(img)] = true
-			}
-		}
-	}
-	for _, img := range images {
-		if d := imageDigest(img.Image); d == "" || !staged[d] {
-			return "not_staged"
-		}
-	}
-	return "staged"
-}
-
-// ciJobs returns, per job, the newest of runs (newest first) that installed
-// the operator bundle of digest bundle and how many did, sorted by job name.
-func ciJobs(runs []prow.Run, bundle string) []model.CIJob {
-	jobs := []model.CIJob{}
-	for _, run := range runs {
-		if !slices.Contains(run.Images, prow.Image{Role: "quay-operator-bundle", Digest: bundle}) {
-			continue
-		}
-		i := slices.IndexFunc(jobs, func(j model.CIJob) bool { return j.JobName == run.JobName })
-		if i < 0 {
-			i = len(jobs)
-			jobs = append(jobs, model.CIJob{JobName: run.JobName, State: run.State, ProwURL: run.ProwURL, StartedAt: run.StartedAt})
-		}
-		jobs[i].Runs++
-	}
-	slices.SortFunc(jobs, func(a, b model.CIJob) int { return strings.Compare(a.JobName, b.JobName) })
-	return jobs
 }
 
 // buildImages returns snap's component images less the base image

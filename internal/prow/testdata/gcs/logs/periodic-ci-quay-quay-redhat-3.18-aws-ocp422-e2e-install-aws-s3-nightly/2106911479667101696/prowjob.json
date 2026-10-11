@@ -1,0 +1,1 @@
+{"spec": {"pod_spec": {"containers": [{"args": ["--target=aws-s3-nightly"]}]}}, "status": {"state": "failure", "startTime": "2026-10-05T00:56:53Z", "url": "https://prow.ci.openshift.org/view/gs/test-platform-results-public/logs/periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly/2106911479667101696"}}

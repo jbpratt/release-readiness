@@ -134,7 +134,7 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 }
 
 // syncJob fetches every run not yet known to be finished. A finished run is
-// never fetched again.
+// never fetched again once its artifacts were read.
 func (s *Syncer) syncJob(ctx context.Context, job Job) (int, error) {
 	ids, err := s.client.listBuildIDs(ctx, job.Prefix)
 	if err != nil {
@@ -188,14 +188,24 @@ func (s *Syncer) fetchRun(ctx context.Context, job Job, id string) (*Run, error)
 	if run.CompletedAt == nil {
 		return run, nil
 	}
-	if target != "" {
-		data, err := s.client.object(ctx, dir+"artifacts/"+target+"/quay-gather/artifacts/tested-images.json")
-		if err != nil {
-			return nil, err
-		}
-		if data != nil {
-			run.applyArtifact(data)
-		}
+	run.ArtifactState = ArtifactNone
+	if target == "" {
+		return run, nil
+	}
+	artifacts := dir + "artifacts/" + target + "/quay-gather/artifacts/"
+	data, err := s.client.object(ctx, artifacts+"tested-images.json")
+	if err != nil {
+		return nil, err
+	}
+	if data != nil {
+		run.applyArtifact(data)
+		return run, nil
+	}
+	if data, err = s.client.object(ctx, artifacts+"olm-csvs.yaml"); err != nil {
+		return nil, err
+	}
+	if data != nil {
+		run.applyOLMCSVs(data)
 	}
 	return run, nil
 }

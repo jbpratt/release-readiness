@@ -1,0 +1,71 @@
+apiVersion: v1
+items:
+- apiVersion: operators.coreos.com/v1alpha1
+  kind: ClusterServiceVersion
+  metadata:
+    name: packageserver
+    namespace: openshift-operator-lifecycle-manager
+  spec:
+    install:
+      spec:
+        deployments:
+        - name: packageserver
+          spec:
+            template:
+              spec:
+                containers:
+                - image: quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:ef431f78a67a9b84e312390b5a9cf0d14084f44b425e9fd26bd7ffc898a3e322
+                  name: packageserver
+- apiVersion: operators.coreos.com/v1alpha1
+  kind: ClusterServiceVersion
+  metadata:
+    annotations:
+      containerImage: registry.redhat.io/quay/quay-rhel9-operator@sha256:261469689b60b3c285fa9c3492ad83daf30b93d6b5a860845dc803af1075dbfb
+      quay-version: v3.18.1
+    name: quay-operator.v3.18.1
+    namespace: quay-enterprise
+  spec:
+    install:
+      spec:
+        deployments:
+        - name: quay-operator-tng
+          spec:
+            template:
+              spec:
+                containers:
+                - env:
+                  - name: RELATED_IMAGE_COMPONENT_QUAY
+                    value: registry.redhat.io/quay/quay-rhel9@sha256:4db6193f032e733fb80f8b83c5a3a0c4e43cda6fdbd7c9cbf150b1ee93bbab3c
+                  - name: RELATED_IMAGE_COMPONENT_CLAIR
+                    value: registry.redhat.io/quay/clair-rhel9@sha256:4953b4a9a79ea732e585b04deab4d2595ae21a71f33c5dd6b0c1d360160e16d8
+                  - name: RELATED_IMAGE_COMPONENT_BUILDER
+                    value: registry.redhat.io/quay/quay-builder-rhel9@sha256:ccae0d49a7795cf7e00a407441b4e404715b8fb21e575756d341467d59e12c04
+                  - name: RELATED_IMAGE_COMPONENT_BUILDER_QEMU
+                    value: registry.redhat.io/quay/quay-builder-qemu-rhcos-rhel8@sha256:fb921ff5608a90658f2133d5e0885a41c498542e7ca363267db7d2c1810282ec
+                  - name: RELATED_IMAGE_COMPONENT_POSTGRES
+                    value: registry.redhat.io/rhel9/postgresql-13@sha256:c8f0cfec0fb5c0a55ca3a8721d279499037c72addd993065b580fe9a9e32d476
+                  - name: RELATED_IMAGE_COMPONENT_REDIS
+                    value: registry.redhat.io/rhel9/redis-7@sha256:3a27a8dac47dd2dce166a8f90105d8bb575744f82612f60b47413e51aa66201d
+                  image: registry.redhat.io/quay/quay-rhel9-operator@sha256:261469689b60b3c285fa9c3492ad83daf30b93d6b5a860845dc803af1075dbfb
+                  name: quay-operator
+    relatedImages:
+    - image: registry.redhat.io/quay/quay-rhel9-operator@sha256:261469689b60b3c285fa9c3492ad83daf30b93d6b5a860845dc803af1075dbfb
+      name: quay-rhel9-operator
+    - image: registry.redhat.io/quay/quay-rhel9@sha256:4db6193f032e733fb80f8b83c5a3a0c4e43cda6fdbd7c9cbf150b1ee93bbab3c
+      name: quay-rhel9
+    - image: registry.redhat.io/quay/clair-rhel9@sha256:4953b4a9a79ea732e585b04deab4d2595ae21a71f33c5dd6b0c1d360160e16d8
+      name: clair-rhel9
+    - image: registry.redhat.io/quay/quay-builder-rhel9@sha256:ccae0d49a7795cf7e00a407441b4e404715b8fb21e575756d341467d59e12c04
+      name: quay-builder-rhel9
+    - image: registry.redhat.io/quay/quay-builder-qemu-rhcos-rhel8@sha256:fb921ff5608a90658f2133d5e0885a41c498542e7ca363267db7d2c1810282ec
+      name: quay-builder-qemu-rhcos-rhel8
+    - image: registry.redhat.io/rhel9/postgresql-13@sha256:c8f0cfec0fb5c0a55ca3a8721d279499037c72addd993065b580fe9a9e32d476
+      name: postgresql-13
+    - image: registry.redhat.io/rhel9/redis-7@sha256:3a27a8dac47dd2dce166a8f90105d8bb575744f82612f60b47413e51aa66201d
+      name: redis-7
+    version: 3.18.1
+  status:
+    phase: Succeeded
+kind: List
+metadata:
+  resourceVersion: ""

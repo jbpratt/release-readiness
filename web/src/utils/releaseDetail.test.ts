@@ -10,8 +10,14 @@ import {
 	OutlinedCircleIcon,
 	QuestionCircleIcon,
 } from "@patternfly/react-icons";
-import type { ImageScan, KonfluxRelease } from "../api/types.ts";
+import type {
+	CandidateCI,
+	CIRun,
+	ImageScan,
+	KonfluxRelease,
+} from "../api/types.ts";
 import {
+	ciWarning,
 	componentLabel,
 	fixableLabels,
 	jobLabels,
@@ -275,4 +281,74 @@ test("scanCell", () => {
 		color: "grey",
 	});
 	assert.deepEqual(scanCell(null), { text: "-", color: "grey" });
+});
+
+test("ciWarning", () => {
+	const run = (state: string, started_at: string): CIRun => ({
+		state,
+		started_at,
+		prow_url: "https://prow.example/1",
+	});
+	const ci = (
+		refresh: CandidateCI["refresh"],
+		inCI: boolean,
+		...jobs: CIRun[][]
+	): CandidateCI => ({
+		since: "2026-10-06T17:10:27Z",
+		builds: [
+			{
+				kind: "candidate",
+				snapshot: "quay-stage-3-18-1-image-20261007200243",
+				created_at: "2026-10-07T20:02:43Z",
+				ci: null,
+				jobs: jobs.map((runs, i) => ({ job_name: `job-${i}`, runs })),
+			},
+		],
+		latest_in_ci: inCI
+			? {
+					snapshot: "quay-3-18-20261009-042614-000",
+					created_at: "2026-10-09T04:28:09Z",
+				}
+			: null,
+		refresh,
+	});
+	// A newer build in CI: the candidate's newest run of any job, and the
+	// build named unless the refresh line names it.
+	assert.deepEqual(
+		ciWarning(
+			ci(
+				"needs_art",
+				true,
+				[run("success", "2026-10-07T23:49:38Z")],
+				[
+					run("success", "2026-10-09T00:56:39Z"),
+					run("failure", "2026-10-07T00:56:56Z"),
+				],
+			),
+		),
+		{ lastRun: "2026-10-09T00:56:39Z", namesLatest: true },
+	);
+	for (const refresh of ["refresh", "waiting"] as const) {
+		assert.deepEqual(
+			ciWarning(ci(refresh, true)),
+			{ lastRun: null, namesLatest: false },
+			refresh,
+		);
+	}
+	// None newer: only whether a run that installed the candidate passed.
+	assert.equal(
+		ciWarning(ci("current", false, [run("failure", "2026-10-08T00:56:37Z")])),
+		"no_pass",
+	);
+	assert.equal(
+		ciWarning(
+			ci(
+				"current",
+				false,
+				[run("failure", "2026-10-08T00:56:37Z")],
+				[run("success", "2026-10-07T23:49:38Z")],
+			),
+		),
+		undefined,
+	);
 });

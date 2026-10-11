@@ -1,0 +1,21 @@
+apiVersion: v1
+items:
+- apiVersion: operators.coreos.com/v1alpha1
+  kind: ClusterServiceVersion
+  metadata:
+    name: packageserver
+    namespace: openshift-operator-lifecycle-manager
+  spec:
+    install:
+      spec:
+        deployments:
+        - name: packageserver
+          spec:
+            template:
+              spec:
+                containers:
+                - image: quay.io/openshift-release-dev/ocp-v4.0-art-dev@sha256:ef431f78a67a9b84e312390b5a9cf0d14084f44b425e9fd26bd7ffc898a3e322
+                  name: packageserver
+kind: List
+metadata:
+  resourceVersion: ""

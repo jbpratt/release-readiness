@@ -2,6 +2,7 @@ package db
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -54,5 +55,28 @@ func TestUpsertProwRunPendingToTerminal(t *testing.T) {
 	if got.State != "success" || got.CompletedAt == nil || !got.CompletedAt.Equal(completed) ||
 		got.ArtifactState != prow.ArtifactPresent || len(got.Images) != 2 || got.Images[1] != run.Images[1] {
 		t.Errorf("run = %+v", got)
+	}
+}
+
+// A finished run an older binary stored as "missing" is read once more.
+func TestListFinishedProwBuildIDs(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	ctx := t.Context()
+
+	at := time.Date(2026, 10, 8, 23, 49, 38, 0, time.UTC)
+	for id, state := range map[string]string{"1": prow.ArtifactMissing, "2": prow.ArtifactOLMCSVs, "3": prow.ArtifactNone, "4": prow.ArtifactPresent} {
+		run := &prow.Run{JobName: "job", BuildID: id, Application: "quay-3-18", State: "failure", StartedAt: &at, CompletedAt: &at, ArtifactState: state, FetchedAt: at}
+		if err := d.UpsertProwRun(ctx, run); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ids, err := d.ListFinishedProwBuildIDs(ctx, "job")
+	slices.Sort(ids)
+	if err != nil || !slices.Equal(ids, []string{"2", "3", "4"}) {
+		t.Errorf("finished = %v, %v, want [2 3 4]", ids, err)
 	}
 }

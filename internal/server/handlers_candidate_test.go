@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -226,10 +227,44 @@ func seedRun(t *testing.T, srv *Server, job, id, state, started string, images [
 	}
 }
 
-// ciJob is the CI job of a run seedRun stored.
-func ciJob(t *testing.T, job, state, id, started string, runs int) model.CIJob {
-	at := mustTime(t, started)
-	return model.CIJob{JobName: jobPrefix + job, State: state, ProwURL: "https://prow.example/" + id, StartedAt: &at, Runs: runs}
+// olmImages is what a run records from olm-csvs.yaml: the operator, quay,
+// clair, builder and builder-qemu images, each named by the build it is from.
+func olmImages(operator, quay, clair, builder, qemu string) []prow.Image {
+	return []prow.Image{
+		{Role: "quay-operator", Digest: testDigest(operator + "/quay-3-18-quay-operator")},
+		{Role: "quay", Digest: testDigest(quay + "/quay-3-18-quay-quay")},
+		{Role: "clair", Digest: testDigest(clair + "/quay-3-18-quay-clair")},
+		{Role: "quay-builder", Digest: testDigest(builder + "/quay-3-18-quay-builder")},
+		{Role: "quay-builder-qemu", Digest: testDigest(qemu + "/quay-3-18-quay-builder-qemu")},
+	}
+}
+
+// ciRows is each CI build row as "kind[ snapshot created_at[ state release]]:
+// job=run,run ...", with jobs and run IDs as seedRun stored them.
+func ciRows(builds []model.CIBuild) []string {
+	rows := []string{}
+	for _, b := range builds {
+		row := b.Kind
+		if b.CreatedAt != nil {
+			row += " " + b.Snapshot + " " + b.CreatedAt.Format(time.RFC3339)
+		}
+		if b.CI != nil {
+			row += " " + b.CI.State
+			if b.CI.Release != nil {
+				row += " " + b.CI.Release.Name
+			}
+		}
+		row += ":"
+		for _, j := range b.Jobs {
+			var ids []string
+			for _, r := range j.Runs {
+				ids = append(ids, strings.TrimPrefix(r.ProwURL, "https://prow.example/"))
+			}
+			row += " " + strings.TrimPrefix(j.JobName, jobPrefix) + "=" + strings.Join(ids, ",")
+		}
+		rows = append(rows, row)
+	}
+	return rows
 }
 
 // A build's version is the X.Y.Z the NVRs of its images ART resolved carry,
@@ -282,9 +317,9 @@ func TestGetCandidate(t *testing.T) {
 	}
 
 	// 3.18.1's release candidate is its STAGE build, and its newest build, not
-	// the stream's newer mixed one, holds other images. The candidate has the
-	// prod Release: the newest Release of a prod Snapshot, not the newest prod
-	// Snapshot. No run installed its bundle.
+	// the stream's newer mixed one, holds other images and is not in CI. The
+	// candidate has the prod Release: the newest Release of a prod Snapshot,
+	// not the newest prod Snapshot. No run installed its bundle.
 	var got model.ReleaseCandidate
 	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
 	c := got.Candidate
@@ -308,20 +343,21 @@ func TestGetCandidate(t *testing.T) {
 	if p := c.Prod; p == nil || p.Name != "quay-prod-3-18-1-image-20261009133455" || p.ReleasedReason != "Failed" || p.FailedTask != "verify-conforma" {
 		t.Errorf("3.18.1 prod = %+v", p)
 	}
-	if c.CI == nil || len(c.CI) != 0 {
-		t.Errorf("3.18.1 ci = %+v, want none", c.CI)
+	if ci := got.CI; ci == nil || len(ci.Builds) == 0 || ciRows(ci.Builds)[0] != "candidate quay-stage-3-18-1-image-20261007200243 2026-10-07T20:02:43Z:" {
+		t.Errorf("3.18.1 ci = %+v, want the candidate first, without runs", ci)
 	}
 	// Its images reached stage the day before, but the build did with its
 	// own Release.
 	if s := c.Stage; s.State != "staged" || s.StagedAt == nil || !s.StagedAt.Equal(mustTime(t, "2026-10-07T20:14:57Z")) {
 		t.Errorf("3.18.1 candidate stage = %+v", s)
 	}
-	if n := got.Newest; n == nil || n.Snapshot != "quay-3-18-20261010-013713-000" || !n.CreatedAt.Equal(mustTime(t, "2026-10-10T01:48:34Z")) || n.Stage != "not_staged" {
-		t.Errorf("3.18.1 newest = %+v, want quay-3-18-20261010-013713-000, not staged", n)
+	if n := got.Newest; n == nil || n.Snapshot != "quay-3-18-20261010-013713-000" || !n.CreatedAt.Equal(mustTime(t, "2026-10-10T01:48:34Z")) || n.CI != (model.CIState{State: "none"}) {
+		t.Errorf("3.18.1 newest = %+v, want quay-3-18-20261010-013713-000, not in CI", n)
 	}
 
-	// 3.14.10 has no STAGE build, so no release candidate, but a newest build.
-	// No STAGE Release of quay-3-14 at all: its stage cannot tell.
+	// 3.14.10 has no STAGE build, so no release candidate and no CI, but a
+	// newest build. No per-build stage Release of quay-3-14 at all: whether it
+	// is in CI cannot tell.
 	if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: "quay-v3.14.10", KonfluxApplication: "quay-3-14"}); err != nil {
 		t.Fatal(err)
 	}
@@ -331,50 +367,142 @@ func TestGetCandidate(t *testing.T) {
 	var raw map[string]any
 	getJSON(t, srv, "/api/v1/releases/quay-v3.14.10/candidate", http.StatusOK, &raw)
 	want := map[string]any{
-		"shipped": false, "candidate": nil, "reason": "no release candidate yet",
-		"newest": map[string]any{"snapshot": "quay-3-14-20261009-185801-000", "created_at": "2026-10-09T19:27:56Z", "stage": "unknown"},
+		"shipped": false, "candidate": nil, "reason": "no release candidate yet", "ci": nil,
+		"newest": map[string]any{
+			"snapshot": "quay-3-14-20261009-185801-000", "created_at": "2026-10-09T19:27:56Z",
+			"ci": map[string]any{"state": "unknown", "release": nil},
+		},
 	}
 	if !reflect.DeepEqual(raw, want) {
 		t.Errorf("3.14.10 = %v, want %v", raw, want)
 	}
 }
 
-// A run tested the candidate when it installed the candidate's operator
-// bundle, whatever other images it recorded.
+// The periodic runs since the stream first built the candidate's operator
+// bundle, by the build each installed: the candidate, by its bundle or, for a
+// run that recorded none, its five Quay images; each other build, newest
+// first, with whether it is in CI; an unknown build; and no Quay.
 func TestGetCandidateCI(t *testing.T) {
 	srv := setupTestServer(t)
 	seedQuay318(t, srv)
+	all := append(slices.Clone(quay318), "quay-3-18-base-rhel9")
+	seedImages(t, srv, "quay-3-18-20261006-052000-000", "2026-10-06T05:20:00Z", testBuild("stage", all...))
+	// A newer build pairs the tested build's images with the candidate's older
+	// bundle: the tested build, whose bundle is newer, is still the one in CI.
+	paired := testBuild("tested", all...)
+	paired["quay-3-18-quay-operator-bundle"] = testImage("stage/quay-3-18-quay-operator-bundle")
+	seedImages(t, srv, "quay-3-18-20261009-224312-000", "2026-10-09T22:52:29Z", paired)
+	seedKonfluxRelease(t, srv, "fbc-ri-stage-quay-3-18-quay-operator-ssrlx", "fbc-ri-stage-quay-3-18-quay-operator-d552l",
+		"quay-advisory-stage-3-18", "Failed", "2026-10-10T01:49:22Z", "2026-10-10T02:01:00Z")
 	for _, r := range []struct {
 		job, id, state, started string
 		images                  []prow.Image
 	}{
-		{"aws-ocp422-e2e-install-aws-s3-nightly", "1", "failure", "2026-10-08T00:56:53Z", runImages("tested", "tested", "tested", "stage")},
-		{"aws-ocp422-e2e-install-aws-s3-nightly", "2", "success", "2026-10-08T12:56:53Z", runImages("new", "new", "new", "stage")},
-		{"gcp-ocp422-e2e-install-gcp-gcs-nightly", "3", "success", "2026-10-08T11:49:53Z", runImages("tested", "new", "tested", "stage")},
-		// The candidate's quay, clair and operator beside another bundle.
-		{"azure-ocp422-e2e-install-azure-blob-nightly", "4", "success", "2026-10-08T13:27:53Z", runImages("stage", "stage", "stage", "tested")},
-		{"aws-ocp422-e2e-install-aws-s3-nightly", "9", "success", "2026-10-10T04:00:00Z", nil},
+		// Before the stream built the candidate's bundle.
+		{"aws-ocp422-e2e-install-aws-s3-nightly", "10", "success", "2026-10-06T00:56:55Z", runImages("stage", "stage", "stage", "stage")},
+		{"gcp-ocp422-e2e-install-gcp-gcs-nightly", "11", "failure", "2026-10-06T23:49:56Z", olmImages("stage", "stage", "stage", "stage", "stage")},
+		{"aws-ocp422-e2e-install-aws-s3-nightly", "12", "failure", "2026-10-07T00:56:56Z", olmImages("stage", "stage", "stage", "stage", "stage")},
+		// The candidate's operator, quay and clair beside another builder.
+		{"azure-ocp422-e2e-install-azure-blob-nightly", "13", "failure", "2026-10-07T01:27:56Z", olmImages("stage", "stage", "stage", "tested", "stage")},
+		{"aws-ocp422-e2e-install-aws-s3-nightly", "14", "success", "2026-10-08T00:56:37Z", runImages("stage", "stage", "stage", "stage")},
+		// A bundle no stream build holds.
+		{"gcp-ocp422-e2e-install-gcp-gcs-nightly", "15", "failure", "2026-10-08T23:49:38Z", runImages("orphan", "orphan", "orphan", "orphan")},
+		{"aws-ocp422-e2e-install-aws-odf-nightly", "16", "failure", "2026-10-09T03:11:39Z", nil},
+		{"aws-ocp422-e2e-install-aws-s3-nightly-fips", "17", "failure", "2026-10-10T17:21:25Z", runImages("other", "other", "other", "other")},
+		{"aws-ocp422-e2e-install-aws-s3-nightly", "18", "failure", "2026-10-11T00:56:03Z", runImages("new", "new", "new", "new")},
 	} {
 		seedRun(t, srv, r.job, r.id, r.state, r.started, r.images)
 	}
+
 	var got model.ReleaseCandidate
 	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
-	want := []model.CIJob{
-		ciJob(t, "aws-ocp422-e2e-install-aws-s3-nightly", "success", "2", "2026-10-08T12:56:53Z", 2),
-		ciJob(t, "gcp-ocp422-e2e-install-gcp-gcs-nightly", "success", "3", "2026-10-08T11:49:53Z", 1),
+	ci := got.CI
+	if ci == nil {
+		t.Fatal("3.18.1 has no CI")
 	}
-	if got.Candidate == nil {
-		t.Fatal("3.18.1 has no candidate")
+	if !ci.Since.Equal(mustTime(t, "2026-10-06T05:20:00Z")) {
+		t.Errorf("since = %v, want when the stream built the candidate's bundle", ci.Since)
 	}
-	if ci := got.Candidate.CI; !reflect.DeepEqual(ci, want) {
-		t.Errorf("3.18.1 ci = %+v, want %+v", ci, want)
+	want := []string{
+		"candidate quay-stage-3-18-1-image-20261007200243 2026-10-07T20:02:43Z: aws-ocp422-e2e-install-aws-s3-nightly=14,12 gcp-ocp422-e2e-install-gcp-gcs-nightly=11",
+		"build quay-3-18-20261010-013713-000 2026-10-10T01:48:34Z failed fbc-ri-stage-quay-3-18-quay-operator-ssrlx: aws-ocp422-e2e-install-aws-s3-nightly=18",
+		"build quay-3-18-20261010-013900-000 2026-10-10T01:40:00Z none: aws-ocp422-e2e-install-aws-s3-nightly-fips=17",
+		"build quay-3-18-20261009-042610-000 2026-10-09T04:29:06Z in fbc-ri-stage-quay-3-18-quay-operator-r8fcb: " +
+			"aws-ocp422-e2e-install-aws-odf-nightly=8 aws-ocp422-e2e-install-aws-s3-nightly=6 azure-ocp422-e2e-install-azure-blob-nightly=7 gcp-ocp422-e2e-install-gcp-gcs-nightly=5",
+		"unknown: azure-ocp422-e2e-install-azure-blob-nightly=13 gcp-ocp422-e2e-install-gcp-gcs-nightly=15",
+		"not_installed: aws-ocp422-e2e-install-aws-odf-nightly=16",
+	}
+	if rows := ciRows(ci.Builds); !slices.Equal(rows, want) {
+		t.Fatalf("builds:\n%s\nwant:\n%s", strings.Join(rows, "\n"), strings.Join(want, "\n"))
+	}
+	if r := ci.Builds[0].Jobs[0].Runs[0]; r.State != "success" || !r.StartedAt.Equal(mustTime(t, "2026-10-08T00:56:37Z")) || r.ProwURL != "https://prow.example/14" {
+		t.Errorf("the candidate's newest run = %+v", r)
+	}
+	// The newest build failed to reach CI; the one before passed in it, but a
+	// prod Release of 3.18.1 was attempted.
+	if l := ci.LatestInCI; l == nil || l.Snapshot != "quay-3-18-20261009-042610-000" || !l.CreatedAt.Equal(mustTime(t, "2026-10-09T04:29:06Z")) || ci.Refresh != "needs_art" {
+		t.Errorf("latest in CI = %+v, refresh %q; want quay-3-18-20261009-042610-000, needs_art", l, ci.Refresh)
+	}
+	if n := got.Newest; n == nil || n.Snapshot != "quay-3-18-20261010-013713-000" || n.CI.State != "failed" || n.CI.Release == nil || n.CI.Release.Name != "fbc-ri-stage-quay-3-18-quay-operator-ssrlx" {
+		t.Errorf("newest = %+v, want quay-3-18-20261010-013713-000, failed to reach CI", n)
+	}
+}
+
+// The candidate needs refreshing once a newer build of its version is in CI
+// and a run that installed it passed, and waits on CI until one does. A build
+// in CI that holds the candidate's bundle is the candidate.
+func TestGetCandidateRefresh(t *testing.T) {
+	srv := setupTestServer(t)
+	seedQuay318(t, srv)
+	all := append(slices.Clone(quay318), "quay-3-18-base-rhel9")
+	ri := []string{"quay-3-18-quay-builder", "quay-3-18-quay-builder-qemu", "quay-3-18-quay-clair", "quay-3-18-quay-operator", "quay-3-18-quay-operator-bundle", "quay-3-18-quay-quay"}
+	inCI := func(build, snapshot, release, created, completed string) {
+		t.Helper()
+		seedImages(t, srv, snapshot, created, testBuild(build, ri...))
+		seedKonfluxRelease(t, srv, release, snapshot, "quay-advisory-stage-3-18", "Succeeded", created, completed)
+	}
+	// 3.18.2's STAGE build, of a stream build in CI.
+	seedImages(t, srv, "quay-3-18-20261010-035000-000", "2026-10-10T03:50:00Z", testBuild("stage2", all...))
+	resolveNVR(t, srv, "stage2/quay-3-18-quay-quay", testNVR("quay-quay", "3.18.2"))
+	inCI("stage2", "fbc-ri-stage-quay-3-18-quay-operator-x2b9k", "fbc-ri-stage-quay-3-18-quay-operator-m4q7z", "2026-10-10T03:51:00Z", "2026-10-10T03:59:00Z")
+	seedImages(t, srv, "quay-stage-3-18-2-image-20261010040000", "2026-10-10T04:00:00Z", testBuild("stage2", quay318...))
+	if err := srv.db.UpsertStagedSnapshot(t.Context(), "quay-stage-3-18-2-image-20261010040000", "3.18.2", "image", "stage", mustTime(t, "2026-10-10T04:00:00Z")); err != nil {
+		t.Fatal(err)
+	}
+	seedKonfluxRelease(t, srv, "quay-stage-3-18-2-image-20261010040000", "quay-stage-3-18-2-image-20261010040000",
+		"quay-advisory-stage-3-18", "Succeeded", "2026-10-10T04:00:00Z", "2026-10-10T04:10:00Z")
+	get := func() *model.CandidateCI {
+		t.Helper()
+		var got model.ReleaseCandidate
+		getJSON(t, srv, "/api/v1/releases/quay-v3.18.2/candidate", http.StatusOK, &got)
+		if got.CI == nil || got.Newest != nil {
+			t.Fatalf("3.18.2 ci = %+v, newest %+v; want CI, and no newest build beside the one it names", got.CI, got.Newest)
+		}
+		return got.CI
+	}
+	if ci := get(); ci.LatestInCI != nil || ci.Refresh != "current" {
+		t.Errorf("the candidate in CI: latest %+v, refresh %q; want none, current", ci.LatestInCI, ci.Refresh)
+	}
+
+	// A newer build reaches CI, and its run fails.
+	seedImages(t, srv, "quay-3-18-20261011-000000-000", "2026-10-11T00:00:00Z", testBuild("next", all...))
+	resolveNVR(t, srv, "next/quay-3-18-quay-quay", testNVR("quay-quay", "3.18.2"))
+	inCI("next", "fbc-ri-stage-quay-3-18-quay-operator-c7d4w", "fbc-ri-stage-quay-3-18-quay-operator-p9t2h", "2026-10-11T00:01:00Z", "2026-10-11T00:12:00Z")
+	seedRun(t, srv, "aws-ocp422-e2e-install-aws-s3-nightly", "21", "failure", "2026-10-11T00:56:03Z", runImages("next", "next", "next", "next"))
+	if ci := get(); ci.LatestInCI == nil || ci.LatestInCI.Snapshot != "quay-3-18-20261011-000000-000" || ci.Refresh != "waiting" {
+		t.Errorf("a newer build failed CI: latest %+v, refresh %q; want quay-3-18-20261011-000000-000, waiting", ci.LatestInCI, ci.Refresh)
+	}
+
+	// A run of it passes, and no prod Release of 3.18.2 was attempted.
+	seedRun(t, srv, "gcp-ocp422-e2e-install-gcp-gcs-nightly", "22", "success", "2026-10-11T01:49:00Z", runImages("next", "next", "next", "next"))
+	if ci := get(); ci.Refresh != "refresh" {
+		t.Errorf("a newer build passed CI: refresh %q, want refresh", ci.Refresh)
 	}
 }
 
 // The newest build shows beside the candidate when it holds another image of
-// a component the candidate holds, staged or not by those images alone: like
-// quay-3-17 for 3.17.6, the stream builds the CSO and QBO operators, which
-// 3.18.2's STAGE build leaves out.
+// a component the candidate holds: like quay-3-17 for 3.17.6, the stream
+// builds the CSO and QBO operators, which 3.18.2's STAGE build leaves out.
 func TestGetCandidateNewest(t *testing.T) {
 	srv := setupTestServer(t)
 	seedQuay318(t, srv)
@@ -398,18 +526,17 @@ func TestGetCandidateNewest(t *testing.T) {
 		t.Errorf("3.18.2 newest = %+v, want none: it holds the STAGE build's images of their components", got.Newest)
 	}
 
-	// A newer one with another quay, staged on its own.
+	// A newer one with another quay. It holds the candidate's bundle, which
+	// the candidate's own stage Release, not a per-build one, holds: it is not
+	// in CI.
 	next := maps.Clone(same)
 	next["quay-3-18-quay-quay"] = testImage("next/quay-3-18-quay-quay")
 	resolveNVR(t, srv, "next/quay-3-18-quay-quay", testNVR("quay-quay", "3.18.2"))
 	seedImages(t, srv, "quay-3-18-20261010-070000-000", "2026-10-10T07:00:00Z", next)
-	seedImages(t, srv, "fbc-ri-stage-quay-3-18-quay", "2026-10-10T07:10:00Z", map[string]string{"quay-3-18-quay-quay": next["quay-3-18-quay-quay"]})
-	seedKonfluxRelease(t, srv, "fbc-ri-stage-quay-3-18-quay", "fbc-ri-stage-quay-3-18-quay",
-		"quay-advisory-stage-3-18", "Succeeded", "2026-10-10T07:10:00Z", "2026-10-10T07:20:00Z")
 	got = model.ReleaseCandidate{}
 	getJSON(t, srv, "/api/v1/releases/quay-v3.18.2/candidate", http.StatusOK, &got)
-	if n := got.Newest; n == nil || n.Snapshot != "quay-3-18-20261010-070000-000" || n.Stage != "staged" {
-		t.Errorf("3.18.2 newest = %+v, want quay-3-18-20261010-070000-000, staged", n)
+	if n := got.Newest; n == nil || n.Snapshot != "quay-3-18-20261010-070000-000" || n.CI != (model.CIState{State: "none"}) {
+		t.Errorf("3.18.2 newest = %+v, want quay-3-18-20261010-070000-000, not in CI", n)
 	}
 }
 
@@ -478,7 +605,7 @@ func TestGetCandidateNone(t *testing.T) {
 		}
 	}
 	none := func(shipped bool, reason string) map[string]any {
-		return map[string]any{"shipped": shipped, "candidate": nil, "reason": reason, "newest": nil}
+		return map[string]any{"shipped": shipped, "candidate": nil, "reason": reason, "newest": nil, "ci": nil}
 	}
 	for version, want := range map[string]map[string]any{
 		"quay-v3.18.0": none(true, ""), // released in JIRA
