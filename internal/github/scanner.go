@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -157,7 +158,9 @@ func (s *Scanner) compare(ctx context.Context, owner, repo, base, head string) (
 	}
 	res := compared{status: cmp.Status}
 	for _, c := range cmp.Commits {
-		for _, k := range uniqueKeys(c.Message) {
+		keys := ticketKeys.FindAllString(c.Message, -1)
+		slices.Sort(keys)
+		for _, k := range slices.Compact(keys) {
 			res.mentions = append(res.mentions, mention{key: k, sha: c.SHA, url: c.HTMLURL})
 		}
 	}
@@ -255,18 +258,6 @@ func githubRepo(c model.TicketComponent) (owner, repo, reason string) {
 		return "", "", ReasonNotGitHub
 	}
 	return owner, repo, ""
-}
-
-func uniqueKeys(msg string) []string {
-	var keys []string
-	seen := map[string]bool{}
-	for _, k := range ticketKeys.FindAllString(msg, -1) {
-		if !seen[k] {
-			seen[k] = true
-			keys = append(keys, k)
-		}
-	}
-	return keys
 }
 
 // splitRepo returns the owner and name of a https://github.com/owner/name
