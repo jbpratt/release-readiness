@@ -37,41 +37,8 @@ func (q *Queries) LatestProdImageRelease(ctx context.Context, assembly string) (
 	return i, err
 }
 
-const latestStagedSnapshot = `-- name: LatestStagedSnapshot :one
-SELECT name, assembly, kind, env, created_at
-FROM staged_snapshots ss
-WHERE assembly = ?1 AND kind = ?2 AND env = 'stage'
-  AND (CAST(?3 AS TEXT) = '' OR EXISTS (
-      SELECT 1
-      FROM snapshots s
-      JOIN snapshot_components sc ON sc.snapshot_id = s.id
-      WHERE s.name = ss.name AND sc.component = ?3))
-ORDER BY created_at DESC, name DESC
-LIMIT 1
-`
-
-type LatestStagedSnapshotParams struct {
-	Assembly  string
-	Kind      string
-	Component string
-}
-
-// An empty component matches any Snapshot.
-func (q *Queries) LatestStagedSnapshot(ctx context.Context, arg LatestStagedSnapshotParams) (StagedSnapshot, error) {
-	row := q.db.QueryRowContext(ctx, latestStagedSnapshot, arg.Assembly, arg.Kind, arg.Component)
-	var i StagedSnapshot
-	err := row.Scan(
-		&i.Name,
-		&i.Assembly,
-		&i.Kind,
-		&i.Env,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
 const listSuccessfulStageReleases = `-- name: ListSuccessfulStageReleases :many
-SELECT kr.release_plan, kr.completion_time, s.id AS snapshot_id, s.name AS snapshot_name
+SELECT kr.release_plan, kr.completion_time, s.name AS snapshot_name
 FROM staged_snapshots ss
 JOIN snapshots s ON s.name = ss.name
 JOIN konflux_releases kr ON kr.snapshot = s.name AND kr.application = s.application
@@ -89,7 +56,6 @@ type ListSuccessfulStageReleasesParams struct {
 type ListSuccessfulStageReleasesRow struct {
 	ReleasePlan    string
 	CompletionTime string
-	SnapshotID     int64
 	SnapshotName   string
 }
 
@@ -102,12 +68,7 @@ func (q *Queries) ListSuccessfulStageReleases(ctx context.Context, arg ListSucce
 	var items []ListSuccessfulStageReleasesRow
 	for rows.Next() {
 		var i ListSuccessfulStageReleasesRow
-		if err := rows.Scan(
-			&i.ReleasePlan,
-			&i.CompletionTime,
-			&i.SnapshotID,
-			&i.SnapshotName,
-		); err != nil {
+		if err := rows.Scan(&i.ReleasePlan, &i.CompletionTime, &i.SnapshotName); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -119,21 +80,6 @@ func (q *Queries) ListSuccessfulStageReleases(ctx context.Context, arg ListSucce
 		return nil, err
 	}
 	return items, nil
-}
-
-const streamStaged = `-- name: StreamStaged :one
-SELECT CAST(EXISTS (
-    SELECT 1 FROM staged_snapshots
-    WHERE env = 'stage' AND assembly LIKE CAST(?1 AS TEXT) || '.%'
-) AS BOOLEAN) AS staged
-`
-
-// The '.' after stream X.Y keeps 3.1 from matching assembly 3.18.1.
-func (q *Queries) StreamStaged(ctx context.Context, stream string) (bool, error) {
-	row := q.db.QueryRowContext(ctx, streamStaged, stream)
-	var staged bool
-	err := row.Scan(&staged)
-	return staged, err
 }
 
 const upsertStagedSnapshot = `-- name: UpsertStagedSnapshot :exec

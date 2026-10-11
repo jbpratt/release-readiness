@@ -47,19 +47,6 @@ func (d *DB) ListJiraIssues(ctx context.Context, fixVersion string) ([]model.Jir
 	return issues, rows.Err()
 }
 
-func (d *DB) GetIssueSummary(ctx context.Context, fixVersion string) (*model.IssueSummary, error) {
-	row, err := d.queries().GetIssueSummary(ctx, fixVersion)
-	if err != nil {
-		return nil, err
-	}
-	return &model.IssueSummary{
-		Total:    int(row.Total),
-		Verified: int(row.Verified),
-		Open:     int(row.Open),
-		CVEs:     int(row.Cves),
-	}, nil
-}
-
 // GetIssueSummariesBatch returns aggregate counts for multiple fixVersions in a single query.
 // Stays hand-written due to variable IN clause.
 func (d *DB) GetIssueSummariesBatch(ctx context.Context, fixVersions []string) (map[string]*model.IssueSummary, error) {

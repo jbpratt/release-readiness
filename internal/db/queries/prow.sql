@@ -40,6 +40,3 @@ ON CONFLICT(job_name) DO UPDATE SET
     application=excluded.application,
     interval_seconds=excluded.interval_seconds,
     last_successful_sync=excluded.last_successful_sync;
-
--- name: ListProwSyncs :many
-SELECT job_name, application, interval_seconds, last_successful_sync FROM prow_syncs;

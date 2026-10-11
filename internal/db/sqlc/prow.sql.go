@@ -154,38 +154,6 @@ func (q *Queries) ListProwRunsByApplication(ctx context.Context, application str
 	return items, nil
 }
 
-const listProwSyncs = `-- name: ListProwSyncs :many
-SELECT job_name, application, interval_seconds, last_successful_sync FROM prow_syncs
-`
-
-func (q *Queries) ListProwSyncs(ctx context.Context) ([]ProwSync, error) {
-	rows, err := q.db.QueryContext(ctx, listProwSyncs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ProwSync
-	for rows.Next() {
-		var i ProwSync
-		if err := rows.Scan(
-			&i.JobName,
-			&i.Application,
-			&i.IntervalSeconds,
-			&i.LastSuccessfulSync,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const upsertProwRun = `-- name: UpsertProwRun :exec
 INSERT INTO prow_runs (job_name, build_id, kind, application, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at)
 VALUES (?, ?, 'periodic', ?, ?, ?, ?, ?, ?, ?, ?)

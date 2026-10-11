@@ -11,15 +11,6 @@ ON CONFLICT(key, fix_version) DO UPDATE SET
     link=excluded.link,
     qa_contact=excluded.qa_contact;
 
--- name: GetIssueSummary :one
-SELECT
-    CAST(COUNT(*) AS INTEGER) AS total,
-    CAST(COALESCE(SUM(CASE WHEN LOWER(status) IN ('closed', 'verified', 'done', 'release pending') THEN 1 ELSE 0 END), 0) AS INTEGER) AS verified,
-    CAST(COALESCE(SUM(CASE WHEN LOWER(status) NOT IN ('closed', 'verified', 'done', 'release pending') THEN 1 ELSE 0 END), 0) AS INTEGER) AS open,
-    CAST(COALESCE(SUM(CASE WHEN LOWER(issue_type) = 'vulnerability' OR LOWER(labels) LIKE '%cve%' THEN 1 ELSE 0 END), 0) AS INTEGER) AS cves
-FROM jira_issues
-WHERE fix_version = ?;
-
 -- name: UpsertReleaseVersion :exec
 INSERT INTO release_versions (name, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)

@@ -18,35 +18,6 @@ func (q *Queries) DeleteAllJiraIssuesForVersion(ctx context.Context, fixVersion 
 	return err
 }
 
-const getIssueSummary = `-- name: GetIssueSummary :one
-SELECT
-    CAST(COUNT(*) AS INTEGER) AS total,
-    CAST(COALESCE(SUM(CASE WHEN LOWER(status) IN ('closed', 'verified', 'done', 'release pending') THEN 1 ELSE 0 END), 0) AS INTEGER) AS verified,
-    CAST(COALESCE(SUM(CASE WHEN LOWER(status) NOT IN ('closed', 'verified', 'done', 'release pending') THEN 1 ELSE 0 END), 0) AS INTEGER) AS open,
-    CAST(COALESCE(SUM(CASE WHEN LOWER(issue_type) = 'vulnerability' OR LOWER(labels) LIKE '%cve%' THEN 1 ELSE 0 END), 0) AS INTEGER) AS cves
-FROM jira_issues
-WHERE fix_version = ?
-`
-
-type GetIssueSummaryRow struct {
-	Total    int64
-	Verified int64
-	Open     int64
-	Cves     int64
-}
-
-func (q *Queries) GetIssueSummary(ctx context.Context, fixVersion string) (GetIssueSummaryRow, error) {
-	row := q.db.QueryRowContext(ctx, getIssueSummary, fixVersion)
-	var i GetIssueSummaryRow
-	err := row.Scan(
-		&i.Total,
-		&i.Verified,
-		&i.Open,
-		&i.Cves,
-	)
-	return i, err
-}
-
 const getReleaseVersion = `-- name: GetReleaseVersion :one
 SELECT name, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
 FROM release_versions WHERE name = ?
