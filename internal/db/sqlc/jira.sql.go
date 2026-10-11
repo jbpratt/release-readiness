@@ -19,25 +19,14 @@ func (q *Queries) DeleteAllJiraIssuesForVersion(ctx context.Context, fixVersion 
 }
 
 const getReleaseVersion = `-- name: GetReleaseVersion :one
-SELECT name, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
-FROM release_versions WHERE name = ?
+SELECT id, name, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date FROM release_versions WHERE name = ?
 `
 
-type GetReleaseVersionRow struct {
-	Name                  string
-	ReleaseDate           string
-	Released              int64
-	Archived              int64
-	ReleaseTicketKey      string
-	ReleaseTicketAssignee string
-	KonfluxApplication    string
-	DueDate               string
-}
-
-func (q *Queries) GetReleaseVersion(ctx context.Context, name string) (GetReleaseVersionRow, error) {
+func (q *Queries) GetReleaseVersion(ctx context.Context, name string) (ReleaseVersion, error) {
 	row := q.db.QueryRowContext(ctx, getReleaseVersion, name)
-	var i GetReleaseVersionRow
+	var i ReleaseVersion
 	err := row.Scan(
+		&i.ID,
 		&i.Name,
 		&i.ReleaseDate,
 		&i.Released,
@@ -51,32 +40,20 @@ func (q *Queries) GetReleaseVersion(ctx context.Context, name string) (GetReleas
 }
 
 const listAllReleaseVersions = `-- name: ListAllReleaseVersions :many
-SELECT name, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date
-FROM release_versions
-ORDER BY name
+SELECT id, name, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date FROM release_versions ORDER BY name
 `
 
-type ListAllReleaseVersionsRow struct {
-	Name                  string
-	ReleaseDate           string
-	Released              int64
-	Archived              int64
-	ReleaseTicketKey      string
-	ReleaseTicketAssignee string
-	KonfluxApplication    string
-	DueDate               string
-}
-
-func (q *Queries) ListAllReleaseVersions(ctx context.Context) ([]ListAllReleaseVersionsRow, error) {
+func (q *Queries) ListAllReleaseVersions(ctx context.Context) ([]ReleaseVersion, error) {
 	rows, err := q.db.QueryContext(ctx, listAllReleaseVersions)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListAllReleaseVersionsRow
+	var items []ReleaseVersion
 	for rows.Next() {
-		var i ListAllReleaseVersionsRow
+		var i ReleaseVersion
 		if err := rows.Scan(
+			&i.ID,
 			&i.Name,
 			&i.ReleaseDate,
 			&i.Released,

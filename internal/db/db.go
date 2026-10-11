@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	_ "embed"
 	"fmt"
 	"time"
 
@@ -11,6 +12,9 @@ import (
 )
 
 //go:generate sqlc generate -f ../../sqlc.yaml
+
+//go:embed schema.sql
+var schemaSQL string
 
 type DB struct {
 	conn *sql.DB
@@ -24,13 +28,11 @@ func Open(path string) (*DB, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	db := &DB{conn: sqlDB, dbtx: sqlDB}
-	if err := db.migrate(); err != nil {
+	if _, err := sqlDB.Exec(schemaSQL); err != nil {
 		_ = sqlDB.Close()
-		return nil, fmt.Errorf("migrate: %w", err)
+		return nil, fmt.Errorf("migrate: exec schema: %w", err)
 	}
-
-	return db, nil
+	return &DB{conn: sqlDB, dbtx: sqlDB}, nil
 }
 
 func (d *DB) Close() error {
@@ -67,9 +69,6 @@ func parseTime(s string) time.Time {
 }
 
 func parseOptionalTime(s string) *time.Time {
-	if s == "" {
-		return nil
-	}
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
 		return nil

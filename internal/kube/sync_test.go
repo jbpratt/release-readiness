@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"slices"
 	"strings"
@@ -203,45 +204,27 @@ func TestSyncOnce(t *testing.T) {
 		return database.InTx(ctx, func(tx *db.DB) error { return fn(tx) })
 	}
 	s := NewSyncer(client, testNamespace, database, withTx, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	// Each Snapshot is stored once, under its application, with its images.
+	check := func() {
+		t.Helper()
+		for app, want := range map[string]model.ReleaseSnapshot{
+			"quay-3-18": {Name: "quay-3-18-abc", CreatedAt: created1, Components: []model.SnapshotImage{
+				{Name: "clair", Image: "quay.io/quay/clair@sha256:2"}, {Name: "quay", Image: "quay.io/quay/quay@sha256:1"},
+			}},
+			"fbc-quay-3-18": {Name: "fbc-quay-3-18-def", CreatedAt: created2, Components: []model.SnapshotImage{{Name: "fbc", Image: "quay.io/quay/fbc@sha256:3"}}},
+		} {
+			if got, _, err := database.StreamBuilds(ctx, app); err != nil || len(got) != 1 || !reflect.DeepEqual(got[0], want) {
+				t.Errorf("%s snapshots = %+v, %v; want %+v", app, got, err, want)
+			}
+		}
+	}
 	s.SyncOnce(ctx)
-
-	got, err := database.GetReleaseSnapshot(ctx, "quay-3-18-abc")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Application != "quay-3-18" || !got.CreatedAt.Equal(created1) {
-		t.Errorf("quay-3-18-abc = app %q created %v", got.Application, got.CreatedAt)
-	}
-	images := map[string]string{}
-	for _, c := range got.Components {
-		images[c.Name] = c.Image
-	}
-	if len(images) != 2 || images["quay"] != "quay.io/quay/quay@sha256:1" || images["clair"] != "quay.io/quay/clair@sha256:2" {
-		t.Errorf("components = %+v", got.Components)
-	}
-
-	got, err = database.GetReleaseSnapshot(ctx, "fbc-quay-3-18-def")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Application != "fbc-quay-3-18" || !got.CreatedAt.Equal(created2) {
-		t.Errorf("fbc-quay-3-18-def = app %q created %v", got.Application, got.CreatedAt)
-	}
-
+	check()
 	if exists, _ := database.SnapshotExistsByName(ctx, "orphan"); exists {
 		t.Error("snapshot without application was stored")
 	}
-
 	s.SyncOnce(ctx)
-	for name, want := range map[string]int{"quay-3-18-abc": 2, "fbc-quay-3-18-def": 1} {
-		got, err := database.GetReleaseSnapshot(ctx, name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(got.Components) != want {
-			t.Errorf("%s: %d components after second sync, want %d", name, len(got.Components), want)
-		}
-	}
+	check()
 }
 
 func TestSyncStagedSnapshots(t *testing.T) {
@@ -290,7 +273,7 @@ func TestSyncStagedSnapshots(t *testing.T) {
 		}
 	}
 	v := &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}
-	got, _, err := database.SelectedStageBuild(ctx, v, regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`))
+	got, err := database.SelectedStageBuild(ctx, v, regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`))
 	if err != nil {
 		t.Fatal(err)
 	}

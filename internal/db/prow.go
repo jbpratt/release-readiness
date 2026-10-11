@@ -54,10 +54,6 @@ func (d *DB) ListProwRunsByApplication(ctx context.Context, application string) 
 	if err != nil {
 		return nil, err
 	}
-	return d.toProwRuns(ctx, rows)
-}
-
-func (d *DB) toProwRuns(ctx context.Context, rows []dbsqlc.ProwRun) ([]prow.Run, error) {
 	runs := make([]prow.Run, len(rows))
 	for i, r := range rows {
 		imgs, err := d.queries().ListProwRunImages(ctx, dbsqlc.ListProwRunImagesParams{JobName: r.JobName, BuildID: r.BuildID})

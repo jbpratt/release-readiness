@@ -251,7 +251,7 @@ func (s *Server) CandidateDigests(ctx context.Context) ([]string, error) {
 // build, or nil when there is neither, with its images' ART builds, upstream
 // commits and scans, and the STAGE build's stage Release's completion time.
 func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersion, newest *model.ReleaseSnapshot) (*model.CandidateBuild, *time.Time, error) {
-	staged, _, err := s.db.SelectedStageBuild(ctx, release, s.StageReleasePlanPattern)
+	staged, err := s.db.SelectedStageBuild(ctx, release, s.StageReleasePlanPattern)
 	if err != nil {
 		return nil, nil, err
 	}

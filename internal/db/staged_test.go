@@ -56,26 +56,15 @@ func TestSelectedStageBuild(t *testing.T) {
 
 	plans := regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
 	v := &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}
-	sel, reason, err := d.SelectedStageBuild(ctx, v, plans)
+	sel, err := d.SelectedStageBuild(ctx, v, plans)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if sel == nil || sel.SnapshotName != "snap-b" || !sel.CompletedAt.Equal(*at(70)) || reason != "" {
-		t.Fatalf("selected = %+v, %q; want snap-b completed by rel-b", sel, reason)
+	if sel == nil || sel.SnapshotName != "snap-b" || !sel.CompletedAt.Equal(*at(70)) {
+		t.Fatalf("selected = %+v; want snap-b completed by rel-b", sel)
 	}
-
-	for _, tc := range []struct {
-		name    string
-		version string
-		plans   *regexp.Regexp
-		reason  string
-	}{
-		{"empty plan config", "quay-v3.18.1", nil, "stage release plan not configured"},
-		{"non-concrete version", "quay-v3.18.z", plans, "not a concrete quay-vX.Y.Z version"},
-	} {
-		got, reason, err := d.SelectedStageBuild(ctx, &model.ReleaseVersion{Name: tc.version, KonfluxApplication: "quay-3-18"}, tc.plans)
-		if err != nil || got != nil || reason != tc.reason {
-			t.Errorf("%s: got %+v, %q, %v; want reason %q", tc.name, got, reason, err, tc.reason)
-		}
+	// An empty -stage-release-plan-pattern selects none.
+	if sel, err := d.SelectedStageBuild(ctx, v, nil); err != nil || sel != nil {
+		t.Errorf("without plans: selected = %+v, %v; want none", sel, err)
 	}
 }
