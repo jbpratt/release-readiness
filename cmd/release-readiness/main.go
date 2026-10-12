@@ -133,6 +133,9 @@ func main() {
 		resolver := artbuild.NewResolver(art, database, artLog)
 		resolver.Status = status.Track("art-builds", 5*time.Minute)
 		wg.Go(func() { resolver.Run(ctx, 5*time.Minute) })
+		history := artbuild.NewHistorySync(art, database, logger.With("component", "art-history"))
+		history.Status = status.Track("art-history", 10*time.Minute)
+		wg.Go(func() { history.Run(ctx, 10*time.Minute) })
 	}
 
 	var shipped *catalog.Shipped

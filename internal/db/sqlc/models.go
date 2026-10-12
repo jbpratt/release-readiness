@@ -19,6 +19,29 @@ type ArtFbcRecord struct {
 	EndTime    string
 }
 
+type ArtHistoryBuild struct {
+	RecordID        string
+	GroupName       string
+	BuildType       string
+	Nvr             string
+	Digest          string
+	Pullspec        string
+	StartTime       string
+	EndTime         string
+	ArtJobUrl       string
+	BundleNvrsJson  string
+	OperatorNvr     string
+	OperandNvrsJson string
+	BundleCsvName   string
+}
+
+type ArtHistoryScanDay struct {
+	GroupName string
+	BuildType string
+	Day       string
+	CheckedAt string
+}
+
 type JiraIssue struct {
 	ID         int64
 	Key        string
