@@ -9,25 +9,19 @@ export interface KonfluxRelease {
 }
 
 /**
- * What decides whether a version can ship. candidate is null with reason set
- * when there is none. ci is set with the candidate, and without one when the
- * version has builds. newest is set when the version's newest build holds,
- * for a component the candidate holds, another image than the candidate does,
- * or when there is no candidate, and is not ci's passed nor, beside the
- * candidate, its latest_in_ci. A shipped version keeps its candidate and ci,
- * but has no reason, newest, or anything in ci to pick, re-run or wait on.
+ * What decides whether a version can ship: its operator FBCs. candidate is
+ * the version's STAGE build, null with reason set when there is none; a
+ * shipped version has no reason.
  */
 export interface ReleaseCandidate {
 	shipped: boolean;
 	candidate: CandidateBuild | null;
 	reason: string;
-	newest: NewestBuild | null;
-	ci: CandidateCI | null;
 	/** The version's FBC catalogs, staged ones first. */
 	catalogs: CandidateCatalog[] | null;
 	/**
-	 * With a candidate, the newest image of the version's builds of each
-	 * component the candidate leaves out.
+	 * With a STAGE build, the newest image of the version's builds of each
+	 * component it leaves out.
 	 */
 	unshipped_builds: UnshippedBuild[] | null;
 	/**
@@ -137,19 +131,10 @@ export interface CandidateCatalog {
 	release_plan: string;
 }
 
-/** The release candidate: the version's STAGE build. */
+/** The version's STAGE build. */
 export interface CandidateBuild {
-	snapshot: string;
-	created_at: string;
-	components: CandidateComponent[];
-	stage: StageFlag;
 	/** The version's prod Release. */
 	prod: KonfluxRelease | null;
-}
-
-/** The version's newest build, its images, and whether its operator bundle is in CI. */
-export interface NewestBuild extends BuildLabel {
-	ci: CIState;
 }
 
 /**
@@ -160,60 +145,6 @@ export interface NewestBuild extends BuildLabel {
 export interface CIState {
 	state: "in" | "failed" | "none" | "unknown";
 	release: KonfluxRelease | null;
-}
-
-/**
- * A build named by the oldest stream Snapshot holding its operator bundle;
- * without a candidate, ci's passed has that build's images.
- */
-export interface BuildLabel {
-	snapshot: string;
-	created_at: string;
-	components?: CandidateComponent[];
-}
-
-/**
- * The periodic runs since the candidate's operator bundle was first built, or
- * without a candidate since the first of the version's builds' bundles was, by
- * the build each installed; the newest bundle of the version's builds in CI,
- * by its label, unless it is the candidate's; passed, the newest of them,
- * newer than the candidate, that a run passed with, and fbc, its FBCs, null
- * until ART's record of each of the version's FBC images is read; and what to
- * do: with a candidate, rerun release-from-fbc with passed, wait on a newer
- * build in CI, or nothing (current); without one, pick passed, or nothing
- * (none).
- */
-export interface CandidateCI {
-	builds: CIBuild[];
-	latest_in_ci: BuildLabel | null;
-	passed: BuildLabel | null;
-	fbc: BuildFBC | null;
-	refresh: "rerun" | "waiting" | "current" | "pick" | "none";
-}
-
-/**
- * A build's FBCs for release-from-fbc: of the version's FBC images of each
- * operator and OCP version, the pullspec of the one ART built last that holds
- * a bundle of the build, and the pairs without one, each with ART build
- * history's search for the operator's FBCs ("" when ART links are off).
- */
-export interface BuildFBC {
-	pullspecs: string[];
-	missing: { operator: string; ocp: string; url: string }[];
-}
-
-/**
- * The runs that installed one build, or failed to install it: the candidate,
- * another build with its label and CI state, or an unknown build. Without a
- * candidate, no row is the candidate's.
- */
-export interface CIBuild {
-	kind: "candidate" | "build" | "unknown";
-	/** "" unless candidate or build. */
-	snapshot: string;
-	created_at: string | null;
-	ci: CIState | null;
-	jobs: CIJob[];
 }
 
 /** A job's runs of a build, newest first. */
@@ -236,11 +167,6 @@ export interface CandidateComponent {
 	image: string;
 	nvr: string;
 	build_url: string;
-}
-
-/** The candidate's stage: when its own stage Release completed. */
-export interface StageFlag {
-	staged_at: string;
 }
 
 export interface JiraIssue {

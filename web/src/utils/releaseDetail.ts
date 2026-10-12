@@ -1,9 +1,9 @@
 import type {
 	CandidateCatalog,
-	CandidateCI,
-	CIBuild,
+	FBCCandidate,
+	FBCMember,
 	KonfluxRelease,
-	NewestBuild,
+	OperatorFBC,
 } from "../api/types";
 import { relative } from "./format.ts";
 
@@ -56,11 +56,10 @@ type CIStep = {
 };
 
 /**
- * A build's CI step: runsStatus of every run that installed it, and when some
- * passed and some failed, how many of those passed; undefined without runs.
+ * Runs' step: runsStatus of their states, and when some passed and some
+ * failed, how many of those passed; undefined without a counted run.
  */
-function runsStep(build?: CIBuild): CIStep | undefined {
-	const states = build?.jobs.flatMap((j) => j.runs.map((r) => r.state)) ?? [];
+function runsStep(states: string[]): CIStep | undefined {
 	const s = runsStatus(states);
 	if (!s) return undefined;
 	if (s === "success") return { variant: s, text: "Passed" };
@@ -70,53 +69,166 @@ function runsStep(build?: CIBuild): CIStep | undefined {
 	return { variant: s, text: `${passed} of ${counted} runs passed` };
 }
 
-/** The candidate's CI step: its runs' runsStep, else not tested. */
-export const ciStep = (ci: CandidateCI): CIStep =>
-	runsStep(ci.builds.find((b) => b.kind === "candidate")) ?? {
+/** Each FBC of a slot, on the head bundle or not, of every operator. */
+const slotFBCs = (c: FBCCandidate) =>
+	c.operators.flatMap((o) => [...o.members, ...o.conflicts]);
+
+/**
+ * The candidate's CI step: the runs that installed one of its FBCs by digest;
+ * without one, runs on another FBC of the same bundle only, which do not
+ * count as tested.
+ */
+export function fbcCIStep(c: FBCCandidate): CIStep {
+	const states = (tier: "exact" | "equivalent") =>
+		slotFBCs(c).flatMap(
+			(m) => m.ci?.[tier].flatMap((j) => j.runs.map((r) => r.state)) ?? [],
+		);
+	const exact = runsStep(states("exact"));
+	if (exact) return exact;
+	const same = runsStep(states("equivalent"));
+	return {
 		variant: "warning",
-		text: "Not tested",
+		text: same ? `Not tested · same bundle: ${same.text}` : "Not tested",
 	};
-
-/**
- * Without a candidate, the build the stepper is anchored on: the newest, else
- * ci's passed, which the server leaves out of newest when it is the newest
- * build's bundle, with its CI row's state.
- */
-export function stepperBuild(
-	newest: NewestBuild | null,
-	ci: CandidateCI | null,
-): NewestBuild | null {
-	if (newest || !ci?.passed) return newest;
-	const passed = ci.passed;
-	const row = ci.builds.find((b) => b.snapshot === passed.snapshot);
-	return { ...passed, ci: row?.ci ?? { state: "unknown", release: null } };
 }
 
 /**
- * Without a candidate, the newest build's CI step: the runsStep of its CI
- * row, the one labeled by its Snapshot or sharing its per-build stage Release
- * (a row is labeled by the oldest Snapshot with its bundle), else whether its
- * bundle reached CI.
+ * The candidate's Stage step: not staged for the stream, else by the newest
+ * Release of each staged slot's Snapshot, a failed one first. Released slots
+ * are a warning while the candidate has errors, as a missing operator.
  */
-export function newestCIStep(
-	newest: NewestBuild,
-	ci: CandidateCI | null,
-): CIStep {
-	const release = newest.ci.release?.name;
-	const row = ci?.builds.find(
-		(b) =>
-			b.snapshot === newest.snapshot ||
-			(release && b.ci?.release?.name === release),
+export function fbcStageStep(c: FBCCandidate): CIStep {
+	if (c.source === "stream") return { variant: "pending", text: "Not staged" };
+	const states = slotFBCs(c).map((m) =>
+		m.release ? releaseLine(m.release).status : "running",
 	);
-	const runs = runsStep(row);
-	if (runs) return runs;
-	if (newest.ci.state === "in") return { variant: "info", text: "In CI" };
-	if (newest.ci.state === "failed")
-		return { variant: "danger", text: "Failed to reach CI" };
-	if (newest.ci.state === "none")
-		return { variant: "pending", text: "Not in CI" };
-	return { variant: "pending", text: "No CI runs" };
+	const failed = states.filter((s) => s === "failed").length;
+	if (failed > 0)
+		return {
+			variant: "danger",
+			text: `${failed} Release${failed === 1 ? "" : "s"} failed`,
+		};
+	if (states.length > 0 && states.every((s) => s === "done"))
+		return c.errors.length > 0
+			? { variant: "warning", text: "Released with errors" }
+			: { variant: "success", text: "Released" };
+	return { variant: "info", text: "Release in progress" };
 }
+
+// What each candidate state means.
+const stateTexts: Record<FBCCandidate["state"], string> = {
+	complete: "every operator's FBCs head one bundle",
+	incomplete: "an operator or OCP version has no FBC",
+	inconsistent: "an operator's FBCs head more than one bundle",
+	unknown: "a head bundle or staged catalog is not resolved yet",
+};
+
+/** The candidate's headline: where its FBCs come from and their state. */
+export function candidateLine(c: FBCCandidate): StatusLine {
+	const source =
+		c.source === "stream" ? "Not staged: the stream's newest FBCs" : "Staged";
+	const status =
+		c.state === "complete"
+			? c.source === "stream"
+				? "warning"
+				: "done"
+			: c.state === "unknown"
+				? "warning"
+				: "failed";
+	return { status, text: `${source}; ${stateTexts[c.state]}.` };
+}
+
+/**
+ * release-from-fbc's fbc-pullspecs, comma-separated, only for a complete
+ * candidate; else null.
+ */
+export const fbcPullspecs = (c: FBCCandidate): string | null =>
+	c.state === "complete" && c.pullspecs.length > 0
+		? c.pullspecs.join(",")
+		: null;
+
+/** Why a candidate has no fbc-pullspecs to copy. */
+export const pullspecsBlocked = (c: FBCCandidate) =>
+	c.errors.length > 0 ? c.errors.join("; ") : stateTexts[c.state];
+
+/** Compares dot-separated versions numerically: OCP 4.9 is lower than 4.12. */
+export function compareVersions(a: string, b: string): number {
+	const x = a.split(".").map(Number);
+	const y = b.split(".").map(Number);
+	for (let i = 0; i < Math.max(x.length, y.length); i++) {
+		const d = (x[i] ?? -1) - (y[i] ?? -1);
+		if (d !== 0) return d;
+	}
+	return 0;
+}
+
+/**
+ * An operator's OCP version slot: its FBC on the head bundle ("member"), on
+ * another bundle ("other"), on an unresolved one ("unresolved"), or none
+ * ("missing").
+ */
+export interface SlotRow {
+	ocp: string;
+	kind: "member" | "other" | "unresolved" | "missing";
+	fbc: FBCMember | null;
+}
+
+/** An operator's slots by OCP version. */
+export function slotRows(o: OperatorFBC): SlotRow[] {
+	const rows: SlotRow[] = [
+		...o.members.map((m) => ({ ocp: m.ocp, kind: "member" as const, fbc: m })),
+		...o.conflicts.map((m) => ({
+			ocp: m.ocp,
+			kind: m.head_bundle_nvr ? ("other" as const) : ("unresolved" as const),
+			fbc: m,
+		})),
+		...o.missing_ocp.map((ocp) => ({
+			ocp,
+			kind: "missing" as const,
+			fbc: null,
+		})),
+	];
+	return rows.sort((a, b) => compareVersions(a.ocp, b.ocp));
+}
+
+/**
+ * The stream's head bundle of an operator when a staged candidate heads
+ * another one; else null.
+ */
+export function streamAhead(
+	c: FBCCandidate,
+	stream: FBCCandidate | null,
+	operator: string,
+): string | null {
+	if (c.source === "stream") return null;
+	const head = c.operators.find(
+		(o) => o.operator === operator,
+	)?.head_bundle_nvr;
+	const ahead = stream?.operators.find(
+		(o) => o.operator === operator,
+	)?.head_bundle_nvr;
+	return ahead && ahead !== head ? ahead : null;
+}
+
+/** An operator's image check: the image Snapshot's bundle against its head. */
+export function imageCheckLine(o: OperatorFBC): string {
+	const { state, snapshot, bundle_nvr } = o.image_check;
+	if (state === "matches")
+		return `Image Snapshot ${snapshot} holds this bundle`;
+	if (state === "differs")
+		return `Image Snapshot ${snapshot} holds bundle ${nvrLabel(bundle_nvr)}`;
+	return snapshot
+		? `Image Snapshot ${snapshot}: no bundle to compare`
+		: "No image Snapshot to compare";
+}
+
+/** Whether an operator's head bundle reached stage through fbc-ri. */
+export const fbcRIText: Record<OperatorFBC["fbc_ri_stage"]["state"], string> = {
+	in: "installable",
+	failed: "fbc-ri Release failed",
+	none: "not installable: no fbc-ri Release",
+	unknown: "installability unknown",
+};
 
 /**
  * A component named without what the page already says, its application and
@@ -146,18 +258,6 @@ export function nvrLabel(nvr: string): string {
 export interface StatusLine {
 	status: "done" | "failed" | "running" | "warning";
 	text: string;
-}
-
-/**
- * The --fbc-pullspecs value to run release-from-fbc with ci's passed build:
- * its FBC pullspecs, comma-separated, when it has one for every operator and
- * OCP version; else null.
- */
-export function fbcCopy(ci: CandidateCI): string | null {
-	const fbc = ci.fbc;
-	return fbc && fbc.missing.length === 0 && fbc.pullspecs.length > 0
-		? fbc.pullspecs.join(",")
-		: null;
 }
 
 // Why a failed Release failed, by the managed pipeline task it stopped at.

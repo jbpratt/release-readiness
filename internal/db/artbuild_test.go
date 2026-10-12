@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -122,48 +121,6 @@ func TestArtBuildCandidatesStagedFirst(t *testing.T) {
 	}
 	if len(cands) != 1 || cands[0].Image != staged {
 		t.Errorf("candidates: got %+v, want only %s", cands, staged)
-	}
-}
-
-// The FBC images the resolver reads ART's records of: resolved, with an FBC
-// NVR, without an FBC record, at most limit.
-func TestListUnreadFBCImages(t *testing.T) {
-	d, err := Open(filepath.Join(t.TempDir(), "test.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
-	ctx := t.Context()
-
-	unread := []artbuild.Build{
-		{Digest: "sha256:aaaa", State: artbuild.StateResolved, NVR: "quay-operator-fbc-3.18.1-20261009044841.ocp4.21", RecordID: "rec-a"},
-		{Digest: "sha256:bbbb", State: artbuild.StateResolved, NVR: "quay-bridge-operator-fbc-3.18.1-20261009044154.ocp4.12", RecordID: "rec-b"},
-	}
-	for _, b := range append([]artbuild.Build{
-		{Digest: "sha256:cccc", State: artbuild.StateResolved, NVR: "container-security-operator-fbc-3.18.1-20261009044154.ocp5.0", RecordID: "rec-c"},
-		{Digest: "sha256:dddd", State: artbuild.StateResolved, NVR: "quay-operator-container-3.18.1-202609300827.p2.g35cf767.assembly.stream.el9", RecordID: "rec-d"},
-		{Digest: "sha256:eeee", State: artbuild.StateResolved, NVR: "quay-operator-fbc-index-3.18.1", RecordID: "rec-e"},
-		{Digest: "sha256:ffff", State: artbuild.StateUnresolved},
-	}, unread...) {
-		b.CheckedAt = time.Now()
-		if err := d.UpsertArtBuild(ctx, b); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := d.UpsertFBCRecord(ctx, artbuild.FBCRecord{Digest: "sha256:cccc", Pullspec: "quay.io/x/art-fbc@sha256:cccc", EndTime: "2026-10-09T05:42:26", BundleNVRs: []string{}}); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := d.ListUnreadFBCImages(ctx, 10)
-	if err != nil {
-		t.Fatal(err)
-	}
-	slices.SortFunc(got, func(a, b artbuild.Build) int { return strings.Compare(a.Digest, b.Digest) })
-	if !slices.Equal(got, unread) {
-		t.Errorf("unread FBC images = %+v, want %+v", got, unread)
-	}
-	if got, err := d.ListUnreadFBCImages(ctx, 1); err != nil || len(got) != 1 || !slices.Contains(unread, got[0]) {
-		t.Errorf("unread FBC images, at most 1 = %+v, %v; want one of %+v", got, err, unread)
 	}
 }
 
