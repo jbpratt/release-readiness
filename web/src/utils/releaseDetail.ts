@@ -1,4 +1,5 @@
 import type {
+	CandidateCatalog,
 	CandidateCI,
 	CIBuild,
 	KonfluxRelease,
@@ -193,6 +194,40 @@ export function releaseLine(r: KonfluxRelease): StatusLine {
 		};
 	}
 	return { status: "running", text: "Release in progress" };
+}
+
+const fbcs = (n: number) => `${n} FBC${n === 1 ? "" : "s"}`;
+
+/**
+ * A step's FBC line, null without a catalog to show: at Build, how many
+ * catalogs are staged and how many built, not staged; at Stage, how many are
+ * staged and how their Releases went.
+ */
+export function fbcLine(
+	catalogs: CandidateCatalog[],
+	step: "build" | "stage",
+): string | null {
+	const staged = catalogs.filter((c) => c.state === "staged");
+	const built = catalogs.length - staged.length;
+	if (step === "build") {
+		const parts = [
+			staged.length > 0 && `${fbcs(staged.length)} staged`,
+			built > 0 &&
+				`${staged.length > 0 ? built : fbcs(built)} built, not staged`,
+		].filter(Boolean);
+		return parts.length > 0 ? parts.join(" · ") : null;
+	}
+	if (staged.length === 0) return null;
+	const states = staged.map((c) =>
+		c.release ? releaseLine(c.release).status : "running",
+	);
+	const failed = states.filter((s) => s === "failed").length;
+	const outcome = failed
+		? `${failed} Release${failed === 1 ? "" : "s"} failed`
+		: states.every((s) => s === "done")
+			? "Released"
+			: "Release in progress";
+	return `${fbcs(staged.length)} staged · ${outcome}`;
 }
 
 /** release-from-fbc's fbc-pullspecs while there are none to run with. */

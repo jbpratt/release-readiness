@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"regexp"
+	"slices"
 	"strings"
 
+	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/db/sqlc"
 	"github.com/quay/release-readiness/internal/model"
 )
@@ -77,6 +79,31 @@ func (d *DB) StageReleases(ctx context.Context, release *model.ReleaseVersion, p
 		}
 	}
 	return releases, nil
+}
+
+// StagedFBCCatalogs returns the catalogs of application's FBC Snapshots ART
+// staged for stage for assembly, by Snapshot name, each with the newest
+// Release of its Snapshot.
+func (d *DB) StagedFBCCatalogs(ctx context.Context, assembly, application string) ([]model.CandidateCatalog, error) {
+	rows, err := d.queries().ListStagedFBCCatalogs(ctx, dbsqlc.ListStagedFBCCatalogsParams{Assembly: assembly, Application: application})
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	releases, err := d.queries().ListKonfluxReleasesByApplication(ctx, application)
+	if err != nil {
+		return nil, err
+	}
+	catalogs := make([]model.CandidateCatalog, len(rows))
+	for i, r := range rows {
+		_, _, ocp, _ := artbuild.ParseFBC(r.Nvr)
+		catalogs[i] = model.CandidateCatalog{State: "staged", Snapshot: r.SnapshotName, Component: r.Component, Pullspec: r.ImageUrl, NVR: r.Nvr, OCP: ocp}
+		// releases is newest first.
+		if j := slices.IndexFunc(releases, func(kr dbsqlc.KonfluxRelease) bool { return kr.Snapshot == r.SnapshotName }); j >= 0 {
+			kr := toKonfluxRelease(releases[j])
+			catalogs[i].Release, catalogs[i].ReleasePlan = &kr, kr.ReleasePlan
+		}
+	}
+	return catalogs, nil
 }
 
 // LatestProdRelease returns the newest Release, whatever its status, of an

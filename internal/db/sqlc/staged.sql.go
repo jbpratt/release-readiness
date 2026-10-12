@@ -36,6 +36,60 @@ func (q *Queries) LatestProdImageRelease(ctx context.Context, assembly string) (
 	return i, err
 }
 
+const listStagedFBCCatalogs = `-- name: ListStagedFBCCatalogs :many
+SELECT s.name AS snapshot_name, sc.component, sc.image_url, CAST(COALESCE(a.nvr, '') AS TEXT) AS nvr
+FROM staged_snapshots ss
+JOIN snapshots s ON s.name = ss.name
+JOIN snapshot_components sc ON sc.snapshot_id = s.id
+LEFT JOIN art_builds a ON a.state = 'resolved'
+  AND a.digest = substr(sc.image_url, instr(sc.image_url, '@') + 1)
+WHERE ss.assembly = ?1 AND ss.kind = 'fbc' AND ss.env = 'stage'
+  AND s.application = ?2
+ORDER BY s.name, sc.component
+`
+
+type ListStagedFBCCatalogsParams struct {
+	Assembly    string
+	Application string
+}
+
+type ListStagedFBCCatalogsRow struct {
+	SnapshotName string
+	Component    string
+	ImageUrl     string
+	Nvr          string
+}
+
+// The catalog images of the application's FBC Snapshots ART staged for stage
+// for assembly, each with the NVR of its digest's resolved ART build, or ”.
+func (q *Queries) ListStagedFBCCatalogs(ctx context.Context, arg ListStagedFBCCatalogsParams) ([]ListStagedFBCCatalogsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listStagedFBCCatalogs, arg.Assembly, arg.Application)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStagedFBCCatalogsRow
+	for rows.Next() {
+		var i ListStagedFBCCatalogsRow
+		if err := rows.Scan(
+			&i.SnapshotName,
+			&i.Component,
+			&i.ImageUrl,
+			&i.Nvr,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSuccessfulStageReleases = `-- name: ListSuccessfulStageReleases :many
 SELECT kr.release_plan, kr.completion_time, s.name AS snapshot_name
 FROM staged_snapshots ss

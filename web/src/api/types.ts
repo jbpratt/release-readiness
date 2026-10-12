@@ -23,6 +23,27 @@ export interface ReleaseCandidate {
 	reason: string;
 	newest: NewestBuild | null;
 	ci: CandidateCI | null;
+	/** The version's FBC catalogs, staged ones first. */
+	catalogs: CandidateCatalog[] | null;
+}
+
+/**
+ * An FBC catalog image of the version, the Snapshot holding it and its ART
+ * build; nvr and ocp are "" until ART resolves it. A staged catalog is one of
+ * an FBC Snapshot ART staged for stage, with that Snapshot's newest Release,
+ * null before one, and its ReleasePlan; a built one is the newest catalog of
+ * an operator and OCP version the FBC stream built and ART did not stage.
+ */
+export interface CandidateCatalog {
+	state: "staged" | "built";
+	snapshot: string;
+	component: string;
+	/** The catalog's pullspec, repo@sha256:... */
+	pullspec: string;
+	nvr: string;
+	ocp: string;
+	release: KonfluxRelease | null;
+	release_plan: string;
 }
 
 /** The release candidate: the version's STAGE build. */

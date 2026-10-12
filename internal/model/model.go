@@ -99,6 +99,26 @@ type ReleaseCandidate struct {
 	Reason    string          `json:"reason"`
 	Newest    *NewestBuild    `json:"newest"`
 	CI        *CandidateCI    `json:"ci"`
+	// Catalogs is the version's FBC catalogs, staged ones first.
+	Catalogs []CandidateCatalog `json:"catalogs"`
+}
+
+// CandidateCatalog is an FBC catalog image of a version, the Snapshot holding
+// it and its ART build, NVR and OCP "" until ART resolves it: State "staged"
+// for a catalog of an FBC Snapshot ART staged for stage, with the newest
+// Release of that Snapshot, nil before one, and its ReleasePlan, or "built"
+// for the newest catalog of an operator and OCP version that the FBC stream
+// built for the version and ART did not stage, by the oldest stream build
+// holding it.
+type CandidateCatalog struct {
+	State       string          `json:"state"`
+	Snapshot    string          `json:"snapshot"`
+	Component   string          `json:"component"`
+	Pullspec    string          `json:"pullspec"`
+	NVR         string          `json:"nvr"`
+	OCP         string          `json:"ocp"`
+	Release     *KonfluxRelease `json:"release"`
+	ReleasePlan string          `json:"release_plan"`
 }
 
 // CandidateBuild is the release candidate, the version's selected STAGE

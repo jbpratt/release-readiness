@@ -22,3 +22,16 @@ FROM konflux_releases
 WHERE snapshot IN (SELECT name FROM staged_snapshots WHERE assembly = ? AND kind = 'image' AND env = 'prod')
 ORDER BY created_at DESC, id DESC
 LIMIT 1;
+
+-- name: ListStagedFBCCatalogs :many
+-- The catalog images of the application's FBC Snapshots ART staged for stage
+-- for assembly, each with the NVR of its digest's resolved ART build, or ''.
+SELECT s.name AS snapshot_name, sc.component, sc.image_url, CAST(COALESCE(a.nvr, '') AS TEXT) AS nvr
+FROM staged_snapshots ss
+JOIN snapshots s ON s.name = ss.name
+JOIN snapshot_components sc ON sc.snapshot_id = s.id
+LEFT JOIN art_builds a ON a.state = 'resolved'
+  AND a.digest = substr(sc.image_url, instr(sc.image_url, '@') + 1)
+WHERE ss.assembly = sqlc.arg(assembly) AND ss.kind = 'fbc' AND ss.env = 'stage'
+  AND s.application = sqlc.arg(application)
+ORDER BY s.name, sc.component;
