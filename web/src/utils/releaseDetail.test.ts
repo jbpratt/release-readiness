@@ -117,7 +117,6 @@ test("nvrLabel", () => {
 
 const release = (r: Partial<KonfluxRelease>): KonfluxRelease => ({
 	name: "r1",
-	release_plan: "rp",
 	released_status: "",
 	released_reason: "",
 	created_at: "2026-10-08T09:00:00Z",
@@ -182,7 +181,6 @@ test("ciStep: the candidate row's runs, as runsStatus counts them", () => {
 		})),
 	});
 	const ci = (...builds: CIBuild[]): CandidateCI => ({
-		since: "2026-10-06T17:10:27Z",
 		builds,
 		latest_in_ci: null,
 		passed: null,
@@ -269,7 +267,6 @@ test("newestCIStep: the runs of the newest build's row, else its CI state", () =
 		],
 	});
 	const ci = (...builds: CIBuild[]): CandidateCI => ({
-		since: "2026-10-05T22:52:53Z",
 		builds,
 		latest_in_ci: null,
 		passed: null,
@@ -329,7 +326,6 @@ test("stepperBuild: the newest build, else the passed one with its row's CI stat
 	const snap = "quay-3-16-20261011-034719-000-c0";
 	const state = { state: "in" as const, release: release({ name: "r1" }) };
 	const ci = (passed: boolean): CandidateCI => ({
-		since: "2026-10-05T22:52:53Z",
 		builds: [
 			{
 				kind: "build",
@@ -363,7 +359,6 @@ test("stepperBuild: the newest build, else the passed one with its row's CI stat
 
 test("fbcCopy: the pullspecs, comma-separated, unless one is missing or unread", () => {
 	const ci = (fbc: CandidateCI["fbc"]): CandidateCI => ({
-		since: "2026-10-06T17:10:27Z",
 		builds: [],
 		latest_in_ci: null,
 		passed: {

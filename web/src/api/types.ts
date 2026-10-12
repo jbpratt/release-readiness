@@ -1,6 +1,5 @@
 export interface KonfluxRelease {
 	name: string;
-	release_plan: string;
 	released_status: string;
 	released_reason: string;
 	/** Task and step of the last managed pipeline attempt of a failed Release. */
@@ -71,7 +70,6 @@ export interface BuildLabel {
  * (none).
  */
 export interface CandidateCI {
-	since: string;
 	builds: CIBuild[];
 	latest_in_ci: BuildLabel | null;
 	passed: BuildLabel | null;
@@ -124,22 +122,16 @@ export interface CandidateComponent {
 	build_url: string;
 }
 
-/** The candidate's stage: staged when its own stage Release completed. */
+/** The candidate's stage: when its own stage Release completed. */
 export interface StageFlag {
-	state: "staged";
 	staged_at: string;
 }
 
 export interface JiraIssue {
 	key: string;
 	summary: string;
-	status: string;
-	priority: string;
-	fix_version: string;
-	assignee: string;
 	issue_type: string;
 	link: string;
-	qa_contact: string;
 }
 
 export interface ReleaseVersion {

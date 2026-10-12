@@ -120,9 +120,6 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if releases == nil {
-		releases = []model.ReleaseVersion{}
-	}
 
 	streams := map[string]streamBuilds{}
 	overviews := make([]model.ReleaseOverview, len(releases))
