@@ -476,7 +476,7 @@ function Candidate({
 						)
 					}
 					popoverRender={
-						prod
+						prod?.status === "failed"
 							? (ref) => (
 									<Popover
 										aria-label="Prod detail"
@@ -793,7 +793,6 @@ function CICard({
 						<Tr>
 							<Th modifier="fitContent">Build</Th>
 							<Th modifier="fitContent">State</Th>
-							<Th modifier="fitContent">Passing</Th>
 							<Th>Jobs (failures first)</Th>
 						</Tr>
 					</Thead>
@@ -824,11 +823,6 @@ function CICard({
 											/>
 										)
 									)}
-								</Td>
-								<Td style={nowrap}>
-									{b.jobs.length > 0
-										? `${b.jobs.filter((j) => jobStatus(j) === "success").length} of ${b.jobs.length} jobs`
-										: "-"}
 								</Td>
 								<Td>
 									{b.jobs.length > 0 ? (

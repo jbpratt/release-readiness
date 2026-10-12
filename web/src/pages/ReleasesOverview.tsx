@@ -22,7 +22,6 @@ import {
 	ToolbarContent,
 	ToolbarGroup,
 	ToolbarItem,
-	Tooltip,
 } from "@patternfly/react-core";
 import {
 	CheckCircleIcon,
@@ -173,13 +172,9 @@ function ReleaseCard({
 		yellow: <ExclamationTriangleIcon />,
 	};
 
-	const lastBuild = latestBuild ? (
-		<Tooltip content="Newest build of this version.">
-			<span>{new Date(latestBuild).toLocaleDateString()}</span>
-		</Tooltip>
-	) : (
-		"None yet"
-	);
+	const lastBuild = latestBuild
+		? new Date(latestBuild).toLocaleDateString()
+		: "None yet";
 
 	const navigate = useNavigate();
 	const displayName = formatReleaseName(release.name);
