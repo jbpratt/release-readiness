@@ -101,6 +101,16 @@ type ReleaseCandidate struct {
 	CI        *CandidateCI    `json:"ci"`
 	// Catalogs is the version's FBC catalogs, staged ones first.
 	Catalogs []CandidateCatalog `json:"catalogs"`
+	// UnshippedBuilds is, with a candidate, the newest image of the version's
+	// builds of each component the candidate leaves out.
+	UnshippedBuilds []UnshippedBuild `json:"unshipped_builds"`
+}
+
+// UnshippedBuild is an image of a component a release candidate leaves out,
+// and the stream build holding it.
+type UnshippedBuild struct {
+	CandidateComponent
+	Snapshot string `json:"snapshot"`
 }
 
 // CandidateCatalog is an FBC catalog image of a version, the Snapshot holding

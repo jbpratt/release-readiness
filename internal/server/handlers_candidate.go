@@ -89,6 +89,9 @@ func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVe
 		for _, cc := range cand.Components {
 			held[cc.Name] = imageDigest(cc.Image)
 		}
+		if resp.UnshippedBuilds, err = s.unshippedBuilds(ctx, app, c, held); err != nil {
+			return nil, err
+		}
 		if cand.Prod, err = s.db.LatestProdRelease(ctx, c.assembly); err != nil {
 			return nil, err
 		}
@@ -151,6 +154,36 @@ func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVe
 		}
 	}
 	return resp, nil
+}
+
+// unshippedBuilds returns, sorted by component, the newest image of the
+// version of each component that held, the candidate's images by component,
+// leaves out. A STAGE build ships only its shipment's components; ART stages
+// the others another way.
+func (s *Server) unshippedBuilds(ctx context.Context, app string, c *candidate, held map[string]string) ([]model.UnshippedBuild, error) {
+	var picked model.ReleaseSnapshot
+	var snapshots []string
+	for i := range c.builds {
+		for _, img := range buildImages(app, &c.builds[i]) {
+			_, ok := held[img.Name]
+			if ok || nvrVersion(c.nvrs[img.Image]) != c.assembly ||
+				slices.ContainsFunc(picked.Components, func(p model.SnapshotImage) bool { return p.Name == img.Name }) {
+				continue
+			}
+			picked.Components = append(picked.Components, img)
+			snapshots = append(snapshots, c.builds[i].Name)
+		}
+	}
+	components, err := s.buildComponents(ctx, app, &picked)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]model.UnshippedBuild, len(components))
+	for i, cc := range components {
+		out[i] = model.UnshippedBuild{CandidateComponent: cc, Snapshot: snapshots[i]}
+	}
+	slices.SortFunc(out, func(a, b model.UnshippedBuild) int { return strings.Compare(a.Name, b.Name) })
+	return out, nil
 }
 
 const (

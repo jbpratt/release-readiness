@@ -52,6 +52,7 @@ import type {
 	NewestBuild,
 	ReleaseCandidate,
 	ReleaseVersion,
+	UnshippedBuild,
 } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
@@ -384,6 +385,7 @@ function BuildsCard({
 						candidate={c}
 						ci={data.ci}
 						newest={data.newest}
+						unshipped={data.unshipped_builds ?? []}
 						app={app}
 						konflux={konflux}
 						fbcLines={fbcLines}
@@ -451,6 +453,7 @@ function Candidate({
 	candidate,
 	ci,
 	newest,
+	unshipped,
 	app,
 	konflux,
 	fbcLines,
@@ -459,6 +462,7 @@ function Candidate({
 	candidate: CandidateBuild;
 	ci: CandidateCI;
 	newest: NewestBuild | null;
+	unshipped: UnshippedBuild[];
 	app: string;
 	konflux: KonfluxLink;
 	fbcLines: (step: "build" | "stage") => ReactNode;
@@ -586,6 +590,68 @@ function Candidate({
 				/>
 			</ProgressStepper>
 			<ComponentTable components={candidate.components} app={app} />
+			<UnshippedTable builds={unshipped} app={app} konflux={konflux} />
+		</>
+	);
+}
+
+/**
+ * The images of the components the candidate's stage shipment leaves out,
+ * each with its stream build and ART build, copying its pullspec. ART stages
+ * them by another path, so they are not "not staged".
+ */
+function UnshippedTable({
+	builds,
+	app,
+	konflux,
+}: {
+	builds: UnshippedBuild[];
+	app: string;
+	konflux: KonfluxLink;
+}) {
+	if (builds.length === 0) return null;
+	return (
+		<>
+			<Title headingLevel="h4" size="md" style={{ marginTop: "1rem" }}>
+				Built, not in the stage shipment
+			</Title>
+			<Table variant="compact">
+				<Thead>
+					<Tr>
+						<Th>Component</Th>
+						<Th>Build</Th>
+						<Th>Pullspec</Th>
+					</Tr>
+				</Thead>
+				<Tbody>
+					{builds.map((b) => (
+						<Tr key={b.name}>
+							<Td>
+								<ExtLink
+									href={konflux("snapshots", b.snapshot)}
+									title={b.snapshot}
+								>
+									{componentLabel(b.name, app)}
+								</ExtLink>
+							</Td>
+							<Td>
+								<ExtLink href={b.build_url || null} title={b.nvr}>
+									{nvrLabel(b.nvr)}
+								</ExtLink>
+							</Td>
+							<Td modifier="nowrap">
+								<ClipboardCopy
+									variant="inline-compact"
+									isCode
+									onCopy={(e) => clipboardCopyFunc(e, b.image)}
+								>
+									{shortDigest(b.image)}
+								</ClipboardCopy>
+							</Td>
+						</Tr>
+					))}
+				</Tbody>
+			</Table>
 		</>
 	);
 }
