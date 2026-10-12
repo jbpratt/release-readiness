@@ -5,7 +5,6 @@ export interface KonfluxRelease {
 	/** Task and step of the last managed pipeline attempt of a failed Release. */
 	failed_task?: string;
 	failed_step?: string;
-	created_at: string;
 	completion_time?: string;
 }
 
@@ -36,9 +35,7 @@ export interface CandidateBuild {
 }
 
 /** The version's newest build and whether its operator bundle is in CI. */
-export interface NewestBuild {
-	snapshot: string;
-	created_at: string;
+export interface NewestBuild extends BuildLabel {
 	ci: CIState;
 }
 
@@ -153,7 +150,6 @@ export interface ReadinessResponse {
 export interface ReleaseOverview {
 	release: ReleaseVersion;
 	readiness: ReadinessResponse;
-	// Newest snapshot in the version's Konflux applications, not bound to this version.
 	latest_build?: string;
 	next_in_stream: boolean;
 }

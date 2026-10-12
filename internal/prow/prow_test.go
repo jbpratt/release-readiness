@@ -103,9 +103,9 @@ func TestApplyArtifact(t *testing.T) {
 	if !strings.HasSuffix(r.CatalogRef, "@sha256:16703125878630f03d1781454b1da8212db6127c822f95c2cfe04e805210bb0d") {
 		t.Errorf("catalog ref = %q", r.CatalogRef)
 	}
-	// 11 pod images plus the catalog and the operator bundle.
-	if len(r.Images) != 13 {
-		t.Fatalf("images = %d, want 13", len(r.Images))
+	// 11 pod images plus the operator bundle.
+	if len(r.Images) != 12 {
+		t.Fatalf("images = %d, want 12", len(r.Images))
 	}
 	byRole := map[string]Image{}
 	for _, img := range r.Images {
@@ -114,7 +114,6 @@ func TestApplyArtifact(t *testing.T) {
 		}
 	}
 	for role, want := range map[string]string{
-		"catalog":              "sha256:16703125878630f03d1781454b1da8212db6127c822f95c2cfe04e805210bb0d",
 		"quay-operator-bundle": "sha256:9dbd39a4c49b8879ae5290a22ff9c139168256d91950a956bc62097b6e978de0",
 		"quay":                 "sha256:e0716d7b2f783366224c95db83a8f2eec7ea44ac1738e7a63190292ed0733877",
 		// The join key is the requested digest, not the differing runtime imageID.
@@ -254,7 +253,7 @@ func TestSync(t *testing.T) {
 		state, artifact string
 		images          int
 	}{
-		periodicRun: {"failure", ArtifactPresent, 13},
+		periodicRun: {"failure", ArtifactPresent, 12},
 		olmRun:      {"success", ArtifactOLMCSVs, 5},
 		noneRun:     {"failure", ArtifactNone, 0},
 		pendingRun:  {"pending", ArtifactMissing, 0},

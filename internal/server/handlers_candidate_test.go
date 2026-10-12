@@ -316,8 +316,8 @@ func TestBuildVersion(t *testing.T) {
 			t.Errorf("%s: version %q, want %q", tc.desc, got, tc.want)
 		}
 	}
-	if !lowerVersion("3.18.9", "3.18.10") || lowerVersion("3.18.10", "3.18.9") || lowerVersion("3.18.1", "3.18.1") {
-		t.Error("lowerVersion does not compare X.Y.Z numerically")
+	if compareVersions("3.18.9", "3.18.10") >= 0 || compareVersions("3.18.10", "3.18.9") <= 0 || compareVersions("3.18.1", "3.18.1") != 0 {
+		t.Error("compareVersions does not compare X.Y.Z numerically")
 	}
 }
 
@@ -499,7 +499,7 @@ func TestGetCandidateInstallFailed(t *testing.T) {
 			JobName: jobPrefix + r.job, BuildID: r.id, Application: "quay-3-18", State: "failure", StartedAt: &at,
 			ProwURL: "https://prow.example/" + r.id, ArtifactState: prow.ArtifactPresent, CatalogRef: testImage("fbc/" + fbc),
 			InstallFailed: r.installFailed, FetchedAt: at,
-			Images: append([]prow.Image{{Role: "catalog", Digest: testDigest("fbc/" + fbc)}}, r.images...),
+			Images: r.images,
 		}
 		if err := srv.db.UpsertProwRun(t.Context(), run); err != nil {
 			t.Fatal(err)

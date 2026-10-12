@@ -73,7 +73,7 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 	} else {
 		resp.Reason = "no release candidate yet"
 		if c.newest == nil {
-			if c.art != "" && lowerVersion(c.art, c.assembly) {
+			if c.art != "" && compareVersions(c.art, c.assembly) < 0 {
 				resp.Reason = "no " + c.assembly + " builds yet: ART still builds " + c.art
 			}
 			return resp, nil
@@ -466,17 +466,11 @@ func versionBuilds(app string, builds []model.ReleaseSnapshot, nvrs map[string]s
 		switch v := buildVersion(app, &builds[i], nvrs); {
 		case v == version:
 			out = append(out, builds[i])
-		case v != "" && lowerVersion(v, version):
+		case v != "" && compareVersions(v, version) < 0:
 			return out
 		}
 	}
 	return out
-}
-
-// lowerVersion reports whether X.Y.Z version a is numerically lower than b:
-// 3.18.9 is lower than 3.18.10.
-func lowerVersion(a, b string) bool {
-	return compareVersions(a, b) < 0
 }
 
 // compareVersions compares dot-separated versions numerically: OCP 4.9 is
