@@ -73,6 +73,9 @@ func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVe
 		return resp, nil
 	}
 	app := release.KonfluxApplication
+	if resp.Catalogs, err = s.candidateCatalogs(ctx, app, c.assembly); err != nil {
+		return nil, err
+	}
 	releases, err := s.db.StageReleases(ctx, release, s.StageReleasePlanPattern)
 	if err != nil {
 		return nil, err
@@ -403,6 +406,56 @@ func (s *Server) buildFBC(ctx context.Context, c *candidate, snapshot string) (*
 		fbc.Missing = append(fbc.Missing, m)
 	}
 	return fbc, nil
+}
+
+// candidateCatalogs returns the FBC catalogs of assembly: those of the FBC
+// Snapshots of app ART staged for stage, then, by operator and OCP version,
+// the newest catalog of the FBC stream ART built for assembly, unless it
+// staged that catalog.
+func (s *Server) candidateCatalogs(ctx context.Context, app, assembly string) ([]model.CandidateCatalog, error) {
+	fbcApp := "fbc-" + app
+	catalogs, err := s.db.StagedFBCCatalogs(ctx, assembly, fbcApp)
+	if err != nil {
+		return nil, err
+	}
+	n, staged := len(catalogs), map[string]bool{}
+	for _, c := range catalogs {
+		staged[imageDigest(c.Pullspec)] = true
+	}
+	builds, nvrs, err := s.db.StreamBuilds(ctx, fbcApp)
+	if err != nil {
+		return nil, err
+	}
+	type slot struct{ operator, ocp string }
+	// newest holds the index in catalogs of each slot's newest catalog, -1
+	// when that one is staged.
+	newest := map[slot]int{}
+	for i := range builds {
+		for _, img := range builds[i].Components {
+			nvr := nvrs[img.Image]
+			operator, version, ocp, ok := artbuild.ParseFBC(nvr)
+			if !ok || version != assembly {
+				continue
+			}
+			k := slot{operator, ocp}
+			j, seen := newest[k]
+			switch {
+			case seen && j >= 0 && catalogs[j].Pullspec == img.Image:
+				// builds is newest first.
+				catalogs[j].Snapshot = builds[i].Name
+			case seen:
+			case staged[imageDigest(img.Image)]:
+				newest[k] = -1
+			default:
+				newest[k] = len(catalogs)
+				catalogs = append(catalogs, model.CandidateCatalog{State: "built", Snapshot: builds[i].Name, Component: img.Name, Pullspec: img.Image, NVR: nvr, OCP: ocp})
+			}
+		}
+	}
+	slices.SortFunc(catalogs[n:], func(a, b model.CandidateCatalog) int {
+		return cmp.Or(strings.Compare(a.Component, b.Component), compareVersions(a.OCP, b.OCP))
+	})
+	return catalogs, nil
 }
 
 // ciState tells whether the operator bundle of digest bundle reached the

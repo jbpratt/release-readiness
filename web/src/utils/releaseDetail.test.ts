@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type {
+	CandidateCatalog,
 	CandidateCI,
 	CIBuild,
 	KonfluxRelease,
@@ -11,6 +12,7 @@ import {
 	ciStep,
 	componentLabel,
 	fbcCopy,
+	fbcLine,
 	fbcParams,
 	jobLabels,
 	jobShortName,
@@ -424,4 +426,46 @@ test("fbcParams and tknCommand: 3.17.6 with and without FBC pullspecs", () => {
 		tknCommand(fbcParams("quay-3-17", "3.17.6", null, [])),
 		"tkn pipeline start release-from-fbc -n art-quay-tenant --use-param-defaults -p 'group=quay-3.17' -p 'assembly=3.17.6' -p 'fbc-pullspecs=<fbc-pullspecs>' -p 'dry-run=true'",
 	);
+});
+
+test("fbcLine", () => {
+	const catalog = (
+		state: CandidateCatalog["state"],
+		r?: Partial<KonfluxRelease>,
+	): CandidateCatalog => ({
+		state,
+		snapshot: "s",
+		component: "c",
+		pullspec: "p",
+		nvr: "",
+		ocp: "",
+		release: r ? release(r) : null,
+		release_plan: "",
+	});
+	const released = catalog("staged", { released_status: "True" });
+	const built = catalog("built");
+	assert.equal(fbcLine([], "build"), null);
+	assert.equal(fbcLine([], "stage"), null);
+	assert.equal(fbcLine([built, built], "build"), "2 FBCs built, not staged");
+	assert.equal(fbcLine([built], "stage"), null);
+	assert.equal(
+		fbcLine([released, released, built], "build"),
+		"2 FBCs staged · 1 built, not staged",
+	);
+	assert.equal(
+		fbcLine([released, released, built], "stage"),
+		"2 FBCs staged · Released",
+	);
+	assert.equal(
+		fbcLine([released, catalog("staged")], "stage"),
+		"2 FBCs staged · Release in progress",
+	);
+	assert.equal(
+		fbcLine(
+			[released, catalog("staged", { released_reason: "Failed" })],
+			"stage",
+		),
+		"2 FBCs staged · 1 Release failed",
+	);
+	assert.equal(fbcLine([released], "build"), "1 FBC staged");
 });

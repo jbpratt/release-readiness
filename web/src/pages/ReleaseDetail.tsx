@@ -42,6 +42,7 @@ import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
 import type {
 	BuildLabel,
 	CandidateBuild,
+	CandidateCatalog,
 	CandidateCI,
 	CandidateComponent,
 	CIJob,
@@ -69,6 +70,7 @@ import {
 	componentLabel,
 	FBC_PLACEHOLDER,
 	fbcCopy,
+	fbcLine,
 	fbcParams,
 	jobLabels,
 	newestCIStep,
@@ -80,10 +82,11 @@ import {
 	tknCommand,
 } from "../utils/releaseDetail";
 
-/** A Konflux UI page of the version's application. */
+/** A Konflux UI page of the version's application, or of application. */
 type KonfluxLink = (
 	kind?: "snapshots" | "releases",
 	name?: string,
+	application?: string,
 ) => string | null;
 
 const external = { target: "_blank", rel: "noopener noreferrer" };
@@ -143,12 +146,13 @@ export default function ReleaseDetail() {
 	const displayName = formatReleaseName(release.name);
 	const app = release.konflux_application ?? "";
 	const xyz = release.name.replace(/^[a-z]+-v/, "");
-	// Every Release the candidate response names is in the version's application.
-	const konflux: KonfluxLink = (kind, name) =>
+	// Every Release the candidate response names is in the version's
+	// application, but its FBC catalogs'.
+	const konflux: KonfluxLink = (kind, name, application) =>
 		konfluxUrl(
 			config?.konflux_ui_url ?? "",
 			config?.konflux_namespace ?? "",
-			app,
+			application ?? app,
 			kind,
 			name,
 		);
@@ -352,6 +356,14 @@ function BuildsCard({
 }) {
 	const c = data?.candidate;
 	const anchor = data && stepperBuild(data.newest, data.ci);
+	const fbcLines = (step: "build" | "stage") => (
+		<FBCLine
+			catalogs={data?.catalogs ?? []}
+			step={step}
+			app={app}
+			konflux={konflux}
+		/>
+	);
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<LinkedCardTitle href={konflux()} link="Konflux">
@@ -374,6 +386,7 @@ function BuildsCard({
 						newest={data.newest}
 						app={app}
 						konflux={konflux}
+						fbcLines={fbcLines}
 						fbc={
 							!data.shipped && (
 								<ReleaseFromFBC
@@ -394,13 +407,19 @@ function BuildsCard({
 						newest={anchor}
 						ci={data.ci}
 						konflux={konflux}
+						fbcLines={fbcLines}
 						shipped
 					/>
 				) : (
 					<>
 						{`${data.reason.charAt(0).toUpperCase()}${data.reason.slice(1)}.`}
 						{anchor && (
-							<NewestStepper newest={anchor} ci={data.ci} konflux={konflux} />
+							<NewestStepper
+								newest={anchor}
+								ci={data.ci}
+								konflux={konflux}
+								fbcLines={fbcLines}
+							/>
 						)}
 						{data.ci?.refresh === "pick" && data.ci.passed && (
 							<div style={line}>
@@ -423,9 +442,10 @@ function BuildsCard({
 
 /**
  * The candidate: where it is, from its build through CI and stage to prod,
- * and its images. The CI step's popover has a newer build to re-run
- * release-from-fbc with or wait on, and the newest build; unshipped, the
- * Stage step's has release-from-fbc's params; the Prod step's, its Release.
+ * and its images, with the FBC lines of the Build and Stage steps. The CI
+ * step's popover has a newer build to re-run release-from-fbc with or wait
+ * on, and the newest build; unshipped, the Stage step's has
+ * release-from-fbc's params; the Prod step's, its Release.
  */
 function Candidate({
 	candidate,
@@ -433,6 +453,7 @@ function Candidate({
 	newest,
 	app,
 	konflux,
+	fbcLines,
 	fbc,
 }: {
 	candidate: CandidateBuild;
@@ -440,6 +461,7 @@ function Candidate({
 	newest: NewestBuild | null;
 	app: string;
 	konflux: KonfluxLink;
+	fbcLines: (step: "build" | "stage") => ReactNode;
 	fbc?: ReactNode;
 }) {
 	const prod = candidate.prod && {
@@ -465,7 +487,12 @@ function Candidate({
 				<Step
 					title="Build"
 					variant="success"
-					description={<BuildLink build={candidate} konflux={konflux} />}
+					description={
+						<>
+							<BuildLink build={candidate} konflux={konflux} />
+							{fbcLines("build")}
+						</>
+					}
 				/>
 				<Step
 					title="CI"
@@ -505,7 +532,12 @@ function Candidate({
 					title="Stage"
 					variant="success"
 					isCurrent={!prod}
-					description={`Pinned ${new Date(candidate.stage.staged_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+					description={
+						<>
+							{`Pinned ${new Date(candidate.stage.staged_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+							{fbcLines("stage")}
+						</>
+					}
 					popoverRender={
 						fbc
 							? (ref) => (
@@ -689,6 +721,103 @@ function ComponentTable({
 }
 
 /**
+ * A step's FBC line, opening the catalogs it counts, each with its Snapshot,
+ * pullspec and Release: at Build all of them, at Stage the staged ones.
+ */
+function FBCLine({
+	catalogs,
+	step,
+	app,
+	konflux,
+}: {
+	catalogs: CandidateCatalog[];
+	step: "build" | "stage";
+	app: string;
+	konflux: KonfluxLink;
+}) {
+	const text = fbcLine(catalogs, step);
+	if (!text) return null;
+	const shown =
+		step === "stage" ? catalogs.filter((c) => c.state === "staged") : catalogs;
+	const fbcApp = `fbc-${app}`;
+	return (
+		<div>
+			<Popover
+				aria-label="FBC catalogs"
+				headerContent="FBC catalogs"
+				minWidth="48rem"
+				bodyContent={
+					<div style={{ maxHeight: "60vh", overflowY: "auto" }}>
+						<Table variant="compact">
+							<Thead>
+								<Tr>
+									<Th>Catalog</Th>
+									<Th>Pullspec</Th>
+									<Th>Release</Th>
+								</Tr>
+							</Thead>
+							<Tbody>
+								{shown.map((c) => (
+									<Tr key={c.pullspec}>
+										<Td>
+											<ExtLink
+												href={konflux("snapshots", c.snapshot, fbcApp)}
+												title={c.nvr || c.snapshot}
+											>
+												{componentLabel(c.component, fbcApp)}
+												{c.ocp && ` · OCP ${c.ocp}`}
+											</ExtLink>{" "}
+											<Label
+												isCompact
+												color={c.state === "staged" ? "green" : "grey"}
+											>
+												{c.state}
+											</Label>
+										</Td>
+										<Td modifier="nowrap">
+											<ClipboardCopy
+												variant="inline-compact"
+												isCode
+												onCopy={(e) => clipboardCopyFunc(e, c.pullspec)}
+											>
+												{shortDigest(c.pullspec)}
+											</ClipboardCopy>
+										</Td>
+										<Td>
+											{c.release ? (
+												<>
+													<ExtLink
+														href={konflux("releases", c.release.name, fbcApp)}
+														title={c.release.name}
+													>
+														{releaseLine(c.release).text}
+													</ExtLink>
+													<div style={muted}>{c.release_plan}</div>
+												</>
+											) : (
+												<span style={muted}>
+													{c.state === "staged"
+														? "No Release yet"
+														: "Not staged"}
+												</span>
+											)}
+										</Td>
+									</Tr>
+								))}
+							</Tbody>
+						</Table>
+					</div>
+				}
+			>
+				<Button variant="link" isInline>
+					{text}
+				</Button>
+			</Popover>
+		</div>
+	);
+}
+
+/**
  * Without a candidate, where the version's newest build is: built, its CI,
  * and not yet staged or released. The CI step links the Release that decides
  * whether its bundle reached CI. A shipped version without a candidate has
@@ -698,11 +827,13 @@ function NewestStepper({
 	newest,
 	ci,
 	konflux,
+	fbcLines,
 	shipped,
 }: {
 	newest?: NewestBuild | null;
 	ci: CandidateCI | null;
 	konflux: KonfluxLink;
+	fbcLines: (step: "build" | "stage") => ReactNode;
 	shipped?: boolean;
 }) {
 	const tested = newest && newestCIStep(newest, ci);
@@ -718,7 +849,12 @@ function NewestStepper({
 					<Step
 						title="Build"
 						variant="success"
-						description={<BuildLink build={newest} konflux={konflux} />}
+						description={
+							<>
+								<BuildLink build={newest} konflux={konflux} />
+								{fbcLines("build")}
+							</>
+						}
 					/>
 					<Step
 						title="CI"
@@ -737,14 +873,23 @@ function NewestStepper({
 				</>
 			) : (
 				<>
-					<Step title="Build" variant="pending" description="No data" />
+					<Step
+						title="Build"
+						variant="pending"
+						description={<>No data{fbcLines("build")}</>}
+					/>
 					<Step title="CI" variant="pending" description="No data" />
 				</>
 			)}
 			<Step
 				title="Stage"
 				variant="pending"
-				description={shipped ? "No data" : "Not staged"}
+				description={
+					<>
+						{shipped ? "No data" : "Not staged"}
+						{fbcLines("stage")}
+					</>
+				}
 			/>
 			<Step
 				title="Prod"

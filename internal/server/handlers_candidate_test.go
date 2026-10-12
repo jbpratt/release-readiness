@@ -389,7 +389,7 @@ func TestGetCandidate(t *testing.T) {
 	var raw map[string]any
 	getJSON(t, srv, "/api/v1/releases/quay-v3.14.10/candidate", http.StatusOK, &raw)
 	want := map[string]any{
-		"shipped": false, "candidate": nil, "reason": "no release candidate yet",
+		"shipped": false, "candidate": nil, "reason": "no release candidate yet", "catalogs": nil,
 		"ci": map[string]any{"builds": []any{}, "latest_in_ci": nil, "passed": nil, "fbc": nil, "refresh": "none"},
 		"newest": map[string]any{
 			"snapshot": "quay-3-14-20261009-185801-000", "created_at": "2026-10-09T19:27:56Z",
@@ -762,6 +762,98 @@ func TestGetCandidateFBC(t *testing.T) {
 	}
 }
 
+// The version's FBC catalogs: those ART staged, each with its Snapshot's
+// newest Release, then the newest the FBC stream built of each operator and
+// OCP version, unless ART staged it, by the oldest stream build holding it.
+func TestGetCandidateCatalogs(t *testing.T) {
+	srv := setupTestServer(t)
+	seedQuay318(t, srv)
+	ctx := t.Context()
+	const app = "fbc-quay-3-18"
+	op, cso, qbo := app+"-quay-operator", app+"-container-security-operator", app+"-quay-bridge-operator"
+	snapshot := func(name, created string, images map[string]string) {
+		t.Helper()
+		id, err := srv.db.CreateSnapshot(ctx, app, name, mustTime(t, created))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for c, img := range images {
+			if err := srv.db.CreateSnapshotComponent(ctx, id, c, img); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	release := func(name, snapshot, reason, created string) {
+		t.Helper()
+		r := &model.KonfluxRelease{Name: name, Application: app, Snapshot: snapshot, ReleasePlan: "quay-fbc-stage-3-18",
+			ReleasedStatus: "False", ReleasedReason: reason, CreatedAt: mustTime(t, created)}
+		if reason == "Succeeded" {
+			r.ReleasedStatus = "True"
+		}
+		if err := srv.db.UpsertKonfluxRelease(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	nvr := func(operator, version, built, ocp string) string {
+		return operator + "-fbc-" + version + "-" + built + ".ocp" + ocp
+	}
+
+	// Staged only: a catalog ART has not identified, staged again after a
+	// failed Release. Built and staged: the operator's catalog for OCP 4.17.
+	const staged1, staged2 = "quay-stage-3-18-1-fbc-20261008084003", "quay-stage-3-18-1-fbc-20261008084006"
+	snapshot(staged1, "2026-10-08T08:40:03Z", map[string]string{op: testImage("fbc/staged1")})
+	snapshot(staged2, "2026-10-08T08:40:06Z", map[string]string{op: testImage("fbc/op-4.17")})
+	for _, name := range []string{staged1, staged2} {
+		if err := srv.db.UpsertStagedSnapshot(ctx, name, "3.18.1", "fbc", "stage"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	release(staged1+"-a", staged1, "Failed", "2026-10-08T08:40:03Z")
+	release(staged1+"-b", staged1, "Succeeded", "2026-10-08T09:00:00Z")
+
+	// Built only: the newest CSO catalog for OCP 4.16 and operator catalog for
+	// OCP 4.16. Older catalogs of a pair and 3.18.2's are left out.
+	snapshot("fbc-quay-3-18-20261010-000000-000", "2026-10-10T00:00:00Z", map[string]string{
+		op: testImage("fbc/op-4.17"), cso: testImage("fbc/cso-new"), qbo: testImage("fbc/qbo-3.18.2"),
+	})
+	snapshot("fbc-quay-3-18-20261009-000000-000", "2026-10-09T00:00:00Z", map[string]string{
+		op: testImage("fbc/op-4.16"), cso: testImage("fbc/cso-new"),
+	})
+	snapshot("fbc-quay-3-18-20261008-000000-000", "2026-10-08T00:00:00Z", map[string]string{
+		op: testImage("fbc/op-4.17-old"), cso: testImage("fbc/cso-old"),
+	})
+	for label, n := range map[string]string{
+		"fbc/op-4.17":     nvr("quay-operator", "3.18.1", "20261008000000", "4.17"),
+		"fbc/op-4.17-old": nvr("quay-operator", "3.18.1", "20261007000000", "4.17"),
+		"fbc/op-4.16":     nvr("quay-operator", "3.18.1", "20261008000000", "4.16"),
+		"fbc/cso-new":     nvr("container-security-operator", "3.18.1", "20261009000000", "4.16"),
+		"fbc/cso-old":     nvr("container-security-operator", "3.18.1", "20261007000000", "4.16"),
+		"fbc/qbo-3.18.2":  nvr("quay-bridge-operator", "3.18.2", "20261009000000", "4.16"),
+	} {
+		resolveNVR(t, srv, label, n)
+	}
+
+	var got model.ReleaseCandidate
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
+	rows := []string{}
+	for _, c := range got.Catalogs {
+		row := strings.Join([]string{c.State, c.Snapshot, c.Component, c.Pullspec, c.NVR, c.OCP, c.ReleasePlan}, " ")
+		if r := c.Release; r != nil {
+			row += " " + r.Name + " " + r.ReleasedStatus
+		}
+		rows = append(rows, row)
+	}
+	want := []string{
+		"staged " + staged1 + " " + op + " " + testImage("fbc/staged1") + "   quay-fbc-stage-3-18 " + staged1 + "-b True",
+		"staged " + staged2 + " " + op + " " + testImage("fbc/op-4.17") + " " + nvr("quay-operator", "3.18.1", "20261008000000", "4.17") + " 4.17 ",
+		"built fbc-quay-3-18-20261009-000000-000 " + cso + " " + testImage("fbc/cso-new") + " " + nvr("container-security-operator", "3.18.1", "20261009000000", "4.16") + " 4.16 ",
+		"built fbc-quay-3-18-20261009-000000-000 " + op + " " + testImage("fbc/op-4.16") + " " + nvr("quay-operator", "3.18.1", "20261008000000", "4.16") + " 4.16 ",
+	}
+	if !slices.Equal(rows, want) {
+		t.Errorf("catalogs:\n%s\nwant:\n%s", strings.Join(rows, "\n"), strings.Join(want, "\n"))
+	}
+}
+
 // The newest build shows beside the candidate when it holds another image of
 // a component the candidate holds: like quay-3-17 for 3.17.6, the stream
 // builds the CSO and QBO operators, which 3.18.2's STAGE build leaves out.
@@ -872,7 +964,7 @@ func TestGetCandidateNone(t *testing.T) {
 	seedSnapshot(t, srv, "quay-3-16", "quay-3-16-20261010-000000-000", mustTime(t, "2026-10-10T00:00:00Z"), "quay-3-16-quay-quay")
 	resolveNVR(t, srv, "quay-3-16-20261010-000000-000/quay-3-16-quay-quay", testNVR("quay-quay", "3.16.8"))
 	none := func(shipped bool, reason string) map[string]any {
-		return map[string]any{"shipped": shipped, "candidate": nil, "reason": reason, "newest": nil, "ci": nil}
+		return map[string]any{"shipped": shipped, "candidate": nil, "reason": reason, "newest": nil, "ci": nil, "catalogs": nil}
 	}
 	for version, want := range map[string]map[string]any{
 		"quay-v3.18.0": none(true, ""), // released in JIRA
