@@ -875,3 +875,46 @@ func TestGetCandidateNone(t *testing.T) {
 	}
 	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/candidate", http.StatusNotFound, nil)
 }
+
+// A shipped version, released in JIRA or published in the catalog, keeps its
+// release candidate and the CI that tested it, with nothing to pick, re-run
+// or wait on.
+func TestGetCandidateShipped(t *testing.T) {
+	for _, how := range []string{"jira", "catalog"} {
+		t.Run(how, func(t *testing.T) {
+			srv := setupTestServer(t)
+			seedQuay318(t, srv)
+			var before model.ReleaseCandidate
+			getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &before)
+			if before.CI == nil || before.CI.Refresh != "rerun" || before.Newest == nil {
+				t.Fatalf("unshipped 3.18.1: ci %+v, newest %+v; want rerun and a newest build", before.CI, before.Newest)
+			}
+			if how == "jira" {
+				if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18", Released: true}); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				cat := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					_, _ = w.Write([]byte(`{"total":1,"data":[{"repositories":[{"published":true,"tags":[{"name":"v3.18.1"}]}]}]}`))
+				}))
+				defer cat.Close()
+				srv.shipped = catalog.NewShipped(catalog.NewClient(cat.URL, cat.Client()), slog.Default())
+				srv.shipped.Refresh(t.Context())
+			}
+
+			var got model.ReleaseCandidate
+			getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
+			if c := got.Candidate; !got.Shipped || got.Reason != "" || got.Newest != nil || c == nil ||
+				c.Snapshot != before.Candidate.Snapshot || len(c.Components) != len(before.Candidate.Components) || c.Prod == nil {
+				t.Fatalf("shipped 3.18.1: shipped %v, reason %q, newest %+v, candidate %+v", got.Shipped, got.Reason, got.Newest, c)
+			}
+			ci := got.CI
+			if ci == nil || !slices.Equal(ciRows(ci.Builds), ciRows(before.CI.Builds)) {
+				t.Fatalf("shipped 3.18.1 ci = %+v, want the unshipped rows %v", ci, ciRows(before.CI.Builds))
+			}
+			if ci.LatestInCI != nil || ci.Passed != nil || ci.FBC != nil || ci.Refresh != "current" {
+				t.Errorf("shipped 3.18.1: latest %+v, passed %+v, fbc %+v, refresh %q; want none, none, none, current", ci.LatestInCI, ci.Passed, ci.FBC, ci.Refresh)
+			}
+		})
+	}
+}

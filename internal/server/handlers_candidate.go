@@ -44,11 +44,30 @@ func (s *Server) handleGetCandidate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
+// releaseCandidate is the version's candidate response. A shipped version
+// keeps the build it shipped and the CI that tested it, with nothing left to
+// pick, re-run or wait on.
 func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVersion) (*model.ReleaseCandidate, error) {
 	c, err := s.selectCandidate(ctx, release)
 	if err != nil {
 		return nil, err
 	}
+	resp, err := s.candidateResponse(ctx, release, c)
+	if err != nil || !c.shipped {
+		return resp, err
+	}
+	resp.Reason, resp.Newest = "", nil
+	if ci := resp.CI; ci != nil {
+		ci.LatestInCI, ci.Passed, ci.FBC, ci.Refresh = nil, nil, nil, "none"
+		if resp.Candidate != nil {
+			ci.Refresh = "current"
+		}
+	}
+	return resp, nil
+}
+
+func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVersion, c *candidate) (*model.ReleaseCandidate, error) {
+	var err error
 	resp := &model.ReleaseCandidate{Shipped: c.shipped, Reason: c.reason}
 	if c.assembly == "" {
 		return resp, nil
@@ -406,8 +425,8 @@ func bundleDigest(app string, snap *model.ReleaseSnapshot) string {
 	return ""
 }
 
-// candidate is a version's build up for release. A version that shipped, or
-// that is not one ART builds, has no assembly and nothing more to decide.
+// candidate is a version's build up for release. A version that is not one
+// ART builds has no assembly and nothing more to decide.
 type candidate struct {
 	shipped bool
 	// reason says why the version has no build.
@@ -431,19 +450,18 @@ type candidate struct {
 func (s *Server) selectCandidate(ctx context.Context, release *model.ReleaseVersion) (*candidate, error) {
 	app := release.KonfluxApplication
 	m := quayVersion.FindStringSubmatch(release.Name)
+	shipped := release.Released || s.catalogShipped(release.Name)
 	switch {
-	case release.Released || s.catalogShipped(release.Name):
-		return &candidate{shipped: true}, nil
 	case app == "":
-		return &candidate{reason: "no Konflux application"}, nil
+		return &candidate{shipped: shipped, reason: "no Konflux application"}, nil
 	case m == nil:
-		return &candidate{reason: "not a concrete quay-vX.Y.Z version"}, nil
+		return &candidate{shipped: shipped, reason: "not a concrete quay-vX.Y.Z version"}, nil
 	}
 	builds, nvrs, err := s.db.StreamBuilds(ctx, app)
 	if err != nil {
 		return nil, err
 	}
-	c := &candidate{assembly: m[1], builds: versionBuilds(app, builds, nvrs, m[1]), stream: builds, nvrs: nvrs}
+	c := &candidate{shipped: shipped, assembly: m[1], builds: versionBuilds(app, builds, nvrs, m[1]), stream: builds, nvrs: nvrs}
 	for i := 0; i < len(builds) && c.art == ""; i++ {
 		c.art = buildVersion(app, &builds[i], nvrs)
 	}
