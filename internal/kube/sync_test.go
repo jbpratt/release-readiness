@@ -105,10 +105,9 @@ func TestSyncReleases(t *testing.T) {
 		Name: "fbc-quay-3-18-r1", Application: "fbc-quay-3-18", Snapshot: "fbc-quay-3-18-r1-snap", ReleasePlan: "quay-advisory-stage-3-18",
 		ReleasedStatus: "Unknown", ReleasedReason: "Progressing", CreatedAt: created,
 	}
-	if len(got) != 1 || got[0].StartTime == nil || !got[0].StartTime.Equal(created.Add(time.Minute)) || got[0].CompletionTime != nil {
+	if len(got) != 1 || got[0].CompletionTime != nil {
 		t.Fatalf("releases = %+v", got)
 	}
-	got[0].StartTime = nil
 	if got[0] != want {
 		t.Errorf("release = %+v, want %+v", got[0], want)
 	}

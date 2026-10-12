@@ -44,7 +44,6 @@ type KonfluxRelease struct {
 	FailedTask     string
 	FailedStep     string
 	CreatedAt      string
-	StartTime      string
 	CompletionTime string
 }
 
