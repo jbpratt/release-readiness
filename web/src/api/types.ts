@@ -25,6 +25,16 @@ export interface ReleaseCandidate {
 	ci: CandidateCI | null;
 	/** The version's FBC catalogs, staged ones first. */
 	catalogs: CandidateCatalog[] | null;
+	/**
+	 * With a candidate, the newest image of the version's builds of each
+	 * component the candidate leaves out.
+	 */
+	unshipped_builds: UnshippedBuild[] | null;
+}
+
+/** An image of a component the candidate leaves out, and its stream build. */
+export interface UnshippedBuild extends CandidateComponent {
+	snapshot: string;
 }
 
 /**

@@ -389,7 +389,7 @@ func TestGetCandidate(t *testing.T) {
 	var raw map[string]any
 	getJSON(t, srv, "/api/v1/releases/quay-v3.14.10/candidate", http.StatusOK, &raw)
 	want := map[string]any{
-		"shipped": false, "candidate": nil, "reason": "no release candidate yet", "catalogs": nil,
+		"shipped": false, "candidate": nil, "reason": "no release candidate yet", "catalogs": nil, "unshipped_builds": nil,
 		"ci": map[string]any{"builds": []any{}, "latest_in_ci": nil, "passed": nil, "fbc": nil, "refresh": "none"},
 		"newest": map[string]any{
 			"snapshot": "quay-3-14-20261009-185801-000", "created_at": "2026-10-09T19:27:56Z",
@@ -894,6 +894,48 @@ func TestGetCandidateNewest(t *testing.T) {
 	}
 }
 
+// A component the STAGE build's shipment leaves out shows as built, by its
+// newest image of the version: an older build of the version and a stream
+// build of another version do not count.
+func TestGetCandidateUnshipped(t *testing.T) {
+	srv := setupTestServer(t)
+	srv.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
+	ctx := t.Context()
+	if err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{Name: "quay-v3.18.2", KonfluxApplication: "quay-3-18"}); err != nil {
+		t.Fatal(err)
+	}
+	const (
+		operator = "quay-3-18-quay-operator"
+		cso      = "quay-3-18-container-security-operator"
+		qbo      = "quay-3-18-quay-bridge-operator"
+		stage    = "quay-stage-3-18-2-image-20261010040000"
+	)
+	seedImages(t, srv, stage, "2026-10-10T04:00:00Z", testBuild("stage", operator))
+	if err := srv.db.UpsertStagedSnapshot(ctx, stage, "3.18.2", "image", "stage"); err != nil {
+		t.Fatal(err)
+	}
+	seedKonfluxRelease(t, srv, stage, stage, "quay-advisory-stage-3-18", "Succeeded", "2026-10-10T04:00:00Z", "2026-10-10T04:10:00Z")
+	seedImages(t, srv, "quay-3-18-20261010-050000-000", "2026-10-10T05:00:00Z", testBuild("old", cso))
+	resolveNVR(t, srv, "old/"+cso, testNVR("container-security-operator", "3.18.2"))
+	seedImages(t, srv, "quay-3-18-20261010-060000-000", "2026-10-10T06:00:00Z", testBuild("new", operator, cso))
+	resolveNVR(t, srv, "new/"+operator, testNVR("quay-operator", "3.18.2"))
+	resolveNVR(t, srv, "new/"+cso, testNVR("container-security-operator", "3.18.2"))
+	seedImages(t, srv, "quay-3-18-20261011-060000-000", "2026-10-11T06:00:00Z", testBuild("next", cso, qbo))
+	resolveNVR(t, srv, "next/"+cso, testNVR("container-security-operator", "3.18.3"))
+	resolveNVR(t, srv, "next/"+qbo, testNVR("quay-bridge-operator", "3.18.3"))
+
+	var got model.ReleaseCandidate
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.2/candidate", http.StatusOK, &got)
+	nvr := testNVR("container-security-operator", "3.18.2")
+	want := []model.UnshippedBuild{{
+		CandidateComponent: model.CandidateComponent{Name: cso, Image: testImage("new/" + cso), NVR: nvr, BuildURL: "https://art.example/build?nvr=" + nvr + "&record_id="},
+		Snapshot:           "quay-3-18-20261010-060000-000",
+	}}
+	if !reflect.DeepEqual(got.UnshippedBuilds, want) {
+		t.Errorf("3.18.2 unshipped builds = %+v, want %+v", got.UnshippedBuilds, want)
+	}
+}
+
 // A build of a version counts for it only if ART built no lower version
 // after it: ART built 3.18.2 until 28 Sep, then went back to 3.18.1. Its next
 // 3.18.2 build counts, and hides no older 3.18.1 build.
@@ -964,7 +1006,7 @@ func TestGetCandidateNone(t *testing.T) {
 	seedSnapshot(t, srv, "quay-3-16", "quay-3-16-20261010-000000-000", mustTime(t, "2026-10-10T00:00:00Z"), "quay-3-16-quay-quay")
 	resolveNVR(t, srv, "quay-3-16-20261010-000000-000/quay-3-16-quay-quay", testNVR("quay-quay", "3.16.8"))
 	none := func(shipped bool, reason string) map[string]any {
-		return map[string]any{"shipped": shipped, "candidate": nil, "reason": reason, "newest": nil, "ci": nil, "catalogs": nil}
+		return map[string]any{"shipped": shipped, "candidate": nil, "reason": reason, "newest": nil, "ci": nil, "catalogs": nil, "unshipped_builds": nil}
 	}
 	for version, want := range map[string]map[string]any{
 		"quay-v3.18.0": none(true, ""), // released in JIRA
