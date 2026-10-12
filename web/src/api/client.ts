@@ -1,6 +1,6 @@
 import type {
-	BuildTickets,
 	DashboardConfig,
+	JiraIssue,
 	ReleaseCandidate,
 	ReleaseOverview,
 	ReleaseVersion,
@@ -35,10 +35,8 @@ export function getRelease(version: string): Promise<ReleaseVersion> {
 	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}`);
 }
 
-export function getBuildTickets(version: string): Promise<BuildTickets> {
-	return fetchJSON(
-		`${BASE}/releases/${encodeURIComponent(version)}/build-tickets`,
-	);
+export function listReleaseIssues(version: string): Promise<JiraIssue[]> {
+	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}/issues`);
 }
 
 export function getCandidate(version: string): Promise<ReleaseCandidate> {

@@ -46,7 +46,6 @@ func ParseFBC(nvr string) (operator, version, ocp string, ok bool) {
 // carry only Digest, State and CheckedAt.
 type Build struct {
 	Digest, State, NVR, RecordID string
-	UpstreamRepo, UpstreamSHA    string
 	CheckedAt                    time.Time
 }
 
@@ -254,7 +253,6 @@ func (r *Resolver) resolve(ctx context.Context, c Candidate, now time.Time, pace
 	}
 	b.State = StateResolved
 	b.NVR, b.RecordID = rec.NVR, rec.RecordID
-	b.UpstreamRepo, b.UpstreamSHA = rec.SourceRepo, rec.Commitish
 	if _, _, _, ok := ParseFBC(rec.NVR); !ok {
 		return b, nil, nil
 	}

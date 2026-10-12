@@ -5,13 +5,11 @@
 package dbsqlc
 
 type ArtBuild struct {
-	Digest       string
-	State        string
-	Nvr          string
-	RecordID     string
-	UpstreamRepo string
-	UpstreamSha  string
-	CheckedAt    string
+	Digest    string
+	State     string
+	Nvr       string
+	RecordID  string
+	CheckedAt string
 }
 
 type ArtFbcRecord struct {

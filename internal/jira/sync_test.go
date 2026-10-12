@@ -63,11 +63,10 @@ func TestSyncOnceRejectedTokenDeletesNothing(t *testing.T) {
 	if store.deletes != 0 {
 		t.Errorf("deletes = %d, want 0", store.deletes)
 	}
-	// The version lookup 404s too, but a missing fixVersion is not sync
-	// health: only the version and .z stream searches count.
+	// The version lookup 404s too, but a missing fixVersion is not sync health.
 	p := reg.Problems(time.Now())
-	if len(p) != 1 || !strings.HasPrefix(p[0].Message, "JIRA authentication failed: search issues") || !strings.Contains(p[0].Message, "(2 errors this pass)") {
-		t.Fatalf("problems = %+v, want jira auth failures from the two searches", p)
+	if len(p) != 1 || !strings.HasPrefix(p[0].Message, "JIRA authentication failed: search issues") || strings.Contains(p[0].Message, "errors this pass") {
+		t.Fatalf("problems = %+v, want one jira auth failure from search", p)
 	}
 }
 
@@ -75,12 +74,9 @@ type versionStore struct {
 	Store
 	versions []model.ReleaseVersion
 	synced   []string
-	upserted []string
-	issues   []string
 }
 
-func (v *versionStore) UpsertReleaseVersion(_ context.Context, rv *model.ReleaseVersion) error {
-	v.upserted = append(v.upserted, rv.Name)
+func (v *versionStore) UpsertReleaseVersion(context.Context, *model.ReleaseVersion) error {
 	return nil
 }
 
@@ -88,8 +84,7 @@ func (v *versionStore) ListAllReleaseVersions(context.Context) ([]model.ReleaseV
 	return v.versions, nil
 }
 
-func (v *versionStore) UpsertJiraIssue(_ context.Context, i *model.JiraIssueRecord) error {
-	v.issues = append(v.issues, i.Key+"@"+i.FixVersion)
+func (v *versionStore) UpsertJiraIssue(context.Context, *model.JiraIssueRecord) error {
 	return nil
 }
 
@@ -129,45 +124,7 @@ func TestSyncOnceSyncsShippedUnarchivedVersions(t *testing.T) {
 
 	s.SyncOnce(context.Background())
 
-	if got := strings.Join(store.synced, ","); got != "quay-v3.17.4,quay-v3.17.z,quay-v3.17.5" {
-		t.Errorf("synced = %s, want the retained versions and their stream once", got)
-	}
-}
-
-func TestSyncOnceSyncsStreamCandidates(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		jql := r.URL.Query().Get("jql")
-		switch {
-		case strings.Contains(jql, "-area/release"):
-			_ = json.NewEncoder(w).Encode(searchResponse{Issues: []Issue{
-				{Key: "PROJQUAY-1", Fields: IssueFields{Summary: "Release Quay v3.16.2"}},
-				{Key: "PROJQUAY-2", Fields: IssueFields{Summary: "Release Quay v3.16.3"}},
-			}})
-		case strings.Contains(jql, `"Target Version"="quay-v3.16.z"`):
-			_ = json.NewEncoder(w).Encode(searchResponse{Issues: []Issue{{Key: "PROJQUAY-9"}}})
-		case r.URL.Path == "/rest/api/3/search/jql":
-			_ = json.NewEncoder(w).Encode(searchResponse{})
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer srv.Close()
-
-	client := New(Config{BaseURL: srv.URL, Token: "t", Project: "PROJQUAY"})
-	client.minDelay = 0
-	store := &versionStore{}
-	withTx := func(ctx context.Context, fn func(Store) error) error { return fn(store) }
-	s := NewSyncer(client, store, withTx, slog.New(slog.NewTextHandler(io.Discard, nil)))
-
-	s.SyncOnce(context.Background())
-
-	if got := strings.Join(store.synced, ","); got != "quay-v3.16.2,quay-v3.16.z,quay-v3.16.3" {
-		t.Errorf("synced = %s, want the stream once after its first version", got)
-	}
-	if got := strings.Join(store.upserted, ","); got != "quay-v3.16.2,quay-v3.16.3" {
-		t.Errorf("release versions = %s, want no stream version", got)
-	}
-	if got := strings.Join(store.issues, ","); got != "PROJQUAY-9@quay-v3.16.z" {
-		t.Errorf("issues = %s, want PROJQUAY-9 under the stream", got)
+	if got := strings.Join(store.synced, ","); got != "quay-v3.17.4,quay-v3.17.5" {
+		t.Errorf("synced = %s, want the retained versions", got)
 	}
 }

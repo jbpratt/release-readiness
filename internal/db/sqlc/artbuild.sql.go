@@ -131,7 +131,7 @@ func (q *Queries) ListArtFBCImages(ctx context.Context) ([]ListArtFBCImagesRow, 
 }
 
 const listResolvedArtBuilds = `-- name: ListResolvedArtBuilds :many
-SELECT digest, state, nvr, record_id, upstream_repo, upstream_sha, checked_at
+SELECT digest, state, nvr, record_id, checked_at
 FROM art_builds
 WHERE state = 'resolved' AND digest IN (/*SLICE:digests*/?)
 `
@@ -160,8 +160,6 @@ func (q *Queries) ListResolvedArtBuilds(ctx context.Context, digests []string) (
 			&i.State,
 			&i.Nvr,
 			&i.RecordID,
-			&i.UpstreamRepo,
-			&i.UpstreamSha,
 			&i.CheckedAt,
 		); err != nil {
 			return nil, err
@@ -216,25 +214,21 @@ func (q *Queries) ListUnreadArtFBCImages(ctx context.Context) ([]ListUnreadArtFB
 }
 
 const upsertArtBuild = `-- name: UpsertArtBuild :exec
-INSERT INTO art_builds (digest, state, nvr, record_id, upstream_repo, upstream_sha, checked_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO art_builds (digest, state, nvr, record_id, checked_at)
+VALUES (?, ?, ?, ?, ?)
 ON CONFLICT(digest) DO UPDATE SET
     state = excluded.state,
     nvr = excluded.nvr,
     record_id = excluded.record_id,
-    upstream_repo = excluded.upstream_repo,
-    upstream_sha = excluded.upstream_sha,
     checked_at = excluded.checked_at
 `
 
 type UpsertArtBuildParams struct {
-	Digest       string
-	State        string
-	Nvr          string
-	RecordID     string
-	UpstreamRepo string
-	UpstreamSha  string
-	CheckedAt    string
+	Digest    string
+	State     string
+	Nvr       string
+	RecordID  string
+	CheckedAt string
 }
 
 func (q *Queries) UpsertArtBuild(ctx context.Context, arg UpsertArtBuildParams) error {
@@ -243,8 +237,6 @@ func (q *Queries) UpsertArtBuild(ctx context.Context, arg UpsertArtBuildParams) 
 		arg.State,
 		arg.Nvr,
 		arg.RecordID,
-		arg.UpstreamRepo,
-		arg.UpstreamSha,
 		arg.CheckedAt,
 	)
 	return err

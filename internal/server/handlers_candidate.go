@@ -537,8 +537,8 @@ func nvrVersion(nvr string) string {
 }
 
 // candidateBuild returns the version's selected STAGE build, else its newest
-// build, or nil when there is neither, with its images' ART builds and upstream
-// commits, and the STAGE build's stage Release's completion time.
+// build, or nil when there is neither, with its images' ART builds, and the
+// STAGE build's stage Release's completion time.
 func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersion, newest *model.ReleaseSnapshot) (*model.CandidateBuild, *time.Time, error) {
 	staged, err := s.db.SelectedStageBuild(ctx, release, s.StageReleasePlanPattern)
 	if err != nil {
@@ -570,7 +570,6 @@ func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersi
 		c.Components[i] = model.CandidateComponent{Name: img.Name, Image: img.Image}
 		if b, ok := builds[digests[i]]; ok {
 			c.Components[i].NVR, c.Components[i].BuildURL = b.NVR, artbuild.PageURL(s.artBaseURL, b.NVR, b.RecordID)
-			c.Components[i].UpstreamRepo, c.Components[i].UpstreamSHA = b.UpstreamRepo, b.UpstreamSHA
 		}
 	}
 	return c, stagedAt, nil

@@ -14,13 +14,11 @@ import (
 
 func (d *DB) UpsertArtBuild(ctx context.Context, b artbuild.Build) error {
 	return d.queries().UpsertArtBuild(ctx, dbsqlc.UpsertArtBuildParams{
-		Digest:       b.Digest,
-		State:        b.State,
-		Nvr:          b.NVR,
-		RecordID:     b.RecordID,
-		UpstreamRepo: b.UpstreamRepo,
-		UpstreamSha:  b.UpstreamSHA,
-		CheckedAt:    b.CheckedAt.UTC().Format(time.RFC3339),
+		Digest:    b.Digest,
+		State:     b.State,
+		Nvr:       b.NVR,
+		RecordID:  b.RecordID,
+		CheckedAt: b.CheckedAt.UTC().Format(time.RFC3339),
 	})
 }
 
@@ -53,13 +51,11 @@ func (d *DB) ResolvedArtBuilds(ctx context.Context, digests []string) (map[strin
 	builds := make(map[string]artbuild.Build, len(rows))
 	for _, r := range rows {
 		builds[r.Digest] = artbuild.Build{
-			Digest:       r.Digest,
-			State:        r.State,
-			NVR:          r.Nvr,
-			RecordID:     r.RecordID,
-			UpstreamRepo: r.UpstreamRepo,
-			UpstreamSHA:  r.UpstreamSha,
-			CheckedAt:    parseTime(r.CheckedAt),
+			Digest:    r.Digest,
+			State:     r.State,
+			NVR:       r.Nvr,
+			RecordID:  r.RecordID,
+			CheckedAt: parseTime(r.CheckedAt),
 		}
 	}
 	return builds, nil

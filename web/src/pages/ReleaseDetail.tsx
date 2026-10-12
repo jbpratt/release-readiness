@@ -40,17 +40,15 @@ import {
 } from "@patternfly/react-table";
 import { type ReactNode, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getBuildTickets, getCandidate, getRelease } from "../api/client";
+import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
 import type {
-	BuildCommit,
 	BuildLabel,
-	BuildTicket,
-	BuildTickets,
 	CandidateBuild,
 	CandidateCI,
 	CIJob,
 	CIState,
 	DashboardConfig,
+	JiraIssue,
 	NewestBuild,
 	ReleaseCandidate,
 	ReleaseVersion,
@@ -70,8 +68,6 @@ import {
 	componentLabel,
 	fbcCopy,
 	jobLabels,
-	missingCommits,
-	notComparedLines,
 	nvrLabel,
 	releaseLine,
 	runsStatus,
@@ -106,8 +102,8 @@ export default function ReleaseDetail() {
 		() => getRelease(version!),
 	);
 	const { data: tickets, error: ticketsError } = useCachedFetch(
-		`buildTickets:${version}`,
-		() => getBuildTickets(version!),
+		`issues:${version}`,
+		() => listReleaseIssues(version!),
 	);
 	const candidate = useCachedFetch(`candidate:${version}`, () =>
 		getCandidate(version!),
@@ -179,10 +175,9 @@ export default function ReleaseDetail() {
 			)}
 
 			<TicketsCard
-				data={tickets}
+				issues={tickets}
 				error={ticketsError}
 				version={version!}
-				app={app}
 				config={config}
 			/>
 		</PageSection>
@@ -900,31 +895,23 @@ function Pill({
 }
 
 function TicketsCard({
-	data,
+	issues,
 	error,
 	version,
-	app,
 	config,
 }: {
-	data?: BuildTickets;
+	issues?: JiraIssue[];
 	error?: Error;
 	version: string;
-	app: string;
 	config?: DashboardConfig;
 }) {
-	const issues = data?.tickets;
 	const hasIssues = (issues ?? []).length > 0;
 	const jira = config?.jira_project
 		? jiraSearchUrl(
-				ticketsJql(config.jira_project, version, issues ?? []),
+				ticketsJql(config.jira_project, version),
 				config.jira_base_url,
 			)
 		: null;
-	const zTip = issues?.some((t) => t.fix_version !== version)
-		? data?.z_since
-			? `.z tickets are listed when a candidate commit newer than ${data.z_since.replace(/^[a-z]+-v/, "")}'s candidate names them.`
-			: ".z tickets are listed when a candidate commit on the release branch names them."
-		: undefined;
 
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
@@ -933,19 +920,8 @@ function TicketsCard({
 				{hasIssues && ` (${issues!.length})`}
 			</LinkedCardTitle>
 			<CardBody>
-				{data &&
-					notComparedLines(data.not_compared, app).map((line) => (
-						<div key={line} style={{ ...muted, marginBottom: "0.5rem" }}>
-							{line}
-						</div>
-					))}
 				{hasIssues ? (
-					<IssuesTable
-						issues={issues!}
-						hasBuild={!!data?.build}
-						zTip={zTip}
-						app={app}
-					/>
+					<IssuesTable issues={issues!} />
 				) : error ? (
 					error.message
 				) : !issues ? (
@@ -960,38 +936,10 @@ function TicketsCard({
 	);
 }
 
-const commitLabel = (c: BuildCommit, app: string) =>
-	`${componentLabel(c.component, app)}@${c.commit_sha.slice(0, 7)}`;
-
-// Tickets not in the build sort first, then "-", then by commit.
-const inBuildKey = (t: BuildTicket, app: string) =>
-	t.in_build.length > 0
-		? `2 ${t.in_build.map((c) => commitLabel(c, app)).join(" ")}`
-		: t.not_in_build.length > 0
-			? "0"
-			: "1";
-
-const inBuildTip = lines(
-	"Commits: the candidate's release-branch commits that name the ticket.",
-	"Not in build: a default-branch commit names it and no candidate commit does.",
-	"-: no compared commit names it, which proves nothing.",
-);
-
 // The ticket table's columns, in order.
-const ISSUES_COLUMNS = ["key", "type", "summary", "target", "inBuild"];
+const ISSUES_COLUMNS = ["key", "type", "summary"];
 
-function IssuesTable({
-	issues,
-	hasBuild,
-	zTip,
-	app,
-}: {
-	issues: BuildTicket[];
-	hasBuild: boolean;
-	/** How the .z tickets were found, when any are listed. */
-	zTip?: string;
-	app: string;
-}) {
+function IssuesTable({ issues }: { issues: JiraIssue[] }) {
 	const [activeSortKey, setActiveSortKey] = useState<string | undefined>(
 		undefined,
 	);
@@ -1003,19 +951,12 @@ function IssuesTable({
 		if (activeSortKey === undefined || activeSortDirection === undefined) {
 			return issues;
 		}
+		// Type is the only sortable column.
 		return [...issues].sort((a, b) => {
-			let cmp = 0;
-			switch (activeSortKey) {
-				case "type":
-					cmp = a.issue_type.localeCompare(b.issue_type);
-					break;
-				case "inBuild":
-					cmp = inBuildKey(a, app).localeCompare(inBuildKey(b, app));
-					break;
-			}
+			const cmp = a.issue_type.localeCompare(b.issue_type);
 			return activeSortDirection === "asc" ? cmp : -cmp;
 		});
-	}, [issues, activeSortKey, activeSortDirection, app]);
+	}, [issues, activeSortKey, activeSortDirection]);
 
 	const getSortParams = (columnKey: string): ThProps["sort"] => ({
 		sortBy: {
@@ -1038,18 +979,6 @@ function IssuesTable({
 						Type
 					</Th>
 					<Th>Summary</Th>
-					<Th info={zTip ? { tooltip: zTip } : undefined} modifier="fitContent">
-						Target
-					</Th>
-					{hasBuild && (
-						<Th
-							sort={getSortParams("inBuild")}
-							info={{ tooltip: inBuildTip }}
-							modifier="fitContent"
-						>
-							In build
-						</Th>
-					)}
 				</Tr>
 			</Thead>
 			<Tbody>
@@ -1064,39 +993,6 @@ function IssuesTable({
 						<Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
 							{issue.summary}
 						</Td>
-						<Td>{issue.fix_version.replace(/^[a-z]+-v/, "")}</Td>
-						{hasBuild && (
-							<Td style={{ whiteSpace: "nowrap" }}>
-								{issue.in_build.length > 0 ? (
-									issue.in_build.map((c) => (
-										<div key={`${c.component}@${c.commit_sha}`}>
-											<a href={c.commit_url} {...external} title={c.component}>
-												{commitLabel(c, app)}
-											</a>
-										</div>
-									))
-								) : issue.not_in_build.length > 0 ? (
-									<>
-										<Label isCompact color="red">
-											Not in build
-										</Label>
-										{missingCommits(issue.not_in_build, app).map((c) => (
-											<a
-												key={c.sha}
-												href={c.url}
-												{...external}
-												title={c.title}
-												style={{ marginLeft: "0.5rem" }}
-											>
-												{c.sha.slice(0, 7)}
-											</a>
-										))}
-									</>
-								) : (
-									"-"
-								)}
-							</Td>
-						)}
 					</Tr>
 				))}
 			</Tbody>

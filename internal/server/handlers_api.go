@@ -6,13 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/quay/release-readiness/internal/github"
-	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
@@ -54,159 +51,16 @@ func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, release)
 }
 
-// handleGetBuildTickets lists the release's Target Version tickets, then the
-// tickets of its .z stream that a commit of its candidate new since the
-// previous version's candidate names, each with the candidate commits naming
-// it and, for a Target Version ticket none names, the default-branch commits
-// naming it that the candidate lacks. A ticket under both Target Versions is
-// listed once, as the release's own.
-func (s *Server) handleGetBuildTickets(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	version := r.PathValue("version")
-	release, err := s.db.GetReleaseVersion(ctx, version)
-	if err != nil {
-		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
-		return
-	}
-	versions, err := s.db.ListAllReleaseVersions(ctx)
+func (s *Server) handleListReleaseIssues(w http.ResponseWriter, r *http.Request) {
+	issues, err := s.db.ListJiraIssues(r.Context(), r.PathValue("version"))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	build, reason, err := s.ticketBuild(ctx, release, versions)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
+	if issues == nil {
+		issues = []model.JiraIssueRecord{}
 	}
-	resp := model.BuildTickets{Build: build, Reason: reason, NotCompared: []model.NotCompared{}, Tickets: []model.BuildTicket{}}
-	var e github.Evidence
-	if build != nil {
-		e = s.Scanner.Tickets(build)
-		resp.NotCompared = e.NotCompared
-		if e.ZSince {
-			resp.ZSince = build.Since
-		}
-	}
-	issues, err := s.db.ListJiraIssues(ctx, release.Name)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	if z := jira.StreamVersion(release.Name); z != "" {
-		stream, err := s.db.ListJiraIssues(ctx, z)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, err)
-			return
-		}
-		for _, i := range stream {
-			listed := slices.ContainsFunc(issues, func(c model.JiraIssueRecord) bool { return c.Key == i.Key })
-			if e.Z[i.Key] && !listed {
-				issues = append(issues, i)
-			}
-		}
-	}
-	for _, i := range issues {
-		t := model.BuildTicket{JiraIssueRecord: i, InBuild: e.InBuild[i.Key], NotInBuild: []model.BuildCommit{}}
-		if t.InBuild == nil {
-			t.InBuild = []model.BuildCommit{}
-		}
-		// A .z ticket is listed only because a candidate commit names it.
-		if missing, ok := e.NotInBuild[i.Key]; ok && i.FixVersion == release.Name {
-			t.NotInBuild = missing
-		}
-		resp.Tickets = append(resp.Tickets, t)
-	}
-	writeJSON(w, http.StatusOK, resp)
-}
-
-// TicketBuilds returns the build each version's tickets are checked against,
-// for the versions that have one.
-func (s *Server) TicketBuilds(ctx context.Context) ([]model.TicketBuild, error) {
-	versions, err := s.db.ListAllReleaseVersions(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var builds []model.TicketBuild
-	for i := range versions {
-		b, _, err := s.ticketBuild(ctx, &versions[i], versions)
-		if err != nil {
-			return nil, err
-		}
-		if b != nil {
-			builds = append(builds, *b)
-		}
-	}
-	return builds, nil
-}
-
-// ticketBuild returns release's candidate as its tickets are checked against
-// it, or nil and the reason there is none: "shipped", "archived" or the
-// candidate's. When the previous version is unshipped and has a candidate,
-// each component's base is the upstream commit of the component of the same
-// name in that candidate.
-func (s *Server) ticketBuild(ctx context.Context, release *model.ReleaseVersion, versions []model.ReleaseVersion) (*model.TicketBuild, string, error) {
-	c, err := s.selectCandidate(ctx, release)
-	switch {
-	case err != nil:
-		return nil, "", err
-	case c.shipped:
-		return nil, "shipped", nil
-	case release.Archived:
-		return nil, "archived", nil
-	case c.build == nil:
-		return nil, c.reason, nil
-	}
-	issues, err := s.db.ListJiraIssues(ctx, release.Name)
-	if err != nil {
-		return nil, "", err
-	}
-	b := &model.TicketBuild{Snapshot: c.build.Snapshot, Source: c.build.Source, Targets: len(issues) > 0}
-	for _, cc := range c.build.Components {
-		b.Components = append(b.Components, model.TicketComponent{Name: cc.Name, UpstreamRepo: cc.UpstreamRepo, UpstreamSHA: cc.UpstreamSHA})
-	}
-	prev := previousVersion(release, versions)
-	if prev == nil {
-		return b, "", nil
-	}
-	pc, err := s.selectCandidate(ctx, prev)
-	if err != nil || pc.build == nil {
-		return b, "", err
-	}
-	b.Since = prev.Name
-	for i, tc := range b.Components {
-		if j := slices.IndexFunc(pc.build.Components, func(p model.CandidateComponent) bool { return p.Name == tc.Name }); j >= 0 {
-			b.Components[i].BaseSHA = pc.build.Components[j].UpstreamSHA
-		}
-	}
-	return b, "", nil
-}
-
-// previousVersion returns the version of release's X.Y with the highest lower
-// Z that is not archived, or nil.
-func previousVersion(release *model.ReleaseVersion, versions []model.ReleaseVersion) *model.ReleaseVersion {
-	xy, z, ok := splitZ(release.Name)
-	if !ok {
-		return nil
-	}
-	var prev *model.ReleaseVersion
-	best := -1
-	for i, v := range versions {
-		if vxy, vz, ok := splitZ(v.Name); ok && !v.Archived && vxy == xy && vz < z && vz > best {
-			prev, best = &versions[i], vz
-		}
-	}
-	return prev
-}
-
-// splitZ returns the X.Y and the Z of a quay-vX.Y.Z version.
-func splitZ(name string) (xy string, z int, ok bool) {
-	m := quayVersion.FindStringSubmatch(name)
-	if m == nil {
-		return "", 0, false
-	}
-	i := strings.LastIndexByte(m[1], '.')
-	z, err := strconv.Atoi(m[1][i+1:])
-	return m[1][:i], z, err == nil
+	writeJSON(w, http.StatusOK, issues)
 }
 
 // streamBuilds is an application's stream builds, newest first, and the NVRs

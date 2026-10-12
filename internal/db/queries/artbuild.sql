@@ -1,12 +1,10 @@
 -- name: UpsertArtBuild :exec
-INSERT INTO art_builds (digest, state, nvr, record_id, upstream_repo, upstream_sha, checked_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)
+INSERT INTO art_builds (digest, state, nvr, record_id, checked_at)
+VALUES (?, ?, ?, ?, ?)
 ON CONFLICT(digest) DO UPDATE SET
     state = excluded.state,
     nvr = excluded.nvr,
     record_id = excluded.record_id,
-    upstream_repo = excluded.upstream_repo,
-    upstream_sha = excluded.upstream_sha,
     checked_at = excluded.checked_at;
 
 -- name: ListArtBuildCandidates :many
@@ -29,7 +27,7 @@ ORDER BY last_seen DESC
 LIMIT ?;
 
 -- name: ListResolvedArtBuilds :many
-SELECT digest, state, nvr, record_id, upstream_repo, upstream_sha, checked_at
+SELECT digest, state, nvr, record_id, checked_at
 FROM art_builds
 WHERE state = 'resolved' AND digest IN (sqlc.slice('digests'));
 
