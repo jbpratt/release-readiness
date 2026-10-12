@@ -69,16 +69,6 @@ CREATE TABLE IF NOT EXISTS art_builds (
     checked_at    TEXT NOT NULL
 );
 
--- What the ART build record of a resolved FBC image (art_builds) says of it:
--- bundle_nvrs, a JSON array of the operator bundles it holds, is empty unless
--- the build succeeded; end_time is as ART gives it.
-CREATE TABLE IF NOT EXISTS art_fbc_records (
-    digest      TEXT PRIMARY KEY,
-    pullspec    TEXT NOT NULL,
-    bundle_nvrs TEXT NOT NULL,
-    end_time    TEXT NOT NULL
-);
-
 -- Successful ART build history records of FBC, bundle and image builds;
 -- pending and failed records are never stored. bundle_nvrs_json is set for
 -- an FBC image; operator_nvr, operand_nvrs_json and bundle_csv_name for a

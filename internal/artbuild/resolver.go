@@ -22,9 +22,6 @@ const (
 	// searchWindow is how long before its first Snapshot an image may have been built.
 	searchWindow = 120 * 24 * time.Hour
 	perPass      = 50
-	// fbcPerPass bounds the FBC records a pass reads for FBC images resolved
-	// before their records were kept.
-	fbcPerPass = 500
 )
 
 var quayStream = regexp.MustCompile(`quay-(\d+)-(\d+)`)
@@ -49,21 +46,6 @@ type Build struct {
 	CheckedAt                    time.Time
 }
 
-// FBCRecord is what the ART build record of an FBC image says of it:
-// BundleNVRs, the operator bundles it holds, is empty unless the build
-// succeeded, and EndTime is as ART gives it.
-type FBCRecord struct {
-	Digest, Pullspec, EndTime string
-	BundleNVRs                []string
-}
-
-// FBCImage is a resolved FBC image, an operator's catalog for an OCP version,
-// with its FBC record, nil until read.
-type FBCImage struct {
-	NVR, Operator, OCP string
-	Record             *FBCRecord
-}
-
 // Candidate is a stored component image to look up. Applications holds every
 // application with a stored Snapshot holding it; FirstSeen is the oldest one.
 type Candidate struct {
@@ -76,10 +58,6 @@ type Candidate struct {
 type Store interface {
 	ListArtBuildCandidates(ctx context.Context, retryBefore time.Time, limit int) ([]Candidate, error)
 	UpsertArtBuild(ctx context.Context, b Build) error
-	// ListUnreadFBCImages returns up to limit resolved FBC images without an
-	// FBC record.
-	ListUnreadFBCImages(ctx context.Context, limit int) ([]Build, error)
-	UpsertFBCRecord(ctx context.Context, r FBCRecord) error
 }
 
 // Resolver looks up stored component images in ART build history, one
@@ -113,9 +91,8 @@ func (r *Resolver) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
-// ResolveOnce looks up up to perPass candidates, then reads the FBC records of
-// up to fbcPerPass FBC images resolved without one. A lookup or read that
-// fails is left for the next pass; only a clean miss is cached as unresolved.
+// ResolveOnce looks up up to perPass candidates. A lookup that fails is left
+// for the next pass; only a clean miss is cached as unresolved.
 func (r *Resolver) ResolveOnce(ctx context.Context) {
 	var pass syncstatus.Pass
 	defer func() { r.Status.Report(pass.Err()) }()
@@ -130,7 +107,7 @@ func (r *Resolver) ResolveOnce(ctx context.Context) {
 	defer pace.Stop()
 	resolved := 0
 	for _, c := range cands {
-		b, fbc, err := r.resolve(ctx, c, now, pace.C)
+		b, err := r.resolve(ctx, c, now, pace.C)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
@@ -144,12 +121,6 @@ func (r *Resolver) ResolveOnce(ctx context.Context) {
 			pass.Add(fmt.Errorf("store %s: %w", c.Image, err))
 			continue
 		}
-		if fbc != nil {
-			if err := r.store.UpsertFBCRecord(ctx, *fbc); err != nil {
-				r.logger.Error("store FBC record", "image", c.Image, "error", err)
-				pass.Add(fmt.Errorf("store FBC record %s: %w", c.Image, err))
-			}
-		}
 		if b.State == StateResolved {
 			resolved++
 		}
@@ -157,47 +128,9 @@ func (r *Resolver) ResolveOnce(ctx context.Context) {
 	if len(cands) > 0 {
 		r.logger.Info("resolved images", "looked_up", len(cands), "resolved", resolved)
 	}
-	r.readFBCRecords(ctx, &pass, pace.C)
 }
 
-// readFBCRecords reads the ART build records of up to fbcPerPass resolved FBC
-// images without an FBC record, one request each.
-func (r *Resolver) readFBCRecords(ctx context.Context, pass *syncstatus.Pass, pace <-chan time.Time) {
-	unread, err := r.store.ListUnreadFBCImages(ctx, fbcPerPass)
-	if err != nil {
-		r.logger.Error("list unread FBC images", "error", err)
-		pass.Add(fmt.Errorf("list unread FBC images: %w", err))
-		return
-	}
-	read := 0
-	for _, b := range unread {
-		if err := wait(ctx, pace); err != nil {
-			return
-		}
-		rec, err := r.client.record(ctx, b.NVR, b.RecordID)
-		if err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			r.logger.Warn("read FBC record", "nvr", b.NVR, "error", err)
-			pass.Add(fmt.Errorf("read FBC record %s: %w", b.NVR, err))
-			continue
-		}
-		if err := r.store.UpsertFBCRecord(ctx, fbcRecord(b.Digest, rec)); err != nil {
-			r.logger.Error("store FBC record", "nvr", b.NVR, "error", err)
-			pass.Add(fmt.Errorf("store FBC record %s: %w", b.NVR, err))
-			continue
-		}
-		read++
-	}
-	if len(unread) > 0 {
-		r.logger.Info("read FBC records", "unread", len(unread), "read", read)
-	}
-}
-
-// resolve looks c up, and returns its build and, for an FBC image, its FBC
-// record from the same /build read.
-func (r *Resolver) resolve(ctx context.Context, c Candidate, now time.Time, pace <-chan time.Time) (Build, *FBCRecord, error) {
+func (r *Resolver) resolve(ctx context.Context, c Candidate, now time.Time, pace <-chan time.Time) (Build, error) {
 	b := Build{Digest: c.Image[strings.Index(c.Image, "@")+1:], State: StateUnresolved, CheckedAt: now}
 	q := url.Values{
 		"image_sha_tag": {strings.TrimPrefix(b.Digest, "sha256:")},
@@ -225,11 +158,11 @@ func (r *Resolver) resolve(ctx context.Context, c Candidate, now time.Time, pace
 			q.Set("group", g)
 		}
 		if err := wait(ctx, pace); err != nil {
-			return b, nil, err
+			return b, err
 		}
 		builds, _, err := r.client.search(ctx, q)
 		if err != nil {
-			return b, nil, err
+			return b, err
 		}
 		// image_sha_tag also matches tags and NVRs, and pending rows have no
 		// image, so only an exact pullspec is the build.
@@ -239,35 +172,21 @@ func (r *Resolver) resolve(ctx context.Context, c Candidate, now time.Time, pace
 		}
 	}
 	if hit == nil {
-		return b, nil, nil
+		return b, nil
 	}
 	if err := wait(ctx, pace); err != nil {
-		return b, nil, err
+		return b, err
 	}
 	rec, err := r.client.record(ctx, hit.NVR, hit.RecordID)
 	if err != nil {
-		return b, nil, err
+		return b, err
 	}
 	if rec.ImagePullspec != c.Image {
-		return b, nil, nil
+		return b, nil
 	}
 	b.State = StateResolved
 	b.NVR, b.RecordID = rec.NVR, rec.RecordID
-	if _, _, _, ok := ParseFBC(rec.NVR); !ok {
-		return b, nil, nil
-	}
-	fbc := fbcRecord(b.Digest, rec)
-	return b, &fbc, nil
-}
-
-// fbcRecord is the FBC record of the image of digest by its ART build record.
-func fbcRecord(digest string, rec *record) FBCRecord {
-	bundles := []string{}
-	// A failed build's catalog holds nothing to release.
-	if rec.Outcome == "success" {
-		bundles = append(bundles, rec.BundleNVRs...)
-	}
-	return FBCRecord{Digest: digest, Pullspec: rec.ImagePullspec, EndTime: rec.EndTime, BundleNVRs: bundles}
+	return b, nil
 }
 
 func wait(ctx context.Context, pace <-chan time.Time) error {

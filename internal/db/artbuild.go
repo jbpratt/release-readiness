@@ -2,9 +2,7 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"strings"
 	"time"
 
@@ -59,76 +57,6 @@ func (d *DB) ResolvedArtBuilds(ctx context.Context, digests []string) (map[strin
 		}
 	}
 	return builds, nil
-}
-
-// UpsertFBCRecord stores what the ART build record of an FBC image says of it.
-func (d *DB) UpsertFBCRecord(ctx context.Context, r artbuild.FBCRecord) error {
-	// A string slice cannot fail to marshal.
-	bundles, _ := json.Marshal(r.BundleNVRs)
-	return d.queries().UpsertArtFBCRecord(ctx, dbsqlc.UpsertArtFBCRecordParams{
-		Digest:     r.Digest,
-		Pullspec:   r.Pullspec,
-		BundleNvrs: string(bundles),
-		EndTime:    r.EndTime,
-	})
-}
-
-// FBCBundleNVRs returns the bundle NVRs the FBC record of the image of digest
-// lists, nil without a record.
-func (d *DB) FBCBundleNVRs(ctx context.Context, digest string) ([]string, error) {
-	data, err := d.queries().GetArtFBCBundleNVRs(ctx, digest)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var nvrs []string
-	if err := json.Unmarshal([]byte(data), &nvrs); err != nil {
-		return nil, err
-	}
-	return nvrs, nil
-}
-
-// ListUnreadFBCImages returns up to limit resolved FBC images without an FBC
-// record.
-func (d *DB) ListUnreadFBCImages(ctx context.Context, limit int) ([]artbuild.Build, error) {
-	rows, err := d.queries().ListUnreadArtFBCImages(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var builds []artbuild.Build
-	for _, r := range rows {
-		if _, _, _, ok := artbuild.ParseFBC(r.Nvr); ok && len(builds) < limit {
-			builds = append(builds, artbuild.Build{Digest: r.Digest, State: artbuild.StateResolved, NVR: r.Nvr, RecordID: r.RecordID})
-		}
-	}
-	return builds, nil
-}
-
-// FBCImages returns the resolved FBC images of X.Y.Z version, each with its
-// FBC record, nil until read.
-func (d *DB) FBCImages(ctx context.Context, version string) ([]artbuild.FBCImage, error) {
-	rows, err := d.queries().ListArtFBCImages(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var images []artbuild.FBCImage
-	for _, r := range rows {
-		operator, v, ocp, ok := artbuild.ParseFBC(r.Nvr)
-		if !ok || v != version {
-			continue
-		}
-		img := artbuild.FBCImage{NVR: r.Nvr, Operator: operator, OCP: ocp}
-		if r.Pullspec.Valid {
-			img.Record = &artbuild.FBCRecord{Digest: r.Digest, Pullspec: r.Pullspec.String, EndTime: r.EndTime.String}
-			if err := json.Unmarshal([]byte(r.BundleNvrs.String), &img.Record.BundleNVRs); err != nil {
-				return nil, err
-			}
-		}
-		images = append(images, img)
-	}
-	return images, nil
 }
 
 func (d *DB) ListSnapshotApplications(ctx context.Context) ([]string, error) {

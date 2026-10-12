@@ -40,16 +40,14 @@ import { type ReactNode, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
 import type {
-	BuildLabel,
-	CandidateBuild,
 	CandidateCatalog,
-	CandidateCI,
-	CandidateComponent,
 	CIJob,
-	CIState,
 	DashboardConfig,
+	FBCCandidate,
+	FBCMember,
 	JiraIssue,
-	NewestBuild,
+	KonfluxRelease,
+	OperatorFBC,
 	ReleaseCandidate,
 	ReleaseVersion,
 	UnshippedBuild,
@@ -67,19 +65,24 @@ import {
 	ticketsJql,
 } from "../utils/links";
 import {
-	ciStep,
+	candidateLine,
 	componentLabel,
 	FBC_PLACEHOLDER,
-	fbcCopy,
+	fbcCIStep,
 	fbcLine,
 	fbcParams,
+	fbcPullspecs,
+	fbcRIText,
+	fbcStageStep,
+	imageCheckLine,
 	jobLabels,
-	newestCIStep,
 	nvrLabel,
+	pullspecsBlocked,
 	releaseLine,
 	runsStatus,
 	type StatusLine,
-	stepperBuild,
+	slotRows,
+	streamAhead,
 	tknCommand,
 } from "../utils/releaseDetail";
 
@@ -186,10 +189,6 @@ export default function ReleaseDetail() {
 				}
 				dueDate={release.due_date}
 			/>
-
-			{candidate.data?.ci && candidate.data.ci.builds.length > 0 && (
-				<CICard ci={candidate.data.ci} version={xyz} konflux={konflux} />
-			)}
 
 			<TicketsCard
 				issues={tickets}
@@ -327,14 +326,9 @@ function LinkedCardTitle({
 	);
 }
 
-/** Tooltip content, one line each, without the empty ones. */
-const lines = (...ls: (string | undefined)[]) =>
-	ls.filter(Boolean).map((l) => <div key={l}>{l}</div>);
-
 /**
- * The version's release candidate, its STAGE build, or why it has none and
- * the build to pick, with the build's images; a shipped version's is labeled,
- * with nothing to pick or release.
+ * The version's release candidate, its operator FBCs, or why it has none; a
+ * shipped version's is labeled, with nothing to release.
  */
 function BuildsCard({
 	data,
@@ -355,8 +349,7 @@ function BuildsCard({
 	bugs?: string[];
 	dueDate?: string;
 }) {
-	const c = data?.candidate;
-	const anchor = data && stepperBuild(data.newest, data.ci);
+	const fbc = data?.fbc_candidate;
 	const fbcLines = (step: "build" | "stage") => (
 		<FBCLine
 			catalogs={data?.catalogs ?? []}
@@ -365,10 +358,11 @@ function BuildsCard({
 			konflux={konflux}
 		/>
 	);
+	const reason = data?.reason || "no FBC built or staged yet";
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<LinkedCardTitle href={konflux()} link="Konflux">
-				{c ? `${version} release candidate` : "Release candidate"}
+				{fbc ? `${version} release candidate` : "Release candidate"}
 				{data?.shipped && (
 					<Label color="green" isCompact style={{ marginLeft: "0.5rem" }}>
 						Shipped
@@ -380,62 +374,37 @@ function BuildsCard({
 					error.message
 				) : !data ? (
 					<Spinner size="md" />
-				) : c && data.ci ? (
+				) : fbc ? (
 					<Candidate
-						candidate={c}
-						ci={data.ci}
-						newest={data.newest}
+						fbc={fbc}
+						stream={data.fbc_stream}
+						prod={data.candidate?.prod ?? null}
+						shipped={data.shipped}
 						unshipped={data.unshipped_builds ?? []}
+						version={version}
 						app={app}
 						konflux={konflux}
 						fbcLines={fbcLines}
-						fbc={
+						release={
 							!data.shipped && (
 								<ReleaseFromFBC
 									params={fbcParams(
 										app,
 										version,
-										fbcCopy(data.ci),
+										fbcPullspecs(fbc),
 										bugs ?? [],
 										dueDate,
 									)}
+									blocked={pullspecsBlocked(fbc)}
 									bugsUnknown={!bugs}
 								/>
 							)
 						}
 					/>
 				) : data.shipped ? (
-					<NewestStepper
-						newest={anchor}
-						ci={data.ci}
-						konflux={konflux}
-						fbcLines={fbcLines}
-						shipped
-					/>
+					"Shipped; no FBC data."
 				) : (
-					<>
-						{`${data.reason.charAt(0).toUpperCase()}${data.reason.slice(1)}.`}
-						{anchor && (
-							<NewestStepper
-								newest={anchor}
-								ci={data.ci}
-								konflux={konflux}
-								fbcLines={fbcLines}
-							/>
-						)}
-						{data.ci?.refresh === "pick" && data.ci.passed && (
-							<div style={line}>
-								<Status status="warning">
-									Pick the candidate: the{" "}
-									<BuildLink build={data.ci.passed} konflux={konflux} /> build
-									passed CI. <PassedCopy ci={data.ci} passed={data.ci.passed} />
-								</Status>
-							</div>
-						)}
-						{anchor?.components && (
-							<ComponentTable components={anchor.components} app={app} />
-						)}
-					</>
+					`${reason.charAt(0).toUpperCase()}${reason.slice(1)}.`
 				)}
 			</CardBody>
 		</Card>
@@ -443,113 +412,103 @@ function BuildsCard({
 }
 
 /**
- * The candidate: where it is, from its build through CI and stage to prod,
- * and its images, with the FBC lines of the Build and Stage steps. The CI
- * step's popover has a newer build to re-run release-from-fbc with or wait
- * on, and the newest build; unshipped, the Stage step's has
- * release-from-fbc's params; the Prod step's, its Release.
+ * The FBC candidate: its state and errors; where it is, from the stream's
+ * build through CI and stage to prod, with the FBC lines of the Build and
+ * Stage steps; and each operator's slots. Unshipped, the Stage step's popover
+ * has release-from-fbc's params; the Prod step's, its Release.
  */
 function Candidate({
-	candidate,
-	ci,
-	newest,
+	fbc,
+	stream,
+	prod: prodRelease,
+	shipped,
 	unshipped,
+	version,
 	app,
 	konflux,
 	fbcLines,
-	fbc,
+	release,
 }: {
-	candidate: CandidateBuild;
-	ci: CandidateCI;
-	newest: NewestBuild | null;
+	fbc: FBCCandidate;
+	stream: FBCCandidate | null;
+	prod: KonfluxRelease | null;
+	shipped: boolean;
 	unshipped: UnshippedBuild[];
+	version: string;
 	app: string;
 	konflux: KonfluxLink;
 	fbcLines: (step: "build" | "stage") => ReactNode;
-	fbc?: ReactNode;
+	release?: ReactNode;
 }) {
-	const prod = candidate.prod && {
-		name: candidate.prod.name,
-		...releaseLine(candidate.prod),
+	const prod = prodRelease && {
+		name: prodRelease.name,
+		...releaseLine(prodRelease),
 	};
-	const tested = ciStep(ci);
-	const next =
-		ci.refresh === "rerun" && ci.passed
-			? " · re-run available"
-			: ci.refresh === "waiting"
-				? " · newer build waiting"
-				: "";
-	const latest = ci.latest_in_ci && (
-		<BuildLink build={ci.latest_in_ci} konflux={konflux} />
+	const head = candidateLine(fbc);
+	const tested = fbcCIStep(fbc);
+	const staged = fbcStageStep(fbc);
+	const built = (stream ?? fbc).operators.reduce(
+		(n, o) => [
+			n[0] + o.coverage.slots - o.missing_ocp.length,
+			n[1] + o.coverage.slots,
+		],
+		[0, 0],
 	);
+	const jobs = [
+		...new Set(
+			fbc.operators.flatMap((o) =>
+				[...o.members, ...o.conflicts].flatMap((m) =>
+					[...(m.ci?.exact ?? []), ...(m.ci?.equivalent ?? [])].map(
+						(j) => j.job_name,
+					),
+				),
+			),
+		),
+	];
+	const labels = jobLabels(jobs);
+	const label = (job: string) => labels[jobs.indexOf(job)];
 	return (
 		<>
+			<Status status={head.status}>{head.text}</Status>
+			{fbc.errors.map((e) => (
+				<div key={e} style={line}>
+					<Status status="failed">{e}</Status>
+				</div>
+			))}
 			<ProgressStepper
 				isCenterAligned
 				aria-label="Where the release candidate is"
+				style={{ marginTop: "1rem" }}
 			>
 				<Step
 					title="Build"
 					variant="success"
 					description={
 						<>
-							<BuildLink build={candidate} konflux={konflux} />
+							{`${built[0]} of ${built[1]} slots built`}
 							{fbcLines("build")}
 						</>
 					}
 				/>
-				<Step
-					title="CI"
-					variant={tested.variant}
-					description={tested.text + next}
-					popoverRender={(ref) => (
-						<Popover
-							aria-label="CI detail"
-							headerContent="CI"
-							triggerRef={ref}
-							minWidth="32rem"
-							bodyContent={
-								<>
-									{ci.refresh === "rerun" && ci.passed ? (
-										<Status status="warning">
-											Re-run release-from-fbc with the{" "}
-											<BuildLink build={ci.passed} konflux={konflux} /> build,
-											which is newer and passed CI (optional).
-											{candidate.prod &&
-												" ART may refuse it after a prod attempt."}{" "}
-											<PassedCopy ci={ci} passed={ci.passed} />
-										</Status>
-									) : ci.refresh === "waiting" ? (
-										<Status status="running">
-											Newer build {latest} is waiting on CI.
-										</Status>
-									) : (
-										<Status status="done">Candidate is current.</Status>
-									)}
-									{newest && <NewestLine newest={newest} konflux={konflux} />}
-								</>
-							}
-						/>
-					)}
-				/>
+				<Step title="CI" variant={tested.variant} description={tested.text} />
 				<Step
 					title="Stage"
-					variant="success"
-					isCurrent={!prod}
+					variant={staged.variant}
+					isCurrent={!prod && !shipped}
 					description={
 						<>
-							{`Pinned ${new Date(candidate.stage.staged_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+							{staged.text}
 							{fbcLines("stage")}
 						</>
 					}
 					popoverRender={
-						fbc
+						release
 							? (ref) => (
 									<Popover
 										aria-label="Release from FBC"
 										triggerRef={ref}
 										minWidth="40rem"
-										bodyContent={fbc}
+										bodyContent={release}
 									/>
 								)
 							: undefined
@@ -557,13 +516,21 @@ function Candidate({
 				/>
 				<Step
 					title="Prod"
-					variant={prod ? releaseVariants[prod.status] : "pending"}
-					isCurrent={!!prod}
+					variant={
+						prod
+							? releaseVariants[prod.status]
+							: shipped
+								? "success"
+								: "pending"
+					}
+					isCurrent={!!prod || shipped}
 					description={
 						prod ? (
 							<ExtLink href={konflux("releases", prod.name)} title={prod.name}>
 								{prod.status === "failed" ? "Release failed" : prod.text}
 							</ExtLink>
+						) : shipped ? (
+							"Shipped"
 						) : (
 							"Not started"
 						)
@@ -589,9 +556,195 @@ function Candidate({
 					}
 				/>
 			</ProgressStepper>
-			<ComponentTable components={candidate.components} app={app} />
+			{fbc.operators.map((o) => (
+				<OperatorTable
+					key={o.operator}
+					operator={o}
+					ahead={streamAhead(fbc, stream, o.operator)}
+					label={label}
+					version={version}
+					app={app}
+					konflux={konflux}
+				/>
+			))}
+			{fbc.unknown.length > 0 && (
+				<div style={line}>
+					<Status status="warning">
+						{`${fbc.unknown.length} staged catalog${fbc.unknown.length === 1 ? "" : "s"} not identified: `}
+						{fbc.unknown.map((m, i) => (
+							<span key={m.digest}>
+								{i > 0 && ", "}
+								<ExtLink
+									href={konflux("snapshots", m.snapshot, `fbc-${app}`)}
+									title={m.pullspec}
+								>
+									{shortDigest(m.pullspec)}
+								</ExtLink>
+							</span>
+						))}
+					</Status>
+				</div>
+			)}
 			<UnshippedTable builds={unshipped} app={app} konflux={konflux} />
 		</>
+	);
+}
+
+/** An FBC NVR without its operator: quay-operator-fbc-3.17.6-1.ocp4.14 is 3.17.6-1.ocp4.14. */
+const fbcLabel = (nvr: string) => nvr.replace(/^.*-fbc-/, "");
+
+const slotLabels: Record<
+	"other" | "unresolved" | "missing",
+	{ color: LabelProps["color"]; text: string }
+> = {
+	other: { color: "orange", text: "other bundle" },
+	unresolved: { color: "grey", text: "head unresolved" },
+	missing: { color: "red", text: "missing" },
+};
+
+/**
+ * An operator's head bundle, coverage, installability and image check, then a
+ * row per OCP version slot: its FBC, stage Release, and CI, runs on its own
+ * digest apart from runs on another FBC of the same bundle.
+ */
+function OperatorTable({
+	operator: o,
+	ahead,
+	label,
+	version,
+	app,
+	konflux,
+}: {
+	operator: OperatorFBC;
+	/** The stream's newer head bundle, when the stage candidate is behind it. */
+	ahead: string | null;
+	label: (job: string) => string;
+	version: string;
+	app: string;
+	konflux: KonfluxLink;
+}) {
+	const fbcApp = `fbc-${app}`;
+	const ri = o.fbc_ri_stage;
+	const pills = (jobs: CIJob[] | undefined) =>
+		jobs && jobs.length > 0 ? (
+			<JobPills jobs={jobs} label={label} version={version} />
+		) : (
+			<span style={muted}>No runs</span>
+		);
+	const stage = (m: FBCMember | null) => {
+		if (!m?.snapshot) return <span style={muted}>Not staged</span>;
+		if (!m.release) return <span style={muted}>No Release yet</span>;
+		return (
+			<ExtLink
+				href={konflux("releases", m.release.name, fbcApp)}
+				title={m.release.name}
+			>
+				{releaseLine(m.release).text}
+			</ExtLink>
+		);
+	};
+	return (
+		<div style={{ marginTop: "1rem" }}>
+			<Flex
+				gap={{ default: "gapSm" }}
+				alignItems={{ default: "alignItemsCenter" }}
+			>
+				<Title headingLevel="h4" size="md">
+					{o.operator}
+				</Title>
+				<Label isCompact>
+					{`${o.coverage.members}/${o.coverage.slots} OCP`}
+				</Label>
+				<Label
+					isCompact
+					status={ri.state === "in" ? "success" : undefined}
+					color={ri.state === "failed" ? "red" : undefined}
+					href={
+						ri.release
+							? (konflux("releases", ri.release.name) ?? undefined)
+							: undefined
+					}
+				>
+					{fbcRIText[ri.state]}
+				</Label>
+			</Flex>
+			<div style={muted}>
+				{o.head_bundle_nvr ? (
+					<>
+						Head bundle{" "}
+						<span title={o.head_bundle_nvr}>{nvrLabel(o.head_bundle_nvr)}</span>
+						{o.channel && ` · ${o.channel}`}
+						{o.head_csv && ` → ${o.head_csv}`}
+					</>
+				) : (
+					"Head bundle not resolved"
+				)}
+			</div>
+			{ahead && (
+				<div style={muted}>
+					Stream heads newer bundle <span title={ahead}>{nvrLabel(ahead)}</span>
+				</div>
+			)}
+			<div style={muted}>Check: {imageCheckLine(o)}</div>
+			<Table variant="compact" aria-label={`${o.operator} FBCs by OCP version`}>
+				<Thead>
+					<Tr>
+						<Th modifier="fitContent">OCP</Th>
+						<Th>FBC</Th>
+						<Th>Stage</Th>
+						<Th>CI</Th>
+						<Th>
+							<Tooltip content="Runs that installed another FBC of this OCP version heading the same bundle; its catalog can differ, so they do not count as tested.">
+								<span>Same bundle CI</span>
+							</Tooltip>
+						</Th>
+					</Tr>
+				</Thead>
+				<Tbody>
+					{slotRows(o).map((r) => (
+						<Tr key={`${r.ocp} ${r.fbc?.digest ?? ""}`}>
+							<Td style={{ whiteSpace: "nowrap" }}>{r.ocp}</Td>
+							<Td>
+								{r.fbc && (
+									<>
+										<ExtLink href={r.fbc.build_url || null} title={r.fbc.nvr}>
+											{r.fbc.nvr
+												? fbcLabel(r.fbc.nvr)
+												: shortDigest(r.fbc.pullspec)}
+										</ExtLink>{" "}
+										<ClipboardCopy
+											variant="inline-compact"
+											isCode
+											onCopy={(e) =>
+												clipboardCopyFunc(e, r.fbc?.pullspec ?? "")
+											}
+										>
+											{shortDigest(r.fbc.pullspec)}
+										</ClipboardCopy>
+									</>
+								)}
+								{r.kind !== "member" && (
+									<Label
+										isCompact
+										color={slotLabels[r.kind].color}
+										style={{ marginLeft: "0.5rem" }}
+									>
+										<span title={r.fbc?.head_bundle_nvr || undefined}>
+											{slotLabels[r.kind].text}
+										</span>
+									</Label>
+								)}
+							</Td>
+							<Td>{r.fbc ? stage(r.fbc) : null}</Td>
+							<Td>{r.fbc && pills(r.fbc.ci?.exact)}</Td>
+							<Td style={{ opacity: 0.7 }}>
+								{r.fbc && pills(r.fbc.ci?.equivalent)}
+							</Td>
+						</Tr>
+					))}
+				</Tbody>
+			</Table>
+		</div>
 	);
 }
 
@@ -662,9 +815,12 @@ function UnshippedTable({
  */
 function ReleaseFromFBC({
 	params,
+	blocked,
 	bugsUnknown,
 }: {
 	params: Record<string, string>;
+	/** Why there are no fbc-pullspecs to copy. */
+	blocked: string;
 	/** The tickets did not load, so jira-bugs is unknown, not empty. */
 	bugsUnknown: boolean;
 }) {
@@ -709,7 +865,7 @@ function ReleaseFromFBC({
 				{row(
 					"fbc-pullspecs",
 					pullspecs === FBC_PLACEHOLDER ? (
-						<span style={muted}>not available yet</span>
+						<span style={muted}>not available: {blocked}</span>
 					) : (
 						<ClipboardCopy variant="inline-compact" truncation>
 							{pullspecs}
@@ -737,54 +893,6 @@ function ReleaseFromFBC({
 /** An image's digest to 12 hex digits: "sha256:0123456789ab". */
 const shortDigest = (image: string) =>
 	image.slice(image.indexOf("@") + 1).slice(0, 19);
-
-/**
- * A build's images, each by its ART build, else by its short digest, copying
- * its pullspec.
- */
-function ComponentTable({
-	components,
-	app,
-}: {
-	components: CandidateComponent[];
-	app: string;
-}) {
-	return (
-		<Table variant="compact" style={{ marginTop: "1rem" }}>
-			<Thead>
-				<Tr>
-					<Th>Component</Th>
-					<Th>Build</Th>
-				</Tr>
-			</Thead>
-			<Tbody>
-				{components.map((c) => (
-					<Tr key={c.name}>
-						<Td>{componentLabel(c.name, app)}</Td>
-						<Td>
-							{c.nvr ? (
-								<ExtLink href={c.build_url || null} title={c.nvr}>
-									{nvrLabel(c.nvr)}
-								</ExtLink>
-							) : (
-								<span title={c.image}>
-									<ClipboardCopy
-										variant="inline-compact"
-										isCode
-										onCopy={(e) => clipboardCopyFunc(e, c.image)}
-									>
-										{shortDigest(c.image)}
-									</ClipboardCopy>{" "}
-									<span style={muted}>ART NVR not resolved</span>
-								</span>
-							)}
-						</Td>
-					</Tr>
-				))}
-			</Tbody>
-		</Table>
-	);
-}
 
 /**
  * A step's FBC line, opening the catalogs it counts, each with its Snapshot,
@@ -883,181 +991,7 @@ function FBCLine({
 	);
 }
 
-/**
- * Without a candidate, where the version's newest build is: built, its CI,
- * and not yet staged or released. The CI step links the Release that decides
- * whether its bundle reached CI. A shipped version without a candidate has
- * no stage data and may have no build, but is in prod.
- */
-function NewestStepper({
-	newest,
-	ci,
-	konflux,
-	fbcLines,
-	shipped,
-}: {
-	newest?: NewestBuild | null;
-	ci: CandidateCI | null;
-	konflux: KonfluxLink;
-	fbcLines: (step: "build" | "stage") => ReactNode;
-	shipped?: boolean;
-}) {
-	const tested = newest && newestCIStep(newest, ci);
-	const r = newest?.ci.release;
-	return (
-		<ProgressStepper
-			isCenterAligned
-			aria-label="Where the newest build is"
-			style={{ marginTop: "1rem" }}
-		>
-			{newest && tested ? (
-				<>
-					<Step
-						title="Build"
-						variant="success"
-						description={
-							<>
-								<BuildLink build={newest} konflux={konflux} />
-								{fbcLines("build")}
-							</>
-						}
-					/>
-					<Step
-						title="CI"
-						variant={tested.variant}
-						isCurrent={!shipped}
-						description={
-							r ? (
-								<ExtLink href={konflux("releases", r.name)} title={r.name}>
-									{tested.text}
-								</ExtLink>
-							) : (
-								tested.text
-							)
-						}
-					/>
-				</>
-			) : (
-				<>
-					<Step
-						title="Build"
-						variant="pending"
-						description={<>No data{fbcLines("build")}</>}
-					/>
-					<Step title="CI" variant="pending" description="No data" />
-				</>
-			)}
-			<Step
-				title="Stage"
-				variant="pending"
-				description={
-					<>
-						{shipped ? "No data" : "Not staged"}
-						{fbcLines("stage")}
-					</>
-				}
-			/>
-			<Step
-				title="Prod"
-				variant={shipped ? "success" : "pending"}
-				isCurrent={shipped}
-				description={shipped ? "Shipped" : "Not released"}
-			/>
-		</ProgressStepper>
-	);
-}
-
 const line = { marginTop: "0.5rem" };
-
-/**
- * What to copy to run release-from-fbc with ci's passed build: its FBC
- * pullspecs, once it has one for every operator and OCP version, else its
- * Snapshot; then the pairs it has no FBC of, each linked to ART's search.
- */
-function PassedCopy({ ci, passed }: { ci: CandidateCI; passed: BuildLabel }) {
-	const copy = fbcCopy(ci);
-	const missing = ci.fbc?.missing ?? [];
-	return (
-		<>
-			{copy ? (
-				<>
-					{`FBC pullspecs (${ci.fbc?.pullspecs.length}):`}{" "}
-					<ClipboardCopy variant="inline-compact" truncation>
-						{copy}
-					</ClipboardCopy>
-				</>
-			) : (
-				<ClipboardCopy variant="inline-compact">
-					{passed.snapshot}
-				</ClipboardCopy>
-			)}
-			{missing.length > 0 && (
-				<div style={muted}>
-					Missing FBC:{" "}
-					{missing.map((m, i) => (
-						<span key={`${m.operator} ${m.ocp}`}>
-							{i > 0 && ", "}
-							<ExtLink href={m.url || null}>
-								{`${m.operator} OCP ${m.ocp}`}
-							</ExtLink>
-						</span>
-					))}
-					.
-				</div>
-			)}
-		</>
-	);
-}
-
-/** A build's date and time, linked to its Snapshot. */
-function BuildLink({
-	build,
-	konflux,
-}: {
-	build: BuildLabel;
-	konflux: KonfluxLink;
-}) {
-	return (
-		<ExtLink href={konflux("snapshots", build.snapshot)} title={build.snapshot}>
-			{when(build.created_at)}
-		</ExtLink>
-	);
-}
-
-/** Whether a build is in CI, linked to the Release that decides it; nothing when unknown. */
-function CIStateText({ ci, konflux }: { ci: CIState; konflux: KonfluxLink }) {
-	const r = ci.release;
-	if (ci.state === "none") return "not in CI";
-	if (!r) return null;
-	return (
-		<ExtLink href={konflux("releases", r.name)} title={r.name}>
-			{ci.state === "in"
-				? "in CI"
-				: releaseLine(r).text.replace(/^Release failed/, "failed to reach CI")}
-		</ExtLink>
-	);
-}
-
-/** The version's newest build: its date and time, linked to its Snapshot, and whether it is in CI. */
-function NewestLine({
-	newest,
-	konflux,
-}: {
-	newest: NewestBuild;
-	konflux: KonfluxLink;
-}) {
-	return (
-		<div style={line}>
-			Newest build <BuildLink build={newest} konflux={konflux} />, not pinned
-			{newest.ci.state !== "unknown" && (
-				<>
-					{" · "}
-					<CIStateText ci={newest.ci} konflux={konflux} />
-				</>
-			)}
-		</div>
-	);
-}
 
 // What a step's variant means, read out after its title: only its icon shows it.
 const stepStates = {
@@ -1146,149 +1080,6 @@ const ciStates: Record<string, string> = {
 
 const runState = (state: string) =>
 	ciStates[state] ?? state.charAt(0).toUpperCase() + state.slice(1);
-
-const nowrap = { whiteSpace: "nowrap" } as const;
-
-// A build's date and time in ms; 0, so oldest, for the unknown build.
-const time = (iso: string | null) => (iso ? Date.parse(iso) : 0);
-
-/**
- * The periodic runs since the candidate's bundle was first built, or the
- * version's builds' without one, after the OCP release controller: a row per
- * build they installed, or failed to install, newest first, the unknown build
- * last.
- */
-function CICard({
-	ci,
-	version,
-	konflux,
-}: {
-	ci: CandidateCI;
-	/** The version's X.Y.Z. */
-	version: string;
-	konflux: KonfluxLink;
-}) {
-	const jobs = [
-		...new Set(ci.builds.flatMap((b) => b.jobs.map((j) => j.job_name))),
-	];
-	const labels = jobLabels(jobs);
-	const label = (job: string) => labels[jobs.indexOf(job)];
-	const candidate = ci.builds.find((b) => b.kind === "candidate");
-	const notPinned = candidate?.created_at
-		? `Not pinned: the ${version} release candidate is the ${when(candidate.created_at)} build.`
-		: undefined;
-	const builds = [...ci.builds].sort(
-		(a, b) => time(b.created_at) - time(a.created_at),
-	);
-	return (
-		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<CardTitle>CI</CardTitle>
-			<CardBody>
-				<Table variant="compact" aria-label="CI runs by build">
-					<Thead>
-						<Tr>
-							<Th modifier="fitContent">Build</Th>
-							<Th modifier="fitContent">State</Th>
-							<Th>Jobs (failures first)</Th>
-						</Tr>
-					</Thead>
-					<Tbody>
-						{builds.map((b) => (
-							<Tr key={`${b.kind} ${b.snapshot}`}>
-								<Td style={nowrap}>
-									{b.created_at ? (
-										<BuildLink
-											build={{ snapshot: b.snapshot, created_at: b.created_at }}
-											konflux={konflux}
-										/>
-									) : (
-										<span style={muted}>Unknown build</span>
-									)}
-								</Td>
-								<Td style={nowrap}>
-									{b.kind === "candidate" ? (
-										<Pill color="blue" tip={`Pinned to ship as ${version}.`}>
-											release candidate
-										</Pill>
-									) : (
-										b.ci && (
-											<CIPill
-												ci={b.ci}
-												notPinned={notPinned}
-												konflux={konflux}
-											/>
-										)
-									)}
-								</Td>
-								<Td>
-									{b.jobs.length > 0 ? (
-										<JobPills jobs={b.jobs} label={label} version={version} />
-									) : (
-										<span style={muted}>No runs</span>
-									)}
-								</Td>
-							</Tr>
-						))}
-					</Tbody>
-				</Table>
-			</CardBody>
-		</Card>
-	);
-}
-
-/**
- * A build's CI state as a pill, its meaning and notPinned on hover; in and
- * failed open the stage Release that decides it. Nothing when unknown.
- */
-function CIPill({
-	ci,
-	notPinned,
-	konflux,
-}: {
-	ci: CIState;
-	/** Which build is pinned instead, when one is. */
-	notPinned?: string;
-	konflux: KonfluxLink;
-}) {
-	const r = ci.release;
-	const href = r && konflux("releases", r.name);
-	switch (ci.state) {
-		case "in":
-			return (
-				<Pill
-					color="teal"
-					href={href}
-					tip={lines("Reached the catalog CI installs from.", notPinned)}
-				>
-					in CI
-				</Pill>
-			);
-		case "failed":
-			return (
-				<Pill
-					color="red"
-					href={href}
-					tip={lines(r ? releaseLine(r).text : undefined, notPinned)}
-				>
-					failed to reach CI
-				</Pill>
-			);
-		case "none":
-			return (
-				<Pill
-					color="grey"
-					tip={lines(
-						"No stage Release put it in the catalog CI installs from.",
-						notPinned,
-					)}
-				>
-					not in CI
-				</Pill>
-			);
-		default:
-			return null;
-	}
-}
 
 // Job statuses, failures first.
 const jobRank = { danger: 0, warning: 1, success: 2, none: 3 } as const;

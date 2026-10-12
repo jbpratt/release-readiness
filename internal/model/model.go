@@ -84,25 +84,18 @@ type StageRelease struct {
 	Images []string
 }
 
-// ReleaseCandidate is what decides whether a version can ship: its release
-// candidate, the selected STAGE build, or null with Reason set when there is
-// none, with the periodic CI runs since its operator bundle was built, or
-// without a candidate since its builds' were, when it has builds, and its
-// newest build when that holds, for a component the candidate holds, another
-// image than the candidate does, or when there is no candidate, and is not a
-// build CI names to pick, re-run with or, beside the candidate, in CI. A
-// shipped version keeps its candidate and CI, with no Reason, newest build, or
-// build in CI to pick, re-run with or wait on.
+// ReleaseCandidate is what decides whether a version can ship: its operator
+// FBCs up for release, and its STAGE build, the image Snapshot ART selected,
+// or null with Reason set when there is none. A shipped version has no
+// Reason.
 type ReleaseCandidate struct {
 	Shipped   bool            `json:"shipped"`
 	Candidate *CandidateBuild `json:"candidate"`
 	Reason    string          `json:"reason"`
-	Newest    *NewestBuild    `json:"newest"`
-	CI        *CandidateCI    `json:"ci"`
 	// Catalogs is the version's FBC catalogs, staged ones first.
 	Catalogs []CandidateCatalog `json:"catalogs"`
-	// UnshippedBuilds is, with a candidate, the newest image of the version's
-	// builds of each component the candidate leaves out.
+	// UnshippedBuilds is, with a STAGE build, the newest image of the
+	// version's builds of each component it leaves out.
 	UnshippedBuilds []UnshippedBuild `json:"unshipped_builds"`
 	// FBCCandidate is the version's operator FBCs up for release: as ART
 	// staged them for stage, else as its stream built them; FBCStream is
@@ -227,23 +220,13 @@ type CandidateCatalog struct {
 	ReleasePlan string          `json:"release_plan"`
 }
 
-// CandidateBuild is the release candidate, the version's selected STAGE
-// build, with whether it reached stage and the version's prod Release.
+// CandidateBuild is the version's STAGE build, with the version's prod
+// Release. Its Snapshot and images are only checked against: the FBCs are the
+// candidate.
 type CandidateBuild struct {
-	Snapshot   string               `json:"snapshot"`
-	CreatedAt  time.Time            `json:"created_at"`
-	Components []CandidateComponent `json:"components"`
-	Stage      StageFlag            `json:"stage"`
+	Snapshot   string               `json:"-"`
+	Components []CandidateComponent `json:"-"`
 	Prod       *KonfluxRelease      `json:"prod"`
-}
-
-// NewestBuild is a version's newest build, its images, and whether its
-// operator bundle reached the catalog CI installs from.
-type NewestBuild struct {
-	Snapshot   string               `json:"snapshot"`
-	CreatedAt  time.Time            `json:"created_at"`
-	CI         CIState              `json:"ci"`
-	Components []CandidateComponent `json:"components"`
 }
 
 // CIState tells whether an operator bundle reached the catalog CI installs
@@ -253,60 +236,6 @@ type NewestBuild struct {
 type CIState struct {
 	State   string          `json:"state"`
 	Release *KonfluxRelease `json:"release"`
-}
-
-// CandidateCI is the application's periodic runs since the candidate's
-// operator bundle was first built, or without a candidate since the first of
-// the version's builds' bundles was, by the build each installed; the newest
-// bundle of the version's builds in the CI catalog, when that is not the
-// candidate's; Passed, the newest of them, newer than the candidate, that a run
-// passed with, and FBC, its FBCs, null until ART's record of each of the
-// version's FBC images is read; and Refresh, what to do: with a candidate
-// "rerun" release-from-fbc with Passed, "waiting" while a newer build in CI
-// has not passed, or "current"; without one "pick" Passed, or "none".
-type CandidateCI struct {
-	Since      time.Time   `json:"-"`
-	Builds     []CIBuild   `json:"builds"`
-	LatestInCI *BuildLabel `json:"latest_in_ci"`
-	Passed     *BuildLabel `json:"passed"`
-	FBC        *BuildFBC   `json:"fbc"`
-	Refresh    string      `json:"refresh"`
-}
-
-// BuildFBC is a build's FBCs for release-from-fbc: of the version's FBC images
-// of each operator and OCP version, by pullspec, the one ART built last that
-// holds a bundle of the build, and in Missing each pair without one, both by
-// operator, then OCP version.
-type BuildFBC struct {
-	Pullspecs []string     `json:"pullspecs"`
-	Missing   []MissingFBC `json:"missing"`
-}
-
-// MissingFBC is an operator and OCP version a build has no FBC of, with URL,
-// ART build history's search for the operator's FBCs, "" when ART links are
-// off.
-type MissingFBC struct {
-	Operator string `json:"operator"`
-	OCP      string `json:"ocp"`
-	URL      string `json:"url"`
-}
-
-// BuildLabel names an operator bundle by the oldest stream build holding it;
-// without a candidate, CandidateCI.Passed has that build's images.
-type BuildLabel struct {
-	Snapshot   string               `json:"snapshot"`
-	CreatedAt  time.Time            `json:"created_at"`
-	Components []CandidateComponent `json:"components,omitempty"`
-}
-
-// CIBuild is the runs, by job, that installed one build, or failed to install
-// it: Kind "candidate", "build" with its label and CIState, or "unknown".
-type CIBuild struct {
-	Kind      string     `json:"kind"`
-	Snapshot  string     `json:"snapshot"`
-	CreatedAt *time.Time `json:"created_at"`
-	CI        *CIState   `json:"ci"`
-	Jobs      []CIJob    `json:"jobs"`
 }
 
 // CIJob is a job's runs of a build, newest first.
@@ -329,10 +258,4 @@ type CandidateComponent struct {
 	Image    string `json:"image"`
 	NVR      string `json:"nvr"`
 	BuildURL string `json:"build_url"`
-}
-
-// StageFlag is the release candidate's stage: StagedAt when its stage Release
-// completed.
-type StageFlag struct {
-	StagedAt *time.Time `json:"staged_at"`
 }

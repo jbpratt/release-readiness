@@ -2,25 +2,31 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type {
 	CandidateCatalog,
-	CandidateCI,
-	CIBuild,
+	CIJob,
+	FBCCandidate,
+	FBCMember,
 	KonfluxRelease,
-	NewestBuild,
+	OperatorFBC,
 } from "../api/types.ts";
 import {
 	artGroup,
-	ciStep,
+	candidateLine,
+	compareVersions,
 	componentLabel,
-	fbcCopy,
+	fbcCIStep,
 	fbcLine,
 	fbcParams,
+	fbcPullspecs,
+	fbcStageStep,
+	imageCheckLine,
 	jobLabels,
 	jobShortName,
-	newestCIStep,
 	nvrLabel,
+	pullspecsBlocked,
 	releaseLine,
 	runsStatus,
-	stepperBuild,
+	slotRows,
+	streamAhead,
 	tknCommand,
 } from "./releaseDetail.ts";
 
@@ -169,235 +175,6 @@ test("releaseLine", () => {
 	);
 });
 
-test("ciStep: the candidate row's runs, as runsStatus counts them", () => {
-	const row = (kind: CIBuild["kind"], ...jobs: string[][]): CIBuild => ({
-		kind,
-		snapshot: "quay-stage-3-18-1-image-20261007200243",
-		created_at: "2026-10-07T20:02:43Z",
-		ci: null,
-		jobs: jobs.map((states, i) => ({
-			job_name: `job-${i}`,
-			runs: states.map((state) => ({
-				state,
-				started_at: "2026-10-08T00:56:37Z",
-				prow_url: "https://prow.example/1",
-			})),
-		})),
-	});
-	const ci = (...builds: CIBuild[]): CandidateCI => ({
-		builds,
-		latest_in_ci: null,
-		passed: null,
-		fbc: null,
-		refresh: "current",
-	});
-	const notTested: ReturnType<typeof ciStep> = {
-		variant: "warning",
-		text: "Not tested",
-	};
-	const want: [string, CandidateCI, ReturnType<typeof ciStep>][] = [
-		["no candidate row", ci(), notTested],
-		["a candidate row without jobs", ci(row("candidate")), notTested],
-		[
-			"success, success",
-			ci(row("candidate", ["success", "success"])),
-			{ variant: "success", text: "Passed" },
-		],
-		[
-			"failure, error",
-			ci(row("candidate", ["failure", "error"])),
-			{ variant: "danger", text: "Failed" },
-		],
-		[
-			"a mix across three jobs",
-			ci(
-				row(
-					"candidate",
-					["success", "success"],
-					["failure", "failure"],
-					["success", "failure"],
-				),
-			),
-			{ variant: "warning", text: "3 of 6 runs passed" },
-		],
-		[
-			"success, aborted",
-			ci(row("candidate", ["success", "aborted"])),
-			{ variant: "success", text: "Passed" },
-		],
-		[
-			"success, failure, aborted",
-			ci(row("candidate", ["success", "failure", "aborted"])),
-			{ variant: "warning", text: "1 of 2 runs passed" },
-		],
-		[
-			"a passing run only on a non-candidate row",
-			ci(row("build", ["success"]), row("candidate")),
-			notTested,
-		],
-	];
-	for (const [name, c, step] of want) {
-		assert.deepEqual(ciStep(c), step, name);
-	}
-});
-
-test("newestCIStep: the runs of the newest build's row, else its CI state", () => {
-	const newest = (
-		state: NewestBuild["ci"]["state"],
-		r?: string,
-	): NewestBuild => ({
-		snapshot: "quay-3-16-20261012-034719-000-c0",
-		created_at: "2026-10-12T03:49:33Z",
-		ci: { state, release: r ? release({ name: r }) : null },
-	});
-	const row = (
-		snapshot: string,
-		r: string | null,
-		...states: string[]
-	): CIBuild => ({
-		kind: "build",
-		snapshot,
-		created_at: "2026-10-11T03:49:33Z",
-		ci: { state: "in", release: r ? release({ name: r }) : null },
-		jobs: [
-			{
-				job_name: "job",
-				runs: states.map((state) => ({
-					state,
-					started_at: "2026-10-12T05:00:00Z",
-					prow_url: "https://prow.example/1",
-				})),
-			},
-		],
-	});
-	const ci = (...builds: CIBuild[]): CandidateCI => ({
-		builds,
-		latest_in_ci: null,
-		passed: null,
-		fbc: null,
-		refresh: "none",
-	});
-	const want: [
-		string,
-		NewestBuild,
-		CandidateCI | null,
-		ReturnType<typeof newestCIStep>,
-	][] = [
-		[
-			"unknown, no CI",
-			newest("unknown"),
-			null,
-			{ variant: "pending", text: "No CI runs" },
-		],
-		["none", newest("none"), ci(), { variant: "pending", text: "Not in CI" }],
-		[
-			"in, no runs",
-			newest("in", "r1"),
-			ci(),
-			{ variant: "info", text: "In CI" },
-		],
-		[
-			"failed",
-			newest("failed", "r1"),
-			ci(),
-			{ variant: "danger", text: "Failed to reach CI" },
-		],
-		[
-			"its row by snapshot",
-			newest("in", "r1"),
-			ci(row("quay-3-16-20261012-034719-000-c0", null, "failure")),
-			{ variant: "danger", text: "Failed" },
-		],
-		[
-			"its row by stage Release, labeled by an older snapshot",
-			newest("in", "r1"),
-			ci(row("quay-3-16-20261011-034719-000-c0", "r1", "success")),
-			{ variant: "success", text: "Passed" },
-		],
-		[
-			"another build's row",
-			newest("in", "r1"),
-			ci(row("quay-3-16-20261010-034719-000-c0", "r0", "success")),
-			{ variant: "info", text: "In CI" },
-		],
-	];
-	for (const [name, n, c, step] of want) {
-		assert.deepEqual(newestCIStep(n, c), step, name);
-	}
-});
-
-test("stepperBuild: the newest build, else the passed one with its row's CI state", () => {
-	const snap = "quay-3-16-20261011-034719-000-c0";
-	const state = { state: "in" as const, release: release({ name: "r1" }) };
-	const ci = (passed: boolean): CandidateCI => ({
-		builds: [
-			{
-				kind: "build",
-				snapshot: snap,
-				created_at: "2026-10-11T03:49:33Z",
-				ci: state,
-				jobs: [],
-			},
-		],
-		latest_in_ci: null,
-		passed: passed
-			? { snapshot: snap, created_at: "2026-10-11T03:49:33Z" }
-			: null,
-		fbc: null,
-		refresh: passed ? "pick" : "none",
-	});
-	const newest: NewestBuild = {
-		snapshot: "quay-3-16-20261012-034719-000-c0",
-		created_at: "2026-10-12T03:49:33Z",
-		ci: { state: "none", release: null },
-	};
-	assert.equal(stepperBuild(newest, ci(true)), newest);
-	assert.deepEqual(stepperBuild(null, ci(true)), {
-		snapshot: snap,
-		created_at: "2026-10-11T03:49:33Z",
-		ci: state,
-	});
-	assert.equal(stepperBuild(null, ci(false)), null);
-	assert.equal(stepperBuild(null, null), null);
-});
-
-test("fbcCopy: the pullspecs, comma-separated, unless one is missing or unread", () => {
-	const ci = (fbc: CandidateCI["fbc"]): CandidateCI => ({
-		builds: [],
-		latest_in_ci: null,
-		passed: {
-			snapshot: "quay-3-18-20261009-042614-000",
-			created_at: "2026-10-09T04:28:09Z",
-		},
-		fbc,
-		refresh: "rerun",
-	});
-	const pullspecs = [
-		"quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:52b9f23c5edd4a1097cc6e3e0fac64e5de5ff68af76af97395397b1a39f20c9e",
-		"quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc@sha256:be4568f034f763465e06852349a4ebd7153f251d04d4a1b4e27b83e059c8f792",
-	];
-	assert.equal(
-		fbcCopy(ci({ pullspecs, missing: [] })),
-		`${pullspecs[0]},${pullspecs[1]}`,
-	);
-	assert.equal(
-		fbcCopy(
-			ci({
-				pullspecs,
-				missing: [
-					{
-						operator: "quay-bridge-operator",
-						ocp: "4.12",
-						url: "https://art.example/search?group=quay-3.18&name=quay-bridge-operator-fbc&assembly=stream",
-					},
-				],
-			}),
-		),
-		null,
-	);
-	assert.equal(fbcCopy(ci(null)), null);
-});
-
 test("artGroup: the application's X.Y dotted", () => {
 	assert.equal(artGroup("quay-3-17"), "quay-3.17");
 	assert.equal(artGroup("quay-3-9"), "quay-3.9");
@@ -468,4 +245,302 @@ test("fbcLine", () => {
 		"2 FBCs staged · 1 Release failed",
 	);
 	assert.equal(fbcLine([released], "build"), "1 FBC staged");
+});
+
+const job = (...states: string[]): CIJob => ({
+	job_name:
+		"periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly",
+	runs: states.map((state, i) => ({
+		state,
+		started_at: "2026-10-12T00:00:00Z",
+		prow_url: `https://prow.example/${i}`,
+	})),
+});
+
+const bundle = (built: string) =>
+	`quay-operator-metadata-container-3.17.6.${built}.p2.g35cf767.assembly.stream.el9-1`;
+
+const fbcMember = (
+	ocp: string,
+	head: string,
+	m: Partial<FBCMember> = {},
+): FBCMember => ({
+	ocp,
+	digest: `sha256:${ocp}-${head}`,
+	pullspec: `quay.io/art-fbc@sha256:${ocp}-${head}`,
+	nvr: `quay-operator-fbc-3.17.6-20261012000000.ocp${ocp}`,
+	build_url: "",
+	head_bundle_nvr: head,
+	snapshot: "",
+	release: null,
+	ci: { exact: [], equivalent: [] },
+	...m,
+});
+
+const operatorFBC = (
+	operator: string,
+	head: string,
+	members: FBCMember[],
+	o: Partial<OperatorFBC> = {},
+): OperatorFBC => ({
+	operator,
+	head_bundle_nvr: head,
+	channel: "stable-3.17",
+	head_csv: "",
+	coverage: { members: members.length, slots: members.length },
+	members,
+	missing_ocp: [],
+	conflicts: [],
+	fbc_ri_stage: { state: "none", release: null },
+	image_check: { state: "absent", snapshot: "", bundle_nvr: "" },
+	...o,
+});
+
+const fbcCandidate = (c: Partial<FBCCandidate>): FBCCandidate => ({
+	source: "stage_snapshots",
+	state: "complete",
+	errors: [],
+	operators: [],
+	unknown: [],
+	pullspecs: [],
+	installable: false,
+	...c,
+});
+
+test("stream only, no stage (3.16): not staged, pullspecs from the stream", () => {
+	const head =
+		"quay-operator-metadata-container-3.16.7.202610121915.p2.ga4fe015.assembly.stream.el9-1";
+	const members = ["4.12", "4.14"].map((v) => fbcMember(v, head));
+	const c = fbcCandidate({
+		source: "stream",
+		operators: ["quay-operator", "container-security-operator"].map((o) =>
+			operatorFBC(o, head, members, {
+				channel: "stable-3.16",
+				head_csv: "quay-operator.v3.99.0-dev",
+			}),
+		),
+		pullspecs: [members[0].pullspec, members[1].pullspec],
+	});
+	assert.deepEqual(candidateLine(c), {
+		status: "warning",
+		text: "Not staged: the stream's newest FBCs; every operator's FBCs head one bundle.",
+	});
+	assert.deepEqual(fbcStageStep(c), { variant: "pending", text: "Not staged" });
+	assert.deepEqual(fbcCIStep(c), { variant: "warning", text: "Not tested" });
+	assert.equal(
+		fbcPullspecs(c),
+		"quay.io/art-fbc@sha256:4.12-" +
+			head +
+			",quay.io/art-fbc@sha256:4.14-" +
+			head,
+	);
+	assert.equal(streamAhead(c, c, "quay-operator"), null);
+});
+
+test("missing operator (3.17.6): CSO and QBO not in stage block the copy", () => {
+	const head = bundle("202610090936");
+	const released = release({ name: "r", released_status: "True" });
+	const qo = operatorFBC(
+		"quay-operator",
+		head,
+		["4.12", "4.13", "4.14"].map((v) =>
+			fbcMember(v, head, { snapshot: "s", release: released }),
+		),
+	);
+	const cso = operatorFBC("container-security-operator", "", [], {
+		missing_ocp: ["4.14", "4.12"],
+		coverage: { members: 0, slots: 2 },
+	});
+	const errors = [
+		"container-security-operator is not in stage",
+		"quay-bridge-operator is not in stage",
+	];
+	const c = fbcCandidate({
+		state: "incomplete",
+		errors,
+		operators: [qo, cso, operatorFBC("quay-bridge-operator", "", [])],
+	});
+	assert.deepEqual(candidateLine(c), {
+		status: "failed",
+		text: "Staged; an operator or OCP version has no FBC.",
+	});
+	assert.equal(fbcPullspecs(c), null);
+	assert.equal(pullspecsBlocked(c), errors.join("; "));
+	assert.deepEqual(fbcStageStep(c), {
+		variant: "warning",
+		text: "Released with errors",
+	});
+	assert.deepEqual(slotRows(cso), [
+		{ ocp: "4.12", kind: "missing", fbc: null },
+		{ ocp: "4.14", kind: "missing", fbc: null },
+	]);
+});
+
+test("restaged slots (3.18.1): a failed latest Release fails the Stage step", () => {
+	const head = bundle("202610090339");
+	const newer = bundle("202610121915");
+	const failed = release({ name: "f", released_reason: "Failed" });
+	const ok = release({ name: "ok", released_status: "True" });
+	const staged = operatorFBC("quay-operator", head, [
+		fbcMember("4.14", head, { snapshot: "s2", release: failed }),
+		fbcMember("4.15", head, { snapshot: "s1", release: ok }),
+	]);
+	const c = fbcCandidate({ operators: [staged] });
+	assert.deepEqual(fbcStageStep(c), {
+		variant: "danger",
+		text: "1 Release failed",
+	});
+	assert.deepEqual(
+		fbcStageStep(
+			fbcCandidate({
+				operators: [
+					operatorFBC("quay-operator", head, [
+						fbcMember("4.14", head, { snapshot: "s2" }),
+						fbcMember("4.15", head, { snapshot: "s1", release: ok }),
+					]),
+				],
+			}),
+		),
+		{ variant: "info", text: "Release in progress" },
+	);
+	assert.deepEqual(
+		fbcStageStep(
+			fbcCandidate({
+				operators: [
+					operatorFBC("quay-operator", head, [
+						fbcMember("4.14", head, { snapshot: "s2", release: ok }),
+					]),
+				],
+			}),
+		),
+		{ variant: "success", text: "Released" },
+	);
+	const stream = fbcCandidate({
+		source: "stream",
+		operators: [operatorFBC("quay-operator", newer, [])],
+	});
+	assert.equal(streamAhead(c, stream, "quay-operator"), newer);
+	assert.equal(streamAhead(c, c, "quay-operator"), null);
+});
+
+test("mixed slots (CSO 7 on ...0313, 2 on ...1613): inconsistent, the others in OCP order", () => {
+	const head = bundle("202610121613");
+	const other = bundle("202610120313");
+	const all = [
+		"4.12",
+		"4.13",
+		"4.14",
+		"4.15",
+		"4.16",
+		"4.17",
+		"4.18",
+		"4.19",
+		"4.20",
+	];
+	const cso = operatorFBC(
+		"container-security-operator",
+		head,
+		["4.19", "4.20"].map((v) => fbcMember(v, head)),
+		{
+			conflicts: all.slice(0, 7).map((v) => fbcMember(v, other)),
+			coverage: { members: 2, slots: 9 },
+		},
+	);
+	const c = fbcCandidate({
+		state: "inconsistent",
+		errors: [
+			"container-security-operator heads more than one bundle across its OCP versions",
+		],
+		operators: [cso],
+		pullspecs: ["x"],
+	});
+	assert.equal(candidateLine(c).status, "failed");
+	assert.equal(fbcPullspecs(c), null);
+	const rows = slotRows(cso);
+	assert.deepEqual(
+		rows.map((r) => `${r.ocp} ${r.kind}`),
+		all.map((v, i) => `${v} ${i < 7 ? "other" : "member"}`),
+	);
+});
+
+test("unresolved heads: unknown state, slot and image check", () => {
+	const o = operatorFBC("quay-operator", "", [], {
+		conflicts: [fbcMember("4.14", "")],
+	});
+	const c = fbcCandidate({ state: "unknown", operators: [o] });
+	assert.deepEqual(candidateLine(c), {
+		status: "warning",
+		text: "Staged; a head bundle or staged catalog is not resolved yet.",
+	});
+	assert.deepEqual(
+		slotRows(o).map((r) => r.kind),
+		["unresolved"],
+	);
+	assert.equal(imageCheckLine(o), "No image Snapshot to compare");
+});
+
+test("fbcCIStep: exact runs decide; same-bundle runs alone are not tested", () => {
+	const head = bundle("202610090936");
+	const with_ = (ci: FBCMember["ci"]) =>
+		fbcCandidate({
+			operators: [
+				operatorFBC("quay-operator", head, [fbcMember("4.14", head, { ci })]),
+			],
+		});
+	assert.deepEqual(
+		fbcCIStep(
+			with_({
+				exact: [job("success", "failure")],
+				equivalent: [job("success")],
+			}),
+		),
+		{ variant: "warning", text: "1 of 2 runs passed" },
+	);
+	assert.deepEqual(
+		fbcCIStep(with_({ exact: [], equivalent: [job("success")] })),
+		{
+			variant: "warning",
+			text: "Not tested · same bundle: Passed",
+		},
+	);
+	assert.deepEqual(
+		fbcCIStep(with_({ exact: [job("success")], equivalent: [] })),
+		{
+			variant: "success",
+			text: "Passed",
+		},
+	);
+});
+
+test("imageCheckLine: the image Snapshot's bundle against the head", () => {
+	const head = bundle("202610090936");
+	const check = (image_check: OperatorFBC["image_check"]) =>
+		imageCheckLine(operatorFBC("quay-operator", head, [], { image_check }));
+	assert.equal(
+		check({
+			state: "matches",
+			snapshot: "quay-stage-3-17-6",
+			bundle_nvr: head,
+		}),
+		"Image Snapshot quay-stage-3-17-6 holds this bundle",
+	);
+	assert.equal(
+		check({
+			state: "differs",
+			snapshot: "quay-stage-3-17-6",
+			bundle_nvr: bundle("202610010000"),
+		}),
+		"Image Snapshot quay-stage-3-17-6 holds bundle 3.17.6.202610010000.p2.g35cf767-1",
+	);
+	assert.equal(
+		check({ state: "absent", snapshot: "quay-stage-3-17-6", bundle_nvr: "" }),
+		"Image Snapshot quay-stage-3-17-6: no bundle to compare",
+	);
+});
+
+test("compareVersions: numeric by dot-separated part", () => {
+	assert.ok(compareVersions("4.9", "4.12") < 0);
+	assert.ok(compareVersions("4.12", "4.9") > 0);
+	assert.equal(compareVersions("4.14", "4.14"), 0);
+	assert.ok(compareVersions("4", "4.1") < 0);
 });
