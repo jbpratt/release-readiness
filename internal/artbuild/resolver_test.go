@@ -110,12 +110,10 @@ func groups(searches []url.Values) []string {
 func TestResolveMatch(t *testing.T) {
 	b, searches := resolveWith(t, operator, always("search_match.json"))
 	want := Build{
-		Digest:       "sha256:bfd08ada78f2c19d7dc773f42fc53f5ceb649ff1c34da95e62fb73f0a15a6563",
-		State:        StateResolved,
-		NVR:          "quay-operator-container-3.18.1-202609300827.p2.g35cf767.assembly.stream.el9",
-		RecordID:     "7f4d8117-35dc-6c01-1e27-3b3d32a2fa8f",
-		UpstreamRepo: "https://github.com/quay/quay-operator",
-		UpstreamSHA:  "35cf767efc3b4e7bebc7802afcf12b60cd343bc0",
+		Digest:   "sha256:bfd08ada78f2c19d7dc773f42fc53f5ceb649ff1c34da95e62fb73f0a15a6563",
+		State:    StateResolved,
+		NVR:      "quay-operator-container-3.18.1-202609300827.p2.g35cf767.assembly.stream.el9",
+		RecordID: "7f4d8117-35dc-6c01-1e27-3b3d32a2fa8f",
 	}
 	b.CheckedAt = time.Time{}
 	if b != want {

@@ -72,8 +72,6 @@ CREATE TABLE IF NOT EXISTS art_builds (
     state         TEXT NOT NULL CHECK (state IN ('resolved', 'unresolved')),
     nvr           TEXT NOT NULL DEFAULT '',
     record_id     TEXT NOT NULL DEFAULT '',
-    upstream_repo TEXT NOT NULL DEFAULT '',
-    upstream_sha  TEXT NOT NULL DEFAULT '',
     checked_at    TEXT NOT NULL
 );
 

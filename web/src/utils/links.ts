@@ -8,23 +8,9 @@ export function jiraSearchUrl(jql: string, baseUrl: string): string {
 	return `${baseUrl.replace(/\/+$/, "")}/issues/?jql=${encodeURIComponent(jql)}`;
 }
 
-/**
- * JQL for exactly a version's ticket list: its Target Version, and by key
- * the tickets listed under another fix version.
- */
-export function ticketsJql(
-	project: string,
-	version: string,
-	tickets: { key: string; fix_version: string }[],
-): string {
-	const target = `"Target Version"="${version}"`;
-	const keys = tickets
-		.filter((t) => t.fix_version !== version)
-		.map((t) => t.key)
-		.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-	return keys.length === 0
-		? `project=${project} AND ${target}`
-		: `project=${project} AND (${target} OR key in (${keys.join(", ")}))`;
+/** JQL for a version's ticket list: the tickets of its Target Version. */
+export function ticketsJql(project: string, version: string): string {
+	return `project=${project} AND "Target Version"="${version}"`;
 }
 
 /**

@@ -1,9 +1,4 @@
-import type {
-	BuildCommit,
-	BuildTickets,
-	CandidateCI,
-	KonfluxRelease,
-} from "../api/types";
+import type { CandidateCI, KonfluxRelease } from "../api/types";
 import { relative } from "./format.ts";
 
 // A "-nightly" segment, at the end or before a suffix like "-fips".
@@ -79,54 +74,6 @@ export const componentLabel = (name: string, app: string) =>
 		/^quay-/,
 		"",
 	);
-
-// The not_compared reasons of a GitHub API error, which the next pass retries.
-const API_ERRORS = new Set([
-	"github api error",
-	"default branch: github api error",
-]);
-
-/**
- * The Tickets card's not-compared lines: the components not compared, with
- * the reason, then one line for all those a GitHub API error left.
- */
-export function notComparedLines(
-	notCompared: BuildTickets["not_compared"],
-	app: string,
-): string[] {
-	const other = notCompared.filter((c) => !API_ERRORS.has(c.reason));
-	const lines: string[] = [];
-	if (other.length > 0) {
-		lines.push(
-			`Not compared: ${other.map((c) => `${componentLabel(c.component, app)} (${c.reason})`).join(", ")}`,
-		);
-	}
-	if (other.length < notCompared.length) {
-		lines.push("Not compared with GitHub: API error (retrying)");
-	}
-	return lines;
-}
-
-/**
- * A ticket's not_in_build commits once each, titled with the components that
- * lack them: an operator and its bundle share their commits.
- */
-export function missingCommits(
-	commits: BuildCommit[],
-	app: string,
-): { sha: string; url: string; title: string }[] {
-	const out: { sha: string; url: string; title: string }[] = [];
-	for (const c of commits) {
-		const name = componentLabel(c.component, app);
-		const seen = out.find((o) => o.sha === c.commit_sha);
-		if (seen) {
-			seen.title += `, ${name}`;
-		} else {
-			out.push({ sha: c.commit_sha, url: c.commit_url, title: name });
-		}
-	}
-	return out;
-}
 
 const CONTAINER = "-container-";
 

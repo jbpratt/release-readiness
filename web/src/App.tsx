@@ -51,7 +51,6 @@ const glossary: [string, string][] = [
 		"CI",
 		"Periodic Prow jobs, grouped by the build each installed: from its tested-images.json, or for runs before 2026-10-09 its olm-csvs.yaml.",
 	],
-	["In build", "The build's commits whose message names the ticket."],
 	[
 		"z-stream",
 		"The patch releases of one minor version, e.g. 3.18.z. The next release per stream is its lowest unshipped z.",
@@ -131,7 +130,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 										<Content component="p">
 											One page per version answers: can it ship? Data: Konflux
 											Snapshots and Releases, ART build history, Prow periodics,
-											Jira, GitHub.
+											Jira.
 										</Content>
 										<DescriptionList isCompact style={{ marginTop: "1rem" }}>
 											{glossary.map(([term, desc]) => (

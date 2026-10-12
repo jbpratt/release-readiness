@@ -19,7 +19,6 @@ import (
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
-	"github.com/quay/release-readiness/internal/github"
 	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/kube"
 	"github.com/quay/release-readiness/internal/prow"
@@ -58,9 +57,6 @@ func main() {
 
 	// Selected STAGE build flags
 	stagePlanPattern := flag.String("stage-release-plan-pattern", cmp.Or(os.Getenv("STAGE_RELEASE_PLAN_PATTERN"), `^quay-advisory-stage-\d+-\d+$`), "regexp matching the Konflux ReleasePlan names whose Releases are image STAGE (empty selects no staged build)")
-
-	// GitHub ticket evidence flags
-	githubToken := flag.String("github-token", os.Getenv("GITHUB_TOKEN"), "read-only GitHub token (optional; raises the rate limit)")
 
 	flag.Parse()
 
@@ -160,20 +156,6 @@ func main() {
 	srv.StageReleasePlanPattern = stagePlans
 	srv.KonfluxUIURL = *konfluxUIURL
 	srv.KonfluxNamespace = *namespace
-
-	if stagePlans != nil {
-		logger.Info("github evidence scan enabled", "token", *githubToken != "")
-		srv.Scanner = github.NewScanner(github.NewClient("https://api.github.com", *githubToken, &http.Client{Timeout: time.Minute}), srv.TicketBuilds, logger.With("component", "github-evidence"))
-		srv.Scanner.Status = status.Track("github-evidence", 10*time.Minute)
-		wg.Go(func() {
-			// Until the catalog is read, the versions it shipped look
-			// unshipped, and their compares would be read.
-			if shipped != nil {
-				shipped.Refresh(ctx)
-			}
-			srv.Scanner.Run(ctx, 10*time.Minute)
-		})
-	}
 
 	if err := srv.Run(ctx); err != nil {
 		logger.Error("server", "error", err)

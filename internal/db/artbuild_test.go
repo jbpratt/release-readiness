@@ -62,7 +62,7 @@ func TestArtBuildCache(t *testing.T) {
 		t.Fatalf("candidates: got %v, want both images", got)
 	}
 
-	resolved := artbuild.Build{Digest: "sha256:aaaa", State: artbuild.StateResolved, NVR: "nvr-a", RecordID: "rec-a", UpstreamSHA: "abc", CheckedAt: now}
+	resolved := artbuild.Build{Digest: "sha256:aaaa", State: artbuild.StateResolved, NVR: "nvr-a", RecordID: "rec-a", CheckedAt: now}
 	missed := artbuild.Build{Digest: "sha256:bbbb", State: artbuild.StateUnresolved, CheckedAt: now}
 	for _, b := range []artbuild.Build{resolved, missed} {
 		if err := d.UpsertArtBuild(ctx, b); err != nil {

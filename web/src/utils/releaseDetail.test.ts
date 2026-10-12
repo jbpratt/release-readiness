@@ -7,8 +7,6 @@ import {
 	fbcCopy,
 	jobLabels,
 	jobShortName,
-	missingCommits,
-	notComparedLines,
 	nvrLabel,
 	releaseLine,
 	runsStatus,
@@ -91,70 +89,6 @@ test("componentLabel", () => {
 		componentLabel("quay-3-18-container-security-operator", "quay-3-18"),
 		"container-security-operator",
 	);
-});
-
-test("missingCommits: one link per commit, titled with the components lacking it", () => {
-	const commit = (component: string, sha: string) => ({
-		component: `quay-3-18-${component}`,
-		commit_sha: sha,
-		commit_url: `https://github.com/quay/x/commit/${sha}`,
-	});
-	assert.deepEqual(
-		missingCommits(
-			[
-				commit("quay-operator", "aaa"),
-				commit("quay-operator-bundle", "aaa"),
-				commit("quay-operator", "bbb"),
-			],
-			"quay-3-18",
-		),
-		[
-			{
-				sha: "aaa",
-				url: "https://github.com/quay/x/commit/aaa",
-				title: "operator, operator-bundle",
-			},
-			{
-				sha: "bbb",
-				url: "https://github.com/quay/x/commit/bbb",
-				title: "operator",
-			},
-		],
-	);
-	assert.deepEqual(missingCommits([], "quay-3-18"), []);
-});
-
-test("notComparedLines: GitHub API errors folded into one line", () => {
-	const nc = (component: string, reason: string) => ({
-		component: `quay-3-18-${component}`,
-		reason,
-	});
-	const fold = "Not compared with GitHub: API error (retrying)";
-	assert.deepEqual(
-		notComparedLines(
-			[
-				nc("quay-quay", "github api error"),
-				nc("quay-clair", "default branch: github api error"),
-			],
-			"quay-3-18",
-		),
-		[fold],
-	);
-	assert.deepEqual(
-		notComparedLines(
-			[
-				nc("quay-builder", "upstream repo is not on github.com"),
-				nc("quay-clair", "default branch: github api error"),
-				nc("quay-quay", "not scanned yet"),
-			],
-			"quay-3-18",
-		),
-		[
-			"Not compared: builder (upstream repo is not on github.com), quay (not scanned yet)",
-			fold,
-		],
-	);
-	assert.deepEqual(notComparedLines([], "quay-3-18"), []);
 });
 
 test("nvrLabel", () => {

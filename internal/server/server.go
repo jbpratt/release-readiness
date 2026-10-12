@@ -10,7 +10,6 @@ import (
 
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
-	"github.com/quay/release-readiness/internal/github"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
@@ -26,9 +25,6 @@ type Server struct {
 	// StageReleasePlanPattern matches the ReleasePlan names whose Releases
 	// are image STAGE; nil selects no staged build.
 	StageReleasePlanPattern *regexp.Regexp
-	// Scanner holds the GitHub compares of the candidate builds; nil
-	// has compared nothing.
-	Scanner *github.Scanner
 	// KonfluxUIURL and KonfluxNamespace locate the Konflux UI pages the web
 	// links to; an empty URL links none.
 	KonfluxUIURL, KonfluxNamespace string
