@@ -158,3 +158,22 @@ CREATE TABLE IF NOT EXISTS staged_snapshots (
 );
 
 CREATE INDEX IF NOT EXISTS idx_staged_snapshots_assembly ON staged_snapshots(assembly, env, kind);
+
+-- The release channel head of an FBC image, read from its registry by
+-- digest. A rendered row is final; a failed one, with its error, is retried
+-- after retry_after. label_nvr is the image's com.redhat.art.nvr label, its
+-- identity when ART build history has no record of it.
+CREATE TABLE IF NOT EXISTS fbc_render_cache (
+    digest               TEXT PRIMARY KEY,
+    state                TEXT NOT NULL CHECK (state IN ('rendered', 'failed')),
+    label_nvr            TEXT NOT NULL DEFAULT '',
+    package_name         TEXT NOT NULL DEFAULT '',
+    channel              TEXT NOT NULL DEFAULT '',
+    head_csv             TEXT NOT NULL DEFAULT '',
+    head_bundle_pullspec TEXT NOT NULL DEFAULT '',
+    replaces             TEXT NOT NULL DEFAULT '',
+    skip_range           TEXT NOT NULL DEFAULT '',
+    error                TEXT NOT NULL DEFAULT '',
+    rendered_at          TEXT NOT NULL,
+    retry_after          TEXT NOT NULL DEFAULT ''
+);
