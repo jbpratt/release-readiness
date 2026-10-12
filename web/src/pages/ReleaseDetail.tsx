@@ -62,6 +62,7 @@ import {
 	jiraIssueUrl,
 	jiraSearchUrl,
 	konfluxUrl,
+	sippyJobUrl,
 	ticketsJql,
 } from "../utils/links";
 import {
@@ -803,7 +804,7 @@ function CICard({
 								</Td>
 								<Td>
 									{b.jobs.length > 0 ? (
-										<JobPills jobs={b.jobs} label={label} />
+										<JobPills jobs={b.jobs} label={label} version={version} />
 									) : (
 										<span style={muted}>No runs</span>
 									)}
@@ -878,15 +879,18 @@ const jobStatus = (j: CIJob): keyof typeof jobRank =>
 	runsStatus(j.runs.map((r) => r.state)) ?? "none";
 
 /**
- * A pill per job, failures first, opening its newest run; its runs, each
- * opening it, on hover. Passing jobs fold into one "N passed" toggle.
+ * A pill per job, failures first, opening its Sippy page; its runs, each
+ * opening it in Prow, on hover. Passing jobs fold into one "N passed" toggle.
  */
 function JobPills({
 	jobs,
 	label,
+	version,
 }: {
 	jobs: CIJob[];
 	label: (job: string) => string;
+	/** The version's X.Y.Z. */
+	version: string;
 }) {
 	const [showPassed, setShowPassed] = useState(false);
 	const sorted = [...jobs].sort(
@@ -901,7 +905,7 @@ function JobPills({
 			<Pill
 				key={job.job_name}
 				status={s === "none" ? undefined : s}
-				href={job.runs[0].prow_url}
+				href={sippyJobUrl(version, job.job_name)}
 				popover
 				tip={
 					<>
@@ -964,6 +968,7 @@ function Pill({
 	/** Whether tip has links, so shows in a popover that stays open under the pointer. */
 	popover?: boolean;
 }) {
+	const [open, setOpen] = useState<"hover" | "focus">();
 	const label = href ? (
 		<Label
 			isCompact
@@ -983,9 +988,32 @@ function Pill({
 		</Label>
 	);
 	return popover ? (
-		<Popover triggerAction="hover" aria-label="Runs" bodyContent={tip}>
-			{label}
-		</Popover>
+		// Open while focus is inside, and inline then so Tab reaches tip's links;
+		// on hover it stays in body, where the card's overflow cannot flip it.
+		// biome-ignore lint/a11y/noStaticElementInteractions: tracks focus, not input
+		<span
+			style={{ display: "contents" }}
+			onFocus={(e) => {
+				// React bubbles focus out of the hover portal; going inline then
+				// would remount the link under a pending click.
+				if (e.currentTarget.contains(e.target)) setOpen("focus");
+			}}
+			onBlur={(e) => {
+				if (!e.currentTarget.contains(e.relatedTarget)) setOpen(undefined);
+			}}
+		>
+			<Popover
+				triggerAction="hover"
+				isVisible={!!open}
+				shouldOpen={() => setOpen((o) => o ?? "hover")}
+				shouldClose={() => setOpen(undefined)}
+				appendTo={open === "focus" ? "inline" : undefined}
+				aria-label="Runs"
+				bodyContent={tip}
+			>
+				{label}
+			</Popover>
+		</span>
 	) : (
 		<Tooltip content={tip}>{label}</Tooltip>
 	);
