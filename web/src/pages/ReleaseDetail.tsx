@@ -62,10 +62,12 @@ import {
 	componentLabel,
 	fbcCopy,
 	jobLabels,
+	newestCIStep,
 	nvrLabel,
 	releaseLine,
 	runsStatus,
 	type StatusLine,
+	stepperBuild,
 } from "../utils/releaseDetail";
 
 /** A Konflux UI page of the version's application. */
@@ -333,6 +335,7 @@ function BuildsCard({
 	konflux: KonfluxLink;
 }) {
 	const c = data?.candidate;
+	const anchor = data && stepperBuild(data.newest, data.ci);
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<LinkedCardTitle href={konflux()} link="Konflux">
@@ -356,6 +359,9 @@ function BuildsCard({
 				) : (
 					<>
 						{`${data.reason.charAt(0).toUpperCase()}${data.reason.slice(1)}.`}
+						{anchor && (
+							<NewestStepper newest={anchor} ci={data.ci} konflux={konflux} />
+						)}
 						{data.ci?.refresh === "pick" && data.ci.passed && (
 							<div style={line}>
 								<Status status="warning">
@@ -364,9 +370,6 @@ function BuildsCard({
 									passed CI. <PassedCopy ci={data.ci} passed={data.ci.passed} />
 								</Status>
 							</div>
-						)}
-						{data.newest && (
-							<NewestLine newest={data.newest} konflux={konflux} />
 						)}
 					</>
 				)}
@@ -447,9 +450,7 @@ function Candidate({
 									) : (
 										<Status status="done">Candidate is current.</Status>
 									)}
-									{newest && (
-										<NewestLine notIn newest={newest} konflux={konflux} />
-									)}
+									{newest && <NewestLine newest={newest} konflux={konflux} />}
 								</>
 							}
 						/>
@@ -520,6 +521,53 @@ function Candidate({
 				</Tbody>
 			</Table>
 		</>
+	);
+}
+
+/**
+ * Without a candidate, where the version's newest build is: built, its CI,
+ * and not yet staged or released. The CI step links the Release that decides
+ * whether its bundle reached CI.
+ */
+function NewestStepper({
+	newest,
+	ci,
+	konflux,
+}: {
+	newest: NewestBuild;
+	ci: CandidateCI | null;
+	konflux: KonfluxLink;
+}) {
+	const tested = newestCIStep(newest, ci);
+	const r = newest.ci.release;
+	return (
+		<ProgressStepper
+			isCenterAligned
+			aria-label="Where the newest build is"
+			style={{ marginTop: "1rem" }}
+		>
+			<Step
+				title="Build"
+				variant="success"
+				description={<BuildLink build={newest} konflux={konflux} />}
+			/>
+			<Step
+				title="CI"
+				variant={tested.variant}
+				isCurrent
+				description={
+					r ? (
+						<ExtLink href={konflux("releases", r.name)} title={r.name}>
+							{tested.text}
+						</ExtLink>
+					) : (
+						tested.text
+					)
+				}
+			/>
+			<Step title="Stage" variant="pending" description="Not staged" />
+			<Step title="Prod" variant="pending" description="Not released" />
+		</ProgressStepper>
 	);
 }
 
@@ -596,19 +644,15 @@ function CIStateText({ ci, konflux }: { ci: CIState; konflux: KonfluxLink }) {
 
 /** The version's newest build: its date and time, linked to its Snapshot, and whether it is in CI. */
 function NewestLine({
-	notIn,
 	newest,
 	konflux,
 }: {
-	/** Whether there is a candidate, which lacks the newest build's images. */
-	notIn?: boolean;
 	newest: NewestBuild;
 	konflux: KonfluxLink;
 }) {
 	return (
 		<div style={line}>
-			Newest build <BuildLink build={newest} konflux={konflux} />
-			{notIn && ", not pinned"}
+			Newest build <BuildLink build={newest} konflux={konflux} />, not pinned
 			{newest.ci.state !== "unknown" && (
 				<>
 					{" · "}

@@ -1,4 +1,9 @@
-import type { CandidateCI, KonfluxRelease } from "../api/types";
+import type {
+	CandidateCI,
+	CIBuild,
+	KonfluxRelease,
+	NewestBuild,
+} from "../api/types";
 import { relative } from "./format.ts";
 
 // A "-nightly" segment, at the end or before a suffix like "-fips".
@@ -44,25 +49,72 @@ export function runsStatus(
 	return failed ? "danger" : undefined;
 }
 
-/**
- * The candidate's CI step: runsStatus of every run that installed it, and
- * when some passed and some failed, how many of those passed.
- */
-export function ciStep(ci: CandidateCI): {
-	variant: "success" | "warning" | "danger";
+type CIStep = {
+	variant: "success" | "warning" | "danger" | "info" | "pending";
 	text: string;
-} {
-	const states =
-		ci.builds
-			.find((b) => b.kind === "candidate")
-			?.jobs.flatMap((j) => j.runs.map((r) => r.state)) ?? [];
+};
+
+/**
+ * A build's CI step: runsStatus of every run that installed it, and when some
+ * passed and some failed, how many of those passed; undefined without runs.
+ */
+function runsStep(build?: CIBuild): CIStep | undefined {
+	const states = build?.jobs.flatMap((j) => j.runs.map((r) => r.state)) ?? [];
 	const s = runsStatus(states);
-	if (!s) return { variant: "warning", text: "Not tested" };
+	if (!s) return undefined;
 	if (s === "success") return { variant: s, text: "Passed" };
 	if (s === "danger") return { variant: s, text: "Failed" };
 	const passed = states.filter((st) => st === "success").length;
 	const counted = passed + states.filter(failedState).length;
 	return { variant: s, text: `${passed} of ${counted} runs passed` };
+}
+
+/** The candidate's CI step: its runs' runsStep, else not tested. */
+export const ciStep = (ci: CandidateCI): CIStep =>
+	runsStep(ci.builds.find((b) => b.kind === "candidate")) ?? {
+		variant: "warning",
+		text: "Not tested",
+	};
+
+/**
+ * Without a candidate, the build the stepper is anchored on: the newest, else
+ * ci's passed, which the server leaves out of newest when it is the newest
+ * build's bundle, with its CI row's state.
+ */
+export function stepperBuild(
+	newest: NewestBuild | null,
+	ci: CandidateCI | null,
+): NewestBuild | null {
+	if (newest || !ci?.passed) return newest;
+	const passed = ci.passed;
+	const row = ci.builds.find((b) => b.snapshot === passed.snapshot);
+	return { ...passed, ci: row?.ci ?? { state: "unknown", release: null } };
+}
+
+/**
+ * Without a candidate, the newest build's CI step: the runsStep of its CI
+ * row, the one labeled by its Snapshot or sharing its per-build stage Release
+ * (a row is labeled by the oldest Snapshot with its bundle), else whether its
+ * bundle reached CI.
+ */
+export function newestCIStep(
+	newest: NewestBuild,
+	ci: CandidateCI | null,
+): CIStep {
+	const release = newest.ci.release?.name;
+	const row = ci?.builds.find(
+		(b) =>
+			b.snapshot === newest.snapshot ||
+			(release && b.ci?.release?.name === release),
+	);
+	const runs = runsStep(row);
+	if (runs) return runs;
+	if (newest.ci.state === "in") return { variant: "info", text: "In CI" };
+	if (newest.ci.state === "failed")
+		return { variant: "danger", text: "Failed to reach CI" };
+	if (newest.ci.state === "none")
+		return { variant: "pending", text: "Not in CI" };
+	return { variant: "pending", text: "No CI runs" };
 }
 
 /**
