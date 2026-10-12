@@ -88,6 +88,43 @@ func TestArtBuildCache(t *testing.T) {
 	}
 }
 
+// An image held by a stage-staged image Snapshot is resolved ahead of a newer
+// Snapshot's image.
+func TestArtBuildCandidatesStagedFirst(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	ctx := t.Context()
+
+	const (
+		staged = "quay.io/x/art-images@sha256:aaaa"
+		newer  = "quay.io/x/art-images@sha256:bbbb"
+	)
+	t0 := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	for i, img := range []string{staged, newer} {
+		id, err := d.CreateSnapshot(ctx, "quay-3-18", "snap-"+string(rune('a'+i)), t0.Add(time.Duration(i)*time.Hour))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := d.CreateSnapshotComponent(ctx, id, "quay-3-18-"+img[len(img)-4:], img); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := d.UpsertStagedSnapshot(ctx, "snap-a", "3.18.1", "image", "stage"); err != nil {
+		t.Fatal(err)
+	}
+
+	cands, err := d.ListArtBuildCandidates(ctx, t0, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cands) != 1 || cands[0].Image != staged {
+		t.Errorf("candidates: got %+v, want only %s", cands, staged)
+	}
+}
+
 // The FBC images the resolver reads ART's records of: resolved, with an FBC
 // NVR, without an FBC record, at most limit.
 func TestListUnreadFBCImages(t *testing.T) {
