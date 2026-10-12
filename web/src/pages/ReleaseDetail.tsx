@@ -15,6 +15,7 @@ import {
 	Label,
 	type LabelProps,
 	PageSection,
+	Popover,
 	ProgressStep,
 	type ProgressStepProps,
 	ProgressStepper,
@@ -382,9 +383,10 @@ function BuildsCard({
 }
 
 /**
- * The candidate: where it is, from its build through CI and stage to prod, a
- * newer build to re-run release-from-fbc with or wait on, the newest build,
- * and its images.
+ * The candidate: where it is, from its build through CI and stage to prod,
+ * and its images. The CI step's popover has a newer build to re-run
+ * release-from-fbc with or wait on, and the newest build; the Prod step's,
+ * its Release.
  */
 function Candidate({
 	candidate,
@@ -404,6 +406,12 @@ function Candidate({
 		...releaseLine(candidate.prod),
 	};
 	const tested = ciStep(ci);
+	const next =
+		ci.refresh === "rerun" && ci.passed
+			? " · re-run available"
+			: ci.refresh === "waiting"
+				? " · newer build waiting"
+				: "";
 	const latest = ci.latest_in_ci && (
 		<BuildLink build={ci.latest_in_ci} konflux={konflux} />
 	);
@@ -418,7 +426,42 @@ function Candidate({
 					variant="success"
 					description={<BuildLink build={candidate} konflux={konflux} />}
 				/>
-				<Step title="CI" variant={tested.variant} description={tested.text} />
+				<Step
+					title="CI"
+					variant={tested.variant}
+					description={tested.text + next}
+					popoverRender={(ref) => (
+						<Popover
+							aria-label="CI detail"
+							headerContent="CI"
+							triggerRef={ref}
+							minWidth="32rem"
+							bodyContent={
+								<>
+									{ci.refresh === "rerun" && ci.passed ? (
+										<Status status="warning">
+											Re-run release-from-fbc with the{" "}
+											<BuildLink build={ci.passed} konflux={konflux} /> build,
+											which is newer and passed CI (optional).
+											{candidate.prod &&
+												" ART may refuse it after a prod attempt."}{" "}
+											<PassedCopy ci={ci} passed={ci.passed} />
+										</Status>
+									) : ci.refresh === "waiting" ? (
+										<Status status="running">
+											Newer build {latest} is waiting on CI.
+										</Status>
+									) : (
+										<Status status="done">Candidate is current.</Status>
+									)}
+									{newest && (
+										<NewestLine notIn newest={newest} konflux={konflux} />
+									)}
+								</>
+							}
+						/>
+					)}
+				/>
 				<Step
 					title="Stage"
 					variant="success"
@@ -432,32 +475,33 @@ function Candidate({
 					description={
 						prod ? (
 							<ExtLink href={konflux("releases", prod.name)} title={prod.name}>
-								{prod.text}
+								{prod.status === "failed" ? "Release failed" : prod.text}
 							</ExtLink>
 						) : (
 							"Not started"
 						)
 					}
+					popoverRender={
+						prod
+							? (ref) => (
+									<Popover
+										aria-label="Prod detail"
+										headerContent="Prod"
+										triggerRef={ref}
+										bodyContent={
+											<ExtLink
+												href={konflux("releases", prod.name)}
+												title={prod.name}
+											>
+												{prod.text}
+											</ExtLink>
+										}
+									/>
+								)
+							: undefined
+					}
 				/>
 			</ProgressStepper>
-			<div style={line}>
-				{ci.refresh === "rerun" && ci.passed ? (
-					<Status status="warning">
-						Re-run release-from-fbc with the{" "}
-						<BuildLink build={ci.passed} konflux={konflux} /> build, which is
-						newer and passed CI (optional).
-						{candidate.prod && " ART may refuse it after a prod attempt."}{" "}
-						<PassedCopy ci={ci} passed={ci.passed} />
-					</Status>
-				) : ci.refresh === "waiting" ? (
-					<Status status="running">
-						Newer build {latest} is waiting on CI.
-					</Status>
-				) : (
-					<Status status="done">Candidate is current.</Status>
-				)}
-			</div>
-			{newest && <NewestLine notIn newest={newest} konflux={konflux} />}
 			<Table variant="compact" style={{ marginTop: "1rem" }}>
 				<Thead>
 					<Tr>
@@ -604,7 +648,7 @@ function Step({
 	title,
 	variant,
 	...props
-}: Pick<ProgressStepProps, "isCurrent" | "description"> & {
+}: Pick<ProgressStepProps, "isCurrent" | "description" | "popoverRender"> & {
 	title: string;
 	variant: keyof typeof stepStates;
 }) {
@@ -720,7 +764,8 @@ function CICard({
 						<Tr>
 							<Th modifier="fitContent">Build</Th>
 							<Th modifier="fitContent">State</Th>
-							<Th>Jobs</Th>
+							<Th modifier="fitContent">Passing</Th>
+							<Th>Jobs (failures first)</Th>
 						</Tr>
 					</Thead>
 					<Tbody>
@@ -751,9 +796,14 @@ function CICard({
 										)
 									)}
 								</Td>
+								<Td style={nowrap}>
+									{b.jobs.length > 0
+										? `${b.jobs.filter((j) => jobStatus(j) === "success").length} of ${b.jobs.length} jobs`
+										: "-"}
+								</Td>
 								<Td>
 									{b.jobs.length > 0 ? (
-										<JobChips jobs={b.jobs} label={label} />
+										<JobPills jobs={b.jobs} label={label} />
 									) : (
 										<span style={muted}>No runs</span>
 									)}
@@ -821,79 +871,123 @@ function CIPill({
 	}
 }
 
-/** A chip per job, coloured by its runs' pass/fail mix, opening its newest run; every run on hover. */
-function JobChips({
+// Job statuses, failures first.
+const jobRank = { danger: 0, warning: 1, success: 2, none: 3 } as const;
+
+const jobStatus = (j: CIJob): keyof typeof jobRank =>
+	runsStatus(j.runs.map((r) => r.state)) ?? "none";
+
+/**
+ * A pill per job, failures first, opening its newest run; its runs, each
+ * opening it, on hover. Passing jobs fold into one "N passed" toggle.
+ */
+function JobPills({
 	jobs,
 	label,
 }: {
 	jobs: CIJob[];
 	label: (job: string) => string;
 }) {
+	const [showPassed, setShowPassed] = useState(false);
+	const sorted = [...jobs].sort(
+		(a, b) =>
+			jobRank[jobStatus(a)] - jobRank[jobStatus(b)] ||
+			label(a.job_name).localeCompare(label(b.job_name)),
+	);
+	const passed = sorted.filter((j) => jobStatus(j) === "success");
+	const pill = (job: CIJob) => {
+		const s = jobStatus(job);
+		return (
+			<Pill
+				key={job.job_name}
+				status={s === "none" ? undefined : s}
+				href={job.runs[0].prow_url}
+				popover
+				tip={
+					<>
+						<div>{job.job_name}</div>
+						{job.runs.map((r) => (
+							<div key={r.prow_url}>
+								<ExtLink href={r.prow_url}>{when(r.started_at)}</ExtLink>
+								{` · ${r.install_failed ? "Install failed" : runState(r.state)}`}
+							</div>
+						))}
+					</>
+				}
+			>
+				{label(job.job_name)}
+				{job.runs.length > 1 && ` ×${job.runs.length}`}
+			</Pill>
+		);
+	};
 	return (
 		<Flex gap={{ default: "gapXs" }}>
-			{[...jobs]
-				.sort((a, b) => label(a.job_name).localeCompare(label(b.job_name)))
-				.map(({ job_name, runs }) => (
-					<Pill
-						key={job_name}
-						status={runsStatus(runs.map((r) => r.state))}
-						href={runs[0].prow_url}
-						tip={lines(
-							job_name,
-							...runs.map(
-								(r) =>
-									`${when(r.started_at)} · ${r.install_failed ? "Install failed" : runState(r.state)}`,
-							),
-						)}
-					>
-						{label(job_name)}
-						{runs[0].install_failed && " · install failed"}
-						{runs.length > 1 && ` ×${runs.length}`}
-					</Pill>
-				))}
+			{sorted.filter((j) => jobStatus(j) !== "success").map(pill)}
+			{passed.length > 0 && (
+				<Label
+					isCompact
+					isClickable
+					status="success"
+					render={({ className, content, componentRef }) => (
+						<button
+							type="button"
+							className={className}
+							ref={componentRef}
+							aria-expanded={showPassed}
+							onClick={() => setShowPassed(!showPassed)}
+						>
+							{content}
+						</button>
+					)}
+				>
+					{`${passed.length} passed`}
+				</Label>
+			)}
+			{showPassed && passed.map(pill)}
 		</Flex>
 	);
 }
 
 /**
- * A compact label with a tooltip, opening href in a new tab; without href it
- * takes keyboard focus, which shows the tooltip.
+ * A compact label with a tooltip, or popover, opening href in a new tab;
+ * without href it takes keyboard focus, which shows the tooltip.
  */
 function Pill({
 	tip,
 	href,
+	popover,
 	children,
 	...props
 }: Pick<LabelProps, "color" | "status" | "children"> & {
 	tip: ReactNode;
 	href?: string | null;
+	/** Whether tip has links, so shows in a popover that stays open under the pointer. */
+	popover?: boolean;
 }) {
-	return (
-		<Tooltip content={tip}>
-			{href ? (
-				<Label
-					isCompact
-					isClickable
-					render={({ className, content, componentRef }) => (
-						<a
-							className={className}
-							href={href}
-							ref={componentRef}
-							{...external}
-						>
-							{content}
-						</a>
-					)}
-					{...props}
-				>
-					{children}
-				</Label>
-			) : (
-				<Label isCompact tabIndex={0} {...props}>
-					{children}
-				</Label>
+	const label = href ? (
+		<Label
+			isCompact
+			isClickable
+			render={({ className, content, componentRef }) => (
+				<a className={className} href={href} ref={componentRef} {...external}>
+					{content}
+				</a>
 			)}
-		</Tooltip>
+			{...props}
+		>
+			{children}
+		</Label>
+	) : (
+		<Label isCompact tabIndex={0} {...props}>
+			{children}
+		</Label>
+	);
+	return popover ? (
+		<Popover triggerAction="hover" aria-label="Runs" bodyContent={tip}>
+			{label}
+		</Popover>
+	) : (
+		<Tooltip content={tip}>{label}</Tooltip>
 	);
 }
 
