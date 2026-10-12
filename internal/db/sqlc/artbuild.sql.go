@@ -33,10 +33,12 @@ JOIN snapshots s ON s.id = sc.snapshot_id
 LEFT JOIN art_builds a ON a.digest = substr(sc.image_url, instr(sc.image_url, '@') + 1)
 LEFT JOIN (SELECT application, MAX(created_at) AS newest FROM snapshots GROUP BY application) n
   ON n.application = s.application AND n.newest = s.created_at
+LEFT JOIN staged_snapshots ss ON ss.name = s.name AND ss.kind = 'image' AND ss.env = 'stage'
 WHERE instr(sc.image_url, '@sha256:') > 0
   AND (a.digest IS NULL OR (a.state = 'unresolved' AND a.checked_at < ?))
 GROUP BY sc.image_url
-ORDER BY MAX(n.newest IS NOT NULL) DESC,
+ORDER BY MAX(ss.name IS NOT NULL) DESC,
+         MAX(n.newest IS NOT NULL) DESC,
          last_seen DESC
 LIMIT ?
 `
@@ -55,11 +57,12 @@ type ListArtBuildCandidatesRow struct {
 }
 
 // Stored component images with no ART record yet, or whose last miss is older
-// than the retry cutoff. Images held by an application's newest Snapshot come
-// first, so every release gets a newest build on a fresh DB before the backlog
-// drains; then newest Snapshot first. first_seen bounds the build date: an image
-// is built before any Snapshot holds it. applications lists every application
-// holding the image, comma-separated.
+// than the retry cutoff. Images held by a stage-staged image Snapshot come
+// first, as those are the builds a release ships; then images held by an
+// application's newest Snapshot, so every release gets a newest build on a
+// fresh DB before the backlog drains; then newest Snapshot first. first_seen
+// bounds the build date: an image is built before any Snapshot holds it.
+// applications lists every application holding the image, comma-separated.
 func (q *Queries) ListArtBuildCandidates(ctx context.Context, arg ListArtBuildCandidatesParams) ([]ListArtBuildCandidatesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listArtBuildCandidates, arg.CheckedAt, arg.Limit)
 	if err != nil {

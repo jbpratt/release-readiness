@@ -677,7 +677,7 @@ function ComponentTable({
 									>
 										{shortDigest(c.image)}
 									</ClipboardCopy>{" "}
-									<span style={muted}>ART build record unavailable</span>
+									<span style={muted}>ART NVR not resolved</span>
 								</span>
 							)}
 						</Td>
