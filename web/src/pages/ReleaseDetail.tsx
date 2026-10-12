@@ -360,7 +360,12 @@ function BuildsCard({
 						konflux={konflux}
 					/>
 				) : data.shipped ? (
-					"Shipped."
+					<NewestStepper
+						newest={anchor}
+						ci={data.ci}
+						konflux={konflux}
+						shipped
+					/>
 				) : (
 					<>
 						{`${data.reason.charAt(0).toUpperCase()}${data.reason.slice(1)}.`}
@@ -532,46 +537,67 @@ function Candidate({
 /**
  * Without a candidate, where the version's newest build is: built, its CI,
  * and not yet staged or released. The CI step links the Release that decides
- * whether its bundle reached CI.
+ * whether its bundle reached CI. A shipped version without a candidate has
+ * no stage data and may have no build, but is in prod.
  */
 function NewestStepper({
 	newest,
 	ci,
 	konflux,
+	shipped,
 }: {
-	newest: NewestBuild;
+	newest?: NewestBuild | null;
 	ci: CandidateCI | null;
 	konflux: KonfluxLink;
+	shipped?: boolean;
 }) {
-	const tested = newestCIStep(newest, ci);
-	const r = newest.ci.release;
+	const tested = newest && newestCIStep(newest, ci);
+	const r = newest?.ci.release;
 	return (
 		<ProgressStepper
 			isCenterAligned
 			aria-label="Where the newest build is"
 			style={{ marginTop: "1rem" }}
 		>
+			{newest && tested ? (
+				<>
+					<Step
+						title="Build"
+						variant="success"
+						description={<BuildLink build={newest} konflux={konflux} />}
+					/>
+					<Step
+						title="CI"
+						variant={tested.variant}
+						isCurrent={!shipped}
+						description={
+							r ? (
+								<ExtLink href={konflux("releases", r.name)} title={r.name}>
+									{tested.text}
+								</ExtLink>
+							) : (
+								tested.text
+							)
+						}
+					/>
+				</>
+			) : (
+				<>
+					<Step title="Build" variant="pending" description="No data" />
+					<Step title="CI" variant="pending" description="No data" />
+				</>
+			)}
 			<Step
-				title="Build"
-				variant="success"
-				description={<BuildLink build={newest} konflux={konflux} />}
+				title="Stage"
+				variant="pending"
+				description={shipped ? "No data" : "Not staged"}
 			/>
 			<Step
-				title="CI"
-				variant={tested.variant}
-				isCurrent
-				description={
-					r ? (
-						<ExtLink href={konflux("releases", r.name)} title={r.name}>
-							{tested.text}
-						</ExtLink>
-					) : (
-						tested.text
-					)
-				}
+				title="Prod"
+				variant={shipped ? "success" : "pending"}
+				isCurrent={shipped}
+				description={shipped ? "Shipped" : "Not released"}
 			/>
-			<Step title="Stage" variant="pending" description="Not staged" />
-			<Step title="Prod" variant="pending" description="Not released" />
 		</ProgressStepper>
 	);
 }
