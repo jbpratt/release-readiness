@@ -148,9 +148,9 @@ func parseRun(job Job, buildID string, pjData, finData []byte) (*Run, string, er
 }
 
 // applyArtifact records tested-images.json on r and reports whether it saw a
-// quay-operator Subscription. The catalog and operator bundle are stored as
-// images too so a digest lookup finds them; of the rest, only images that ran
-// in a pod count, not those the CSV merely references.
+// quay-operator Subscription. The operator bundle is stored as an image too;
+// of the rest, only images that ran in a pod count, not those the CSV merely
+// references.
 func (r *Run) applyArtifact(data []byte) (subscribed bool) {
 	var ti testedImages
 	if err := json.Unmarshal(data, &ti); err != nil || ti.SchemaVersion != 1 {
@@ -161,9 +161,6 @@ func (r *Run) applyArtifact(data []byte) (subscribed bool) {
 	r.CatalogRef = ti.Catalog.ResolvedRef
 	add := func(role, ref string) {
 		r.Images = append(r.Images, Image{Role: role, Digest: digest(ref)})
-	}
-	if ti.Catalog.ResolvedRef != "" {
-		add("catalog", ti.Catalog.ResolvedRef)
 	}
 	if ti.Operator.BundleRef != "" {
 		add("quay-operator-bundle", ti.Operator.BundleRef)

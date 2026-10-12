@@ -25,12 +25,14 @@ func TestSearchIssues(t *testing.T) {
 		},
 	}
 
+	var capturedJQL string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/rest/api/3/search/jql" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 			http.Error(w, "not found", 404)
 			return
 		}
+		capturedJQL = r.URL.Query().Get("jql")
 
 		// Check Basic Auth header
 		wantAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("test@example.com:test-token"))
@@ -66,6 +68,10 @@ func TestSearchIssues(t *testing.T) {
 	}
 	if result[0].Fields.Status.Name != "Closed" {
 		t.Errorf("status: got %q, want Closed", result[0].Fields.Status.Name)
+	}
+	wantJQL := `project=PROJQUAY AND "Target Version"="3.16.2"`
+	if capturedJQL != wantJQL {
+		t.Errorf("JQL:\n got %q\nwant %q", capturedJQL, wantJQL)
 	}
 }
 
@@ -287,38 +293,6 @@ func TestFixVersionToKonfluxApp(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("FixVersionToKonfluxApp(%q): got %q, want %q", tc.input, got, tc.want)
 		}
-	}
-}
-
-func TestSearchIssuesTargetVersion(t *testing.T) {
-	var capturedJQL string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedJQL = r.URL.Query().Get("jql")
-		resp := searchResponse{
-			Issues: []Issue{{Key: "PROJQUAY-10157"}},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
-	}))
-	defer srv.Close()
-
-	client := New(Config{
-		BaseURL: srv.URL,
-		Project: "PROJQUAY",
-	})
-	client.minDelay = 0
-
-	result, err := client.SearchIssues(context.Background(), "quay-v3.17.0")
-	if err != nil {
-		t.Fatalf("SearchIssues: %v", err)
-	}
-	if len(result) != 1 {
-		t.Fatalf("got %d issues, want 1", len(result))
-	}
-
-	wantJQL := `project=PROJQUAY AND "Target Version"="quay-v3.17.0"`
-	if capturedJQL != wantJQL {
-		t.Errorf("JQL:\n got %q\nwant %q", capturedJQL, wantJQL)
 	}
 }
 

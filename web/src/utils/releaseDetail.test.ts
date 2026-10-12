@@ -119,7 +119,6 @@ const release = (r: Partial<KonfluxRelease>): KonfluxRelease => ({
 	name: "r1",
 	released_status: "",
 	released_reason: "",
-	created_at: "2026-10-08T09:00:00Z",
 	...r,
 });
 

@@ -153,7 +153,7 @@ func (c *Client) DiscoverActiveReleases(ctx context.Context) ([]ActiveRelease, e
 		`project=%s AND component="-area/release" AND status NOT IN (Closed, Done)`,
 		c.project,
 	)
-	allIssues, err := c.search(ctx, jql, "summary,status,duedate,assignee", "discover releases")
+	allIssues, err := c.search(ctx, jql, "summary,duedate,assignee", "discover releases")
 	if err != nil {
 		return nil, err
 	}
