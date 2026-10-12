@@ -1222,6 +1222,15 @@ func TestGetCandidateFBCStream(t *testing.T) {
 	if o := cand.Operators[0]; o.Channel != "stable" || o.HeadCSV != "csv-"+head || o.Members[0].BuildURL == "" {
 		t.Errorf("quay-operator channel %q head %q build %q", o.Channel, o.HeadCSV, o.Members[0].BuildURL)
 	}
+	// Complete: release-from-fbc takes each slot's FBC, by operator, then OCP.
+	if want := []string{
+		testImage("fbc/quay-operator-fbc-3.16.7-20261012201007.ocp4.12"),
+		testImage("fbc/quay-operator-fbc-3.16.7-20261012200000.ocp4.13"),
+		testImage("fbc/container-security-operator-fbc-3.16.7-20261012201007.ocp4.12"),
+		testImage("fbc/quay-bridge-operator-fbc-3.16.7-20261012201007.ocp4.12"),
+	}; !slices.Equal(cand.Pullspecs, want) {
+		t.Errorf("pullspecs %v, want %v", cand.Pullspecs, want)
+	}
 }
 
 // Like 3.17.6: ART staged quay-operator's 9 FBCs, all on bundle ...0936, and
@@ -1249,6 +1258,10 @@ func TestGetCandidateFBCMissingOperator(t *testing.T) {
 	})
 	if stream.Source != "stream" || stream.Operators[1].Coverage.Members != 1 {
 		t.Errorf("stream %s, CSO coverage %+v, want the stream's CSO FBC", stream.Source, stream.Operators[1].Coverage)
+	}
+	// A partial shipment cannot be released, though the stream could be.
+	if len(cand.Pullspecs) != 0 || len(stream.Pullspecs) != 11 {
+		t.Errorf("pullspecs: candidate %v, stream %d; want none, 11", cand.Pullspecs, len(stream.Pullspecs))
 	}
 }
 
@@ -1283,21 +1296,175 @@ func TestGetCandidateFBCRestage(t *testing.T) {
 	})
 }
 
-// An operator whose slots head different bundles is keyed by its newest
-// FBC's: the others are conflicts, not members, and the candidate is
-// inconsistent.
+// Like CSO 3.17.6: 7 slots on bundle ...0313 and the 2 newest on ...1613. The
+// operator is keyed by its newest FBC's bundle, the 7 others are conflicts,
+// not a 9-slot union, and the candidate is inconsistent, so it has no
+// pullspecs.
 func TestGetCandidateFBCMixed(t *testing.T) {
 	srv := setupTestServer(t)
+	const old, cur = "cso-3.17.6.202610120313", "cso-3.17.6.202610121613"
 	seedHistoryFBC(t, srv, "quay-operator-fbc-3.17.6-20261002100000.ocp4.12", "qo-bundle")
-	seedHistoryFBC(t, srv, "container-security-operator-fbc-3.17.6-20261003100000.ocp4.12", "cso-1613")
-	seedHistoryFBC(t, srv, "container-security-operator-fbc-3.17.6-20261002100000.ocp4.13", "cso-0313")
 	seedHistoryFBC(t, srv, "quay-bridge-operator-fbc-3.17.6-20261002100000.ocp4.12", "qbo-bundle")
+	cso := `container-security-operator "` + cur + `" 2/9`
+	var conflicts string
+	for minor := 12; minor <= 20; minor++ {
+		nvr, bundle := fmt.Sprintf("container-security-operator-fbc-3.17.6-20261012040000.ocp4.%d", minor), old
+		if minor >= 19 {
+			nvr, bundle = fmt.Sprintf("container-security-operator-fbc-3.17.6-20261012170000.ocp4.%d", minor), cur
+			cso += fmt.Sprintf(" 4.%d:%s", minor, nvr)
+		} else {
+			conflicts += fmt.Sprintf(" conflict=4.%d:%s", minor, nvr)
+		}
+		seedHistoryFBC(t, srv, nvr, bundle)
+	}
 
 	cand, _ := getFBC(t, srv, "quay-v3.17.6", "quay-3-17")
 	checkRows(t, "candidate", fbcRows(cand), []string{
 		"stream inconsistent [container-security-operator heads more than one bundle across its OCP versions]",
 		`quay-operator "qo-bundle" 1/1 4.12:quay-operator-fbc-3.17.6-20261002100000.ocp4.12`,
-		`container-security-operator "cso-1613" 1/2 4.12:container-security-operator-fbc-3.17.6-20261003100000.ocp4.12 conflict=4.13:container-security-operator-fbc-3.17.6-20261002100000.ocp4.13`,
+		cso + conflicts,
 		`quay-bridge-operator "qbo-bundle" 1/1 4.12:quay-bridge-operator-fbc-3.17.6-20261002100000.ocp4.12`,
 	})
+	if len(cand.Pullspecs) != 0 {
+		t.Errorf("pullspecs %v, want none", cand.Pullspecs)
+	}
+}
+
+// seedCatalogRun stores a quay-3-18 periodic run that installed from the
+// catalog image pullspec.
+func seedCatalogRun(t *testing.T, srv *Server, job, id, started, catalog string) {
+	t.Helper()
+	at := mustTime(t, started)
+	run := &prow.Run{
+		JobName: jobPrefix + job, BuildID: id, Application: "quay-3-18", State: "success", StartedAt: &at,
+		ProwURL: "https://prow.example/" + id, ArtifactState: prow.ArtifactPresent, CatalogRef: catalog, FetchedAt: at,
+	}
+	if err := srv.db.UpsertProwRun(t.Context(), run); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A slot's CI is in two tiers: runs from its own digest, and runs from another
+// FBC of its operator and OCP version on the same head bundle. A run from
+// another slot, or from an FBC on another bundle, is neither.
+func TestGetCandidateFBCEvidence(t *testing.T) {
+	srv := setupTestServer(t)
+	const head, older = "quay-operator-metadata-container-3.18.1.202610090339", "quay-operator-metadata-container-3.18.1.202610080000"
+	ocp20 := seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261009044841.ocp4.20", head)
+	rebuilt := seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261009040000.ocp4.20", head)
+	stale := seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261008000000.ocp4.20", older)
+	ocp21 := seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261009044841.ocp4.21", head)
+	seedHistoryFBC(t, srv, "container-security-operator-fbc-3.18.1-20261009044841.ocp4.20", "cso-bundle")
+	seedHistoryFBC(t, srv, "quay-bridge-operator-fbc-3.18.1-20261009044841.ocp4.20", "qbo-bundle")
+	seedCatalogRun(t, srv, "aws", "1", "2026-10-09T06:00:00Z", ocp20)
+	seedCatalogRun(t, srv, "aws", "2", "2026-10-09T05:00:00Z", rebuilt)
+	seedCatalogRun(t, srv, "gcp", "3", "2026-10-09T05:30:00Z", stale)
+	seedCatalogRun(t, srv, "gcp", "4", "2026-10-09T07:00:00Z", ocp21)
+
+	cand, _ := getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
+	tier := func(jobs []model.CIJob) string {
+		var ids []string
+		for _, j := range jobs {
+			for _, r := range j.Runs {
+				ids = append(ids, strings.TrimPrefix(j.JobName, jobPrefix)+"="+strings.TrimPrefix(r.ProwURL, "https://prow.example/"))
+			}
+		}
+		return strings.Join(ids, ",")
+	}
+	var got []string
+	for _, o := range cand.Operators {
+		for _, m := range o.Members {
+			got = append(got, o.Operator+" "+m.OCP+" exact["+tier(m.CI.Exact)+"] equivalent["+tier(m.CI.Equivalent)+"]")
+		}
+	}
+	checkRows(t, "ci", got, []string{
+		"quay-operator 4.20 exact[aws=1] equivalent[aws=2]",
+		"quay-operator 4.21 exact[gcp=4] equivalent[]",
+		"container-security-operator 4.20 exact[] equivalent[]",
+		"quay-bridge-operator 4.20 exact[] equivalent[]",
+	})
+}
+
+// Like 3.16 on 12 Oct 2026, a candidate whose head bundles have no fbc-ri
+// stage Release is not installable; once each operator's succeeded, it is. A
+// failed one is not.
+func TestGetCandidateFBCInstallable(t *testing.T) {
+	srv := setupTestServer(t)
+	srv.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
+	heads := map[string]string{
+		"quay-operator":               "quay-operator-metadata-container-3.18.1.202610090339",
+		"container-security-operator": "container-security-operator-metadata-container-3.18.1.202610090339",
+		"quay-bridge-operator":        "quay-bridge-operator-metadata-container-3.18.1.202610090339",
+	}
+	for _, operator := range artbuild.Operators {
+		seedHistoryFBC(t, srv, operator+"-fbc-3.18.1-20261009044841.ocp4.20", heads[operator])
+	}
+	states := func(c *model.FBCCandidate) string {
+		s := fmt.Sprint(c.Installable)
+		for _, o := range c.Operators {
+			s += " " + o.FBCRIStage.State
+		}
+		return s
+	}
+	cand, _ := getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
+	if got := states(cand); got != "false none none none" {
+		t.Errorf("without fbc-ri Releases: %s, want false none none none", got)
+	}
+
+	for i, operator := range artbuild.Operators {
+		label := "ri/" + operator
+		resolveNVR(t, srv, label, heads[operator])
+		snap := fmt.Sprintf("fbc-ri-stage-quay-3-18-%s-%d", operator, i)
+		seedImages(t, srv, snap, "2026-10-09T05:00:00Z", map[string]string{"quay-3-18-" + operator + "-bundle": testImage(label)})
+		seedKonfluxRelease(t, srv, snap+"-r", snap, "quay-advisory-stage-3-18", "Succeeded", "2026-10-09T05:00:00Z", "2026-10-09T05:10:00Z")
+	}
+	cand, _ = getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
+	if got := states(cand); got != "true in in in" {
+		t.Errorf("with fbc-ri Releases: %s, want true in in in", got)
+	}
+
+	seedImages(t, srv, "fbc-ri-stage-quay-3-18-quay-operator-x", "2026-10-09T06:00:00Z", map[string]string{"quay-3-18-quay-operator-bundle": testImage("ri/quay-operator")})
+	seedKonfluxRelease(t, srv, "fbc-ri-stage-quay-3-18-quay-operator-x-r", "fbc-ri-stage-quay-3-18-quay-operator-x",
+		"quay-advisory-stage-3-18", "Failed", "2026-10-09T06:00:00Z", "2026-10-09T06:10:00Z")
+	// The bundle reached stage once, so it stays installable.
+	cand, _ = getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
+	if got := states(cand); got != "true in in in" {
+		t.Errorf("after a later failed fbc-ri Release: %s, want true in in in", got)
+	}
+}
+
+// Each operator's head bundle is checked against the image Snapshot's bundle
+// of it, which never keys the candidate.
+func TestGetCandidateFBCImageCheck(t *testing.T) {
+	srv := setupTestServer(t)
+	const head = "quay-operator-metadata-container-3.18.1.202610090339.p2.g35cf767.assembly.stream.el9-1"
+	seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261009044841.ocp4.20", head)
+	seedHistoryFBC(t, srv, "container-security-operator-fbc-3.18.1-20261009044841.ocp4.20", "cso-bundle")
+	seedHistoryFBC(t, srv, "quay-bridge-operator-fbc-3.18.1-20261009044841.ocp4.20", "qbo-bundle")
+	checks := func(c *model.FBCCandidate) []string {
+		var out []string
+		for _, o := range c.Operators {
+			out = append(out, o.Operator+" "+o.ImageCheck.State+" "+o.ImageCheck.Snapshot+" "+o.ImageCheck.BundleNVR)
+		}
+		return out
+	}
+	cand, _ := getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
+	checkRows(t, "no image Snapshot", checks(cand), []string{
+		"quay-operator absent  ", "container-security-operator absent  ", "quay-bridge-operator absent  ",
+	})
+
+	const snap = "quay-3-18-20261009-042610-000"
+	const cso = "container-security-operator-metadata-container-3.18.1.202610080000.p2.g1.assembly.stream.el9-1"
+	seedImages(t, srv, snap, "2026-10-09T04:29:06Z", testBuild("img", "quay-3-18-quay-operator-bundle", "quay-3-18-container-security-operator-bundle", "quay-3-18-quay-bridge-operator-bundle"))
+	resolveNVR(t, srv, "img/quay-3-18-quay-operator-bundle", head)
+	resolveNVR(t, srv, "img/quay-3-18-container-security-operator-bundle", cso)
+	cand, _ = getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
+	checkRows(t, "newest build", checks(cand), []string{
+		"quay-operator matches " + snap + " " + head,
+		"container-security-operator differs " + snap + " " + cso,
+		"quay-bridge-operator absent " + snap + " ",
+	})
+	if cand.State != "complete" || cand.Operators[0].HeadBundleNVR != head {
+		t.Errorf("state %s, quay-operator head %q: the image check must not change the candidate", cand.State, cand.Operators[0].HeadBundleNVR)
+	}
 }

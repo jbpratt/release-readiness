@@ -121,13 +121,17 @@ type ReleaseCandidate struct {
 // "incomplete" for an operator or slot without an FBC, "unknown" while a
 // head bundle or a staged catalog's identity is unresolved, else "complete".
 // Unknown holds, once per digest, the staged catalogs no NVR names, which
-// fill no slot.
+// fill no slot. Pullspecs, release-from-fbc's fbc-pullspecs by operator, then
+// OCP version, is empty unless State is "complete". Installable is set when
+// every operator's head bundle reached stage through an fbc-ri Release.
 type FBCCandidate struct {
-	Source    string        `json:"source"`
-	State     string        `json:"state"`
-	Errors    []string      `json:"errors"`
-	Operators []OperatorFBC `json:"operators"`
-	Unknown   []FBCMember   `json:"unknown"`
+	Source      string        `json:"source"`
+	State       string        `json:"state"`
+	Errors      []string      `json:"errors"`
+	Operators   []OperatorFBC `json:"operators"`
+	Unknown     []FBCMember   `json:"unknown"`
+	Pullspecs   []string      `json:"pullspecs"`
+	Installable bool          `json:"installable"`
 }
 
 // OperatorFBC is one operator's FBCs, keyed by HeadBundleNVR, the NVR of the
@@ -135,7 +139,10 @@ type FBCCandidate struct {
 // "" for none, with that FBC's channel and head CSV. Members are its slots'
 // FBCs on that bundle and Conflicts the others, both by OCP version;
 // MissingOCP the OCP versions it was ever built or staged for without an FBC
-// here, and Coverage how many of those slots Members fill.
+// here, and Coverage how many of those slots Members fill. FBCRIStage tells
+// whether its head bundle reached stage through an fbc-ri Release, "unknown"
+// without a head bundle; ImageCheck compares that bundle with the image
+// Snapshot's.
 type OperatorFBC struct {
 	Operator      string      `json:"operator"`
 	HeadBundleNVR string      `json:"head_bundle_nvr"`
@@ -145,6 +152,29 @@ type OperatorFBC struct {
 	Members       []FBCMember `json:"members"`
 	MissingOCP    []string    `json:"missing_ocp"`
 	Conflicts     []FBCMember `json:"conflicts"`
+	FBCRIStage    CIState     `json:"fbc_ri_stage"`
+	ImageCheck    ImageCheck  `json:"image_check"`
+}
+
+// ImageCheck compares an operator's head bundle with the bundle of it in the
+// version's image Snapshot, its STAGE build, else its newest build: State
+// "matches" or "differs" by NVR, or "absent" when either NVR is unknown or
+// there is no image Snapshot.
+type ImageCheck struct {
+	State     string `json:"state"`
+	Snapshot  string `json:"snapshot"`
+	BundleNVR string `json:"bundle_nvr"`
+}
+
+// FBCCI is the periodic runs that installed from an FBC, by job: Exact from
+// its digest, Equivalent from another FBC of its operator and OCP version
+// headed by the same bundle, whose catalog can still differ. Equivalent sees
+// only FBCs rendered and joined to a head bundle, and the render sync renders
+// staged catalogs and each slot's newest ART build, so a run on an FBC
+// superseded before a render pass never counts.
+type FBCCI struct {
+	Exact      []CIJob `json:"exact"`
+	Equivalent []CIJob `json:"equivalent"`
 }
 
 type FBCCoverage struct {
@@ -156,7 +186,7 @@ type FBCCoverage struct {
 // neither names it, with its ART build page; the NVR of the bundle heading its
 // release channel, "" until joined to an ART bundle build; and, when staged,
 // the FBC Snapshot holding it and that Snapshot's newest Release, whatever its
-// status, nil before one.
+// status, nil before one; and, in a slot, its CI.
 type FBCMember struct {
 	OCP           string          `json:"ocp"`
 	Digest        string          `json:"digest"`
@@ -166,6 +196,7 @@ type FBCMember struct {
 	HeadBundleNVR string          `json:"head_bundle_nvr"`
 	Snapshot      string          `json:"snapshot"`
 	Release       *KonfluxRelease `json:"release"`
+	CI            *FBCCI          `json:"ci"`
 	RecordID      string          `json:"-"`
 	Channel       string          `json:"-"`
 	HeadCSV       string          `json:"-"`
