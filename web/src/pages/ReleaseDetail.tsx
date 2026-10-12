@@ -409,7 +409,10 @@ function Candidate({
 	);
 	return (
 		<>
-			<ProgressStepper aria-label="Where the release candidate is">
+			<ProgressStepper
+				isCenterAligned
+				aria-label="Where the release candidate is"
+			>
 				<Step
 					title="Build"
 					variant="success"
