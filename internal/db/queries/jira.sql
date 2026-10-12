@@ -1,15 +1,10 @@
 -- name: UpsertJiraIssue :exec
-INSERT INTO jira_issues (key, summary, status, priority, labels, fix_version, assignee, issue_type, link, qa_contact)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO jira_issues (key, summary, fix_version, issue_type, link)
+VALUES (?, ?, ?, ?, ?)
 ON CONFLICT(key, fix_version) DO UPDATE SET
     summary=excluded.summary,
-    status=excluded.status,
-    priority=excluded.priority,
-    labels=excluded.labels,
-    assignee=excluded.assignee,
     issue_type=excluded.issue_type,
-    link=excluded.link,
-    qa_contact=excluded.qa_contact;
+    link=excluded.link;
 
 -- name: UpsertReleaseVersion :exec
 INSERT INTO release_versions (name, release_date, released, archived, release_ticket_key, release_ticket_assignee, konflux_application, due_date)

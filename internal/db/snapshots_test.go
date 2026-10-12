@@ -40,7 +40,7 @@ func TestStreamBuilds(t *testing.T) {
 	snapshot("quay-3-18", "quay-3-18-b", 1, map[string]string{"quay-3-18-quay-quay": image("bbbb"), "quay-3-18-quay-clair": image("cccc"), "quay-3-18-quay-operator": image("dddd")})
 	snapshot("quay-3-18", "fbc-ri-stage-quay-3-18-quay-operator-x", 2, map[string]string{"quay-3-18-quay-quay": image("bbbb")})
 	snapshot("quay-3-18", "quay-stage-3-18-1-image-x", 3, map[string]string{"quay-3-18-quay-quay": image("bbbb")})
-	if err := d.UpsertStagedSnapshot(ctx, "quay-stage-3-18-1-image-x", "3.18.1", "image", "stage", t0.Add(3*time.Hour)); err != nil {
+	if err := d.UpsertStagedSnapshot(ctx, "quay-stage-3-18-1-image-x", "3.18.1", "image", "stage"); err != nil {
 		t.Fatal(err)
 	}
 	snapshot("quay-3-17", "quay-3-17-a", 4, map[string]string{"quay-3-17-quay-quay": image("eeee")})

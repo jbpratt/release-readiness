@@ -12,20 +12,15 @@ func (d *DB) UpsertJiraIssue(ctx context.Context, issue *model.JiraIssueRecord) 
 	return d.queries().UpsertJiraIssue(ctx, dbsqlc.UpsertJiraIssueParams{
 		Key:        issue.Key,
 		Summary:    issue.Summary,
-		Status:     issue.Status,
-		Priority:   issue.Priority,
-		Labels:     issue.Labels,
 		FixVersion: issue.FixVersion,
-		Assignee:   issue.Assignee,
 		IssueType:  issue.IssueType,
 		Link:       issue.Link,
-		QaContact:  issue.QAContact,
 	})
 }
 
 // ListJiraIssues returns issues for a fixVersion.
 func (d *DB) ListJiraIssues(ctx context.Context, fixVersion string) ([]model.JiraIssueRecord, error) {
-	query := `SELECT key, summary, status, priority, fix_version, assignee, issue_type, link, qa_contact
+	query := `SELECT key, summary, fix_version, issue_type, link
 		FROM jira_issues WHERE fix_version = ? ORDER BY key`
 
 	rows, err := d.dbtx.QueryContext(ctx, query, fixVersion)
@@ -37,8 +32,7 @@ func (d *DB) ListJiraIssues(ctx context.Context, fixVersion string) ([]model.Jir
 	var issues []model.JiraIssueRecord
 	for rows.Next() {
 		var i model.JiraIssueRecord
-		if err := rows.Scan(&i.Key, &i.Summary, &i.Status, &i.Priority,
-			&i.FixVersion, &i.Assignee, &i.IssueType, &i.Link, &i.QAContact); err != nil {
+		if err := rows.Scan(&i.Key, &i.Summary, &i.FixVersion, &i.IssueType, &i.Link); err != nil {
 			return nil, err
 		}
 		issues = append(issues, i)

@@ -74,11 +74,9 @@ func (q *Queries) InsertProwRunImage(ctx context.Context, arg InsertProwRunImage
 }
 
 const listFinishedProwBuildIDs = `-- name: ListFinishedProwBuildIDs :many
-SELECT build_id FROM prow_runs WHERE job_name = ? AND completed_at != '' AND artifact_state != 'missing'
+SELECT build_id FROM prow_runs WHERE job_name = ? AND completed_at != ''
 `
 
-// A finished run still "missing" was stored by a binary that did not read
-// olm-csvs.yaml, so it is read once more.
 func (q *Queries) ListFinishedProwBuildIDs(ctx context.Context, jobName string) ([]string, error) {
 	rows, err := q.db.QueryContext(ctx, listFinishedProwBuildIDs, jobName)
 	if err != nil {
@@ -143,7 +141,7 @@ func (q *Queries) ListProwRunImages(ctx context.Context, arg ListProwRunImagesPa
 }
 
 const listProwRunsByApplication = `-- name: ListProwRunsByApplication :many
-SELECT r.job_name, r.build_id, r.kind, r.application, r.state, r.started_at, r.completed_at, r.prow_url, r.artifact_state, r.catalog_ref, r.fetched_at,
+SELECT r.job_name, r.build_id, r.application, r.state, r.started_at, r.completed_at, r.prow_url, r.artifact_state, r.catalog_ref, r.fetched_at,
        f.build_id IS NOT NULL AS install_failed
 FROM prow_runs r
 LEFT JOIN prow_install_failures f ON f.job_name = r.job_name AND f.build_id = r.build_id
@@ -154,7 +152,6 @@ ORDER BY r.started_at DESC, r.build_id DESC
 type ListProwRunsByApplicationRow struct {
 	JobName       string
 	BuildID       string
-	Kind          string
 	Application   string
 	State         string
 	StartedAt     string
@@ -178,7 +175,6 @@ func (q *Queries) ListProwRunsByApplication(ctx context.Context, application str
 		if err := rows.Scan(
 			&i.JobName,
 			&i.BuildID,
-			&i.Kind,
 			&i.Application,
 			&i.State,
 			&i.StartedAt,
@@ -203,8 +199,8 @@ func (q *Queries) ListProwRunsByApplication(ctx context.Context, application str
 }
 
 const upsertProwRun = `-- name: UpsertProwRun :exec
-INSERT INTO prow_runs (job_name, build_id, kind, application, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at)
-VALUES (?, ?, 'periodic', ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO prow_runs (job_name, build_id, application, state, started_at, completed_at, prow_url, artifact_state, catalog_ref, fetched_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(job_name, build_id) DO UPDATE SET
     application=excluded.application,
     state=excluded.state,

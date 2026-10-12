@@ -23,14 +23,9 @@ type JiraIssue struct {
 	ID         int64
 	Key        string
 	Summary    string
-	Status     string
-	Priority   string
-	Labels     string
 	FixVersion string
-	Assignee   string
 	IssueType  string
 	Link       string
-	QaContact  string
 }
 
 type KonfluxRelease struct {
@@ -55,7 +50,6 @@ type ProwInstallFailure struct {
 type ProwRun struct {
 	JobName       string
 	BuildID       string
-	Kind          string
 	Application   string
 	State         string
 	StartedAt     string
@@ -101,9 +95,8 @@ type SnapshotComponent struct {
 }
 
 type StagedSnapshot struct {
-	Name      string
-	Assembly  string
-	Kind      string
-	Env       string
-	CreatedAt string
+	Name     string
+	Assembly string
+	Kind     string
+	Env      string
 }

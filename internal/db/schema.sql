@@ -21,14 +21,9 @@ CREATE TABLE IF NOT EXISTS jira_issues (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     key         TEXT NOT NULL,
     summary     TEXT NOT NULL DEFAULT '',
-    status      TEXT NOT NULL DEFAULT '',
-    priority    TEXT NOT NULL DEFAULT '',
-    labels      TEXT NOT NULL DEFAULT '',
     fix_version TEXT NOT NULL DEFAULT '',
-    assignee    TEXT NOT NULL DEFAULT '',
     issue_type  TEXT NOT NULL DEFAULT '',
-    link        TEXT NOT NULL DEFAULT '',
-    qa_contact  TEXT NOT NULL DEFAULT ''
+    link        TEXT NOT NULL DEFAULT ''
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jira_issues_key_version ON jira_issues(key, fix_version);
@@ -87,8 +82,6 @@ CREATE TABLE IF NOT EXISTS art_fbc_records (
 CREATE TABLE IF NOT EXISTS prow_runs (
     job_name        TEXT NOT NULL,
     build_id        TEXT NOT NULL,
-    -- Unused; still set on insert: old databases have it NOT NULL, no default.
-    kind            TEXT NOT NULL,
     application     TEXT NOT NULL,
     state           TEXT NOT NULL DEFAULT '',
     started_at      TEXT NOT NULL DEFAULT '',
@@ -128,8 +121,7 @@ CREATE TABLE IF NOT EXISTS staged_snapshots (
     name       TEXT PRIMARY KEY,
     assembly   TEXT NOT NULL,
     kind       TEXT NOT NULL,
-    env        TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    env        TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_staged_snapshots_assembly ON staged_snapshots(assembly, env, kind, created_at);
+CREATE INDEX IF NOT EXISTS idx_staged_snapshots_assembly ON staged_snapshots(assembly, env, kind);

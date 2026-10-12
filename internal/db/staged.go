@@ -6,19 +6,17 @@ import (
 	"errors"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/quay/release-readiness/internal/db/sqlc"
 	"github.com/quay/release-readiness/internal/model"
 )
 
-func (d *DB) UpsertStagedSnapshot(ctx context.Context, name, assembly, kind, env string, createdAt time.Time) error {
+func (d *DB) UpsertStagedSnapshot(ctx context.Context, name, assembly, kind, env string) error {
 	return d.queries().UpsertStagedSnapshot(ctx, dbsqlc.UpsertStagedSnapshotParams{
-		Name:      name,
-		Assembly:  assembly,
-		Kind:      kind,
-		Env:       env,
-		CreatedAt: createdAt.UTC().Format(time.RFC3339),
+		Name:     name,
+		Assembly: assembly,
+		Kind:     kind,
+		Env:      env,
 	})
 }
 

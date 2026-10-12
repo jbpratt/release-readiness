@@ -151,25 +151,14 @@ func (s *Syncer) syncVersion(ctx context.Context, fixVersion string) error {
 		for _, issue := range issues {
 			keys = append(keys, issue.Key)
 
-			labels := strings.Join(issue.Fields.Labels, ",")
-			assignee := ""
-			if issue.Fields.Assignee != nil {
-				assignee = issue.Fields.Assignee.DisplayName
-			}
-
 			jiraURL := fmt.Sprintf("%s/browse/%s", s.client.SiteURL(), issue.Key)
 
 			record := &model.JiraIssueRecord{
 				Key:        issue.Key,
 				Summary:    issue.Fields.Summary,
-				Status:     issue.Fields.Status.Name,
-				Priority:   issue.Fields.Priority.Name,
-				Labels:     labels,
 				FixVersion: fixVersion,
-				Assignee:   assignee,
 				IssueType:  issue.Fields.IssueType.Name,
 				Link:       jiraURL,
-				QAContact:  issue.QAContact,
 			}
 
 			if err := txStore.UpsertJiraIssue(ctx, record); err != nil {

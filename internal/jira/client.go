@@ -17,35 +17,32 @@ import (
 
 // Config holds JIRA connection settings.
 type Config struct {
-	BaseURL        string // REST API base, e.g. https://redhat.atlassian.net
-	SiteURL        string // browse-link base; defaults to BaseURL
-	Email          string // JIRA Cloud account email for Basic Auth
-	Token          string // JIRA Cloud API token
-	Project        string // e.g. PROJQUAY
-	QAContactField string // custom field name for QA Contact (e.g. customfield_12315948)
+	BaseURL string // REST API base, e.g. https://redhat.atlassian.net
+	SiteURL string // browse-link base; defaults to BaseURL
+	Email   string // JIRA Cloud account email for Basic Auth
+	Token   string // JIRA Cloud API token
+	Project string // e.g. PROJQUAY
 }
 
 // Client is a JIRA REST API client.
 type Client struct {
-	baseURL        string
-	siteURL        string
-	email          string
-	token          string
-	project        string
-	qaContactField string
-	httpClient     *http.Client
-	minDelay       time.Duration // minimum delay between requests
+	baseURL    string
+	siteURL    string
+	email      string
+	token      string
+	project    string
+	httpClient *http.Client
+	minDelay   time.Duration // minimum delay between requests
 }
 
 // New creates a new JIRA client.
 func New(cfg Config) *Client {
 	return &Client{
-		baseURL:        strings.TrimRight(cfg.BaseURL, "/"),
-		siteURL:        strings.TrimRight(cmp.Or(cfg.SiteURL, cfg.BaseURL), "/"),
-		email:          cfg.Email,
-		token:          cfg.Token,
-		project:        cfg.Project,
-		qaContactField: cfg.QAContactField,
+		baseURL: strings.TrimRight(cfg.BaseURL, "/"),
+		siteURL: strings.TrimRight(cmp.Or(cfg.SiteURL, cfg.BaseURL), "/"),
+		email:   cfg.Email,
+		token:   cfg.Token,
+		project: cfg.Project,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -55,40 +52,16 @@ func New(cfg Config) *Client {
 
 // Issue represents a JIRA issue from the REST API.
 type Issue struct {
-	Key       string      `json:"key"`
-	Fields    IssueFields `json:"fields"`
-	QAContact string      `json:"-"`
+	Key    string      `json:"key"`
+	Fields IssueFields `json:"fields"`
 }
 
 // IssueFields holds the fields we care about from a JIRA issue.
 type IssueFields struct {
-	Summary   string        `json:"summary"`
-	Status    StatusField   `json:"status"`
-	Priority  PriorityField `json:"priority"`
-	Labels    []string      `json:"labels"`
-	Assignee  *UserField    `json:"assignee"`
-	IssueType TypeField     `json:"issuetype"`
-	DueDate   string        `json:"duedate"`
-
-	Raw map[string]json.RawMessage `json:"-"`
-}
-
-// UnmarshalJSON decodes known fields and captures raw JSON for custom field extraction.
-func (f *IssueFields) UnmarshalJSON(data []byte) error {
-	type Alias IssueFields
-	a := (*Alias)(f)
-	if err := json.Unmarshal(data, a); err != nil {
-		return err
-	}
-	return json.Unmarshal(data, &f.Raw)
-}
-
-type StatusField struct {
-	Name string `json:"name"`
-}
-
-type PriorityField struct {
-	Name string `json:"name"`
+	Summary   string     `json:"summary"`
+	Assignee  *UserField `json:"assignee"`
+	IssueType TypeField  `json:"issuetype"`
+	DueDate   string     `json:"duedate"`
 }
 
 type VersionField struct {
@@ -194,26 +167,7 @@ func (c *Client) DiscoverActiveReleases(ctx context.Context) ([]ActiveRelease, e
 // It handles pagination automatically and respects rate limits.
 func (c *Client) SearchIssues(ctx context.Context, fixVersion string) ([]Issue, error) {
 	jql := fmt.Sprintf(`project=%s AND "Target Version"="%s"`, c.project, fixVersion)
-	fields := "summary,status,priority,labels,assignee,issuetype"
-	if c.qaContactField != "" {
-		fields += "," + c.qaContactField
-	}
-
-	issues, err := c.search(ctx, jql, fields, "search issues")
-	if err != nil {
-		return nil, err
-	}
-	if c.qaContactField != "" {
-		for i := range issues {
-			if v, ok := issues[i].Fields.Raw[c.qaContactField]; ok {
-				var u *UserField
-				if json.Unmarshal(v, &u) == nil && u != nil {
-					issues[i].QAContact = u.DisplayName
-				}
-			}
-		}
-	}
-	return issues, nil
+	return c.search(ctx, jql, "summary,issuetype", "search issues")
 }
 
 // search returns every issue jql matches, with fields, page by page. A

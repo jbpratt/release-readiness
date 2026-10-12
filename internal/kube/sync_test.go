@@ -112,7 +112,7 @@ func TestSyncReleases(t *testing.T) {
 		t.Errorf("release = %+v, want %+v", got[0], want)
 	}
 	// The prod Release is found by Snapshot name alone, so an unlabelled one is stored too.
-	if err := database.UpsertStagedSnapshot(ctx, "unlabelled-r1-snap", "3.18.1", "image", "prod", created); err != nil {
+	if err := database.UpsertStagedSnapshot(ctx, "unlabelled-r1-snap", "3.18.1", "image", "prod"); err != nil {
 		t.Fatal(err)
 	}
 	if prod, err := database.LatestProdRelease(ctx, "3.18.1"); err != nil || prod == nil || prod.Name != "unlabelled-r1" {

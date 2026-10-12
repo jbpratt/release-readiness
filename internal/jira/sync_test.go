@@ -39,7 +39,7 @@ func TestSyncOnceRejectedTokenDeletesNothing(t *testing.T) {
 		case strings.Contains(r.URL.Query().Get("jql"), "-area/release"):
 			_ = json.NewEncoder(w).Encode(searchResponse{Issues: []Issue{{
 				Key:    "PROJQUAY-1",
-				Fields: IssueFields{Summary: "Release Quay v3.16.2", Status: StatusField{Name: "New"}},
+				Fields: IssueFields{Summary: "Release Quay v3.16.2"},
 			}}})
 		case r.URL.Path == "/rest/api/3/search/jql":
 			w.Header().Set("X-Seraph-LoginReason", "AUTHENTICATED_FAILED")

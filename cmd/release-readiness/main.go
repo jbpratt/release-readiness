@@ -42,7 +42,6 @@ func main() {
 	jiraEmail := flag.String("jira-email", os.Getenv("JIRA_EMAIL"), "JIRA Cloud account email for API token auth")
 	jiraToken := flag.String("jira-token", os.Getenv("JIRA_TOKEN"), "JIRA Cloud API token")
 	jiraProject := flag.String("jira-project", cmp.Or(os.Getenv("JIRA_PROJECT"), "PROJQUAY"), "JIRA project key")
-	jiraQAContactField := flag.String("jira-qa-contact-field", cmp.Or(os.Getenv("JIRA_QA_CONTACT_FIELD"), "customfield_12315948"), "JIRA custom field name for QA Contact")
 	jiraPollInterval := flag.Duration("jira-poll-interval", 5*time.Minute, "JIRA sync poll interval")
 
 	// ART build history flags
@@ -109,12 +108,11 @@ func main() {
 	if *jiraToken != "" {
 		apiURL := cmp.Or(*jiraAPIURL, *jiraURL)
 		jiraClient := jira.New(jira.Config{
-			BaseURL:        apiURL,
-			SiteURL:        *jiraURL,
-			Email:          *jiraEmail,
-			Token:          *jiraToken,
-			Project:        *jiraProject,
-			QAContactField: *jiraQAContactField,
+			BaseURL: apiURL,
+			SiteURL: *jiraURL,
+			Email:   *jiraEmail,
+			Token:   *jiraToken,
+			Project: *jiraProject,
 		})
 		jiraLog := logger.With("component", "jira-sync")
 		logger.Info("jira sync enabled", "url", *jiraURL, "api_url", apiURL, "project", *jiraProject, "interval", *jiraPollInterval)
