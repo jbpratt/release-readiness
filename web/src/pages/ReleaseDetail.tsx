@@ -7,6 +7,7 @@ import {
 	CardBody,
 	CardTitle,
 	ClipboardCopy,
+	clipboardCopyFunc,
 	EmptyState,
 	EmptyStateBody,
 	Flex,
@@ -38,6 +39,7 @@ import type {
 	BuildLabel,
 	CandidateBuild,
 	CandidateCI,
+	CandidateComponent,
 	CIJob,
 	CIState,
 	DashboardConfig,
@@ -306,19 +308,14 @@ function LinkedCardTitle({
 	);
 }
 
-const noNvr = (
-	<span title="Not in ART build history yet" style={muted}>
-		-
-	</span>
-);
-
 /** Tooltip content, one line each, without the empty ones. */
 const lines = (...ls: (string | undefined)[]) =>
 	ls.filter(Boolean).map((l) => <div key={l}>{l}</div>);
 
 /**
  * The version's release candidate, its STAGE build, or why it has none and
- * the build to pick; a shipped version's is labeled, with nothing to pick.
+ * the build to pick, with the build's images; a shipped version's is labeled,
+ * with nothing to pick.
  */
 function BuildsCard({
 	data,
@@ -380,6 +377,9 @@ function BuildsCard({
 									passed CI. <PassedCopy ci={data.ci} passed={data.ci.passed} />
 								</Status>
 							</div>
+						)}
+						{anchor?.components && (
+							<ComponentTable components={anchor.components} app={app} />
 						)}
 					</>
 				)}
@@ -506,31 +506,60 @@ function Candidate({
 					}
 				/>
 			</ProgressStepper>
-			<Table variant="compact" style={{ marginTop: "1rem" }}>
-				<Thead>
-					<Tr>
-						<Th>Component</Th>
-						<Th>Build</Th>
-					</Tr>
-				</Thead>
-				<Tbody>
-					{candidate.components.map((c) => (
-						<Tr key={c.name}>
-							<Td>{componentLabel(c.name, app)}</Td>
-							<Td>
-								{c.nvr ? (
-									<ExtLink href={c.build_url || null} title={c.nvr}>
-										{nvrLabel(c.nvr)}
-									</ExtLink>
-								) : (
-									noNvr
-								)}
-							</Td>
-						</Tr>
-					))}
-				</Tbody>
-			</Table>
+			<ComponentTable components={candidate.components} app={app} />
 		</>
+	);
+}
+
+/** An image's digest to 12 hex digits: "sha256:0123456789ab". */
+const shortDigest = (image: string) =>
+	image.slice(image.indexOf("@") + 1).slice(0, 19);
+
+/**
+ * A build's images, each by its ART build, else by its short digest, copying
+ * its pullspec.
+ */
+function ComponentTable({
+	components,
+	app,
+}: {
+	components: CandidateComponent[];
+	app: string;
+}) {
+	return (
+		<Table variant="compact" style={{ marginTop: "1rem" }}>
+			<Thead>
+				<Tr>
+					<Th>Component</Th>
+					<Th>Build</Th>
+				</Tr>
+			</Thead>
+			<Tbody>
+				{components.map((c) => (
+					<Tr key={c.name}>
+						<Td>{componentLabel(c.name, app)}</Td>
+						<Td>
+							{c.nvr ? (
+								<ExtLink href={c.build_url || null} title={c.nvr}>
+									{nvrLabel(c.nvr)}
+								</ExtLink>
+							) : (
+								<span title={c.image}>
+									<ClipboardCopy
+										variant="inline-compact"
+										isCode
+										onCopy={(e) => clipboardCopyFunc(e, c.image)}
+									>
+										{shortDigest(c.image)}
+									</ClipboardCopy>{" "}
+									<span style={muted}>ART build record unavailable</span>
+								</span>
+							)}
+						</Td>
+					</Tr>
+				))}
+			</Tbody>
+		</Table>
 	);
 }
 

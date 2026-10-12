@@ -111,12 +111,13 @@ type CandidateBuild struct {
 	Prod       *KonfluxRelease      `json:"prod"`
 }
 
-// NewestBuild is a version's newest build and whether its operator bundle
-// reached the catalog CI installs from.
+// NewestBuild is a version's newest build, its images, and whether its
+// operator bundle reached the catalog CI installs from.
 type NewestBuild struct {
-	Snapshot  string    `json:"snapshot"`
-	CreatedAt time.Time `json:"created_at"`
-	CI        CIState   `json:"ci"`
+	Snapshot   string               `json:"snapshot"`
+	CreatedAt  time.Time            `json:"created_at"`
+	CI         CIState              `json:"ci"`
+	Components []CandidateComponent `json:"components"`
 }
 
 // CIState tells whether an operator bundle reached the catalog CI installs
@@ -164,10 +165,12 @@ type MissingFBC struct {
 	URL      string `json:"url"`
 }
 
-// BuildLabel names an operator bundle by the oldest stream build holding it.
+// BuildLabel names an operator bundle by the oldest stream build holding it;
+// without a candidate, CandidateCI.Passed has that build's images.
 type BuildLabel struct {
-	Snapshot  string    `json:"snapshot"`
-	CreatedAt time.Time `json:"created_at"`
+	Snapshot   string               `json:"snapshot"`
+	CreatedAt  time.Time            `json:"created_at"`
+	Components []CandidateComponent `json:"components,omitempty"`
 }
 
 // CIBuild is the runs, by job, that installed one build, or failed to install
@@ -197,7 +200,7 @@ type CIRun struct {
 // resolves it.
 type CandidateComponent struct {
 	Name     string `json:"name"`
-	Image    string `json:"-"`
+	Image    string `json:"image"`
 	NVR      string `json:"nvr"`
 	BuildURL string `json:"build_url"`
 }

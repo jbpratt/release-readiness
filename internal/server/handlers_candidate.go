@@ -116,6 +116,15 @@ func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVe
 		if resp.CI.FBC, err = s.buildFBC(ctx, c, p.Snapshot); err != nil {
 			return nil, err
 		}
+		// Without a candidate, passed carries its images: newest is left out
+		// when it is passed's build.
+		if resp.Candidate == nil {
+			if i := slices.IndexFunc(c.stream, func(b model.ReleaseSnapshot) bool { return b.Name == p.Snapshot }); i >= 0 {
+				if p.Components, err = s.buildComponents(ctx, app, &c.stream[i]); err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
 	if c.newest == nil {
 		return resp, nil
@@ -134,6 +143,9 @@ func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVe
 	})
 	if resp.Candidate == nil || differs {
 		resp.Newest = &model.NewestBuild{Snapshot: c.newest.Name, CreatedAt: c.newest.CreatedAt, CI: ciState(bundle, releases)}
+		if resp.Newest.Components, err = s.buildComponents(ctx, app, c.newest); err != nil {
+			return nil, err
+		}
 	}
 	return resp, nil
 }
@@ -552,7 +564,16 @@ func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersi
 	// Its own stage Release succeeded with every image of it, and dates it:
 	// ART assembles a STAGE build from images it often staged before.
 	c := &model.CandidateBuild{Snapshot: snap.Name, CreatedAt: snap.CreatedAt, Stage: model.StageFlag{StagedAt: &staged.CompletedAt}}
-	images := buildImages(release.KonfluxApplication, snap)
+	if c.Components, err = s.buildComponents(ctx, release.KonfluxApplication, snap); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// buildComponents returns snap's images, base image excluded, with their ART
+// builds.
+func (s *Server) buildComponents(ctx context.Context, app string, snap *model.ReleaseSnapshot) ([]model.CandidateComponent, error) {
+	images := buildImages(app, snap)
 	digests := make([]string, len(images))
 	for i, img := range images {
 		digests[i] = imageDigest(img.Image)
@@ -561,14 +582,14 @@ func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersi
 	if err != nil {
 		return nil, err
 	}
-	c.Components = make([]model.CandidateComponent, len(images))
+	components := make([]model.CandidateComponent, len(images))
 	for i, img := range images {
-		c.Components[i] = model.CandidateComponent{Name: img.Name, Image: img.Image}
+		components[i] = model.CandidateComponent{Name: img.Name, Image: img.Image}
 		if b, ok := builds[digests[i]]; ok {
-			c.Components[i].NVR, c.Components[i].BuildURL = b.NVR, artbuild.PageURL(s.artBaseURL, b.NVR, b.RecordID)
+			components[i].NVR, components[i].BuildURL = b.NVR, artbuild.PageURL(s.artBaseURL, b.NVR, b.RecordID)
 		}
 	}
-	return c, nil
+	return components, nil
 }
 
 // buildImages returns snap's component images less the base image
