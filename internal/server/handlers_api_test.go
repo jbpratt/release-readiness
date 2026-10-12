@@ -160,8 +160,8 @@ func TestReleasesOverview(t *testing.T) {
 	resolveNVR(t, srv, "quay-3-16-snap-1/quay-3-16-quay", testNVR("quay-quay", "3.16.3"))
 
 	err = srv.db.UpsertJiraIssue(ctx, &model.JiraIssueRecord{
-		Key: "PROJQUAY-1", Summary: "fix bug", Status: "Open",
-		Priority: "Major", FixVersion: "quay-v3.16.3", IssueType: "Bug",
+		Key: "PROJQUAY-1", Summary: "fix bug",
+		FixVersion: "quay-v3.16.3", IssueType: "Bug",
 		Link: "https://redhat.atlassian.net/browse/PROJQUAY-1",
 	})
 	if err != nil {
@@ -283,7 +283,7 @@ func TestReleasesOverviewLatestBuild(t *testing.T) {
 	}
 	seedKonfluxRelease(t, srv, "quay-stage-3-18-1-image-20261010020000", "quay-stage-3-18-1-image-20261010020000",
 		"quay-advisory-stage-3-18", "Succeeded", "2026-10-10T02:00:00Z", "2026-10-10T02:05:00Z")
-	if ov := overviews()["quay-v3.18.1"]; !ov.Shipped || ov.LatestBuild == nil || !ov.LatestBuild.Equal(mustTime(t, "2026-10-10T02:00:00Z")) {
+	if ov := overviews()["quay-v3.18.1"]; ov.LatestBuild == nil || !ov.LatestBuild.Equal(mustTime(t, "2026-10-10T02:00:00Z")) {
 		t.Errorf("shipped 3.18.1 latest_build = %v, want its STAGE build's", ov.LatestBuild)
 	}
 }
@@ -395,17 +395,15 @@ func TestReleasesOverviewShipped(t *testing.T) {
 
 	var overviews []model.ReleaseOverview
 	getJSON(t, srv, "/api/v1/releases/overview", http.StatusOK, &overviews)
-	type flags struct{ shipped, next bool }
-	want := map[string]flags{
-		"quay-v3.17.5": {true, false},
-		"quay-v3.17.6": {false, true},
-		"quay-v3.18.0": {true, false},
-		"quay-v3.18.1": {false, true},
+	want := map[string]bool{
+		"quay-v3.17.5": false,
+		"quay-v3.17.6": true,
+		"quay-v3.18.0": false,
+		"quay-v3.18.1": true,
 	}
 	for _, ov := range overviews {
-		got := flags{ov.Shipped, ov.NextInStream}
-		if got != want[ov.Release.Name] {
-			t.Errorf("%s: got %+v, want %+v", ov.Release.Name, got, want[ov.Release.Name])
+		if ov.NextInStream != want[ov.Release.Name] {
+			t.Errorf("%s: next in stream %v, want %v", ov.Release.Name, ov.NextInStream, want[ov.Release.Name])
 		}
 	}
 	if len(overviews) != len(want) {

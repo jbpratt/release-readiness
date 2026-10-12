@@ -77,44 +77,29 @@ func (q *Queries) ListAllReleaseVersions(ctx context.Context) ([]ReleaseVersion,
 }
 
 const upsertJiraIssue = `-- name: UpsertJiraIssue :exec
-INSERT INTO jira_issues (key, summary, status, priority, labels, fix_version, assignee, issue_type, link, qa_contact)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO jira_issues (key, summary, fix_version, issue_type, link)
+VALUES (?, ?, ?, ?, ?)
 ON CONFLICT(key, fix_version) DO UPDATE SET
     summary=excluded.summary,
-    status=excluded.status,
-    priority=excluded.priority,
-    labels=excluded.labels,
-    assignee=excluded.assignee,
     issue_type=excluded.issue_type,
-    link=excluded.link,
-    qa_contact=excluded.qa_contact
+    link=excluded.link
 `
 
 type UpsertJiraIssueParams struct {
 	Key        string
 	Summary    string
-	Status     string
-	Priority   string
-	Labels     string
 	FixVersion string
-	Assignee   string
 	IssueType  string
 	Link       string
-	QaContact  string
 }
 
 func (q *Queries) UpsertJiraIssue(ctx context.Context, arg UpsertJiraIssueParams) error {
 	_, err := q.db.ExecContext(ctx, upsertJiraIssue,
 		arg.Key,
 		arg.Summary,
-		arg.Status,
-		arg.Priority,
-		arg.Labels,
 		arg.FixVersion,
-		arg.Assignee,
 		arg.IssueType,
 		arg.Link,
-		arg.QaContact,
 	)
 	return err
 }

@@ -6,14 +6,9 @@ import "time"
 type JiraIssueRecord struct {
 	Key        string `json:"key"`
 	Summary    string `json:"summary"`
-	Status     string `json:"status"`
-	Priority   string `json:"priority"`
-	Labels     string `json:"-"` // comma-separated
-	FixVersion string `json:"fix_version"`
-	Assignee   string `json:"assignee"`
+	FixVersion string `json:"-"`
 	IssueType  string `json:"issue_type"`
 	Link       string `json:"link"`
-	QAContact  string `json:"qa_contact"`
 }
 
 // ReleaseOverview is a combined view of a release with its readiness signal
@@ -24,7 +19,7 @@ type ReleaseOverview struct {
 	LatestBuild *time.Time        `json:"latest_build,omitempty"`
 	// Shipped is set when the catalog published the version's tag or JIRA
 	// marks it released.
-	Shipped bool `json:"shipped"`
+	Shipped bool `json:"-"`
 	// NextInStream marks the lowest unshipped z of its product and major.minor.
 	NextInStream bool `json:"next_in_stream"`
 }
@@ -65,7 +60,7 @@ type KonfluxRelease struct {
 	Name           string     `json:"name"`
 	Application    string     `json:"-"`
 	Snapshot       string     `json:"-"`
-	ReleasePlan    string     `json:"release_plan"`
+	ReleasePlan    string     `json:"-"`
 	ReleasedStatus string     `json:"released_status"`
 	ReleasedReason string     `json:"released_reason"`
 	FailedTask     string     `json:"failed_task,omitempty"`
@@ -142,7 +137,7 @@ type CIState struct {
 // "rerun" release-from-fbc with Passed, "waiting" while a newer build in CI
 // has not passed, or "current"; without one "pick" Passed, or "none".
 type CandidateCI struct {
-	Since      time.Time   `json:"since"`
+	Since      time.Time   `json:"-"`
 	Builds     []CIBuild   `json:"builds"`
 	LatestInCI *BuildLabel `json:"latest_in_ci"`
 	Passed     *BuildLabel `json:"passed"`
@@ -201,14 +196,13 @@ type CIRun struct {
 // resolves it.
 type CandidateComponent struct {
 	Name     string `json:"name"`
-	Image    string `json:"image"`
+	Image    string `json:"-"`
 	NVR      string `json:"nvr"`
 	BuildURL string `json:"build_url"`
 }
 
-// StageFlag is the release candidate's stage: State "staged", StagedAt when
-// its stage Release completed.
+// StageFlag is the release candidate's stage: StagedAt when its stage Release
+// completed.
 type StageFlag struct {
-	State    string     `json:"state"`
 	StagedAt *time.Time `json:"staged_at"`
 }

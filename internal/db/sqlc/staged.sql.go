@@ -82,21 +82,19 @@ func (q *Queries) ListSuccessfulStageReleases(ctx context.Context, arg ListSucce
 }
 
 const upsertStagedSnapshot = `-- name: UpsertStagedSnapshot :exec
-INSERT INTO staged_snapshots (name, assembly, kind, env, created_at)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO staged_snapshots (name, assembly, kind, env)
+VALUES (?, ?, ?, ?)
 ON CONFLICT(name) DO UPDATE SET
     assembly=excluded.assembly,
     kind=excluded.kind,
-    env=excluded.env,
-    created_at=excluded.created_at
+    env=excluded.env
 `
 
 type UpsertStagedSnapshotParams struct {
-	Name      string
-	Assembly  string
-	Kind      string
-	Env       string
-	CreatedAt string
+	Name     string
+	Assembly string
+	Kind     string
+	Env      string
 }
 
 func (q *Queries) UpsertStagedSnapshot(ctx context.Context, arg UpsertStagedSnapshotParams) error {
@@ -105,7 +103,6 @@ func (q *Queries) UpsertStagedSnapshot(ctx context.Context, arg UpsertStagedSnap
 		arg.Assembly,
 		arg.Kind,
 		arg.Env,
-		arg.CreatedAt,
 	)
 	return err
 }

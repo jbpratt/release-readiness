@@ -119,7 +119,7 @@ func (s *Syncer) sync(ctx context.Context, obj *unstructured.Unstructured) error
 	a := obj.GetAnnotations()
 	assembly, kind, env := a["art.redhat.com/assembly"], a["art.redhat.com/kind"], a["art.redhat.com/env"]
 	if assembly != "" && kind != "" && env != "" {
-		if err := s.db.UpsertStagedSnapshot(ctx, name, assembly, kind, env, obj.GetCreationTimestamp().UTC()); err != nil {
+		if err := s.db.UpsertStagedSnapshot(ctx, name, assembly, kind, env); err != nil {
 			return fmt.Errorf("store staged snapshot: %w", err)
 		}
 	}

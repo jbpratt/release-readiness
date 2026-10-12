@@ -178,7 +178,7 @@ type memStore struct {
 func (m *memStore) ListFinishedProwBuildIDs(_ context.Context, job string) ([]string, error) {
 	var ids []string
 	for _, r := range m.runs {
-		if r.JobName == job && r.CompletedAt != nil && r.ArtifactState != ArtifactMissing {
+		if r.JobName == job && r.CompletedAt != nil {
 			ids = append(ids, r.BuildID)
 		}
 	}

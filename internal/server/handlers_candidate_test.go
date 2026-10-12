@@ -103,9 +103,9 @@ func seedQuay318(t *testing.T, srv *Server) {
 			t.Fatal(err)
 		}
 	}
-	assembly := func(name, env, created string) {
+	assembly := func(name, env string) {
 		t.Helper()
-		if err := srv.db.UpsertStagedSnapshot(ctx, name, "3.18.1", "image", env, mustTime(t, created)); err != nil {
+		if err := srv.db.UpsertStagedSnapshot(ctx, name, "3.18.1", "image", env); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -116,7 +116,7 @@ func seedQuay318(t *testing.T, srv *Server) {
 	seedKonfluxRelease(t, srv, "fbc-ri-stage-quay-3-18-quay-operator-q7x2v", "fbc-ri-stage-quay-3-18-quay-operator-k2p4m",
 		"quay-advisory-stage-3-18", "Succeeded", "2026-10-06T05:28:00Z", "2026-10-06T05:40:00Z")
 	seedImages(t, srv, "quay-stage-3-18-1-image-20261007200243", "2026-10-07T20:02:43Z", staged)
-	assembly("quay-stage-3-18-1-image-20261007200243", "stage", "2026-10-07T20:02:43Z")
+	assembly("quay-stage-3-18-1-image-20261007200243", "stage")
 	seedKonfluxRelease(t, srv, "quay-stage-3-18-1-image-20261007200243", "quay-stage-3-18-1-image-20261007200243",
 		"quay-advisory-stage-3-18", "Succeeded", "2026-10-07T20:02:43Z", "2026-10-07T20:14:57Z")
 	seedImages(t, srv, "quay-3-18-20261009-042610-000", "2026-10-09T04:29:06Z", testBuild("tested", all...))
@@ -126,7 +126,7 @@ func seedQuay318(t *testing.T, srv *Server) {
 	seedKonfluxRelease(t, srv, "fbc-ri-stage-quay-3-18-quay-operator-r8fcb", "fbc-ri-stage-quay-3-18-quay-operator-jxfbj",
 		"quay-advisory-stage-3-18", "Succeeded", "2026-10-09T04:29:20Z", "2026-10-09T04:41:33Z")
 	seedImages(t, srv, "quay-prod-3-18-1-image-20261009133455", "2026-10-09T13:34:55Z", staged)
-	assembly("quay-prod-3-18-1-image-20261009133455", "prod", "2026-10-09T13:34:55Z")
+	assembly("quay-prod-3-18-1-image-20261009133455", "prod")
 	seedKonfluxRelease(t, srv, "quay-prod-3-18-1-image-20261009133455", "quay-prod-3-18-1-image-20261009133455",
 		"quay-advisory-prod-3-18", "Failed", "2026-10-09T13:34:55Z", "2026-10-09T13:39:03Z")
 
@@ -138,11 +138,11 @@ func seedQuay318(t *testing.T, srv *Server) {
 	seedImages(t, srv, "fbc-ri-stage-quay-3-18-quay-operator-d552l", "2026-10-10T01:49:22Z",
 		testBuild("new", "quay-3-18-quay-builder", "quay-3-18-quay-builder-qemu", "quay-3-18-quay-clair", "quay-3-18-quay-operator", "quay-3-18-quay-operator-bundle", "quay-3-18-quay-quay"))
 	seedImages(t, srv, "quay-stage-3-18-1-image-20261010020000", "2026-10-10T02:00:00Z", staged)
-	assembly("quay-stage-3-18-1-image-20261010020000", "stage", "2026-10-10T02:00:00Z")
+	assembly("quay-stage-3-18-1-image-20261010020000", "stage")
 	seedKonfluxRelease(t, srv, "quay-stage-3-18-1-image-20261010020000", "quay-stage-3-18-1-image-20261010020000",
 		"quay-advisory-stage-3-18", "Failed", "2026-10-10T02:00:00Z", "2026-10-10T02:05:00Z")
 	seedImages(t, srv, "quay-prod-3-18-1-image-20261010030000", "2026-10-10T03:00:00Z", staged)
-	assembly("quay-prod-3-18-1-image-20261010030000", "prod", "2026-10-10T03:00:00Z")
+	assembly("quay-prod-3-18-1-image-20261010030000", "prod")
 
 	for _, r := range []struct{ job, id, state, started string }{
 		{"gcp-ocp422-e2e-install-gcp-gcs-nightly", "5", "success", "2026-10-09T23:49:53Z"},
@@ -343,16 +343,15 @@ func TestGetCandidate(t *testing.T) {
 		!c.CreatedAt.Equal(mustTime(t, "2026-10-07T20:02:43Z")) {
 		t.Fatalf("3.18.1 candidate = %+v, reason %q", c, got.Reason)
 	}
-	if !slices.Equal(names(c.Components), quay318) || c.Components[0].Image != testImage("stage/"+quay318[0]) {
+	if !slices.Equal(names(c.Components), quay318) {
 		t.Errorf("3.18.1 components = %+v", c.Components)
 	}
 	wantQuay := model.CandidateComponent{
 		Name:     "quay-3-18-quay-quay",
-		Image:    testImage("stage/quay-3-18-quay-quay"),
 		NVR:      "quay-quay-container-3.18.1-202610060528.p2.g1148474.assembly.stream.el9",
 		BuildURL: "https://art.example/build?nvr=quay-quay-container-3.18.1-202610060528.p2.g1148474.assembly.stream.el9&record_id=rec-stage-quay",
 	}
-	wantClair := model.CandidateComponent{Name: "quay-3-18-quay-clair", Image: testImage("stage/quay-3-18-quay-clair")}
+	wantClair := model.CandidateComponent{Name: "quay-3-18-quay-clair"}
 	if c.Components[9] != wantQuay || c.Components[6] != wantClair {
 		t.Errorf("3.18.1 quay, clair = %+v, %+v; want %+v, %+v", c.Components[9], c.Components[6], wantQuay, wantClair)
 	}
@@ -364,7 +363,7 @@ func TestGetCandidate(t *testing.T) {
 	}
 	// Its images reached stage the day before, but the build did with its
 	// own Release.
-	if s := c.Stage; s.State != "staged" || s.StagedAt == nil || !s.StagedAt.Equal(mustTime(t, "2026-10-07T20:14:57Z")) {
+	if s := c.Stage; s.StagedAt == nil || !s.StagedAt.Equal(mustTime(t, "2026-10-07T20:14:57Z")) {
 		t.Errorf("3.18.1 candidate stage = %+v", s)
 	}
 	if n := got.Newest; n == nil || n.Snapshot != "quay-3-18-20261010-013713-000" || !n.CreatedAt.Equal(mustTime(t, "2026-10-10T01:48:34Z")) || n.CI != (model.CIState{State: "none"}) {
@@ -385,7 +384,7 @@ func TestGetCandidate(t *testing.T) {
 	getJSON(t, srv, "/api/v1/releases/quay-v3.14.10/candidate", http.StatusOK, &raw)
 	want := map[string]any{
 		"shipped": false, "candidate": nil, "reason": "no release candidate yet",
-		"ci": map[string]any{"since": "2026-10-09T19:27:56Z", "builds": []any{}, "latest_in_ci": nil, "passed": nil, "fbc": nil, "refresh": "none"},
+		"ci": map[string]any{"builds": []any{}, "latest_in_ci": nil, "passed": nil, "fbc": nil, "refresh": "none"},
 		"newest": map[string]any{
 			"snapshot": "quay-3-14-20261009-185801-000", "created_at": "2026-10-09T19:27:56Z",
 			"ci": map[string]any{"state": "unknown", "release": nil},
@@ -438,9 +437,6 @@ func TestGetCandidateCI(t *testing.T) {
 	ci := got.CI
 	if ci == nil {
 		t.Fatal("3.18.1 has no CI")
-	}
-	if !ci.Since.Equal(mustTime(t, "2026-10-06T05:20:00Z")) {
-		t.Errorf("since = %v, want when the stream built the candidate's bundle", ci.Since)
 	}
 	want := []string{
 		"candidate quay-stage-3-18-1-image-20261007200243 2026-10-07T20:02:43Z: aws-ocp422-e2e-install-aws-s3-nightly=14,12 gcp-ocp422-e2e-install-gcp-gcs-nightly=11",
@@ -573,7 +569,7 @@ func TestGetCandidateRefresh(t *testing.T) {
 	resolveNVR(t, srv, "stage2/quay-3-18-quay-quay", testNVR("quay-quay", "3.18.2"))
 	inCI("stage2", "fbc-ri-stage-quay-3-18-quay-operator-x2b9k", "fbc-ri-stage-quay-3-18-quay-operator-m4q7z", "2026-10-10T03:51:00Z", "2026-10-10T03:59:00Z")
 	seedImages(t, srv, "quay-stage-3-18-2-image-20261010040000", "2026-10-10T04:00:00Z", testBuild("stage2", quay318...))
-	if err := srv.db.UpsertStagedSnapshot(t.Context(), "quay-stage-3-18-2-image-20261010040000", "3.18.2", "image", "stage", mustTime(t, "2026-10-10T04:00:00Z")); err != nil {
+	if err := srv.db.UpsertStagedSnapshot(t.Context(), "quay-stage-3-18-2-image-20261010040000", "3.18.2", "image", "stage"); err != nil {
 		t.Fatal(err)
 	}
 	seedKonfluxRelease(t, srv, "quay-stage-3-18-2-image-20261010040000", "quay-stage-3-18-2-image-20261010040000",
@@ -624,7 +620,7 @@ func TestGetCandidateRefresh(t *testing.T) {
 	// A prod Release of 3.18.2 is attempted.
 	const prod = "quay-prod-3-18-2-image-20261012010000"
 	seedImages(t, srv, prod, "2026-10-12T01:00:00Z", testBuild("stage2", quay318...))
-	if err := srv.db.UpsertStagedSnapshot(t.Context(), prod, "3.18.2", "image", "prod", mustTime(t, "2026-10-12T01:00:00Z")); err != nil {
+	if err := srv.db.UpsertStagedSnapshot(t.Context(), prod, "3.18.2", "image", "prod"); err != nil {
 		t.Fatal(err)
 	}
 	seedKonfluxRelease(t, srv, prod, prod, "quay-advisory-prod-3-18", "Failed", "2026-10-12T01:00:00Z", "2026-10-12T01:05:00Z")
@@ -665,9 +661,6 @@ func TestGetCandidatePick(t *testing.T) {
 	}
 
 	got := get()
-	if !got.CI.Since.Equal(mustTime(t, "2026-10-10T05:00:00Z")) {
-		t.Errorf("since = %v, want when the stream built the mixed build's bundle", got.CI.Since)
-	}
 	want := []string{
 		"build quay-3-18-20261010-070000-000 2026-10-10T07:00:00Z none: gcp-ocp422-e2e-install-gcp-gcs-nightly=31",
 		"build quay-3-18-20261010-045000-000 2026-10-10T05:00:00Z none: aws-ocp422-e2e-install-aws-s3-nightly=30",
@@ -760,7 +753,7 @@ func TestGetCandidateNewest(t *testing.T) {
 	operators := []string{"quay-3-18-container-security-operator", "quay-3-18-quay-bridge-operator"}
 	stage := testBuild("stage2", slices.DeleteFunc(slices.Clone(quay318), func(c string) bool { return slices.Contains(operators, c) })...)
 	seedImages(t, srv, "quay-stage-3-18-2-image-20261010040000", "2026-10-10T04:00:00Z", stage)
-	if err := srv.db.UpsertStagedSnapshot(t.Context(), "quay-stage-3-18-2-image-20261010040000", "3.18.2", "image", "stage", mustTime(t, "2026-10-10T04:00:00Z")); err != nil {
+	if err := srv.db.UpsertStagedSnapshot(t.Context(), "quay-stage-3-18-2-image-20261010040000", "3.18.2", "image", "stage"); err != nil {
 		t.Fatal(err)
 	}
 	seedKonfluxRelease(t, srv, "quay-stage-3-18-2-image-20261010040000", "quay-stage-3-18-2-image-20261010040000",
@@ -801,7 +794,7 @@ func TestGetCandidateVersionSwitch(t *testing.T) {
 	// 3.18.2's STAGE build gives it a candidate, though ART builds 3.18.1, and
 	// its newest build shows beside it.
 	seedImages(t, srv, "quay-stage-3-18-2-image-20261010040000", "2026-10-10T04:00:00Z", testBuild("stage2", quay318...))
-	if err := srv.db.UpsertStagedSnapshot(ctx, "quay-stage-3-18-2-image-20261010040000", "3.18.2", "image", "stage", mustTime(t, "2026-10-10T04:00:00Z")); err != nil {
+	if err := srv.db.UpsertStagedSnapshot(ctx, "quay-stage-3-18-2-image-20261010040000", "3.18.2", "image", "stage"); err != nil {
 		t.Fatal(err)
 	}
 	seedKonfluxRelease(t, srv, "quay-stage-3-18-2-image-20261010040000", "quay-stage-3-18-2-image-20261010040000",

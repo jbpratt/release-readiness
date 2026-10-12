@@ -22,7 +22,7 @@ func TestSelectedStageBuild(t *testing.T) {
 	at := func(m int) *time.Time { v := t0.Add(time.Duration(m) * time.Minute); return &v }
 	stage := func(name string, created int) {
 		t.Helper()
-		if err := d.UpsertStagedSnapshot(ctx, name, "3.18.1", "image", "stage", *at(created)); err != nil {
+		if err := d.UpsertStagedSnapshot(ctx, name, "3.18.1", "image", "stage"); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := d.CreateSnapshot(ctx, "quay-3-18", name, *at(created)); err != nil {

@@ -1,11 +1,10 @@
 -- name: UpsertStagedSnapshot :exec
-INSERT INTO staged_snapshots (name, assembly, kind, env, created_at)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO staged_snapshots (name, assembly, kind, env)
+VALUES (?, ?, ?, ?)
 ON CONFLICT(name) DO UPDATE SET
     assembly=excluded.assembly,
     kind=excluded.kind,
-    env=excluded.env,
-    created_at=excluded.created_at;
+    env=excluded.env;
 
 -- name: ListSuccessfulStageReleases :many
 SELECT kr.release_plan, kr.completion_time, s.name AS snapshot_name

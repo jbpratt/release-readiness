@@ -533,7 +533,7 @@ func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersi
 	}
 	// Its own stage Release succeeded with every image of it, and dates it:
 	// ART assembles a STAGE build from images it often staged before.
-	c := &model.CandidateBuild{Snapshot: snap.Name, CreatedAt: snap.CreatedAt, Stage: model.StageFlag{State: "staged", StagedAt: &staged.CompletedAt}}
+	c := &model.CandidateBuild{Snapshot: snap.Name, CreatedAt: snap.CreatedAt, Stage: model.StageFlag{StagedAt: &staged.CompletedAt}}
 	images := buildImages(release.KonfluxApplication, snap)
 	digests := make([]string, len(images))
 	for i, img := range images {

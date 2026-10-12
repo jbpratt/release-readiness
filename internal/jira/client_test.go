@@ -16,10 +16,6 @@ func TestSearchIssues(t *testing.T) {
 			Key: "PROJQUAY-100",
 			Fields: IssueFields{
 				Summary:   "Fix auth bug",
-				Status:    StatusField{Name: "Closed"},
-				Priority:  PriorityField{Name: "Major"},
-				Labels:    []string{"qe-approved"},
-				Assignee:  &UserField{DisplayName: "Jane Doe"},
 				IssueType: TypeField{Name: "Bug"},
 			},
 		},
@@ -66,8 +62,8 @@ func TestSearchIssues(t *testing.T) {
 	if result[0].Key != "PROJQUAY-100" {
 		t.Errorf("key: got %q, want PROJQUAY-100", result[0].Key)
 	}
-	if result[0].Fields.Status.Name != "Closed" {
-		t.Errorf("status: got %q, want Closed", result[0].Fields.Status.Name)
+	if result[0].Fields.IssueType.Name != "Bug" {
+		t.Errorf("issue type: got %q, want Bug", result[0].Fields.IssueType.Name)
 	}
 	wantJQL := `project=PROJQUAY AND "Target Version"="3.16.2"`
 	if capturedJQL != wantJQL {
@@ -169,7 +165,6 @@ func TestDiscoverActiveReleases(t *testing.T) {
 					Key: "PROJQUAY-10276",
 					Fields: IssueFields{
 						Summary: "Release Quay v3.16.2",
-						Status:  StatusField{Name: "In Progress"},
 						DueDate: "2026-02-28",
 					},
 				},
@@ -177,7 +172,6 @@ func TestDiscoverActiveReleases(t *testing.T) {
 					Key: "PROJQUAY-10170",
 					Fields: IssueFields{
 						Summary: "Release Quay v3.17.0",
-						Status:  StatusField{Name: "New"},
 						DueDate: "2026-03-15",
 					},
 				},
@@ -185,7 +179,6 @@ func TestDiscoverActiveReleases(t *testing.T) {
 					Key: "PROJQUAY-10278",
 					Fields: IssueFields{
 						Summary: "Release OMR v2.0.10",
-						Status:  StatusField{Name: "Testing"},
 						DueDate: "2026-02-20",
 					},
 				},
