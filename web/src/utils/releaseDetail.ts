@@ -91,7 +91,7 @@ export function nvrLabel(nvr: string): string {
 
 /** A line of a build's box: a status icon and the text it explains. */
 export interface StatusLine {
-	status: "done" | "failed" | "running" | "warning" | "none";
+	status: "done" | "failed" | "running" | "warning";
 	text: string;
 }
 

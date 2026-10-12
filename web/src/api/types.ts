@@ -7,7 +7,6 @@ export interface KonfluxRelease {
 	failed_task?: string;
 	failed_step?: string;
 	created_at: string;
-	start_time?: string;
 	completion_time?: string;
 }
 
@@ -121,18 +120,13 @@ export interface CIRun {
 /** A build image; nvr and build_url are "" until ART build history has it. */
 export interface CandidateComponent {
 	name: string;
-	image: string;
 	nvr: string;
 	build_url: string;
 }
 
-/**
- * Whether every image of a build is in a Snapshot a STAGE Release succeeded
- * with; "unknown" when the stream has no STAGE Release. The candidate is
- * always staged, when its own stage Release completed.
- */
+/** The candidate's stage: staged when its own stage Release completed. */
 export interface StageFlag {
-	state: "staged" | "not_staged" | "unknown";
+	state: "staged";
 	staged_at: string;
 }
 
@@ -162,8 +156,6 @@ export interface ReadinessResponse {
 	/** "", as is message, when there is nothing to flag. */
 	signal: "green" | "yellow" | "red" | "";
 	message: string;
-	/** Released in Jira or published in the Red Hat catalog. */
-	shipped: boolean;
 }
 
 export interface ReleaseOverview {
@@ -171,7 +163,6 @@ export interface ReleaseOverview {
 	readiness: ReadinessResponse;
 	// Newest snapshot in the version's Konflux applications, not bound to this version.
 	latest_build?: string;
-	shipped: boolean;
 	next_in_stream: boolean;
 }
 
