@@ -177,10 +177,10 @@ func markNextInStream(overviews []model.ReleaseOverview) {
 // flag gets an empty signal and message.
 func computeReadiness(release *model.ReleaseVersion, hasSnapshot, catalogShipped bool, now time.Time) model.ReadinessResponse {
 	if release.Released {
-		return model.ReadinessResponse{Signal: "green", Message: "Released", Shipped: true}
+		return model.ReadinessResponse{Signal: "green", Message: "Released"}
 	}
 	if catalogShipped {
-		return model.ReadinessResponse{Signal: "green", Message: "Shipped", Shipped: true}
+		return model.ReadinessResponse{Signal: "green", Message: "Shipped"}
 	}
 
 	var signal, message string

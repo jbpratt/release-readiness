@@ -45,8 +45,6 @@ type SnapshotImage struct {
 type ReadinessResponse struct {
 	Signal  string `json:"signal"`  // "green", "yellow", "red", or "" if nothing to flag
 	Message string `json:"message"` // human-readable reason
-	// Shipped is set when JIRA marks it released or the catalog published it.
-	Shipped bool `json:"shipped"`
 }
 
 // ReleaseVersion represents a JIRA fixVersion with release metadata.
@@ -108,13 +106,10 @@ type ReleaseCandidate struct {
 	CI        *CandidateCI    `json:"ci"`
 }
 
-// CandidateBuild is the Snapshot up for release: Source "staged" is the
-// version's selected STAGE build, "newest" its newest build, the newest stream
-// build whose images' NVRs carry the version. A STAGE build, the release
-// candidate, has whether it reached stage and the version's prod Release.
+// CandidateBuild is the release candidate, the version's selected STAGE
+// build, with whether it reached stage and the version's prod Release.
 type CandidateBuild struct {
 	Snapshot   string               `json:"snapshot"`
-	Source     string               `json:"-"`
 	CreatedAt  time.Time            `json:"created_at"`
 	Components []CandidateComponent `json:"components"`
 	Stage      StageFlag            `json:"stage"`
@@ -213,14 +208,8 @@ type CandidateComponent struct {
 }
 
 // StageFlag is the release candidate's stage: State "staged", StagedAt when
-// its stage Release completed, and Total its images. Its stage Release
-// succeeded with every image of it, so the lists are empty and Release null.
+// its stage Release completed.
 type StageFlag struct {
-	State     string          `json:"state"`
-	StagedAt  *time.Time      `json:"staged_at"`
-	Total     int             `json:"total"`
-	NotStaged []string        `json:"not_staged"`
-	Release   *KonfluxRelease `json:"release"`
-	NoBundle  []string        `json:"no_bundle"`
-	NoRelease []string        `json:"no_release"`
+	State    string     `json:"state"`
+	StagedAt *time.Time `json:"staged_at"`
 }

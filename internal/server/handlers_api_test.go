@@ -296,8 +296,8 @@ func TestComputeReadiness(t *testing.T) {
 		catalogShipped bool
 		want           model.ReadinessResponse
 	}{
-		{"released in JIRA", true, false, model.ReadinessResponse{Signal: "green", Message: "Released", Shipped: true}},
-		{"catalog-shipped, JIRA unreleased", false, true, model.ReadinessResponse{Signal: "green", Message: "Shipped", Shipped: true}},
+		{"released in JIRA", true, false, model.ReadinessResponse{Signal: "green", Message: "Released"}},
+		{"catalog-shipped, JIRA unreleased", false, true, model.ReadinessResponse{Signal: "green", Message: "Shipped"}},
 		{"unshipped past due", false, false, model.ReadinessResponse{Signal: "red", Message: "Past due date"}},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
