@@ -194,3 +194,39 @@ export function releaseLine(r: KonfluxRelease): StatusLine {
 	}
 	return { status: "running", text: "Release in progress" };
 }
+
+/** release-from-fbc's fbc-pullspecs while there are none to run with. */
+export const FBC_PLACEHOLDER = "<fbc-pullspecs>";
+
+/** A Konflux application's ART group: quay-3-17 is quay-3.17. */
+export const artGroup = (app: string) => app.replace(/-(\d+)$/, ".$1");
+
+/**
+ * release-from-fbc's params for a version, in a dry run: fbc-pullspecs is a
+ * placeholder without pullspecs, date's day is target-release-date, and empty
+ * optional params are left out so the Pipeline's defaults apply.
+ */
+export function fbcParams(
+	app: string,
+	version: string,
+	pullspecs: string | null,
+	bugs: string[],
+	date?: string,
+): Record<string, string> {
+	const params: Record<string, string> = {
+		group: artGroup(app),
+		assembly: version,
+		"fbc-pullspecs": pullspecs ?? FBC_PLACEHOLDER,
+	};
+	if (bugs.length > 0) params["jira-bugs"] = bugs.join(",");
+	if (date) params["target-release-date"] = date.slice(0, 10);
+	params["dry-run"] = "true";
+	return params;
+}
+
+/** The tkn command that starts release-from-fbc with params. */
+export const tknCommand = (params: Record<string, string>) =>
+	[
+		"tkn pipeline start release-from-fbc -n art-quay-tenant --use-param-defaults",
+		...Object.entries(params).map(([k, v]) => `-p '${k}=${v}'`),
+	].join(" ");

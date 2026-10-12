@@ -7,9 +7,11 @@ import type {
 	NewestBuild,
 } from "../api/types.ts";
 import {
+	artGroup,
 	ciStep,
 	componentLabel,
 	fbcCopy,
+	fbcParams,
 	jobLabels,
 	jobShortName,
 	newestCIStep,
@@ -17,6 +19,7 @@ import {
 	releaseLine,
 	runsStatus,
 	stepperBuild,
+	tknCommand,
 } from "./releaseDetail.ts";
 
 test("jobShortName", () => {
@@ -391,4 +394,34 @@ test("fbcCopy: the pullspecs, comma-separated, unless one is missing or unread",
 		null,
 	);
 	assert.equal(fbcCopy(ci(null)), null);
+});
+
+test("artGroup: the application's X.Y dotted", () => {
+	assert.equal(artGroup("quay-3-17"), "quay-3.17");
+	assert.equal(artGroup("quay-3-9"), "quay-3.9");
+});
+
+test("fbcParams and tknCommand: 3.17.6 with and without FBC pullspecs", () => {
+	const fbc = "quay.io/a/art-fbc@sha256:1,quay.io/a/art-fbc@sha256:2";
+	assert.deepEqual(
+		fbcParams(
+			"quay-3-17",
+			"3.17.6",
+			fbc,
+			["PROJQUAY-1", "PROJQUAY-2"],
+			"2026-10-15T00:00:00Z",
+		),
+		{
+			group: "quay-3.17",
+			assembly: "3.17.6",
+			"fbc-pullspecs": fbc,
+			"jira-bugs": "PROJQUAY-1,PROJQUAY-2",
+			"target-release-date": "2026-10-15",
+			"dry-run": "true",
+		},
+	);
+	assert.equal(
+		tknCommand(fbcParams("quay-3-17", "3.17.6", null, [])),
+		"tkn pipeline start release-from-fbc -n art-quay-tenant --use-param-defaults -p 'group=quay-3.17' -p 'assembly=3.17.6' -p 'fbc-pullspecs=<fbc-pullspecs>' -p 'dry-run=true'",
+	);
 });

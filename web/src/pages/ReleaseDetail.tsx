@@ -8,6 +8,10 @@ import {
 	CardTitle,
 	ClipboardCopy,
 	clipboardCopyFunc,
+	DescriptionList,
+	DescriptionListDescription,
+	DescriptionListGroup,
+	DescriptionListTerm,
 	EmptyState,
 	EmptyStateBody,
 	Flex,
@@ -56,13 +60,16 @@ import {
 	jiraIssueUrl,
 	jiraSearchUrl,
 	konfluxUrl,
+	RELEASE_FROM_FBC_URL,
 	sippyJobUrl,
 	ticketsJql,
 } from "../utils/links";
 import {
 	ciStep,
 	componentLabel,
+	FBC_PLACEHOLDER,
 	fbcCopy,
+	fbcParams,
 	jobLabels,
 	newestCIStep,
 	nvrLabel,
@@ -70,6 +77,7 @@ import {
 	runsStatus,
 	type StatusLine,
 	stepperBuild,
+	tknCommand,
 } from "../utils/releaseDetail";
 
 /** A Konflux UI page of the version's application. */
@@ -166,6 +174,12 @@ export default function ReleaseDetail() {
 				version={xyz}
 				app={app}
 				konflux={konflux}
+				bugs={
+					config?.jira_enabled === false
+						? undefined
+						: tickets?.map((t) => t.key)
+				}
+				dueDate={release.due_date}
 			/>
 
 			{candidate.data?.ci && candidate.data.ci.builds.length > 0 && (
@@ -315,7 +329,7 @@ const lines = (...ls: (string | undefined)[]) =>
 /**
  * The version's release candidate, its STAGE build, or why it has none and
  * the build to pick, with the build's images; a shipped version's is labeled,
- * with nothing to pick.
+ * with nothing to pick or release.
  */
 function BuildsCard({
 	data,
@@ -323,6 +337,8 @@ function BuildsCard({
 	version,
 	app,
 	konflux,
+	bugs,
+	dueDate,
 }: {
 	data?: ReleaseCandidate;
 	error?: Error;
@@ -330,6 +346,9 @@ function BuildsCard({
 	version: string;
 	app: string;
 	konflux: KonfluxLink;
+	/** The version's ticket keys; undefined while unknown. */
+	bugs?: string[];
+	dueDate?: string;
 }) {
 	const c = data?.candidate;
 	const anchor = data && stepperBuild(data.newest, data.ci);
@@ -355,6 +374,20 @@ function BuildsCard({
 						newest={data.newest}
 						app={app}
 						konflux={konflux}
+						fbc={
+							!data.shipped && (
+								<ReleaseFromFBC
+									params={fbcParams(
+										app,
+										version,
+										fbcCopy(data.ci),
+										bugs ?? [],
+										dueDate,
+									)}
+									bugsUnknown={!bugs}
+								/>
+							)
+						}
 					/>
 				) : data.shipped ? (
 					<NewestStepper
@@ -392,7 +425,7 @@ function BuildsCard({
  * The candidate: where it is, from its build through CI and stage to prod,
  * and its images. The CI step's popover has a newer build to re-run
  * release-from-fbc with or wait on, and the newest build; the Prod step's,
- * its Release.
+ * its Release. Unshipped, release-from-fbc's params follow.
  */
 function Candidate({
 	candidate,
@@ -400,12 +433,14 @@ function Candidate({
 	newest,
 	app,
 	konflux,
+	fbc,
 }: {
 	candidate: CandidateBuild;
 	ci: CandidateCI;
 	newest: NewestBuild | null;
 	app: string;
 	konflux: KonfluxLink;
+	fbc?: ReactNode;
 }) {
 	const prod = candidate.prod && {
 		name: candidate.prod.name,
@@ -506,8 +541,87 @@ function Candidate({
 					}
 				/>
 			</ProgressStepper>
+			{fbc}
 			<ComponentTable components={candidate.components} app={app} />
 		</>
+	);
+}
+
+/**
+ * release-from-fbc's params, a dry-run tkn command and the Pipeline's console
+ * page, to review and run by hand: RR starts no run.
+ */
+function ReleaseFromFBC({
+	params,
+	bugsUnknown,
+}: {
+	params: Record<string, string>;
+	/** The tickets did not load, so jira-bugs is unknown, not empty. */
+	bugsUnknown: boolean;
+}) {
+	const pullspecs = params["fbc-pullspecs"];
+	const row = (term: string, value: ReactNode, hint?: string) => (
+		<DescriptionListGroup>
+			<DescriptionListTerm>{term}</DescriptionListTerm>
+			<DescriptionListDescription>
+				{value} {hint && <span style={muted}>({hint})</span>}
+			</DescriptionListDescription>
+		</DescriptionListGroup>
+	);
+	return (
+		<div style={{ marginTop: "1rem" }}>
+			<Flex
+				justifyContent={{ default: "justifyContentSpaceBetween" }}
+				alignItems={{ default: "alignItemsCenter" }}
+			>
+				<Title headingLevel="h4" size="md">
+					Release from FBC
+				</Title>
+				<Button
+					component="a"
+					variant="link"
+					isInline
+					href={RELEASE_FROM_FBC_URL}
+					{...external}
+					icon={<ExternalLinkAltIcon />}
+					iconPosition="end"
+				>
+					Pipeline
+				</Button>
+			</Flex>
+			<DescriptionList
+				isHorizontal
+				isCompact
+				horizontalTermWidthModifier={{ default: "12rem" }}
+				style={line}
+			>
+				{row("group", params.group)}
+				{row("assembly", params.assembly)}
+				{row(
+					"fbc-pullspecs",
+					pullspecs === FBC_PLACEHOLDER ? (
+						<span style={muted}>not available yet</span>
+					) : (
+						<ClipboardCopy variant="inline-compact" truncation>
+							{pullspecs}
+						</ClipboardCopy>
+					),
+				)}
+				{row(
+					"jira-bugs",
+					params["jira-bugs"] ?? (bugsUnknown ? "unavailable" : "none"),
+					"review before running",
+				)}
+				{row(
+					"target-release-date",
+					params["target-release-date"] ?? "none",
+					"hint",
+				)}
+			</DescriptionList>
+			<ClipboardCopy variant="inline-compact" isCode isBlock style={line}>
+				{tknCommand(params)}
+			</ClipboardCopy>
+		</div>
 	);
 }
 
