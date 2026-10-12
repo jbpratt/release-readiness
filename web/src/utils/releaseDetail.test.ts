@@ -1,15 +1,22 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { CandidateCI, CIBuild, KonfluxRelease } from "../api/types.ts";
+import type {
+	CandidateCI,
+	CIBuild,
+	KonfluxRelease,
+	NewestBuild,
+} from "../api/types.ts";
 import {
 	ciStep,
 	componentLabel,
 	fbcCopy,
 	jobLabels,
 	jobShortName,
+	newestCIStep,
 	nvrLabel,
 	releaseLine,
 	runsStatus,
+	stepperBuild,
 } from "./releaseDetail.ts";
 
 test("jobShortName", () => {
@@ -230,6 +237,128 @@ test("ciStep: the candidate row's runs, as runsStatus counts them", () => {
 	for (const [name, c, step] of want) {
 		assert.deepEqual(ciStep(c), step, name);
 	}
+});
+
+test("newestCIStep: the runs of the newest build's row, else its CI state", () => {
+	const newest = (
+		state: NewestBuild["ci"]["state"],
+		r?: string,
+	): NewestBuild => ({
+		snapshot: "quay-3-16-20261012-034719-000-c0",
+		created_at: "2026-10-12T03:49:33Z",
+		ci: { state, release: r ? release({ name: r }) : null },
+	});
+	const row = (
+		snapshot: string,
+		r: string | null,
+		...states: string[]
+	): CIBuild => ({
+		kind: "build",
+		snapshot,
+		created_at: "2026-10-11T03:49:33Z",
+		ci: { state: "in", release: r ? release({ name: r }) : null },
+		jobs: [
+			{
+				job_name: "job",
+				runs: states.map((state) => ({
+					state,
+					started_at: "2026-10-12T05:00:00Z",
+					prow_url: "https://prow.example/1",
+				})),
+			},
+		],
+	});
+	const ci = (...builds: CIBuild[]): CandidateCI => ({
+		since: "2026-10-05T22:52:53Z",
+		builds,
+		latest_in_ci: null,
+		passed: null,
+		fbc: null,
+		refresh: "none",
+	});
+	const want: [
+		string,
+		NewestBuild,
+		CandidateCI | null,
+		ReturnType<typeof newestCIStep>,
+	][] = [
+		[
+			"unknown, no CI",
+			newest("unknown"),
+			null,
+			{ variant: "pending", text: "No CI runs" },
+		],
+		["none", newest("none"), ci(), { variant: "pending", text: "Not in CI" }],
+		[
+			"in, no runs",
+			newest("in", "r1"),
+			ci(),
+			{ variant: "info", text: "In CI" },
+		],
+		[
+			"failed",
+			newest("failed", "r1"),
+			ci(),
+			{ variant: "danger", text: "Failed to reach CI" },
+		],
+		[
+			"its row by snapshot",
+			newest("in", "r1"),
+			ci(row("quay-3-16-20261012-034719-000-c0", null, "failure")),
+			{ variant: "danger", text: "Failed" },
+		],
+		[
+			"its row by stage Release, labeled by an older snapshot",
+			newest("in", "r1"),
+			ci(row("quay-3-16-20261011-034719-000-c0", "r1", "success")),
+			{ variant: "success", text: "Passed" },
+		],
+		[
+			"another build's row",
+			newest("in", "r1"),
+			ci(row("quay-3-16-20261010-034719-000-c0", "r0", "success")),
+			{ variant: "info", text: "In CI" },
+		],
+	];
+	for (const [name, n, c, step] of want) {
+		assert.deepEqual(newestCIStep(n, c), step, name);
+	}
+});
+
+test("stepperBuild: the newest build, else the passed one with its row's CI state", () => {
+	const snap = "quay-3-16-20261011-034719-000-c0";
+	const state = { state: "in" as const, release: release({ name: "r1" }) };
+	const ci = (passed: boolean): CandidateCI => ({
+		since: "2026-10-05T22:52:53Z",
+		builds: [
+			{
+				kind: "build",
+				snapshot: snap,
+				created_at: "2026-10-11T03:49:33Z",
+				ci: state,
+				jobs: [],
+			},
+		],
+		latest_in_ci: null,
+		passed: passed
+			? { snapshot: snap, created_at: "2026-10-11T03:49:33Z" }
+			: null,
+		fbc: null,
+		refresh: passed ? "pick" : "none",
+	});
+	const newest: NewestBuild = {
+		snapshot: "quay-3-16-20261012-034719-000-c0",
+		created_at: "2026-10-12T03:49:33Z",
+		ci: { state: "none", release: null },
+	};
+	assert.equal(stepperBuild(newest, ci(true)), newest);
+	assert.deepEqual(stepperBuild(null, ci(true)), {
+		snapshot: snap,
+		created_at: "2026-10-11T03:49:33Z",
+		ci: state,
+	});
+	assert.equal(stepperBuild(null, ci(false)), null);
+	assert.equal(stepperBuild(null, null), null);
 });
 
 test("fbcCopy: the pullspecs, comma-separated, unless one is missing or unread", () => {
