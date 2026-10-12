@@ -70,6 +70,7 @@ test("runsStatus: green when every counted run passed, red when none did, yellow
 		[[], undefined],
 		[["success", "success"], "success"],
 		[["failure", "error"], "danger"],
+		[["error"], "danger"],
 		[["success", "success", "failure"], "warning"],
 		[["aborted"], undefined],
 		[["success", "aborted"], "success"],
