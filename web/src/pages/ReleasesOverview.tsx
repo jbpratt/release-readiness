@@ -254,26 +254,22 @@ function ReleaseCard({
 						)}
 					</DescriptionList>
 				) : (
-					<Flex direction={{ default: "column" }}>
+					<Flex justifyContent={{ default: "justifyContentSpaceBetween" }}>
+						{targetDate && (
+							<FlexItem>
+								<span className="rr-label">Target Date</span>
+								<div>{targetDate}</div>
+							</FlexItem>
+						)}
+						{release.release_ticket_key && (
+							<FlexItem>
+								<span className="rr-label">Ticket</span>
+								<div>{ticket}</div>
+							</FlexItem>
+						)}
 						<FlexItem>
-							<Flex justifyContent={{ default: "justifyContentSpaceBetween" }}>
-								{targetDate && (
-									<FlexItem>
-										<span className="rr-label">Target Date</span>
-										<div>{targetDate}</div>
-									</FlexItem>
-								)}
-								{release.release_ticket_key && (
-									<FlexItem>
-										<span className="rr-label">Ticket</span>
-										<div>{ticket}</div>
-									</FlexItem>
-								)}
-								<FlexItem>
-									<span className="rr-label">Last build</span>
-									<div>{lastBuild}</div>
-								</FlexItem>
-							</Flex>
+							<span className="rr-label">Last build</span>
+							<div>{lastBuild}</div>
 						</FlexItem>
 					</Flex>
 				)}
