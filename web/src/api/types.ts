@@ -35,7 +35,7 @@ export interface CandidateBuild {
 	prod: KonfluxRelease | null;
 }
 
-/** The version's newest build and whether its operator bundle is in CI. */
+/** The version's newest build, its images, and whether its operator bundle is in CI. */
 export interface NewestBuild extends BuildLabel {
 	ci: CIState;
 }
@@ -50,10 +50,14 @@ export interface CIState {
 	release: KonfluxRelease | null;
 }
 
-/** A build named by the oldest stream Snapshot holding its operator bundle. */
+/**
+ * A build named by the oldest stream Snapshot holding its operator bundle;
+ * without a candidate, ci's passed has that build's images.
+ */
 export interface BuildLabel {
 	snapshot: string;
 	created_at: string;
+	components?: CandidateComponent[];
 }
 
 /**
@@ -116,6 +120,8 @@ export interface CIRun {
 /** A build image; nvr and build_url are "" until ART build history has it. */
 export interface CandidateComponent {
 	name: string;
+	/** The image's pullspec, repo@sha256:... */
+	image: string;
 	nvr: string;
 	build_url: string;
 }

@@ -348,10 +348,11 @@ func TestGetCandidate(t *testing.T) {
 	}
 	wantQuay := model.CandidateComponent{
 		Name:     "quay-3-18-quay-quay",
+		Image:    testImage("stage/quay-3-18-quay-quay"),
 		NVR:      "quay-quay-container-3.18.1-202610060528.p2.g1148474.assembly.stream.el9",
 		BuildURL: "https://art.example/build?nvr=quay-quay-container-3.18.1-202610060528.p2.g1148474.assembly.stream.el9&record_id=rec-stage-quay",
 	}
-	wantClair := model.CandidateComponent{Name: "quay-3-18-quay-clair"}
+	wantClair := model.CandidateComponent{Name: "quay-3-18-quay-clair", Image: testImage("stage/quay-3-18-quay-clair")}
 	if c.Components[9] != wantQuay || c.Components[6] != wantClair {
 		t.Errorf("3.18.1 quay, clair = %+v, %+v; want %+v, %+v", c.Components[9], c.Components[6], wantQuay, wantClair)
 	}
@@ -373,13 +374,18 @@ func TestGetCandidate(t *testing.T) {
 	// 3.14.10 has no STAGE build, so no release candidate, but a newest build,
 	// and CI since it was built, as it holds no bundle: no run, nothing to
 	// pick. No per-build stage Release of quay-3-14 at all: whether it is in
-	// CI cannot tell.
+	// CI cannot tell. Its images, base image left out, show with their ART
+	// builds, if any.
 	if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: "quay-v3.14.10", KonfluxApplication: "quay-3-14"}); err != nil {
 		t.Fatal(err)
 	}
 	seedSnapshot(t, srv, "quay-3-14", "quay-3-14-20261009-185801-000", mustTime(t, "2026-10-09T19:27:56Z"),
 		"quay-3-14-base-rhel8", "quay-3-14-quay-builder", "quay-3-14-quay-builder-qemu", "quay-3-14-quay-clair")
 	resolveNVR(t, srv, "quay-3-14-20261009-185801-000/quay-3-14-quay-clair", testNVR("quay-clair", "3.14.10"))
+	component := func(name, nvr, url string) map[string]any {
+		return map[string]any{"name": name, "image": testImage("quay-3-14-20261009-185801-000/" + name), "nvr": nvr, "build_url": url}
+	}
+	clair := testNVR("quay-clair", "3.14.10")
 	var raw map[string]any
 	getJSON(t, srv, "/api/v1/releases/quay-v3.14.10/candidate", http.StatusOK, &raw)
 	want := map[string]any{
@@ -388,6 +394,11 @@ func TestGetCandidate(t *testing.T) {
 		"newest": map[string]any{
 			"snapshot": "quay-3-14-20261009-185801-000", "created_at": "2026-10-09T19:27:56Z",
 			"ci": map[string]any{"state": "unknown", "release": nil},
+			"components": []any{
+				component("quay-3-14-quay-builder", "", ""),
+				component("quay-3-14-quay-builder-qemu", "", ""),
+				component("quay-3-14-quay-clair", clair, "https://art.example/build?nvr="+clair+"&record_id="),
+			},
 		},
 	}
 	if !reflect.DeepEqual(raw, want) {
@@ -682,10 +693,17 @@ func TestGetCandidatePick(t *testing.T) {
 			got.CI.Passed, got.CI.Refresh, got.Newest)
 	}
 
-	// A run of the newest build passes.
+	// A run of the newest build passes: no newest build, but the passed one
+	// has its images.
 	seedRun(t, srv, "gcp-ocp422-e2e-install-gcp-gcs-nightly", "34", "success", "2026-10-10T08:49:00Z", runImages("p2", "p2", "p2", "p2"))
-	if got := get(); got.CI.Passed == nil || got.CI.Passed.Snapshot != "quay-3-18-20261010-070000-000" || got.CI.Refresh != "pick" || got.Newest != nil {
-		t.Errorf("the newest build passed: passed %+v, refresh %q, newest %+v; want quay-3-18-20261010-070000-000, pick, none", got.CI.Passed, got.CI.Refresh, got.Newest)
+	got = get()
+	if got.CI.Passed == nil || got.CI.Passed.Snapshot != "quay-3-18-20261010-070000-000" || got.CI.Refresh != "pick" || got.Newest != nil {
+		t.Fatalf("the newest build passed: passed %+v, refresh %q, newest %+v; want quay-3-18-20261010-070000-000, pick, none", got.CI.Passed, got.CI.Refresh, got.Newest)
+	}
+	quay := testNVR("quay-quay", "3.18.2")
+	if cs := got.CI.Passed.Components; len(cs) != len(quay318) || cs[6] != (model.CandidateComponent{Name: "quay-3-18-quay-clair", Image: testImage("p2/quay-3-18-quay-clair")}) ||
+		cs[9] != (model.CandidateComponent{Name: "quay-3-18-quay-quay", Image: testImage("p2/quay-3-18-quay-quay"), NVR: quay, BuildURL: "https://art.example/build?nvr=" + quay + "&record_id="}) {
+		t.Errorf("passed components = %+v, want p2's images, its quay's NVR", cs)
 	}
 }
 
