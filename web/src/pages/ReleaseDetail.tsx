@@ -318,7 +318,7 @@ const lines = (...ls: (string | undefined)[]) =>
 
 /**
  * The version's release candidate, its STAGE build, or why it has none and
- * the build to pick.
+ * the build to pick; a shipped version's is labeled, with nothing to pick.
  */
 function BuildsCard({
 	data,
@@ -340,14 +340,17 @@ function BuildsCard({
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<LinkedCardTitle href={konflux()} link="Konflux">
 				{c ? `${version} release candidate` : "Release candidate"}
+				{data?.shipped && (
+					<Label color="green" isCompact style={{ marginLeft: "0.5rem" }}>
+						Shipped
+					</Label>
+				)}
 			</LinkedCardTitle>
 			<CardBody>
 				{error ? (
 					error.message
 				) : !data ? (
 					<Spinner size="md" />
-				) : data.shipped ? (
-					"Shipped."
 				) : c && data.ci ? (
 					<Candidate
 						candidate={c}
@@ -356,6 +359,8 @@ function BuildsCard({
 						app={app}
 						konflux={konflux}
 					/>
+				) : data.shipped ? (
+					"Shipped."
 				) : (
 					<>
 						{`${data.reason.charAt(0).toUpperCase()}${data.reason.slice(1)}.`}

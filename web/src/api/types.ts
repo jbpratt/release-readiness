@@ -10,11 +10,12 @@ export interface KonfluxRelease {
 
 /**
  * What decides whether a version can ship. candidate is null with reason set
- * when there is none; a shipped version sets nothing else. ci is set with the
- * candidate, and without one when the version has builds. newest is set when
- * the version's newest build holds, for a component the candidate holds,
- * another image than the candidate does, or when there is no candidate, and is
- * not ci's passed nor, beside the candidate, its latest_in_ci.
+ * when there is none. ci is set with the candidate, and without one when the
+ * version has builds. newest is set when the version's newest build holds,
+ * for a component the candidate holds, another image than the candidate does,
+ * or when there is no candidate, and is not ci's passed nor, beside the
+ * candidate, its latest_in_ci. A shipped version keeps its candidate and ci,
+ * but has no reason, newest, or anything in ci to pick, re-run or wait on.
  */
 export interface ReleaseCandidate {
 	shipped: boolean;

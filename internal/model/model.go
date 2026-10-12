@@ -91,7 +91,8 @@ type StageRelease struct {
 // newest build when that holds, for a component the candidate holds, another
 // image than the candidate does, or when there is no candidate, and is not a
 // build CI names to pick, re-run with or, beside the candidate, in CI. A
-// shipped version sets nothing else.
+// shipped version keeps its candidate and CI, with no Reason, newest build, or
+// build in CI to pick, re-run with or wait on.
 type ReleaseCandidate struct {
 	Shipped   bool            `json:"shipped"`
 	Candidate *CandidateBuild `json:"candidate"`
