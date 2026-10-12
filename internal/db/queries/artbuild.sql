@@ -102,3 +102,18 @@ ON CONFLICT(group_name, build_type, day) DO UPDATE SET checked_at = excluded.che
 
 -- name: ListSnapshotApplications :many
 SELECT DISTINCT application FROM snapshots ORDER BY application;
+
+-- name: ListArtHistoryFBCs :many
+-- group's successful FBC builds, newest NVR first, each with the channel and
+-- head CSV its render found and the NVR of its head bundle's ART build, ''
+-- for none.
+SELECT f.record_id, f.nvr, f.pullspec,
+       CAST(COALESCE(r.channel, '') AS TEXT) AS channel,
+       CAST(COALESCE(r.head_csv, '') AS TEXT) AS head_csv,
+       CAST(COALESCE(b.nvr, '') AS TEXT) AS head_bundle_nvr
+FROM art_history_builds f
+LEFT JOIN fbc_render_cache r ON r.state = 'rendered' AND r.digest = f.digest
+LEFT JOIN art_history_builds b ON b.build_type = 'bundle'
+  AND b.digest = substr(r.head_bundle_pullspec, instr(r.head_bundle_pullspec, '@') + 1)
+WHERE f.group_name = ? AND f.build_type = 'fbc'
+ORDER BY f.nvr DESC, f.record_id;

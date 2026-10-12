@@ -73,6 +73,9 @@ func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVe
 		return resp, nil
 	}
 	app := release.KonfluxApplication
+	if resp.FBCCandidate, resp.FBCStream, err = s.fbcCandidates(ctx, app, c.assembly); err != nil {
+		return nil, err
+	}
 	if resp.Catalogs, err = s.candidateCatalogs(ctx, app, c.assembly); err != nil {
 		return nil, err
 	}
@@ -489,6 +492,117 @@ func (s *Server) candidateCatalogs(ctx context.Context, app, assembly string) ([
 		return cmp.Or(strings.Compare(a.Component, b.Component), compareVersions(a.OCP, b.OCP))
 	})
 	return catalogs, nil
+}
+
+// fbcCandidates returns assembly's operator FBCs up for release, as ART staged
+// them for stage in app's FBC Snapshots, else as its stream built them, and
+// as its stream built them; nil while it has no FBC built or staged.
+func (s *Server) fbcCandidates(ctx context.Context, app, assembly string) (cand, stream *model.FBCCandidate, err error) {
+	built, err := s.db.ArtHistoryFBCs(ctx, "quay-"+assembly[:strings.LastIndex(assembly, ".")])
+	if err != nil {
+		return nil, nil, err
+	}
+	// The group holds every z of the stream.
+	built = slices.DeleteFunc(built, func(m model.FBCMember) bool {
+		_, version, _, _ := artbuild.ParseFBC(m.NVR)
+		return version != assembly
+	})
+	staged, err := s.db.StagedFBCMembers(ctx, assembly, "fbc-"+app)
+	if err != nil || len(built) == 0 && len(staged) == 0 {
+		return nil, nil, err
+	}
+	// An operator's slots are the OCP versions any of its FBCs of the version
+	// was built or staged for: no other can be inferred.
+	slots := map[string][]string{}
+	for _, rows := range [][]model.FBCMember{built, staged} {
+		for i := range rows {
+			if rows[i].RecordID != "" {
+				rows[i].BuildURL = artbuild.PageURL(s.artBaseURL, rows[i].NVR, rows[i].RecordID)
+			}
+			if operator, _, ocp, ok := artbuild.ParseFBC(rows[i].NVR); ok && !slices.Contains(slots[operator], ocp) {
+				slots[operator] = append(slots[operator], ocp)
+			}
+		}
+	}
+	for _, ocps := range slots {
+		slices.SortFunc(ocps, compareVersions)
+	}
+	stream = projectFBC("stream", built, slots)
+	if len(staged) == 0 {
+		return stream, stream, nil
+	}
+	return projectFBC("stage_snapshots", staged, slots), stream, nil
+}
+
+// projectFBC returns the operator FBCs that rows, newest first, give each of
+// slots, the OCP versions of each operator: the newest row of each slot, never
+// several. Rows no NVR names fill no slot.
+func projectFBC(source string, rows []model.FBCMember, slots map[string][]string) *model.FBCCandidate {
+	c := &model.FBCCandidate{Source: source, Errors: []string{}, Operators: []model.OperatorFBC{}, Unknown: []model.FBCMember{}}
+	type slot struct{ operator, ocp string }
+	filled := map[slot]bool{}
+	picks := map[string][]model.FBCMember{}
+	for _, m := range rows {
+		operator, _, ocp, ok := artbuild.ParseFBC(m.NVR)
+		switch {
+		case !ok:
+			if !slices.ContainsFunc(c.Unknown, func(u model.FBCMember) bool { return u.Digest == m.Digest }) {
+				c.Unknown = append(c.Unknown, m)
+			}
+		case !filled[slot{operator, ocp}]:
+			filled[slot{operator, ocp}] = true
+			m.OCP = ocp
+			picks[operator] = append(picks[operator], m)
+		}
+	}
+	mixed, partial, unknown := false, false, len(c.Unknown) > 0
+	byOCP := func(a, b model.FBCMember) int { return compareVersions(a.OCP, b.OCP) }
+	for _, operator := range artbuild.Operators {
+		o := model.OperatorFBC{Operator: operator, Members: []model.FBCMember{}, MissingOCP: []string{}, Conflicts: []model.FBCMember{}}
+		p := picks[operator]
+		if i := slices.IndexFunc(p, func(m model.FBCMember) bool { return m.HeadBundleNVR != "" }); i >= 0 {
+			o.HeadBundleNVR, o.Channel, o.HeadCSV = p[i].HeadBundleNVR, p[i].Channel, p[i].HeadCSV
+		}
+		other := false
+		for _, m := range p {
+			if o.HeadBundleNVR != "" && m.HeadBundleNVR == o.HeadBundleNVR {
+				o.Members = append(o.Members, m)
+				continue
+			}
+			o.Conflicts = append(o.Conflicts, m)
+			other, unknown = other || m.HeadBundleNVR != "", unknown || m.HeadBundleNVR == ""
+		}
+		mixed = mixed || other
+		slices.SortFunc(o.Members, byOCP)
+		slices.SortFunc(o.Conflicts, byOCP)
+		for _, ocp := range slots[operator] {
+			if !filled[slot{operator, ocp}] {
+				o.MissingOCP = append(o.MissingOCP, ocp)
+				partial = true
+			}
+		}
+		o.Coverage = model.FBCCoverage{Members: len(o.Members), Slots: len(slots[operator])}
+		switch {
+		case len(p) == 0 && source == "stream":
+			c.Errors, partial = append(c.Errors, operator+" has no FBC build"), true
+		case len(p) == 0:
+			c.Errors, partial = append(c.Errors, operator+" is not in stage"), true
+		case other:
+			c.Errors = append(c.Errors, operator+" heads more than one bundle across its OCP versions")
+		}
+		c.Operators = append(c.Operators, o)
+	}
+	switch {
+	case mixed:
+		c.State = "inconsistent"
+	case partial:
+		c.State = "incomplete"
+	case unknown:
+		c.State = "unknown"
+	default:
+		c.State = "complete"
+	}
+	return c
 }
 
 // ciState tells whether the operator bundle of digest bundle reached the

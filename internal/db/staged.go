@@ -137,3 +137,48 @@ func (d *DB) LatestProdRelease(ctx context.Context, assembly string) (*model.Kon
 	r := toKonfluxRelease(row)
 	return &r, nil
 }
+
+// StagedFBCMembers returns the catalogs of application's FBC Snapshots ART
+// staged for stage for assembly, newest Snapshot first, each with the newest
+// Release of its Snapshot, whatever its status.
+func (d *DB) StagedFBCMembers(ctx context.Context, assembly, application string) ([]model.FBCMember, error) {
+	rows, err := d.queries().ListStagedFBCMembers(ctx, dbsqlc.ListStagedFBCMembersParams{Assembly: assembly, Application: application})
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	releases, err := d.queries().ListKonfluxReleasesByApplication(ctx, application)
+	if err != nil {
+		return nil, err
+	}
+	members := make([]model.FBCMember, len(rows))
+	for i, r := range rows {
+		_, digest, _ := strings.Cut(r.ImageUrl, "@")
+		members[i] = model.FBCMember{
+			Digest: digest, Pullspec: r.ImageUrl, NVR: r.Nvr, HeadBundleNVR: r.HeadBundleNvr, Snapshot: r.SnapshotName,
+			RecordID: r.RecordID, Channel: r.Channel, HeadCSV: r.HeadCsv,
+		}
+		// releases is newest first.
+		if j := slices.IndexFunc(releases, func(kr dbsqlc.KonfluxRelease) bool { return kr.Snapshot == r.SnapshotName }); j >= 0 {
+			kr := toKonfluxRelease(releases[j])
+			members[i].Release = &kr
+		}
+	}
+	return members, nil
+}
+
+// ArtHistoryFBCs returns group's successful ART FBC builds, newest NVR first.
+func (d *DB) ArtHistoryFBCs(ctx context.Context, group string) ([]model.FBCMember, error) {
+	rows, err := d.queries().ListArtHistoryFBCs(ctx, group)
+	if err != nil {
+		return nil, err
+	}
+	members := make([]model.FBCMember, len(rows))
+	for i, r := range rows {
+		_, digest, _ := strings.Cut(r.Pullspec, "@")
+		members[i] = model.FBCMember{
+			Digest: digest, Pullspec: r.Pullspec, NVR: r.Nvr, HeadBundleNVR: r.HeadBundleNvr,
+			RecordID: r.RecordID, Channel: r.Channel, HeadCSV: r.HeadCsv,
+		}
+	}
+	return members, nil
+}

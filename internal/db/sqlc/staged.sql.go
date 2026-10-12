@@ -90,6 +90,80 @@ func (q *Queries) ListStagedFBCCatalogs(ctx context.Context, arg ListStagedFBCCa
 	return items, nil
 }
 
+const listStagedFBCMembers = `-- name: ListStagedFBCMembers :many
+SELECT s.name AS snapshot_name, sc.image_url,
+       CAST(COALESCE(h.nvr, a.nvr, NULLIF(r.label_nvr, ''), '') AS TEXT) AS nvr,
+       CAST(COALESCE(h.record_id, a.record_id, '') AS TEXT) AS record_id,
+       CAST(COALESCE(r.channel, '') AS TEXT) AS channel,
+       CAST(COALESCE(r.head_csv, '') AS TEXT) AS head_csv,
+       CAST(COALESCE(b.nvr, '') AS TEXT) AS head_bundle_nvr
+FROM staged_snapshots ss
+JOIN snapshots s ON s.name = ss.name
+JOIN snapshot_components sc ON sc.snapshot_id = s.id
+LEFT JOIN art_history_builds h ON h.build_type = 'fbc'
+  AND h.digest = substr(sc.image_url, instr(sc.image_url, '@') + 1)
+LEFT JOIN art_builds a ON a.state = 'resolved'
+  AND a.digest = substr(sc.image_url, instr(sc.image_url, '@') + 1)
+LEFT JOIN fbc_render_cache r ON r.state = 'rendered'
+  AND r.digest = substr(sc.image_url, instr(sc.image_url, '@') + 1)
+LEFT JOIN art_history_builds b ON b.build_type = 'bundle'
+  AND b.digest = substr(r.head_bundle_pullspec, instr(r.head_bundle_pullspec, '@') + 1)
+WHERE ss.assembly = ?1 AND ss.kind = 'fbc' AND ss.env = 'stage'
+  AND s.application = ?2
+ORDER BY s.created_at DESC, s.name DESC, sc.component
+`
+
+type ListStagedFBCMembersParams struct {
+	Assembly    string
+	Application string
+}
+
+type ListStagedFBCMembersRow struct {
+	SnapshotName  string
+	ImageUrl      string
+	Nvr           string
+	RecordID      string
+	Channel       string
+	HeadCsv       string
+	HeadBundleNvr string
+}
+
+// The catalog images of the application's FBC Snapshots ART staged for stage
+// for assembly, newest Snapshot first, each with its NVR: that of its ART
+// build in build history, else of its resolved ART build, else its rendered
+// label, ” for none, and that build's record ID; the channel and head CSV
+// its render found; and the NVR of its head bundle's ART build, ” for none.
+func (q *Queries) ListStagedFBCMembers(ctx context.Context, arg ListStagedFBCMembersParams) ([]ListStagedFBCMembersRow, error) {
+	rows, err := q.db.QueryContext(ctx, listStagedFBCMembers, arg.Assembly, arg.Application)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStagedFBCMembersRow
+	for rows.Next() {
+		var i ListStagedFBCMembersRow
+		if err := rows.Scan(
+			&i.SnapshotName,
+			&i.ImageUrl,
+			&i.Nvr,
+			&i.RecordID,
+			&i.Channel,
+			&i.HeadCsv,
+			&i.HeadBundleNvr,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSuccessfulStageReleases = `-- name: ListSuccessfulStageReleases :many
 SELECT kr.release_plan, kr.completion_time, s.name AS snapshot_name
 FROM staged_snapshots ss
