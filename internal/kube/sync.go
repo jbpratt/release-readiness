@@ -171,7 +171,6 @@ func (s *Syncer) syncRelease(ctx context.Context, obj *unstructured.Unstructured
 	}
 	r.Snapshot, _, _ = unstructured.NestedString(obj.Object, "spec", "snapshot")
 	r.ReleasePlan, _, _ = unstructured.NestedString(obj.Object, "spec", "releasePlan")
-	r.StartTime = nestedTime(obj, "status", "startTime")
 	r.CompletionTime = nestedTime(obj, "status", "completionTime")
 
 	conditions, _, _ := unstructured.NestedSlice(obj.Object, "status", "conditions")

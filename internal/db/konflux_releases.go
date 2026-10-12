@@ -19,7 +19,6 @@ func (d *DB) UpsertKonfluxRelease(ctx context.Context, r *model.KonfluxRelease) 
 		FailedTask:     r.FailedTask,
 		FailedStep:     r.FailedStep,
 		CreatedAt:      r.CreatedAt.UTC().Format(time.RFC3339),
-		StartTime:      formatOptionalTime(r.StartTime),
 		CompletionTime: formatOptionalTime(r.CompletionTime),
 	})
 }
@@ -35,7 +34,6 @@ func toKonfluxRelease(r dbsqlc.KonfluxRelease) model.KonfluxRelease {
 		FailedTask:     r.FailedTask,
 		FailedStep:     r.FailedStep,
 		CreatedAt:      parseTime(r.CreatedAt),
-		StartTime:      parseOptionalTime(r.StartTime),
 		CompletionTime: parseOptionalTime(r.CompletionTime),
 	}
 }

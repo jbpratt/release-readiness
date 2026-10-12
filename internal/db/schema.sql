@@ -59,7 +59,6 @@ CREATE TABLE IF NOT EXISTS konflux_releases (
     failed_task     TEXT NOT NULL DEFAULT '',
     failed_step     TEXT NOT NULL DEFAULT '',
     created_at      TEXT NOT NULL,
-    start_time      TEXT NOT NULL DEFAULT '',
     completion_time TEXT NOT NULL DEFAULT ''
 );
 

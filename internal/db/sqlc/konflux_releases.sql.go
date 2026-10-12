@@ -10,7 +10,7 @@ import (
 )
 
 const listKonfluxReleasesByApplication = `-- name: ListKonfluxReleasesByApplication :many
-SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, start_time, completion_time
+SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, completion_time
 FROM konflux_releases
 WHERE application = ?
 ORDER BY created_at DESC, id DESC
@@ -36,7 +36,6 @@ func (q *Queries) ListKonfluxReleasesByApplication(ctx context.Context, applicat
 			&i.FailedTask,
 			&i.FailedStep,
 			&i.CreatedAt,
-			&i.StartTime,
 			&i.CompletionTime,
 		); err != nil {
 			return nil, err
@@ -90,8 +89,8 @@ func (q *Queries) ListReleasedSnapshotImages(ctx context.Context, application st
 }
 
 const upsertKonfluxRelease = `-- name: UpsertKonfluxRelease :exec
-INSERT INTO konflux_releases (name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, start_time, completion_time)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO konflux_releases (name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, completion_time)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(name) DO UPDATE SET
     application=excluded.application,
     snapshot=excluded.snapshot,
@@ -101,7 +100,6 @@ ON CONFLICT(name) DO UPDATE SET
     failed_task=excluded.failed_task,
     failed_step=excluded.failed_step,
     created_at=excluded.created_at,
-    start_time=excluded.start_time,
     completion_time=excluded.completion_time
 `
 
@@ -115,7 +113,6 @@ type UpsertKonfluxReleaseParams struct {
 	FailedTask     string
 	FailedStep     string
 	CreatedAt      string
-	StartTime      string
 	CompletionTime string
 }
 
@@ -130,7 +127,6 @@ func (q *Queries) UpsertKonfluxRelease(ctx context.Context, arg UpsertKonfluxRel
 		arg.FailedTask,
 		arg.FailedStep,
 		arg.CreatedAt,
-		arg.StartTime,
 		arg.CompletionTime,
 	)
 	return err
