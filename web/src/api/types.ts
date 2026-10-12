@@ -45,7 +45,9 @@ export interface ReleaseCandidate {
  * newest staged FBC Snapshot ("stage_snapshots") or the newest successful ART
  * build ("stream"). operators always holds quay-operator,
  * container-security-operator and quay-bridge-operator; unknown holds the
- * staged catalogs no NVR names, which fill no slot.
+ * staged catalogs no NVR names, which fill no slot. pullspecs, release-from-fbc's
+ * fbc-pullspecs, is empty unless state is "complete"; installable is set when
+ * every operator's head bundle reached stage through an fbc-ri Release.
  */
 export interface FBCCandidate {
 	source: "stage_snapshots" | "stream";
@@ -53,6 +55,8 @@ export interface FBCCandidate {
 	errors: string[];
 	operators: OperatorFBC[];
 	unknown: FBCMember[];
+	pullspecs: string[];
+	installable: boolean;
 }
 
 /**
@@ -68,6 +72,28 @@ export interface OperatorFBC {
 	members: FBCMember[];
 	missing_ocp: string[];
 	conflicts: FBCMember[];
+	/** Whether the head bundle reached stage through an fbc-ri Release. */
+	fbc_ri_stage: CIState;
+	image_check: ImageCheck;
+}
+
+/**
+ * The head bundle against the image Snapshot's bundle of the operator: its
+ * STAGE build, else its newest build. "absent" when either NVR is unknown.
+ */
+export interface ImageCheck {
+	state: "matches" | "differs" | "absent";
+	snapshot: string;
+	bundle_nvr: string;
+}
+
+/**
+ * Runs that installed from an FBC: exact from its digest, equivalent from
+ * another FBC of its operator and OCP version on the same head bundle.
+ */
+export interface FBCCI {
+	exact: CIJob[];
+	equivalent: CIJob[];
 }
 
 /**
@@ -83,6 +109,8 @@ export interface FBCMember {
 	head_bundle_nvr: string;
 	snapshot: string;
 	release: KonfluxRelease | null;
+	/** Set on a slot's FBC; null on an unknown catalog. */
+	ci: FBCCI | null;
 }
 
 /** An image of a component the candidate leaves out, and its stream build. */

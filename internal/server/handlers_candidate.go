@@ -73,12 +73,6 @@ func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVe
 		return resp, nil
 	}
 	app := release.KonfluxApplication
-	if resp.FBCCandidate, resp.FBCStream, err = s.fbcCandidates(ctx, app, c.assembly); err != nil {
-		return nil, err
-	}
-	if resp.Catalogs, err = s.candidateCatalogs(ctx, app, c.assembly); err != nil {
-		return nil, err
-	}
 	releases, err := s.db.StageReleases(ctx, release, s.StageReleasePlanPattern)
 	if err != nil {
 		return nil, err
@@ -86,6 +80,16 @@ func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVe
 	// Only the per-build stage Releases, of fbc-ri-* Snapshots, feed the
 	// catalog CI installs from; the version's own stage Releases do not.
 	releases = slices.DeleteFunc(releases, func(r model.StageRelease) bool { return !strings.HasPrefix(r.Snapshot, "fbc-ri-") })
+	runs, err := s.db.ListProwRunsByApplication(ctx, app)
+	if err != nil {
+		return nil, err
+	}
+	if resp.FBCCandidate, resp.FBCStream, err = s.fbcCandidates(ctx, app, c, releases, runs); err != nil {
+		return nil, err
+	}
+	if resp.Catalogs, err = s.candidateCatalogs(ctx, app, c.assembly); err != nil {
+		return nil, err
+	}
 	held := map[string]string{}
 	if cand := c.build; cand != nil {
 		resp.Candidate = cand
@@ -106,10 +110,6 @@ func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVe
 			}
 			return resp, nil
 		}
-	}
-	runs, err := s.db.ListProwRunsByApplication(ctx, app)
-	if err != nil {
-		return nil, err
 	}
 	catalogs := map[string][]string{}
 	for _, run := range runs {
@@ -494,10 +494,14 @@ func (s *Server) candidateCatalogs(ctx context.Context, app, assembly string) ([
 	return catalogs, nil
 }
 
-// fbcCandidates returns assembly's operator FBCs up for release, as ART staged
-// them for stage in app's FBC Snapshots, else as its stream built them, and
-// as its stream built them; nil while it has no FBC built or staged.
-func (s *Server) fbcCandidates(ctx context.Context, app, assembly string) (cand, stream *model.FBCCandidate, err error) {
+// fbcCandidates returns c's operator FBCs up for release, as ART staged them
+// for stage in app's FBC Snapshots, else as its stream built them, and as its
+// stream built them; nil while it has no FBC built or staged. Each slot's FBC
+// carries the runs that installed from it or from equivalent content, and
+// each operator whether releases, the per-build stage Releases, staged its
+// head bundle and how that bundle compares with the image Snapshot's.
+func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, releases []model.StageRelease, runs []prow.Run) (cand, stream *model.FBCCandidate, err error) {
+	assembly := c.assembly
 	built, err := s.db.ArtHistoryFBCs(ctx, "quay-"+assembly[:strings.LastIndex(assembly, ".")])
 	if err != nil {
 		return nil, nil, err
@@ -514,24 +518,103 @@ func (s *Server) fbcCandidates(ctx context.Context, app, assembly string) (cand,
 	// An operator's slots are the OCP versions any of its FBCs of the version
 	// was built or staged for: no other can be inferred.
 	slots := map[string][]string{}
+	type content struct{ operator, ocp, head string }
+	contents := map[string]content{}
 	for _, rows := range [][]model.FBCMember{built, staged} {
 		for i := range rows {
 			if rows[i].RecordID != "" {
 				rows[i].BuildURL = artbuild.PageURL(s.artBaseURL, rows[i].NVR, rows[i].RecordID)
 			}
-			if operator, _, ocp, ok := artbuild.ParseFBC(rows[i].NVR); ok && !slices.Contains(slots[operator], ocp) {
+			operator, _, ocp, ok := artbuild.ParseFBC(rows[i].NVR)
+			if !ok {
+				continue
+			}
+			if !slices.Contains(slots[operator], ocp) {
 				slots[operator] = append(slots[operator], ocp)
 			}
+			contents[rows[i].Digest] = content{operator, ocp, rows[i].HeadBundleNVR}
 		}
 	}
 	for _, ocps := range slots {
 		slices.SortFunc(ocps, compareVersions)
 	}
 	stream = projectFBC("stream", built, slots)
-	if len(staged) == 0 {
-		return stream, stream, nil
+	cand = stream
+	if len(staged) > 0 {
+		cand = projectFBC("stage_snapshots", staged, slots)
 	}
-	return projectFBC("stage_snapshots", staged, slots), stream, nil
+
+	var digests []string
+	for _, r := range releases {
+		for _, img := range r.Images {
+			digests = append(digests, imageDigest(img))
+		}
+	}
+	resolved, err := s.db.ResolvedArtBuilds(ctx, digests)
+	if err != nil {
+		return nil, nil, err
+	}
+	// The digest of each bundle releases staged, by NVR.
+	staging := map[string]string{}
+	for d, b := range resolved {
+		staging[b.NVR] = d
+	}
+	image, bundles := "", map[string]string{}
+	switch {
+	case c.build != nil:
+		image = c.build.Snapshot
+		for _, cc := range c.build.Components {
+			bundles[cc.Name] = cc.NVR
+		}
+	case c.newest != nil:
+		image = c.newest.Name
+		for _, img := range c.newest.Components {
+			bundles[img.Name] = c.nvrs[img.Image]
+		}
+	}
+	// ci returns the runs that installed from m, of operator, or from another
+	// FBC of its slot and head bundle.
+	ci := func(operator string, m model.FBCMember) *model.FBCCI {
+		var exact, equivalent []prow.Run
+		for _, run := range runs {
+			d := imageDigest(run.CatalogRef)
+			switch {
+			case run.StartedAt == nil || d == "":
+			case d == m.Digest:
+				exact = append(exact, run)
+			case m.HeadBundleNVR != "" && contents[d] == (content{operator, m.OCP, m.HeadBundleNVR}):
+				equivalent = append(equivalent, run)
+			}
+		}
+		return &model.FBCCI{Exact: jobRuns(exact), Equivalent: jobRuns(equivalent)}
+	}
+	for _, f := range []*model.FBCCandidate{cand, stream} {
+		f.Installable = true
+		for i := range f.Operators {
+			o := &f.Operators[i]
+			for _, ms := range [][]model.FBCMember{o.Members, o.Conflicts} {
+				for j := range ms {
+					ms[j].CI = ci(o.Operator, ms[j])
+				}
+			}
+			o.FBCRIStage = model.CIState{State: "unknown"}
+			if o.HeadBundleNVR != "" {
+				o.FBCRIStage = model.CIState{State: "none"}
+				if d, ok := staging[o.HeadBundleNVR]; ok {
+					o.FBCRIStage = ciState(d, releases)
+				}
+			}
+			f.Installable = f.Installable && o.FBCRIStage.State == "in"
+			o.ImageCheck = model.ImageCheck{State: "absent", Snapshot: image, BundleNVR: bundles[app+"-"+o.Operator+"-bundle"]}
+			if o.ImageCheck.BundleNVR != "" && o.HeadBundleNVR != "" {
+				o.ImageCheck.State = "differs"
+				if o.ImageCheck.BundleNVR == o.HeadBundleNVR {
+					o.ImageCheck.State = "matches"
+				}
+			}
+		}
+	}
+	return cand, stream, nil
 }
 
 // projectFBC returns the operator FBCs that rows, newest first, give each of
@@ -601,6 +684,15 @@ func projectFBC(source string, rows []model.FBCMember, slots map[string][]string
 		c.State = "unknown"
 	default:
 		c.State = "complete"
+	}
+	// A partial or mixed shipment must not be released.
+	c.Pullspecs = []string{}
+	if c.State == "complete" {
+		for _, o := range c.Operators {
+			for _, m := range o.Members {
+				c.Pullspecs = append(c.Pullspecs, m.Pullspec)
+			}
+		}
 	}
 	return c
 }
