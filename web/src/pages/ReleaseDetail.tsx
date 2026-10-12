@@ -424,8 +424,8 @@ function BuildsCard({
 /**
  * The candidate: where it is, from its build through CI and stage to prod,
  * and its images. The CI step's popover has a newer build to re-run
- * release-from-fbc with or wait on, and the newest build; the Prod step's,
- * its Release. Unshipped, release-from-fbc's params follow.
+ * release-from-fbc with or wait on, and the newest build; unshipped, the
+ * Stage step's has release-from-fbc's params; the Prod step's, its Release.
  */
 function Candidate({
 	candidate,
@@ -506,6 +506,18 @@ function Candidate({
 					variant="success"
 					isCurrent={!prod}
 					description={`Pinned ${new Date(candidate.stage.staged_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`}
+					popoverRender={
+						fbc
+							? (ref) => (
+									<Popover
+										aria-label="Release from FBC"
+										triggerRef={ref}
+										minWidth="40rem"
+										bodyContent={fbc}
+									/>
+								)
+							: undefined
+					}
 				/>
 				<Step
 					title="Prod"
@@ -541,7 +553,6 @@ function Candidate({
 					}
 				/>
 			</ProgressStepper>
-			{fbc}
 			<ComponentTable components={candidate.components} app={app} />
 		</>
 	);
@@ -569,7 +580,7 @@ function ReleaseFromFBC({
 		</DescriptionListGroup>
 	);
 	return (
-		<div style={{ marginTop: "1rem" }}>
+		<>
 			<Flex
 				justifyContent={{ default: "justifyContentSpaceBetween" }}
 				alignItems={{ default: "alignItemsCenter" }}
@@ -621,7 +632,7 @@ function ReleaseFromFBC({
 			<ClipboardCopy variant="inline-compact" isCode isBlock style={line}>
 				{tknCommand(params)}
 			</ClipboardCopy>
-		</div>
+		</>
 	);
 }
 
