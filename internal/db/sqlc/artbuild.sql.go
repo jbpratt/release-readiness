@@ -22,6 +22,50 @@ func (q *Queries) GetArtFBCBundleNVRs(ctx context.Context, digest string) (strin
 	return bundle_nvrs, err
 }
 
+const hasArtHistoryDigest = `-- name: HasArtHistoryDigest :one
+SELECT EXISTS (SELECT 1 FROM art_history_builds WHERE build_type = ? AND digest = ?)
+`
+
+type HasArtHistoryDigestParams struct {
+	BuildType string
+	Digest    string
+}
+
+func (q *Queries) HasArtHistoryDigest(ctx context.Context, arg HasArtHistoryDigestParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasArtHistoryDigest, arg.BuildType, arg.Digest)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const hasArtHistoryNVR = `-- name: HasArtHistoryNVR :one
+SELECT EXISTS (SELECT 1 FROM art_history_builds WHERE group_name = ? AND build_type = ? AND nvr = ?)
+`
+
+type HasArtHistoryNVRParams struct {
+	GroupName string
+	BuildType string
+	Nvr       string
+}
+
+func (q *Queries) HasArtHistoryNVR(ctx context.Context, arg HasArtHistoryNVRParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasArtHistoryNVR, arg.GroupName, arg.BuildType, arg.Nvr)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const hasArtHistoryRecord = `-- name: HasArtHistoryRecord :one
+SELECT EXISTS (SELECT 1 FROM art_history_builds WHERE record_id = ?)
+`
+
+func (q *Queries) HasArtHistoryRecord(ctx context.Context, recordID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasArtHistoryRecord, recordID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const listArtBuildCandidates = `-- name: ListArtBuildCandidates :many
 SELECT sc.image_url,
        CAST(GROUP_CONCAT(DISTINCT s.application) AS TEXT) AS applications,
@@ -138,6 +182,38 @@ func (q *Queries) ListArtFBCImages(ctx context.Context) ([]ListArtFBCImagesRow, 
 	return items, nil
 }
 
+const listArtHistoryScanDays = `-- name: ListArtHistoryScanDays :many
+SELECT day FROM art_history_scan_days WHERE group_name = ? AND build_type = ?
+`
+
+type ListArtHistoryScanDaysParams struct {
+	GroupName string
+	BuildType string
+}
+
+func (q *Queries) ListArtHistoryScanDays(ctx context.Context, arg ListArtHistoryScanDaysParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listArtHistoryScanDays, arg.GroupName, arg.BuildType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var day string
+		if err := rows.Scan(&day); err != nil {
+			return nil, err
+		}
+		items = append(items, day)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listResolvedArtBuilds = `-- name: ListResolvedArtBuilds :many
 SELECT digest, state, nvr, record_id, checked_at
 FROM art_builds
@@ -173,6 +249,33 @@ func (q *Queries) ListResolvedArtBuilds(ctx context.Context, digests []string) (
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSnapshotApplications = `-- name: ListSnapshotApplications :many
+SELECT DISTINCT application FROM snapshots ORDER BY application
+`
+
+func (q *Queries) ListSnapshotApplications(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listSnapshotApplications)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var application string
+		if err := rows.Scan(&application); err != nil {
+			return nil, err
+		}
+		items = append(items, application)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -272,6 +375,82 @@ func (q *Queries) UpsertArtFBCRecord(ctx context.Context, arg UpsertArtFBCRecord
 		arg.Pullspec,
 		arg.BundleNvrs,
 		arg.EndTime,
+	)
+	return err
+}
+
+const upsertArtHistoryBuild = `-- name: UpsertArtHistoryBuild :exec
+INSERT INTO art_history_builds (record_id, group_name, build_type, nvr, digest, pullspec, start_time, end_time, art_job_url, bundle_nvrs_json, operator_nvr, operand_nvrs_json, bundle_csv_name)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(record_id) DO UPDATE SET
+    group_name = excluded.group_name,
+    build_type = excluded.build_type,
+    nvr = excluded.nvr,
+    digest = excluded.digest,
+    pullspec = excluded.pullspec,
+    start_time = excluded.start_time,
+    end_time = excluded.end_time,
+    art_job_url = excluded.art_job_url,
+    bundle_nvrs_json = excluded.bundle_nvrs_json,
+    operator_nvr = excluded.operator_nvr,
+    operand_nvrs_json = excluded.operand_nvrs_json,
+    bundle_csv_name = excluded.bundle_csv_name
+`
+
+type UpsertArtHistoryBuildParams struct {
+	RecordID        string
+	GroupName       string
+	BuildType       string
+	Nvr             string
+	Digest          string
+	Pullspec        string
+	StartTime       string
+	EndTime         string
+	ArtJobUrl       string
+	BundleNvrsJson  string
+	OperatorNvr     string
+	OperandNvrsJson string
+	BundleCsvName   string
+}
+
+func (q *Queries) UpsertArtHistoryBuild(ctx context.Context, arg UpsertArtHistoryBuildParams) error {
+	_, err := q.db.ExecContext(ctx, upsertArtHistoryBuild,
+		arg.RecordID,
+		arg.GroupName,
+		arg.BuildType,
+		arg.Nvr,
+		arg.Digest,
+		arg.Pullspec,
+		arg.StartTime,
+		arg.EndTime,
+		arg.ArtJobUrl,
+		arg.BundleNvrsJson,
+		arg.OperatorNvr,
+		arg.OperandNvrsJson,
+		arg.BundleCsvName,
+	)
+	return err
+}
+
+const upsertArtHistoryScanDay = `-- name: UpsertArtHistoryScanDay :exec
+INSERT INTO art_history_scan_days (group_name, build_type, day, checked_at)
+VALUES (?, ?, ?, ?)
+ON CONFLICT(group_name, build_type, day) DO UPDATE SET checked_at = excluded.checked_at
+`
+
+type UpsertArtHistoryScanDayParams struct {
+	GroupName string
+	BuildType string
+	Day       string
+	CheckedAt string
+}
+
+func (q *Queries) UpsertArtHistoryScanDay(ctx context.Context, arg UpsertArtHistoryScanDayParams) error {
+	_, err := q.db.ExecContext(ctx, upsertArtHistoryScanDay,
+		arg.GroupName,
+		arg.BuildType,
+		arg.Day,
+		arg.CheckedAt,
 	)
 	return err
 }

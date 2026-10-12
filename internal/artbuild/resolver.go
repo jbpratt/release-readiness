@@ -227,7 +227,7 @@ func (r *Resolver) resolve(ctx context.Context, c Candidate, now time.Time, pace
 		if err := wait(ctx, pace); err != nil {
 			return b, nil, err
 		}
-		builds, err := r.client.search(ctx, q)
+		builds, _, err := r.client.search(ctx, q)
 		if err != nil {
 			return b, nil, err
 		}

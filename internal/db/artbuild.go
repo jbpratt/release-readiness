@@ -130,3 +130,64 @@ func (d *DB) FBCImages(ctx context.Context, version string) ([]artbuild.FBCImage
 	}
 	return images, nil
 }
+
+func (d *DB) ListSnapshotApplications(ctx context.Context) ([]string, error) {
+	return d.queries().ListSnapshotApplications(ctx)
+}
+
+func (d *DB) ScannedArtHistoryDays(ctx context.Context, group, buildType string) ([]string, error) {
+	return d.queries().ListArtHistoryScanDays(ctx, dbsqlc.ListArtHistoryScanDaysParams{GroupName: group, BuildType: buildType})
+}
+
+func (d *DB) MarkArtHistoryDayScanned(ctx context.Context, group, buildType, day string, at time.Time) error {
+	return d.queries().UpsertArtHistoryScanDay(ctx, dbsqlc.UpsertArtHistoryScanDayParams{
+		GroupName: group,
+		BuildType: buildType,
+		Day:       day,
+		CheckedAt: at.UTC().Format(time.RFC3339),
+	})
+}
+
+func (d *DB) HasArtHistoryRecord(ctx context.Context, recordID string) (bool, error) {
+	n, err := d.queries().HasArtHistoryRecord(ctx, recordID)
+	return n == 1, err
+}
+
+func (d *DB) HasArtHistoryNVR(ctx context.Context, group, buildType, nvr string) (bool, error) {
+	n, err := d.queries().HasArtHistoryNVR(ctx, dbsqlc.HasArtHistoryNVRParams{GroupName: group, BuildType: buildType, Nvr: nvr})
+	return n == 1, err
+}
+
+func (d *DB) HasArtHistoryDigest(ctx context.Context, buildType, digest string) (bool, error) {
+	n, err := d.queries().HasArtHistoryDigest(ctx, dbsqlc.HasArtHistoryDigestParams{BuildType: buildType, Digest: digest})
+	return n == 1, err
+}
+
+// UpsertArtHistoryBuild stores a successful ART build record.
+func (d *DB) UpsertArtHistoryBuild(ctx context.Context, b artbuild.HistoryBuild) error {
+	return d.queries().UpsertArtHistoryBuild(ctx, dbsqlc.UpsertArtHistoryBuildParams{
+		RecordID:        b.RecordID,
+		GroupName:       b.Group,
+		BuildType:       b.Type,
+		Nvr:             b.NVR,
+		Digest:          b.Digest,
+		Pullspec:        b.Pullspec,
+		StartTime:       b.StartTime,
+		EndTime:         b.EndTime,
+		ArtJobUrl:       b.JobURL,
+		BundleNvrsJson:  jsonList(b.BundleNVRs),
+		OperatorNvr:     b.OperatorNVR,
+		OperandNvrsJson: jsonList(b.OperandNVRs),
+		BundleCsvName:   b.BundleCSVName,
+	})
+}
+
+// jsonList is s as a JSON array, [] when empty.
+func jsonList(s []string) string {
+	if len(s) == 0 {
+		return "[]"
+	}
+	// A string slice cannot fail to marshal.
+	data, _ := json.Marshal(s)
+	return string(data)
+}

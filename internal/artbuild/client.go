@@ -26,6 +26,8 @@ type searchBuild struct {
 	NVR           string `json:"nvr"`
 	RecordID      string `json:"record_id"`
 	ImagePullspec string `json:"image_pullspec"`
+	Name          string `json:"name"`
+	Outcome       string `json:"outcome"`
 }
 
 // record is a full /build record.
@@ -36,21 +38,31 @@ type record struct {
 	// BundleNVRs is, for an FBC image, the operator bundles its catalog holds.
 	BundleNVRs []string `json:"bundle_nvrs"`
 	Outcome    string   `json:"outcome"`
+	StartTime  string   `json:"start_time"`
 	EndTime    string   `json:"end_time"`
+	ArtJobURL  string   `json:"art_job_url"`
+	// OperatorNVR and OperandNVRs are, for a bundle image, the images its
+	// CSV deploys.
+	OperatorNVR   string   `json:"operator_nvr"`
+	OperandNVRs   []string `json:"operand_nvrs"`
+	BundleCSVName string   `json:"bundle_csv_name"`
 }
 
-func (c *Client) search(ctx context.Context, q url.Values) ([]searchBuild, error) {
+// search returns the rows of a /search listing and the warnings the service
+// gave with them.
+func (c *Client) search(ctx context.Context, q url.Values) ([]searchBuild, []string, error) {
 	var resp struct {
-		Builds []searchBuild `json:"builds"`
-		Error  string        `json:"error"`
+		Builds   []searchBuild `json:"builds"`
+		Warnings []string      `json:"warnings"`
+		Error    string        `json:"error"`
 	}
 	if err := c.get(ctx, "/search?"+q.Encode(), &resp); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if resp.Error != "" {
-		return nil, fmt.Errorf("search: %s", resp.Error)
+		return nil, nil, fmt.Errorf("search: %s", resp.Error)
 	}
-	return resp.Builds, nil
+	return resp.Builds, resp.Warnings, nil
 }
 
 func (c *Client) record(ctx context.Context, nvr, recordID string) (*record, error) {

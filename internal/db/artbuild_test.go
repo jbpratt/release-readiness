@@ -206,3 +206,67 @@ func TestArtBuildCandidatesNewestPerApplicationFirst(t *testing.T) {
 		t.Errorf("candidates = %v, want %v", got, want)
 	}
 }
+
+func TestArtHistory(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	ctx := t.Context()
+
+	b := artbuild.HistoryBuild{
+		RecordID: "r1", Group: "quay-3.17", Type: artbuild.TypeBundle,
+		NVR:    "quay-operator-metadata-container-3.17.6.202610081142.p2.g3c4984a.assembly.stream.el9-1",
+		Digest: "sha256:aaaa", Pullspec: "quay.io/x/art-images@sha256:aaaa",
+		OperatorNVR: "quay-operator-container-3.17.6", OperandNVRs: []string{"external"},
+	}
+	for range 2 {
+		if err := d.UpsertArtHistoryBuild(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, has := range map[string]func() (bool, error){
+		"record": func() (bool, error) { return d.HasArtHistoryRecord(ctx, "r1") },
+		"nvr":    func() (bool, error) { return d.HasArtHistoryNVR(ctx, b.Group, b.Type, b.NVR) },
+		"digest": func() (bool, error) { return d.HasArtHistoryDigest(ctx, b.Type, b.Digest) },
+	} {
+		if ok, err := has(); err != nil || !ok {
+			t.Errorf("has %s = %v, %v; want true", name, ok, err)
+		}
+	}
+	if ok, err := d.HasArtHistoryNVR(ctx, b.Group, artbuild.TypeImage, b.NVR); err != nil || ok {
+		t.Errorf("has the bundle NVR as an image = %v, %v; want false", ok, err)
+	}
+	var bundles, operands string
+	if err := d.conn.QueryRow(`SELECT bundle_nvrs_json, operand_nvrs_json FROM art_history_builds WHERE record_id = 'r1'`).Scan(&bundles, &operands); err != nil {
+		t.Fatal(err)
+	}
+	if bundles != "[]" || operands != `["external"]` {
+		t.Errorf("bundle_nvrs_json %s, operand_nvrs_json %s", bundles, operands)
+	}
+
+	at := time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC)
+	for _, day := range []string{"2026-10-11", "2026-10-12", "2026-10-12"} {
+		if err := d.MarkArtHistoryDayScanned(ctx, "quay-3.17", artbuild.TypeFBC, day, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	days, err := d.ScannedArtHistoryDays(ctx, "quay-3.17", artbuild.TypeFBC)
+	slices.Sort(days)
+	if err != nil || !slices.Equal(days, []string{"2026-10-11", "2026-10-12"}) {
+		t.Errorf("scanned days %q, %v", days, err)
+	}
+	if days, _ := d.ScannedArtHistoryDays(ctx, "quay-3.16", artbuild.TypeFBC); len(days) != 0 {
+		t.Errorf("3.16 scanned days %q, want none", days)
+	}
+
+	for i, app := range []string{"quay-3-17", "fbc-quay-3-17", "quay-3-17"} {
+		if _, err := d.CreateSnapshot(ctx, app, fmt.Sprint("snap-", i), at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if apps, err := d.ListSnapshotApplications(ctx); err != nil || !slices.Equal(apps, []string{"fbc-quay-3-17", "quay-3-17"}) {
+		t.Errorf("applications %q, %v", apps, err)
+	}
+}
