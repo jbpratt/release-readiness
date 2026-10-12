@@ -16,6 +16,7 @@ import (
 
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/catalog"
+	"github.com/quay/release-readiness/internal/fbc"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/prow"
 )
@@ -390,6 +391,7 @@ func TestGetCandidate(t *testing.T) {
 	getJSON(t, srv, "/api/v1/releases/quay-v3.14.10/candidate", http.StatusOK, &raw)
 	want := map[string]any{
 		"shipped": false, "candidate": nil, "reason": "no release candidate yet", "catalogs": nil, "unshipped_builds": nil,
+		"fbc_candidate": nil, "fbc_stream": nil,
 		"ci": map[string]any{"builds": []any{}, "latest_in_ci": nil, "passed": nil, "fbc": nil, "refresh": "none"},
 		"newest": map[string]any{
 			"snapshot": "quay-3-14-20261009-185801-000", "created_at": "2026-10-09T19:27:56Z",
@@ -1006,7 +1008,7 @@ func TestGetCandidateNone(t *testing.T) {
 	seedSnapshot(t, srv, "quay-3-16", "quay-3-16-20261010-000000-000", mustTime(t, "2026-10-10T00:00:00Z"), "quay-3-16-quay-quay")
 	resolveNVR(t, srv, "quay-3-16-20261010-000000-000/quay-3-16-quay-quay", testNVR("quay-quay", "3.16.8"))
 	none := func(shipped bool, reason string) map[string]any {
-		return map[string]any{"shipped": shipped, "candidate": nil, "reason": reason, "newest": nil, "ci": nil, "catalogs": nil, "unshipped_builds": nil}
+		return map[string]any{"shipped": shipped, "candidate": nil, "reason": reason, "newest": nil, "ci": nil, "catalogs": nil, "unshipped_builds": nil, "fbc_candidate": nil, "fbc_stream": nil}
 	}
 	for version, want := range map[string]map[string]any{
 		"quay-v3.18.0": none(true, ""), // released in JIRA
@@ -1069,4 +1071,233 @@ func TestGetCandidateShipped(t *testing.T) {
 			}
 		})
 	}
+}
+
+// seedHistoryFBC stores ART's successful build of the FBC image of nvr,
+// rendered with its release channel headed by the bundle of NVR bundle. It
+// returns the image's pullspec.
+func seedHistoryFBC(t *testing.T, srv *Server, nvr, bundle string) string {
+	t.Helper()
+	_, version, _, _ := artbuild.ParseFBC(nvr)
+	pullspec := testImage("fbc/" + nvr)
+	if err := srv.db.UpsertArtHistoryBuild(t.Context(), artbuild.HistoryBuild{
+		RecordID: "rec-" + nvr, Group: "quay-" + version[:strings.LastIndex(version, ".")], Type: "fbc",
+		NVR: nvr, Digest: testDigest("fbc/" + nvr), Pullspec: pullspec,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	seedRender(t, srv, pullspec, "", bundle)
+	return pullspec
+}
+
+// seedRender stores the render of the FBC image pullspec, labelled label,
+// whose channel stable is headed by the CSV csv-<bundle> of the bundle of NVR
+// bundle, with that bundle's ART build.
+func seedRender(t *testing.T, srv *Server, pullspec, label, bundle string) {
+	t.Helper()
+	ctx := t.Context()
+	img := testImage("bundle/" + bundle)
+	if err := srv.db.UpsertArtHistoryBuild(ctx, artbuild.HistoryBuild{
+		RecordID: "rec-" + bundle, Group: "quay", Type: "bundle", NVR: bundle, Digest: testDigest("bundle/" + bundle), Pullspec: img,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.db.UpsertFBCRender(ctx, fbc.Render{
+		Digest: imageDigest(pullspec), State: fbc.StateRendered, LabelNVR: label,
+		Channel: fbc.Channel{Name: "stable", HeadCSV: "csv-" + bundle, HeadBundlePullspec: img}, RenderedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// seedStagedFBC stores app's FBC Snapshot name, holding images, which ART
+// staged for stage for assembly, and its Releases, oldest first, each ending
+// with a reason and created a minute apart.
+func seedStagedFBC(t *testing.T, srv *Server, app, assembly, name, created string, images []string, reasons ...string) {
+	t.Helper()
+	ctx := t.Context()
+	id, err := srv.db.CreateSnapshot(ctx, app, name, mustTime(t, created))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, img := range images {
+		if err := srv.db.CreateSnapshotComponent(ctx, id, fmt.Sprintf("catalog-%d", i), img); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := srv.db.UpsertStagedSnapshot(ctx, name, assembly, "fbc", "stage"); err != nil {
+		t.Fatal(err)
+	}
+	for i, reason := range reasons {
+		r := &model.KonfluxRelease{
+			Name: fmt.Sprintf("%s-%d", name, i), Application: app, Snapshot: name, ReleasePlan: "quay-fbc-stage",
+			ReleasedStatus: "False", ReleasedReason: reason, CreatedAt: mustTime(t, created).Add(time.Duration(i+1) * time.Minute),
+		}
+		if reason == "Succeeded" {
+			r.ReleasedStatus = "True"
+		}
+		if err := srv.db.UpsertKonfluxRelease(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// getFBC returns the FBC candidate and stream of version, of application app.
+func getFBC(t *testing.T, srv *Server, version, app string) (cand, stream *model.FBCCandidate) {
+	t.Helper()
+	if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: version, KonfluxApplication: app}); err != nil {
+		t.Fatal(err)
+	}
+	var got model.ReleaseCandidate
+	getJSON(t, srv, "/api/v1/releases/"+version+"/candidate", http.StatusOK, &got)
+	if got.FBCCandidate == nil || got.FBCStream == nil {
+		t.Fatalf("fbc_candidate %v, fbc_stream %v, want both", got.FBCCandidate, got.FBCStream)
+	}
+	return got.FBCCandidate, got.FBCStream
+}
+
+// fbcRows is c's source, state and errors, then each operator's head bundle,
+// coverage, members, conflicts and missing OCP versions, then its unknown
+// catalogs.
+func fbcRows(c *model.FBCCandidate) []string {
+	member := func(m model.FBCMember) string {
+		s := m.OCP + ":" + m.NVR
+		if m.Snapshot != "" {
+			s += "@" + m.Snapshot
+		}
+		if m.Release != nil {
+			s += "/" + m.Release.ReleasedReason
+		}
+		return s
+	}
+	rows := []string{c.Source + " " + c.State + " [" + strings.Join(c.Errors, "; ") + "]"}
+	for _, o := range c.Operators {
+		row := fmt.Sprintf("%s %q %d/%d", o.Operator, o.HeadBundleNVR, o.Coverage.Members, o.Coverage.Slots)
+		for _, m := range o.Members {
+			row += " " + member(m)
+		}
+		for _, m := range o.Conflicts {
+			row += " conflict=" + member(m)
+		}
+		if len(o.MissingOCP) > 0 {
+			row += " missing=" + strings.Join(o.MissingOCP, ",")
+		}
+		rows = append(rows, row)
+	}
+	for _, m := range c.Unknown {
+		rows = append(rows, "unknown "+m.Pullspec+" "+member(m))
+	}
+	return rows
+}
+
+func checkRows(t *testing.T, what string, got, want []string) {
+	t.Helper()
+	if !slices.Equal(got, want) {
+		t.Errorf("%s:\n%s\nwant:\n%s", what, strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// Like 3.16 on 12 Oct 2026: ART builds the stream, keyed by the placeholder
+// head v3.99.0-dev, and staged nothing, so the candidate is the stream.
+func TestGetCandidateFBCStream(t *testing.T) {
+	srv := setupTestServer(t)
+	const head = "quay-operator-metadata-container-3.16.7.202610121915"
+	seedHistoryFBC(t, srv, "quay-operator-fbc-3.16.7-20261012201007.ocp4.12", head)
+	seedHistoryFBC(t, srv, "quay-operator-fbc-3.16.7-20261012200000.ocp4.13", head)
+	// Superseded in its slot, and another z of the stream.
+	seedHistoryFBC(t, srv, "quay-operator-fbc-3.16.7-20261011000000.ocp4.12", "quay-operator-metadata-container-3.16.7.202610110000")
+	seedHistoryFBC(t, srv, "quay-operator-fbc-3.16.6-20261012201007.ocp4.14", "quay-operator-metadata-container-3.16.6.202610121915")
+	seedHistoryFBC(t, srv, "container-security-operator-fbc-3.16.7-20261012201007.ocp4.12", "cso-bundle")
+	seedHistoryFBC(t, srv, "quay-bridge-operator-fbc-3.16.7-20261012201007.ocp4.12", "qbo-bundle")
+
+	cand, stream := getFBC(t, srv, "quay-v3.16.7", "quay-3-16")
+	want := []string{
+		"stream complete []",
+		`quay-operator "` + head + `" 2/2 4.12:quay-operator-fbc-3.16.7-20261012201007.ocp4.12 4.13:quay-operator-fbc-3.16.7-20261012200000.ocp4.13`,
+		`container-security-operator "cso-bundle" 1/1 4.12:container-security-operator-fbc-3.16.7-20261012201007.ocp4.12`,
+		`quay-bridge-operator "qbo-bundle" 1/1 4.12:quay-bridge-operator-fbc-3.16.7-20261012201007.ocp4.12`,
+	}
+	checkRows(t, "candidate", fbcRows(cand), want)
+	checkRows(t, "stream", fbcRows(stream), want)
+	if o := cand.Operators[0]; o.Channel != "stable" || o.HeadCSV != "csv-"+head || o.Members[0].BuildURL == "" {
+		t.Errorf("quay-operator channel %q head %q build %q", o.Channel, o.HeadCSV, o.Members[0].BuildURL)
+	}
+}
+
+// Like 3.17.6: ART staged quay-operator's 9 FBCs, all on bundle ...0936, and
+// no CSO or QBO FBC, which the stream builds: those are errors.
+func TestGetCandidateFBCMissingOperator(t *testing.T) {
+	srv := setupTestServer(t)
+	const head = "quay-operator-metadata-container-3.17.6.202610020936"
+	var staged []string
+	want := `quay-operator "` + head + `" 9/9`
+	for minor := 12; minor <= 20; minor++ {
+		nvr := fmt.Sprintf("quay-operator-fbc-3.17.6-20261002100000.ocp4.%d", minor)
+		staged = append(staged, seedHistoryFBC(t, srv, nvr, head))
+		want += fmt.Sprintf(" 4.%d:%s@quay-stage-3-17-6-fbc-20261002120000/Succeeded", minor, nvr)
+	}
+	seedHistoryFBC(t, srv, "container-security-operator-fbc-3.17.6-20261002100000.ocp4.12", "cso-bundle")
+	seedHistoryFBC(t, srv, "quay-bridge-operator-fbc-3.17.6-20261002100000.ocp4.12", "qbo-bundle")
+	seedStagedFBC(t, srv, "fbc-quay-3-17", "3.17.6", "quay-stage-3-17-6-fbc-20261002120000", "2026-10-02T12:00:00Z", staged, "Succeeded")
+
+	cand, stream := getFBC(t, srv, "quay-v3.17.6", "quay-3-17")
+	checkRows(t, "candidate", fbcRows(cand), []string{
+		"stage_snapshots incomplete [container-security-operator is not in stage; quay-bridge-operator is not in stage]",
+		want,
+		`container-security-operator "" 0/1 missing=4.12`,
+		`quay-bridge-operator "" 0/1 missing=4.12`,
+	})
+	if stream.Source != "stream" || stream.Operators[1].Coverage.Members != 1 {
+		t.Errorf("stream %s, CSO coverage %+v, want the stream's CSO FBC", stream.Source, stream.Operators[1].Coverage)
+	}
+}
+
+// Like 3.18.1: ART restaged slots. Each slot takes the newest staged Snapshot
+// holding its catalog, with that Snapshot's newest Release even when it
+// failed, never the union of every staged catalog. A catalog no build history
+// names is identified by its resolved ART build, else its label; one nothing
+// names is unknown and fills no slot.
+func TestGetCandidateFBCRestage(t *testing.T) {
+	srv := setupTestServer(t)
+	const app, head = "fbc-quay-3-18", "quay-operator-metadata-container-3.18.1.202610090339"
+	const old, restaged = "quay-stage-3-18-1-fbc-20261008084003", "quay-stage-3-18-1-fbc-20261009050000"
+	op20old := seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261008000000.ocp4.20", head)
+	op20 := seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261009044841.ocp4.20", head)
+	op21 := testImage("fbc/labelled")
+	seedRender(t, srv, op21, "quay-operator-fbc-3.18.1-20261008000000.ocp4.21", head)
+	cso := testImage("fbc/cso")
+	resolveNVR(t, srv, "fbc/cso", "container-security-operator-fbc-3.18.1-20261008000000.ocp4.20")
+	seedRender(t, srv, cso, "", "cso-bundle")
+	qbo := seedHistoryFBC(t, srv, "quay-bridge-operator-fbc-3.18.1-20261008000000.ocp4.20", "qbo-bundle")
+	unnamed := testImage("fbc/unnamed")
+	seedStagedFBC(t, srv, app, "3.18.1", old, "2026-10-08T08:40:03Z", []string{op20old, op21, cso, qbo, unnamed}, "Succeeded")
+	seedStagedFBC(t, srv, app, "3.18.1", restaged, "2026-10-09T05:00:00Z", []string{op20, unnamed}, "Succeeded", "Failed")
+
+	cand, _ := getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
+	checkRows(t, "candidate", fbcRows(cand), []string{
+		"stage_snapshots unknown []",
+		`quay-operator "` + head + `" 2/2 4.20:quay-operator-fbc-3.18.1-20261009044841.ocp4.20@` + restaged + `/Failed 4.21:quay-operator-fbc-3.18.1-20261008000000.ocp4.21@` + old + `/Succeeded`,
+		`container-security-operator "cso-bundle" 1/1 4.20:container-security-operator-fbc-3.18.1-20261008000000.ocp4.20@` + old + `/Succeeded`,
+		`quay-bridge-operator "qbo-bundle" 1/1 4.20:quay-bridge-operator-fbc-3.18.1-20261008000000.ocp4.20@` + old + `/Succeeded`,
+		"unknown " + unnamed + " :@" + restaged + "/Failed",
+	})
+}
+
+// An operator whose slots head different bundles is keyed by its newest
+// FBC's: the others are conflicts, not members, and the candidate is
+// inconsistent.
+func TestGetCandidateFBCMixed(t *testing.T) {
+	srv := setupTestServer(t)
+	seedHistoryFBC(t, srv, "quay-operator-fbc-3.17.6-20261002100000.ocp4.12", "qo-bundle")
+	seedHistoryFBC(t, srv, "container-security-operator-fbc-3.17.6-20261003100000.ocp4.12", "cso-1613")
+	seedHistoryFBC(t, srv, "container-security-operator-fbc-3.17.6-20261002100000.ocp4.13", "cso-0313")
+	seedHistoryFBC(t, srv, "quay-bridge-operator-fbc-3.17.6-20261002100000.ocp4.12", "qbo-bundle")
+
+	cand, _ := getFBC(t, srv, "quay-v3.17.6", "quay-3-17")
+	checkRows(t, "candidate", fbcRows(cand), []string{
+		"stream inconsistent [container-security-operator heads more than one bundle across its OCP versions]",
+		`quay-operator "qo-bundle" 1/1 4.12:quay-operator-fbc-3.17.6-20261002100000.ocp4.12`,
+		`container-security-operator "cso-1613" 1/2 4.12:container-security-operator-fbc-3.17.6-20261003100000.ocp4.12 conflict=4.13:container-security-operator-fbc-3.17.6-20261002100000.ocp4.13`,
+		`quay-bridge-operator "qbo-bundle" 1/1 4.12:quay-bridge-operator-fbc-3.17.6-20261002100000.ocp4.12`,
+	})
 }

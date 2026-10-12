@@ -104,6 +104,71 @@ type ReleaseCandidate struct {
 	// UnshippedBuilds is, with a candidate, the newest image of the version's
 	// builds of each component the candidate leaves out.
 	UnshippedBuilds []UnshippedBuild `json:"unshipped_builds"`
+	// FBCCandidate is the version's operator FBCs up for release: as ART
+	// staged them for stage, else as its stream built them; FBCStream is
+	// always as its stream built them. Both are nil while the version has no
+	// FBC built or staged.
+	FBCCandidate *FBCCandidate `json:"fbc_candidate"`
+	FBCStream    *FBCCandidate `json:"fbc_stream"`
+}
+
+// FBCCandidate is a version's operator FBCs, one per operator and OCP version
+// slot: Source "stage_snapshots" takes each slot's FBC from the newest FBC
+// Snapshot ART staged for stage, "stream" its newest successful ART build.
+// Operators always holds quay-operator, container-security-operator and
+// quay-bridge-operator; one without an FBC is in Errors. State is
+// "inconsistent" when an operator's slots head different bundles,
+// "incomplete" for an operator or slot without an FBC, "unknown" while a
+// head bundle or a staged catalog's identity is unresolved, else "complete".
+// Unknown holds, once per digest, the staged catalogs no NVR names, which
+// fill no slot.
+type FBCCandidate struct {
+	Source    string        `json:"source"`
+	State     string        `json:"state"`
+	Errors    []string      `json:"errors"`
+	Operators []OperatorFBC `json:"operators"`
+	Unknown   []FBCMember   `json:"unknown"`
+}
+
+// OperatorFBC is one operator's FBCs, keyed by HeadBundleNVR, the NVR of the
+// bundle heading the release channel of its newest FBC that has one joined,
+// "" for none, with that FBC's channel and head CSV. Members are its slots'
+// FBCs on that bundle and Conflicts the others, both by OCP version;
+// MissingOCP the OCP versions it was ever built or staged for without an FBC
+// here, and Coverage how many of those slots Members fill.
+type OperatorFBC struct {
+	Operator      string      `json:"operator"`
+	HeadBundleNVR string      `json:"head_bundle_nvr"`
+	Channel       string      `json:"channel"`
+	HeadCSV       string      `json:"head_csv"`
+	Coverage      FBCCoverage `json:"coverage"`
+	Members       []FBCMember `json:"members"`
+	MissingOCP    []string    `json:"missing_ocp"`
+	Conflicts     []FBCMember `json:"conflicts"`
+}
+
+type FBCCoverage struct {
+	Members int `json:"members"`
+	Slots   int `json:"slots"`
+}
+
+// FBCMember is an FBC catalog image: its NVR, from ART or its label, "" when
+// neither names it, with its ART build page; the NVR of the bundle heading its
+// release channel, "" until joined to an ART bundle build; and, when staged,
+// the FBC Snapshot holding it and that Snapshot's newest Release, whatever its
+// status, nil before one.
+type FBCMember struct {
+	OCP           string          `json:"ocp"`
+	Digest        string          `json:"digest"`
+	Pullspec      string          `json:"pullspec"`
+	NVR           string          `json:"nvr"`
+	BuildURL      string          `json:"build_url"`
+	HeadBundleNVR string          `json:"head_bundle_nvr"`
+	Snapshot      string          `json:"snapshot"`
+	Release       *KonfluxRelease `json:"release"`
+	RecordID      string          `json:"-"`
+	Channel       string          `json:"-"`
+	HeadCSV       string          `json:"-"`
 }
 
 // UnshippedBuild is an image of a component a release candidate leaves out,

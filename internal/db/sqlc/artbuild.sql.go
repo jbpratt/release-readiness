@@ -182,6 +182,61 @@ func (q *Queries) ListArtFBCImages(ctx context.Context) ([]ListArtFBCImagesRow, 
 	return items, nil
 }
 
+const listArtHistoryFBCs = `-- name: ListArtHistoryFBCs :many
+SELECT f.record_id, f.nvr, f.pullspec,
+       CAST(COALESCE(r.channel, '') AS TEXT) AS channel,
+       CAST(COALESCE(r.head_csv, '') AS TEXT) AS head_csv,
+       CAST(COALESCE(b.nvr, '') AS TEXT) AS head_bundle_nvr
+FROM art_history_builds f
+LEFT JOIN fbc_render_cache r ON r.state = 'rendered' AND r.digest = f.digest
+LEFT JOIN art_history_builds b ON b.build_type = 'bundle'
+  AND b.digest = substr(r.head_bundle_pullspec, instr(r.head_bundle_pullspec, '@') + 1)
+WHERE f.group_name = ? AND f.build_type = 'fbc'
+ORDER BY f.nvr DESC, f.record_id
+`
+
+type ListArtHistoryFBCsRow struct {
+	RecordID      string
+	Nvr           string
+	Pullspec      string
+	Channel       string
+	HeadCsv       string
+	HeadBundleNvr string
+}
+
+// group's successful FBC builds, newest NVR first, each with the channel and
+// head CSV its render found and the NVR of its head bundle's ART build, ”
+// for none.
+func (q *Queries) ListArtHistoryFBCs(ctx context.Context, groupName string) ([]ListArtHistoryFBCsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtHistoryFBCs, groupName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtHistoryFBCsRow
+	for rows.Next() {
+		var i ListArtHistoryFBCsRow
+		if err := rows.Scan(
+			&i.RecordID,
+			&i.Nvr,
+			&i.Pullspec,
+			&i.Channel,
+			&i.HeadCsv,
+			&i.HeadBundleNvr,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listArtHistoryScanDays = `-- name: ListArtHistoryScanDays :many
 SELECT day FROM art_history_scan_days WHERE group_name = ? AND build_type = ?
 `

@@ -35,3 +35,30 @@ LEFT JOIN art_builds a ON a.state = 'resolved'
 WHERE ss.assembly = sqlc.arg(assembly) AND ss.kind = 'fbc' AND ss.env = 'stage'
   AND s.application = sqlc.arg(application)
 ORDER BY s.name, sc.component;
+
+-- name: ListStagedFBCMembers :many
+-- The catalog images of the application's FBC Snapshots ART staged for stage
+-- for assembly, newest Snapshot first, each with its NVR: that of its ART
+-- build in build history, else of its resolved ART build, else its rendered
+-- label, '' for none, and that build's record ID; the channel and head CSV
+-- its render found; and the NVR of its head bundle's ART build, '' for none.
+SELECT s.name AS snapshot_name, sc.image_url,
+       CAST(COALESCE(h.nvr, a.nvr, NULLIF(r.label_nvr, ''), '') AS TEXT) AS nvr,
+       CAST(COALESCE(h.record_id, a.record_id, '') AS TEXT) AS record_id,
+       CAST(COALESCE(r.channel, '') AS TEXT) AS channel,
+       CAST(COALESCE(r.head_csv, '') AS TEXT) AS head_csv,
+       CAST(COALESCE(b.nvr, '') AS TEXT) AS head_bundle_nvr
+FROM staged_snapshots ss
+JOIN snapshots s ON s.name = ss.name
+JOIN snapshot_components sc ON sc.snapshot_id = s.id
+LEFT JOIN art_history_builds h ON h.build_type = 'fbc'
+  AND h.digest = substr(sc.image_url, instr(sc.image_url, '@') + 1)
+LEFT JOIN art_builds a ON a.state = 'resolved'
+  AND a.digest = substr(sc.image_url, instr(sc.image_url, '@') + 1)
+LEFT JOIN fbc_render_cache r ON r.state = 'rendered'
+  AND r.digest = substr(sc.image_url, instr(sc.image_url, '@') + 1)
+LEFT JOIN art_history_builds b ON b.build_type = 'bundle'
+  AND b.digest = substr(r.head_bundle_pullspec, instr(r.head_bundle_pullspec, '@') + 1)
+WHERE ss.assembly = sqlc.arg(assembly) AND ss.kind = 'fbc' AND ss.env = 'stage'
+  AND s.application = sqlc.arg(application)
+ORDER BY s.created_at DESC, s.name DESC, sc.component;

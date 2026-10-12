@@ -30,6 +30,59 @@ export interface ReleaseCandidate {
 	 * component the candidate leaves out.
 	 */
 	unshipped_builds: UnshippedBuild[] | null;
+	/**
+	 * The version's operator FBCs up for release: as ART staged them for
+	 * stage, else as its stream built them. Null while the version has no
+	 * FBC built or staged.
+	 */
+	fbc_candidate: FBCCandidate | null;
+	/** The version's operator FBCs as its stream built them. */
+	fbc_stream: FBCCandidate | null;
+}
+
+/**
+ * A version's operator FBCs, one per operator and OCP version slot, from the
+ * newest staged FBC Snapshot ("stage_snapshots") or the newest successful ART
+ * build ("stream"). operators always holds quay-operator,
+ * container-security-operator and quay-bridge-operator; unknown holds the
+ * staged catalogs no NVR names, which fill no slot.
+ */
+export interface FBCCandidate {
+	source: "stage_snapshots" | "stream";
+	state: "complete" | "incomplete" | "inconsistent" | "unknown";
+	errors: string[];
+	operators: OperatorFBC[];
+	unknown: FBCMember[];
+}
+
+/**
+ * One operator's FBCs, keyed by the bundle heading its newest FBC's release
+ * channel ("" for none): members are on that bundle, conflicts are not.
+ */
+export interface OperatorFBC {
+	operator: string;
+	head_bundle_nvr: string;
+	channel: string;
+	head_csv: string;
+	coverage: { members: number; slots: number };
+	members: FBCMember[];
+	missing_ocp: string[];
+	conflicts: FBCMember[];
+}
+
+/**
+ * An FBC catalog image; nvr and head_bundle_nvr are "" until resolved. A
+ * staged one has its FBC Snapshot and that Snapshot's newest Release.
+ */
+export interface FBCMember {
+	ocp: string;
+	digest: string;
+	pullspec: string;
+	nvr: string;
+	build_url: string;
+	head_bundle_nvr: string;
+	snapshot: string;
+	release: KonfluxRelease | null;
 }
 
 /** An image of a component the candidate leaves out, and its stream build. */
