@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/model"
@@ -63,21 +62,17 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 	// catalog CI installs from; the version's own stage Releases do not.
 	releases = slices.DeleteFunc(releases, func(r model.StageRelease) bool { return !strings.HasPrefix(r.Snapshot, "fbc-ri-") })
 	held := map[string]string{}
-	if c.build != nil && c.build.Source == "staged" {
-		cand := c.build
+	if cand := c.build; cand != nil {
 		resp.Candidate = cand
 		for _, cc := range cand.Components {
 			held[cc.Name] = imageDigest(cc.Image)
 		}
-		// Its own stage Release succeeded with every image of it, and dates it:
-		// ART assembles a STAGE build from images it often staged before.
-		cand.Stage = model.StageFlag{State: "staged", StagedAt: c.stagedAt, Total: len(cand.Components), NotStaged: []string{}, NoBundle: []string{}, NoRelease: []string{}}
 		if cand.Prod, err = s.db.LatestProdRelease(ctx, c.assembly); err != nil {
 			return nil, err
 		}
 	} else {
 		resp.Reason = "no release candidate yet"
-		if c.build == nil {
+		if c.newest == nil {
 			if c.art != "" && lowerVersion(c.art, c.assembly) {
 				resp.Reason = "no " + c.assembly + " builds yet: ART still builds " + c.art
 			}
@@ -417,13 +412,11 @@ type candidate struct {
 	shipped bool
 	// reason says why the version has no build.
 	reason string
-	// build is the version's selected STAGE build, else newest, its newest
+	// build is the version's selected STAGE build, or nil; newest its newest
 	// build: the first of builds, its stream builds, newest first, as
 	// versionBuilds selects them for its assembly from stream, all of the
-	// application's. stagedAt is the STAGE build's stage Release's completion
-	// time.
+	// application's.
 	build          *model.CandidateBuild
-	stagedAt       *time.Time
 	newest         *model.ReleaseSnapshot
 	builds, stream []model.ReleaseSnapshot
 	assembly       string
@@ -457,11 +450,8 @@ func (s *Server) selectCandidate(ctx context.Context, release *model.ReleaseVers
 	if len(c.builds) > 0 {
 		c.newest = &c.builds[0]
 	}
-	if c.build, c.stagedAt, err = s.candidateBuild(ctx, release, c.newest); err != nil {
+	if c.build, err = s.candidateBuild(ctx, release); err != nil {
 		return nil, err
-	}
-	if c.build == nil {
-		c.reason = "no build of " + m[1] + " yet"
 	}
 	return c, nil
 }
@@ -536,26 +526,20 @@ func nvrVersion(nvr string) string {
 	return ""
 }
 
-// candidateBuild returns the version's selected STAGE build, else its newest
-// build, or nil when there is neither, with its images' ART builds, and the
-// STAGE build's stage Release's completion time.
-func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersion, newest *model.ReleaseSnapshot) (*model.CandidateBuild, *time.Time, error) {
+// candidateBuild returns the version's selected STAGE build, or nil when it
+// has none, with its images' ART builds.
+func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersion) (*model.CandidateBuild, error) {
 	staged, err := s.db.SelectedStageBuild(ctx, release, s.StageReleasePlanPattern)
+	if err != nil || staged == nil {
+		return nil, err
+	}
+	snap, err := s.db.GetReleaseSnapshot(ctx, staged.SnapshotName)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	snap, c := newest, &model.CandidateBuild{Source: "newest"}
-	var stagedAt *time.Time
-	if staged != nil {
-		if snap, err = s.db.GetReleaseSnapshot(ctx, staged.SnapshotName); err != nil {
-			return nil, nil, err
-		}
-		c.Source, stagedAt = "staged", &staged.CompletedAt
-	}
-	if snap == nil {
-		return nil, nil, nil
-	}
-	c.Snapshot, c.CreatedAt = snap.Name, snap.CreatedAt
+	// Its own stage Release succeeded with every image of it, and dates it:
+	// ART assembles a STAGE build from images it often staged before.
+	c := &model.CandidateBuild{Snapshot: snap.Name, CreatedAt: snap.CreatedAt, Stage: model.StageFlag{State: "staged", StagedAt: &staged.CompletedAt}}
 	images := buildImages(release.KonfluxApplication, snap)
 	digests := make([]string, len(images))
 	for i, img := range images {
@@ -563,7 +547,7 @@ func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersi
 	}
 	builds, err := s.db.ResolvedArtBuilds(ctx, digests)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	c.Components = make([]model.CandidateComponent, len(images))
 	for i, img := range images {
@@ -572,7 +556,7 @@ func (s *Server) candidateBuild(ctx context.Context, release *model.ReleaseVersi
 			c.Components[i].NVR, c.Components[i].BuildURL = b.NVR, artbuild.PageURL(s.artBaseURL, b.NVR, b.RecordID)
 		}
 	}
-	return c, stagedAt, nil
+	return c, nil
 }
 
 // buildImages returns snap's component images less the base image
