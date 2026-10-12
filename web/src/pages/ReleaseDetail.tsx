@@ -30,15 +30,7 @@ import {
 	ExternalLinkAltIcon,
 	InProgressIcon,
 } from "@patternfly/react-icons";
-import {
-	Table,
-	Tbody,
-	Td,
-	Th,
-	Thead,
-	type ThProps,
-	Tr,
-} from "@patternfly/react-table";
+import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { type ReactNode, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
@@ -641,7 +633,6 @@ const releaseVariants: Record<StatusLine["status"], keyof typeof stepStates> = {
 	failed: "danger",
 	running: "info",
 	warning: "warning",
-	none: "pending",
 };
 
 /** A step of the candidate's stepper, read out as "<title>: <state>". */
@@ -688,11 +679,6 @@ const statusIcons: Record<StatusLine["status"], ReactNode> = {
 			<ExclamationTriangleIcon />
 		</Icon>
 	),
-	none: (
-		<Icon isInline>
-			<span style={muted}>-</span>
-		</Icon>
-	),
 };
 
 /** A status icon, then its text, which wraps clear of it. */
@@ -706,9 +692,7 @@ function Status({
 	return (
 		<Flex gap={{ default: "gapSm" }} flexWrap={{ default: "nowrap" }}>
 			<FlexItem>{statusIcons[status]}</FlexItem>
-			<FlexItem style={status === "none" ? muted : undefined}>
-				{children}
-			</FlexItem>
+			<FlexItem>{children}</FlexItem>
 		</Flex>
 	);
 }
@@ -1061,46 +1045,31 @@ function TicketsCard({
 	);
 }
 
-// The ticket table's columns, in order.
-const ISSUES_COLUMNS = ["key", "type", "summary"];
-
 function IssuesTable({ issues }: { issues: JiraIssue[] }) {
-	const [activeSortKey, setActiveSortKey] = useState<string | undefined>(
-		undefined,
-	);
-	const [activeSortDirection, setActiveSortDirection] = useState<
-		"asc" | "desc" | undefined
-	>(undefined);
+	// Type, the second column, is the only sortable one.
+	const [direction, setDirection] = useState<"asc" | "desc">();
 
 	const sortedIssues = useMemo(() => {
-		if (activeSortKey === undefined || activeSortDirection === undefined) {
-			return issues;
-		}
-		// Type is the only sortable column.
+		if (!direction) return issues;
 		return [...issues].sort((a, b) => {
 			const cmp = a.issue_type.localeCompare(b.issue_type);
-			return activeSortDirection === "asc" ? cmp : -cmp;
+			return direction === "asc" ? cmp : -cmp;
 		});
-	}, [issues, activeSortKey, activeSortDirection]);
-
-	const getSortParams = (columnKey: string): ThProps["sort"] => ({
-		sortBy: {
-			index: activeSortKey ? ISSUES_COLUMNS.indexOf(activeSortKey) : undefined,
-			direction: activeSortDirection,
-		},
-		onSort: (_event, _index, direction) => {
-			setActiveSortKey(columnKey);
-			setActiveSortDirection(direction);
-		},
-		columnIndex: ISSUES_COLUMNS.indexOf(columnKey),
-	});
+	}, [issues, direction]);
 
 	return (
 		<Table variant="compact" style={{ tableLayout: "auto" }}>
 			<Thead>
 				<Tr>
 					<Th style={{ whiteSpace: "nowrap" }}>Key</Th>
-					<Th sort={getSortParams("type")} modifier="fitContent">
+					<Th
+						sort={{
+							sortBy: { index: direction && 1, direction },
+							onSort: (_event, _index, d) => setDirection(d),
+							columnIndex: 1,
+						}}
+						modifier="fitContent"
+					>
 						Type
 					</Th>
 					<Th>Summary</Th>
