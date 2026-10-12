@@ -83,7 +83,9 @@ func (d *DB) StageReleases(ctx context.Context, release *model.ReleaseVersion, p
 
 // StagedFBCCatalogs returns the catalogs of application's FBC Snapshots ART
 // staged for stage for assembly, by Snapshot name, each with the newest
-// Release of its Snapshot.
+// Release of its Snapshot. ART stages a catalog digest again in each new
+// Snapshot, so each digest appears once: from the Snapshot with the newest
+// Release, else the newest Snapshot.
 func (d *DB) StagedFBCCatalogs(ctx context.Context, assembly, application string) ([]model.CandidateCatalog, error) {
 	rows, err := d.queries().ListStagedFBCCatalogs(ctx, dbsqlc.ListStagedFBCCatalogsParams{Assembly: assembly, Application: application})
 	if err != nil || len(rows) == 0 {
@@ -94,16 +96,32 @@ func (d *DB) StagedFBCCatalogs(ctx context.Context, assembly, application string
 		return nil, err
 	}
 	catalogs := make([]model.CandidateCatalog, len(rows))
+	// rank is the index in releases of each catalog's Release, len(releases)
+	// for none; best is the catalog kept for each digest.
+	rank, best := make([]int, len(rows)), map[string]int{}
 	for i, r := range rows {
 		_, _, ocp, _ := artbuild.ParseFBC(r.Nvr)
 		catalogs[i] = model.CandidateCatalog{State: "staged", Snapshot: r.SnapshotName, Component: r.Component, Pullspec: r.ImageUrl, NVR: r.Nvr, OCP: ocp}
 		// releases is newest first.
-		if j := slices.IndexFunc(releases, func(kr dbsqlc.KonfluxRelease) bool { return kr.Snapshot == r.SnapshotName }); j >= 0 {
-			kr := toKonfluxRelease(releases[j])
+		rank[i] = slices.IndexFunc(releases, func(kr dbsqlc.KonfluxRelease) bool { return kr.Snapshot == r.SnapshotName })
+		if rank[i] >= 0 {
+			kr := toKonfluxRelease(releases[rank[i]])
 			catalogs[i].Release, catalogs[i].ReleasePlan = &kr, kr.ReleasePlan
+		} else {
+			rank[i] = len(releases)
+		}
+		_, digest, _ := strings.Cut(r.ImageUrl, "@")
+		if b, ok := best[digest]; !ok || rank[i] < rank[b] || rank[i] == rank[b] && r.SnapshotName > rows[b].SnapshotName {
+			best[digest] = i
 		}
 	}
-	return catalogs, nil
+	kept := catalogs[:0]
+	for i, c := range catalogs {
+		if _, digest, _ := strings.Cut(c.Pullspec, "@"); best[digest] == i {
+			kept = append(kept, c)
+		}
+	}
+	return kept, nil
 }
 
 // LatestProdRelease returns the newest Release, whatever its status, of an
