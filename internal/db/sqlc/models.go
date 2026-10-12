@@ -42,6 +42,21 @@ type ArtHistoryScanDay struct {
 	CheckedAt string
 }
 
+type FbcRenderCache struct {
+	Digest             string
+	State              string
+	LabelNvr           string
+	PackageName        string
+	Channel            string
+	HeadCsv            string
+	HeadBundlePullspec string
+	Replaces           string
+	SkipRange          string
+	Error              string
+	RenderedAt         string
+	RetryAfter         string
+}
+
 type JiraIssue struct {
 	ID         int64
 	Key        string

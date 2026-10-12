@@ -19,6 +19,7 @@ import (
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
+	"github.com/quay/release-readiness/internal/fbc"
 	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/kube"
 	"github.com/quay/release-readiness/internal/prow"
@@ -136,6 +137,9 @@ func main() {
 		history := artbuild.NewHistorySync(art, database, logger.With("component", "art-history"))
 		history.Status = status.Track("art-history", 10*time.Minute)
 		wg.Go(func() { history.Run(ctx, 10*time.Minute) })
+		render := fbc.NewSync(fbc.NewRegistry(&http.Client{Timeout: 5 * time.Minute}), database, history, logger.With("component", "fbc-render"))
+		render.Status = status.Track("fbc-render", 10*time.Minute)
+		wg.Go(func() { render.Run(ctx, 10*time.Minute) })
 	}
 
 	var shipped *catalog.Shipped
