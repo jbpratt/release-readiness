@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -126,5 +127,45 @@ func TestListUnreadFBCImages(t *testing.T) {
 	}
 	if got, err := d.ListUnreadFBCImages(ctx, 1); err != nil || len(got) != 1 || !slices.Contains(unread, got[0]) {
 		t.Errorf("unread FBC images, at most 1 = %+v, %v; want one of %+v", got, err, unread)
+	}
+}
+
+// Each application's newest Snapshot images come before newer Snapshots of
+// another application, so a quiet application is not starved on a fresh DB.
+func TestArtBuildCandidatesNewestPerApplicationFirst(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	ctx := t.Context()
+
+	t0 := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	snap := func(app, name, img string, at time.Time) {
+		t.Helper()
+		id, err := d.CreateSnapshot(ctx, app, name, at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := d.CreateSnapshotComponent(ctx, id, app, img); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const imgY = "quay.io/x/y@sha256:yyyy"
+	snap("quay-3-15", "y", imgY, t0)
+	for i := range 3 {
+		snap("quay-3-18", fmt.Sprintf("x-%d", i), fmt.Sprintf("quay.io/x/x@sha256:%04d", i), t0.Add(time.Duration(i+1)*time.Hour))
+	}
+
+	cands, err := d.ListArtBuildCandidates(ctx, t0, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, c := range cands {
+		got = append(got, c.Image)
+	}
+	if want := []string{"quay.io/x/x@sha256:0002", imgY}; !slices.Equal(got, want) {
+		t.Errorf("candidates = %v, want %v", got, want)
 	}
 }
