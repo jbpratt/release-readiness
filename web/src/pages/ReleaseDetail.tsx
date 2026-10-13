@@ -1060,7 +1060,7 @@ function OperatorImages({
 	const check = o.image_check;
 	// An external's unset stage or prod is untracked, not "not shipped".
 	const yes = (on: boolean, external: boolean) =>
-		on ? "yes" : external ? "" : "–";
+		on ? "yes" : external ? "" : "no";
 	return (
 		<>
 			{o.compare.length > 0 && (
@@ -1128,8 +1128,21 @@ function OperatorImages({
 							<Th>Image</Th>
 							<Th>ART build</Th>
 							{hasScans && <Th>Fixable CVEs</Th>}
-							<Th>Stage</Th>
-							<Th>Prod</Th>
+							<Th
+								info={{
+									tooltip:
+										"A succeeded stage Release holds this image's digest",
+								}}
+							>
+								In stage
+							</Th>
+							<Th
+								info={{
+									tooltip: "A succeeded prod Release holds this image's digest",
+								}}
+							>
+								In prod
+							</Th>
 						</Tr>
 					</Thead>
 					<Tbody>
