@@ -10,7 +10,6 @@ import {
 	clipboardCopyFunc,
 	EmptyState,
 	EmptyStateBody,
-	ExpandableSection,
 	Flex,
 	FlexItem,
 	FormSelect,
@@ -18,6 +17,9 @@ import {
 	Icon,
 	Label,
 	type LabelProps,
+	Modal,
+	ModalBody,
+	ModalHeader,
 	PageSection,
 	Popover,
 	ProgressStep,
@@ -439,7 +441,7 @@ function BuildsCard({
 /**
  * The FBC candidate: its verdict and how far FBC reads are; where it is, from
  * the stream's build through CI and stage to prod; and a row per operator,
- * opening to its detail. Unshipped, a collapsed section reviews
+ * opening to its detail. Unshipped, a modal reviews
  * release-from-fbc's inputs; the Prod step's popover, its Release.
  * While FBC reads are pending no step warns or fails.
  */
@@ -500,6 +502,7 @@ function Candidate({
 	// Rows the reader opened, and their tabs; rows start collapsed.
 	const [opened, setOpened] = useState<Record<string, boolean>>({});
 	const [tabs, setTabs] = useState<Record<string, BlockTab>>({});
+	const [inputs, setInputs] = useState(false);
 	return (
 		<>
 			<VerdictHeader verdict={verdict} prod={prodRelease} />
@@ -654,12 +657,27 @@ function Candidate({
 				})}
 			</Table>
 			{release && (
-				<ExpandableSection
-					toggleText="Release inputs"
-					style={{ marginTop: "1rem" }}
-				>
-					{release}
-				</ExpandableSection>
+				<>
+					<Button
+						variant="secondary"
+						style={{ marginTop: "1rem" }}
+						onClick={() => setInputs(true)}
+					>
+						Release inputs
+					</Button>
+					<Modal
+						isOpen={inputs}
+						onClose={() => setInputs(false)}
+						aria-labelledby="release-inputs-title"
+						variant="large"
+					>
+						<ModalHeader
+							title="Release inputs"
+							labelId="release-inputs-title"
+						/>
+						<ModalBody tabIndex={0}>{release}</ModalBody>
+					</Modal>
+				</>
 			)}
 			{fbc.unknown.length > 0 && (
 				<div style={line}>
