@@ -43,6 +43,12 @@ type Problem struct {
 	LastSuccess *time.Time `json:"last_success"`
 }
 
+// Freshness is a source's last successful pass, nil if it has had none.
+type Freshness struct {
+	Source      string     `json:"source"`
+	LastSuccess *time.Time `json:"last_success"`
+}
+
 func New() *Registry {
 	return &Registry{now: time.Now}
 }
@@ -89,6 +95,17 @@ func (r *Registry) Problems(now time.Time) []Problem {
 		}
 	}
 	return problems
+}
+
+// Sources lists every tracked source's freshness, sorted by source.
+func (r *Registry) Sources() []Freshness {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]Freshness, len(r.sources))
+	for i, s := range r.sources {
+		out[i] = Freshness{Source: s.name, LastSuccess: ptr(s.lastSuccess)}
+	}
+	return out
 }
 
 // Tracks reports whether source is tracked.

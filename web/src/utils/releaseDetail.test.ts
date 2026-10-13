@@ -7,6 +7,7 @@ import type {
 	FBCMember,
 	ImageCompareRow,
 	ImageScan,
+	JiraIssue,
 	KonfluxRelease,
 	OperatorFBC,
 	VerdictItem,
@@ -28,6 +29,8 @@ import {
 	fbcStageStep,
 	fbcsBuilt,
 	fixableLabels,
+	freshnessLine,
+	issueSummary,
 	jobLabels,
 	jobShortName,
 	nvrLabel,
@@ -43,6 +46,7 @@ import {
 	shownOperators,
 	slotItem,
 	slotRows,
+	splitTickets,
 	stageText,
 	streamAhead,
 	tknCommand,
@@ -1150,4 +1154,98 @@ test("ciList: a line per slot the candidate FBC tested, the rest counted", () =>
 	);
 	assert.equal(n, 2);
 	assert.deepEqual(ciList(untested), { lines: [], untested: 2 });
+});
+
+test("freshnessLine", () => {
+	const ago = (min: number) =>
+		new Date(Date.now() - min * 60_000).toISOString();
+	const sources = [
+		{ source: "art-builds", last_success: ago(2) },
+		{ source: "art-history", last_success: ago(7) },
+		{ source: "jira", last_success: ago(90) },
+		{ source: "konflux", last_success: ago(1) },
+	];
+	// Jira never feeds the verdict, so neither its age nor its failure shows.
+	assert.deepEqual(freshnessLine({ problems: [], sources }), {
+		text: "Refreshed 7 minutes ago",
+		problems: [],
+	});
+	const jira = {
+		source: "jira",
+		message: "boom",
+		since: ago(5),
+		last_success: ago(90),
+	};
+	assert.equal(
+		freshnessLine({ problems: [jira], sources })?.text,
+		"Refreshed 7 minutes ago",
+	);
+
+	const failing = {
+		source: "art-history",
+		message: "boom",
+		since: ago(5),
+		last_success: ago(7),
+	};
+	const stale = {
+		source: "konflux",
+		message: "no successful sync in 10m0s",
+		since: null,
+		last_success: null,
+	};
+	assert.deepEqual(
+		freshnessLine({ problems: [failing, jira, stale], sources }),
+		{
+			text: "Data may be stale: art-history failing, konflux stale, last success never",
+			problems: [failing, stale],
+		},
+	);
+
+	// A source on its first pass, or none tracked, says nothing.
+	assert.equal(
+		freshnessLine({
+			problems: [],
+			sources: [...sources, { source: "fbc-render", last_success: null }],
+		}),
+		null,
+	);
+	assert.equal(
+		freshnessLine({
+			problems: [],
+			sources: sources.filter((f) => f.source === "jira"),
+		}),
+		null,
+	);
+});
+
+const issue = (key: string, issue_type: string): JiraIssue => ({
+	key,
+	issue_type,
+	summary: "",
+	link: "",
+});
+
+test("splitTickets", () => {
+	const issues = [issue("PROJQUAY-1", "Bug"), issue("PROJQUAY-2", "Task")];
+	assert.deepEqual(splitTickets(issues, "PROJQUAY-2"), {
+		ticket: issues[1],
+		work: [issues[0]],
+	});
+	assert.deepEqual(splitTickets(issues, undefined), {
+		ticket: undefined,
+		work: issues,
+	});
+});
+
+test("issueSummary", () => {
+	assert.equal(
+		issueSummary([
+			issue("A", "Story"),
+			issue("B", "Bug"),
+			issue("C", "Bug"),
+			issue("D", "Epic"),
+		]),
+		"4 issues: 2 Bug, 1 Epic, 1 Story",
+	);
+	assert.equal(issueSummary([issue("A", "Bug")]), "1 issue: 1 Bug");
 });

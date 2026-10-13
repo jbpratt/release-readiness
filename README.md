@@ -40,7 +40,7 @@ Reads up to 20 FBC images a pass anonymously from their registry (Registry v2 AP
 
 ### Sync status
 
-`/api/v1/sync-status` lists as `problems` each enabled sync (`konflux`, `jira`, `art-builds`, `art-history`, `fbc-render`, `catalog`, `prow`, `image-scans`) whose last pass failed or that has had no success within 3 poll intervals (at least 10 minutes); the header shows a warning icon while any exist.
+`/api/v1/sync-status` lists as `problems` each enabled sync (`konflux`, `jira`, `art-builds`, `art-history`, `fbc-render`, `catalog`, `prow`, `image-scans`) whose last pass failed or that has had no success within 3 poll intervals (at least 10 minutes), and as `sources` every enabled sync with its `last_success`, null before its first success; the header shows a warning icon while any problems exist.
 
 ## Release view
 

@@ -69,8 +69,14 @@ func TestSyncStatus(t *testing.T) {
 
 	var got struct {
 		Problems []map[string]any `json:"problems"`
+		Sources  []map[string]any `json:"sources"`
 	}
 	getJSON(t, srv, "/api/v1/sync-status", http.StatusOK, &got)
+
+	if len(got.Sources) != 2 || got.Sources[0]["source"] != "jira" || got.Sources[0]["last_success"] != nil ||
+		got.Sources[1]["source"] != "konflux" || got.Sources[1]["last_success"] == nil {
+		t.Errorf("sources = %v, want jira never then konflux", got.Sources)
+	}
 
 	if len(got.Problems) != 1 {
 		t.Fatalf("problems = %v, want one", got.Problems)
