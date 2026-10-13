@@ -9,6 +9,62 @@ import (
 	"context"
 )
 
+const insertFBCRelatedImage = `-- name: InsertFBCRelatedImage :exec
+INSERT INTO fbc_related_images (digest, role, name, image) VALUES (?, ?, ?, ?)
+ON CONFLICT DO NOTHING
+`
+
+type InsertFBCRelatedImageParams struct {
+	Digest string
+	Role   string
+	Name   string
+	Image  string
+}
+
+// A rendered image's related images never change, so a stored one stays.
+func (q *Queries) InsertFBCRelatedImage(ctx context.Context, arg InsertFBCRelatedImageParams) error {
+	_, err := q.db.ExecContext(ctx, insertFBCRelatedImage,
+		arg.Digest,
+		arg.Role,
+		arg.Name,
+		arg.Image,
+	)
+	return err
+}
+
+const listFBCRelatedImages = `-- name: ListFBCRelatedImages :many
+SELECT role, name, image FROM fbc_related_images WHERE digest = ? ORDER BY role, name, image
+`
+
+type ListFBCRelatedImagesRow struct {
+	Role  string
+	Name  string
+	Image string
+}
+
+func (q *Queries) ListFBCRelatedImages(ctx context.Context, digest string) ([]ListFBCRelatedImagesRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFBCRelatedImages, digest)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFBCRelatedImagesRow
+	for rows.Next() {
+		var i ListFBCRelatedImagesRow
+		if err := rows.Scan(&i.Role, &i.Name, &i.Image); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listFBCRenderSources = `-- name: ListFBCRenderSources :many
 SELECT src.pullspec, src.nvr, src.created,
        CAST(COALESCE(r.state, '') AS TEXT) AS state,
@@ -22,7 +78,7 @@ FROM (
     JOIN snapshot_components sc ON sc.snapshot_id = s.id
     WHERE ss.kind = 'fbc' AND instr(sc.image_url, '@sha256:') > 0
 ) src
-LEFT JOIN fbc_render_cache r ON r.digest = substr(src.pullspec, instr(src.pullspec, '@') + 1)
+LEFT JOIN fbc_renders r ON r.digest = substr(src.pullspec, instr(src.pullspec, '@') + 1)
 `
 
 type ListFBCRenderSourcesRow struct {
@@ -68,7 +124,7 @@ func (q *Queries) ListFBCRenderSources(ctx context.Context) ([]ListFBCRenderSour
 
 const listUnjoinedFBCRenders = `-- name: ListUnjoinedFBCRenders :many
 SELECT r.digest, r.label_nvr, r.channel, r.head_bundle_pullspec
-FROM fbc_render_cache r
+FROM fbc_renders r
 WHERE r.state = 'rendered'
   AND NOT EXISTS (
     SELECT 1 FROM art_history_builds b
@@ -113,36 +169,44 @@ func (q *Queries) ListUnjoinedFBCRenders(ctx context.Context) ([]ListUnjoinedFBC
 }
 
 const upsertFBCRender = `-- name: UpsertFBCRender :exec
-INSERT INTO fbc_render_cache (digest, state, label_nvr, package_name, channel, head_csv, head_bundle_pullspec, replaces, skip_range, error, rendered_at, retry_after)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO fbc_renders (digest, state, label_nvr, package_name, channel, head_csv, head_version, head_bundle_pullspec, replaces, skip_range, previous_csv, previous_version, previous_bundle_pullspec, error, rendered_at, retry_after)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(digest) DO UPDATE SET
     state = excluded.state,
     label_nvr = excluded.label_nvr,
     package_name = excluded.package_name,
     channel = excluded.channel,
     head_csv = excluded.head_csv,
+    head_version = excluded.head_version,
     head_bundle_pullspec = excluded.head_bundle_pullspec,
     replaces = excluded.replaces,
     skip_range = excluded.skip_range,
+    previous_csv = excluded.previous_csv,
+    previous_version = excluded.previous_version,
+    previous_bundle_pullspec = excluded.previous_bundle_pullspec,
     error = excluded.error,
     rendered_at = excluded.rendered_at,
     retry_after = excluded.retry_after
-WHERE fbc_render_cache.state = 'failed'
+WHERE fbc_renders.state = 'failed'
 `
 
 type UpsertFBCRenderParams struct {
-	Digest             string
-	State              string
-	LabelNvr           string
-	PackageName        string
-	Channel            string
-	HeadCsv            string
-	HeadBundlePullspec string
-	Replaces           string
-	SkipRange          string
-	Error              string
-	RenderedAt         string
-	RetryAfter         string
+	Digest                 string
+	State                  string
+	LabelNvr               string
+	PackageName            string
+	Channel                string
+	HeadCsv                string
+	HeadVersion            string
+	HeadBundlePullspec     string
+	Replaces               string
+	SkipRange              string
+	PreviousCsv            string
+	PreviousVersion        string
+	PreviousBundlePullspec string
+	Error                  string
+	RenderedAt             string
+	RetryAfter             string
 }
 
 // A rendered row is final, so only a failed one is replaced.
@@ -154,9 +218,13 @@ func (q *Queries) UpsertFBCRender(ctx context.Context, arg UpsertFBCRenderParams
 		arg.PackageName,
 		arg.Channel,
 		arg.HeadCsv,
+		arg.HeadVersion,
 		arg.HeadBundlePullspec,
 		arg.Replaces,
 		arg.SkipRange,
+		arg.PreviousCsv,
+		arg.PreviousVersion,
+		arg.PreviousBundlePullspec,
 		arg.Error,
 		arg.RenderedAt,
 		arg.RetryAfter,

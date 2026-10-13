@@ -12,6 +12,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -21,7 +22,8 @@ import (
 )
 
 // catalog is a 3.16 FBC's quay-operator catalog: the package defaults to the
-// newest stream's channel, and stable-3.16 heads at a placeholder version.
+// newest stream's channel, and stable-3.16 heads at a placeholder version
+// whose bundle lists fewer related images than the v3.16.6 below it.
 const catalog = `---
 defaultChannel: stable-3.18
 name: quay-operator
@@ -49,11 +51,31 @@ schema: olm.channel
 image: registry.redhat.io/quay/quay-operator-bundle@sha256:1606
 name: quay-operator.v3.16.6
 package: quay-operator
+properties:
+- type: olm.gvk
+  value:
+    group: quay.redhat.com
+    kind: QuayRegistry
+    version: v1
+- type: olm.package
+  value:
+    packageName: quay-operator
+    version: 3.16.6
+relatedImages:
+- image: registry.redhat.io/quay/quay-operator-rhel9@sha256:o1606
+  name: quay-operator
+- image: registry.redhat.io/rhel9/postgresql-15@sha256:p15
+  name: postgres
 schema: olm.bundle
 ---
 image: registry.redhat.io/quay/quay-operator-bundle@sha256:1605
 name: quay-operator.v3.16.5
 package: quay-operator
+properties:
+- type: olm.package
+  value:
+    packageName: quay-operator
+    version: 3.16.5
 schema: olm.bundle
 ---
 image: registry.redhat.io/quay/quay-operator-bundle@sha256:1699
@@ -64,11 +86,19 @@ properties:
   value:
     packageName: quay-operator
     version: 3.99.0-dev
+relatedImages:
+- image: registry.redhat.io/quay/quay-rhel9-operator@sha256:o1699
+  name: quay-operator
 schema: olm.bundle
 ---
 image: registry.redhat.io/quay/quay-operator-bundle@sha256:1801
 name: quay-operator.v3.18.1
 package: quay-operator
+properties:
+- type: olm.package
+  value:
+    packageName: quay-operator
+    version: 3.18.1
 schema: olm.bundle
 `
 
@@ -78,6 +108,17 @@ var wantHead = Channel{
 	HeadBundlePullspec: "registry.redhat.io/quay/quay-operator-bundle@sha256:1699",
 	Replaces:           "quay-operator.v3.16.6",
 	SkipRange:          ">=3.13.0 <3.99.0-dev",
+	HeadVersion:        "3.99.0-dev",
+	HeadRelatedImages:  []RelatedImage{{Name: "quay-operator", Image: "registry.redhat.io/quay/quay-rhel9-operator@sha256:o1699"}},
+	Previous: Bundle{
+		CSV:            "quay-operator.v3.16.6",
+		Version:        "3.16.6",
+		BundlePullspec: "registry.redhat.io/quay/quay-operator-bundle@sha256:1606",
+		RelatedImages: []RelatedImage{
+			{Name: "quay-operator", Image: "registry.redhat.io/quay/quay-operator-rhel9@sha256:o1606"},
+			{Name: "postgres", Image: "registry.redhat.io/rhel9/postgresql-15@sha256:p15"},
+		},
+	},
 }
 
 func TestParseChannel(t *testing.T) {
@@ -85,8 +126,16 @@ func TestParseChannel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != wantHead {
+	if !reflect.DeepEqual(got, wantHead) {
 		t.Errorf("got %+v, want %+v", got, wantHead)
+	}
+	// A channel's only entry has no previous one.
+	got, err = ParseChannel(strings.NewReader(catalog), "stable-3.18")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.HeadVersion != "3.18.1" || !reflect.DeepEqual(got.Previous, Bundle{}) {
+		t.Errorf("stable-3.18: version %q, previous %+v", got.HeadVersion, got.Previous)
 	}
 }
 
@@ -272,7 +321,7 @@ func TestSyncCachesByDigest(t *testing.T) {
 
 	digest := f.pullspec[strings.Index(f.pullspec, "@")+1:]
 	r := store.renders[digest]
-	if r.State != StateRendered || r.Channel != wantHead || r.Package != "quay-operator" || r.LabelNVR != "quay-operator-fbc-3.16.7-20261012191500.ocp4.21" {
+	if r.State != StateRendered || !reflect.DeepEqual(r.Channel, wantHead) || r.Package != "quay-operator" || r.LabelNVR != "quay-operator-fbc-3.16.7-20261012191500.ocp4.21" {
 		t.Errorf("render: %+v", r)
 	}
 	if n := f.count(f.layer); n != 1 {
@@ -307,7 +356,7 @@ func TestSyncRetriesFailedRender(t *testing.T) {
 
 	*now = now.Add(retryAfter)
 	s.SyncOnce(t.Context())
-	if r := store.renders[digest]; r.State != StateRendered || r.Channel != wantHead {
+	if r := store.renders[digest]; r.State != StateRendered || !reflect.DeepEqual(r.Channel, wantHead) {
 		t.Errorf("after the retry: %+v", r)
 	}
 }

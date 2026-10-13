@@ -62,7 +62,14 @@ func TestFBCRenderCache(t *testing.T) {
 		t.Errorf("to render: got %v, want %v", got, want)
 	}
 
-	head := fbc.Channel{Name: "stable-3.16", HeadCSV: "quay-operator.v3.99.0-dev", HeadBundlePullspec: bundle, Replaces: "quay-operator.v3.16.6", SkipRange: ">=3.13.0 <3.99.0-dev"}
+	headImages := []fbc.RelatedImage{{Name: "quay-operator", Image: "registry.redhat.io/quay/quay-rhel9-operator@sha256:o1699"}}
+	previousImages := []fbc.RelatedImage{
+		{Name: "postgres", Image: "registry.redhat.io/rhel9/postgresql-15@sha256:p15"},
+		{Name: "quay-operator", Image: "registry.redhat.io/quay/quay-operator-rhel9@sha256:o1606"},
+	}
+	head := fbc.Channel{Name: "stable-3.16", HeadCSV: "quay-operator.v3.99.0-dev", HeadBundlePullspec: bundle, Replaces: "quay-operator.v3.16.6", SkipRange: ">=3.13.0 <3.99.0-dev",
+		HeadVersion: "3.99.0-dev", HeadRelatedImages: headImages,
+		Previous: fbc.Bundle{CSV: "quay-operator.v3.16.6", Version: "3.16.6", BundlePullspec: "registry.redhat.io/quay/quay-operator-bundle@sha256:1606", RelatedImages: previousImages}}
 	rendered := fbc.Render{Digest: "sha256:0004", LabelNVR: "quay-operator-fbc-3.16.7-20261012110000.ocp4.21", Package: "quay-operator", Channel: head, State: fbc.StateRendered, RenderedAt: now}
 	failed := fbc.Render{Digest: "sha256:0002", State: fbc.StateFailed, Error: "GET: 503", RenderedAt: now, RetryAfter: now.Add(time.Hour)}
 	for _, r := range []fbc.Render{rendered, failed} {
@@ -73,6 +80,9 @@ func TestFBCRenderCache(t *testing.T) {
 	if got, want := toRender(now), []string{ocp420}; !slices.Equal(got, want) {
 		t.Errorf("to render before the retry: got %v, want %v", got, want)
 	}
+	if read, failed, pending, err := d.FBCReadProgress(ctx); err != nil || read != 1 || failed != 1 || pending != 1 {
+		t.Errorf("read progress: %d read, %d failed, %d pending, %v; want 1, 1, 1", read, failed, pending, err)
+	}
 	if got, want := toRender(now.Add(time.Hour)), []string{newer, ocp420}; !slices.Equal(got, want) {
 		t.Errorf("to render at the retry: got %v, want %v", got, want)
 	}
@@ -80,6 +90,13 @@ func TestFBCRenderCache(t *testing.T) {
 	// A rendered image is final: it stays rendered and unjoined.
 	if err := d.UpsertFBCRender(ctx, fbc.Render{Digest: "sha256:0004", State: fbc.StateFailed, RenderedAt: now.Add(time.Hour)}); err != nil {
 		t.Fatal(err)
+	}
+	gotHead, gotPrevious, err := d.FBCRelatedImages(ctx, "sha256:0004")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(gotHead, headImages) || !slices.Equal(gotPrevious, previousImages) {
+		t.Errorf("related images: head %+v, previous %+v", gotHead, gotPrevious)
 	}
 	unjoined, err := d.UnjoinedFBCRenders(ctx)
 	if err != nil {

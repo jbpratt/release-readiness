@@ -1,20 +1,32 @@
 -- name: UpsertFBCRender :exec
 -- A rendered row is final, so only a failed one is replaced.
-INSERT INTO fbc_render_cache (digest, state, label_nvr, package_name, channel, head_csv, head_bundle_pullspec, replaces, skip_range, error, rendered_at, retry_after)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO fbc_renders (digest, state, label_nvr, package_name, channel, head_csv, head_version, head_bundle_pullspec, replaces, skip_range, previous_csv, previous_version, previous_bundle_pullspec, error, rendered_at, retry_after)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(digest) DO UPDATE SET
     state = excluded.state,
     label_nvr = excluded.label_nvr,
     package_name = excluded.package_name,
     channel = excluded.channel,
     head_csv = excluded.head_csv,
+    head_version = excluded.head_version,
     head_bundle_pullspec = excluded.head_bundle_pullspec,
     replaces = excluded.replaces,
     skip_range = excluded.skip_range,
+    previous_csv = excluded.previous_csv,
+    previous_version = excluded.previous_version,
+    previous_bundle_pullspec = excluded.previous_bundle_pullspec,
     error = excluded.error,
     rendered_at = excluded.rendered_at,
     retry_after = excluded.retry_after
-WHERE fbc_render_cache.state = 'failed';
+WHERE fbc_renders.state = 'failed';
+
+-- name: InsertFBCRelatedImage :exec
+-- A rendered image's related images never change, so a stored one stays.
+INSERT INTO fbc_related_images (digest, role, name, image) VALUES (?, ?, ?, ?)
+ON CONFLICT DO NOTHING;
+
+-- name: ListFBCRelatedImages :many
+SELECT role, name, image FROM fbc_related_images WHERE digest = ? ORDER BY role, name, image;
 
 -- name: ListFBCRenderSources :many
 -- FBC images to render, ART's successful FBC builds and the catalogs of FBC
@@ -33,12 +45,12 @@ FROM (
     JOIN snapshot_components sc ON sc.snapshot_id = s.id
     WHERE ss.kind = 'fbc' AND instr(sc.image_url, '@sha256:') > 0
 ) src
-LEFT JOIN fbc_render_cache r ON r.digest = substr(src.pullspec, instr(src.pullspec, '@') + 1);
+LEFT JOIN fbc_renders r ON r.digest = substr(src.pullspec, instr(src.pullspec, '@') + 1);
 
 -- name: ListUnjoinedFBCRenders :many
 -- Rendered FBC images whose head bundle image has no stored ART bundle build.
 SELECT r.digest, r.label_nvr, r.channel, r.head_bundle_pullspec
-FROM fbc_render_cache r
+FROM fbc_renders r
 WHERE r.state = 'rendered'
   AND NOT EXISTS (
     SELECT 1 FROM art_history_builds b

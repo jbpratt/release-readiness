@@ -35,19 +35,30 @@ type ArtHistoryScanDay struct {
 	CheckedAt string
 }
 
-type FbcRenderCache struct {
-	Digest             string
-	State              string
-	LabelNvr           string
-	PackageName        string
-	Channel            string
-	HeadCsv            string
-	HeadBundlePullspec string
-	Replaces           string
-	SkipRange          string
-	Error              string
-	RenderedAt         string
-	RetryAfter         string
+type FbcRelatedImage struct {
+	Digest string
+	Role   string
+	Name   string
+	Image  string
+}
+
+type FbcRender struct {
+	Digest                 string
+	State                  string
+	LabelNvr               string
+	PackageName            string
+	Channel                string
+	HeadCsv                string
+	HeadVersion            string
+	HeadBundlePullspec     string
+	Replaces               string
+	SkipRange              string
+	PreviousCsv            string
+	PreviousVersion        string
+	PreviousBundlePullspec string
+	Error                  string
+	RenderedAt             string
+	RetryAfter             string
 }
 
 type JiraIssue struct {
