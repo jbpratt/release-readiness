@@ -48,7 +48,8 @@ export interface Verdict {
 
 /**
  * A blocker, warning or info on operator, "" for the whole release, for
- * owner, "ART", "Quay", "Quay/ART" or "", to act on.
+ * owner, "ART", "ART/Konflux", "Quay (release-from-fbc)", "Quay/ART" or "", to
+ * act on.
  */
 export interface VerdictItem {
 	level: "blocker" | "warning" | "info";
