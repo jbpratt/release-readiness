@@ -37,6 +37,7 @@ import {
 	slotRows,
 	streamAhead,
 	tknCommand,
+	unreadText,
 	unshippedOf,
 	verdictLine,
 	whileChecking,
@@ -545,6 +546,26 @@ test("checking: reading cells, nothing warns or fails", () => {
 		"reading",
 		"unknown",
 	]);
+	const failed = item(
+		"blocker",
+		"quay-operator",
+		"read_failed",
+		"quay-operator OCP 4.14: can't read FBC: no channel stable-5.0",
+	);
+	assert.deepEqual(
+		operatorSummary(c, null, false, [failed, noHead]).rows[0].cells,
+		["failed", "unknown"],
+	);
+	assert.equal(unreadText([], "quay-operator"), null);
+	assert.equal(
+		unreadText([noHead], "quay-operator"),
+		"FBC heads no known bundle",
+	);
+	assert.equal(
+		unreadText([noHead, failed], "quay-operator"),
+		"Can't read FBC: no channel stable-5.0",
+	);
+	assert.equal(unreadText([failed], "quay-bridge-operator"), null);
 	assert.equal(shipsVersion(o), "");
 	assert.equal(imagesState(o, false), "");
 	assert.deepEqual(whileChecking(fbcCIStep(c), true), {
