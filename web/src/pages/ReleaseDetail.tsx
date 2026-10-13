@@ -194,15 +194,40 @@ export default function ReleaseDetail() {
 			kind,
 			name,
 		);
+	const fbc = candidate.data?.fbc_candidate;
 
 	return (
 		<PageSection>
-			<Breadcrumb style={{ marginBottom: "1rem" }}>
-				<BreadcrumbItem>
-					<Link to="/">Releases</Link>
-				</BreadcrumbItem>
-				<BreadcrumbHeading>{displayName}</BreadcrumbHeading>
-			</Breadcrumb>
+			<Flex
+				alignItems={{ default: "alignItemsCenter" }}
+				style={{ marginBottom: "1rem" }}
+			>
+				<FlexItem>
+					<Breadcrumb>
+						<BreadcrumbItem>
+							<Link to="/">Releases</Link>
+						</BreadcrumbItem>
+						<BreadcrumbHeading>{displayName}</BreadcrumbHeading>
+					</Breadcrumb>
+				</FlexItem>
+				{fbc && !candidate.data?.shipped && (
+					<FlexItem>
+						<ReleaseInputsButton>
+							<ReleaseInputs
+								fbc={fbc}
+								app={app}
+								version={xyz}
+								bugs={
+									config?.jira_enabled === false
+										? undefined
+										: tickets?.map((t) => t.key)
+								}
+								dueDate={release.due_date}
+							/>
+						</ReleaseInputsButton>
+					</FlexItem>
+				)}
+			</Flex>
 
 			<ReleaseStatusCard
 				release={release}
@@ -216,12 +241,6 @@ export default function ReleaseDetail() {
 				version={xyz}
 				app={app}
 				konflux={konflux}
-				bugs={
-					config?.jira_enabled === false
-						? undefined
-						: tickets?.map((t) => t.key)
-				}
-				dueDate={release.due_date}
 			/>
 
 			<TicketsCard
@@ -369,8 +388,6 @@ function BuildsCard({
 	version,
 	app,
 	konflux,
-	bugs,
-	dueDate,
 }: {
 	data?: ReleaseCandidate;
 	error?: Error;
@@ -378,9 +395,6 @@ function BuildsCard({
 	version: string;
 	app: string;
 	konflux: KonfluxLink;
-	/** The version's ticket keys; undefined while unknown. */
-	bugs?: string[];
-	dueDate?: string;
 }) {
 	const fbc = data?.fbc_candidate;
 	const reason = data?.reason || "no FBC built or staged yet";
@@ -407,17 +421,6 @@ function BuildsCard({
 						version={version}
 						app={app}
 						konflux={konflux}
-						release={
-							!data.shipped && (
-								<ReleaseInputs
-									fbc={fbc}
-									app={app}
-									version={version}
-									bugs={bugs}
-									dueDate={dueDate}
-								/>
-							)
-						}
 					/>
 				) : data.shipped ? (
 					"Shipped; no FBC data."
@@ -432,8 +435,7 @@ function BuildsCard({
 /**
  * The FBC candidate: its verdict and how far FBC reads are; where it is, from
  * the stream's build through CI and stage to prod; and a row per operator,
- * opening to its detail. Unshipped, a modal reviews
- * release-from-fbc's inputs; the Prod step's popover, its Release.
+ * opening to its detail. The Prod step's popover shows its Release.
  * While FBC reads are pending no step warns or fails.
  */
 function Candidate({
@@ -448,7 +450,6 @@ function Candidate({
 	version,
 	app,
 	konflux,
-	release,
 }: {
 	fbc: FBCCandidate;
 	stream: FBCCandidate | null;
@@ -461,7 +462,6 @@ function Candidate({
 	version: string;
 	app: string;
 	konflux: KonfluxLink;
-	release?: ReactNode;
 }) {
 	const prod = prodRelease && {
 		name: prodRelease.name,
@@ -493,7 +493,6 @@ function Candidate({
 	// Rows the reader opened, and their tabs; rows start collapsed.
 	const [opened, setOpened] = useState<Record<string, boolean>>({});
 	const [tabs, setTabs] = useState<Record<string, BlockTab>>({});
-	const [inputs, setInputs] = useState(false);
 	return (
 		<>
 			<VerdictHeader verdict={verdict} prod={prodRelease} />
@@ -647,29 +646,6 @@ function Candidate({
 					);
 				})}
 			</Table>
-			{release && (
-				<>
-					<Button
-						variant="secondary"
-						style={{ marginTop: "1rem" }}
-						onClick={() => setInputs(true)}
-					>
-						Release inputs
-					</Button>
-					<Modal
-						isOpen={inputs}
-						onClose={() => setInputs(false)}
-						aria-labelledby="release-inputs-title"
-						variant="large"
-					>
-						<ModalHeader
-							title="Release inputs"
-							labelId="release-inputs-title"
-						/>
-						<ModalBody tabIndex={0}>{release}</ModalBody>
-					</Modal>
-				</>
-			)}
 			{fbc.unknown.length > 0 && (
 				<div style={line}>
 					<Status status="warning">
@@ -1237,6 +1213,27 @@ function UnshippedTable({
 					))}
 				</Tbody>
 			</Table>
+		</>
+	);
+}
+
+/** A button opening children, the release's inputs, in a modal. */
+function ReleaseInputsButton({ children }: { children: ReactNode }) {
+	const [open, setOpen] = useState(false);
+	return (
+		<>
+			<Button variant="secondary" onClick={() => setOpen(true)}>
+				Release inputs
+			</Button>
+			<Modal
+				isOpen={open}
+				onClose={() => setOpen(false)}
+				aria-labelledby="release-inputs-title"
+				variant="large"
+			>
+				<ModalHeader title="Release inputs" labelId="release-inputs-title" />
+				<ModalBody tabIndex={0}>{children}</ModalBody>
+			</Modal>
 		</>
 	);
 }
