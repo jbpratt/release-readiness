@@ -23,6 +23,7 @@ import {
 	fbcParams,
 	fbcPullspecs,
 	fbcStageStep,
+	fbcsBuilt,
 	fixableLabels,
 	jobLabels,
 	jobShortName,
@@ -509,6 +510,26 @@ test("unresolved heads: slot", () => {
 		slotRows(o).map((r) => r.kind),
 		["unresolved"],
 	);
+});
+
+test("fbcsBuilt: the oldest FBC's build time", () => {
+	const head = bundle("202610060936");
+	const fbc = (ocp: string, built: string) =>
+		fbcMember(ocp, head, {
+			nvr: `quay-operator-fbc-3.17.6-${built}.ocp${ocp}`,
+		});
+	const c = fbcCandidate({
+		operators: [
+			operatorFBC("quay-operator", head, [fbc("4.14", "20261012201007")], {
+				conflicts: [
+					fbc("4.12", "20261011090000"),
+					fbcMember("4.13", "", { nvr: "" }),
+				],
+			}),
+		],
+	});
+	assert.equal(fbcsBuilt(c), "2026-10-11T09:00:00Z");
+	assert.equal(fbcsBuilt(fbcCandidate({})), "");
 });
 
 test("fbcCIStep: exact runs decide; else runs on an equivalent FBC", () => {

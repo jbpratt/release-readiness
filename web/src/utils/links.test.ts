@@ -6,6 +6,7 @@ import {
 	jiraSearchUrl,
 	konfluxUrl,
 	sippyJobUrl,
+	sippyRunsUrl,
 	ticketsJql,
 } from "./links.ts";
 
@@ -77,4 +78,13 @@ test("sippyJobUrl", () => {
 		"https://sippy.dptools.openshift.org/sippy-ng/jobs/quay-3.18?filters=%7B%22items%22%3A%5B%7B%22columnField%22%3A%22name%22%2C%22operatorValue%22%3A%22equals%22%2C%22value%22%3A%22periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly%22%7D%5D%7D",
 	);
 	assert.equal(sippyJobUrl("next", job), null);
+});
+
+test("sippyRunsUrl", () => {
+	assert.equal(
+		sippyRunsUrl("3.18.2", "2026-10-12T20:10:07Z"),
+		"https://sippy.dptools.openshift.org/sippy-ng/jobs/quay-3.18/runs?filters=%7B%22items%22%3A%5B%7B%22field%22%3A%22timestamp%22%2C%22operator%22%3A%22%3E%22%2C%22value%22%3A%222026-10-12T20%3A10%3A07Z%22%7D%5D%7D",
+	);
+	assert.equal(sippyRunsUrl("3.18.2", ""), null);
+	assert.equal(sippyRunsUrl("next", "2026-10-12T20:10:07Z"), null);
 });
