@@ -45,7 +45,7 @@ const glossary: [string, string][] = [
 	],
 	[
 		"In CI",
-		"Reached the catalog CI installs from: a per-build fbc-ri-stage Release of its operator bundle succeeded.",
+		"Reached the catalog CI installs from: a stage Release holding its operator bundle succeeded, a per-build fbc-ri-stage Release or the version's image shipment.",
 	],
 	[
 		"CI",

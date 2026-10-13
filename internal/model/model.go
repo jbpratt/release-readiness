@@ -116,7 +116,7 @@ type ReleaseCandidate struct {
 // Unknown holds, once per digest, the staged catalogs no NVR names, which
 // fill no slot. Pullspecs, release-from-fbc's fbc-pullspecs by operator, then
 // OCP version, is empty unless State is "complete". Installable is set when
-// every operator's head bundle reached stage through an fbc-ri Release.
+// every operator's head bundle reached stage through a stage Release.
 type FBCCandidate struct {
 	Source      string        `json:"source"`
 	State       string        `json:"state"`
@@ -133,7 +133,7 @@ type FBCCandidate struct {
 // FBCs on that bundle and Conflicts the others, both by OCP version;
 // MissingOCP the OCP versions it was ever built or staged for without an FBC
 // here, and Coverage how many of those slots Members fill. FBCRIStage tells
-// whether its head bundle reached stage through an fbc-ri Release, "unknown"
+// whether its head bundle reached stage through a stage Release, "unknown"
 // without a head bundle; ImageCheck compares that bundle with the image
 // Snapshot's.
 type OperatorFBC struct {
@@ -230,7 +230,7 @@ type CandidateBuild struct {
 }
 
 // CIState tells whether an operator bundle reached the catalog CI installs
-// from: State "in" with the per-build stage Release that succeeded with it,
+// from: State "in" with the stage Release that succeeded with it,
 // "failed" with the one that failed, "none", or "unknown" for a build without
 // a bundle or a stream without such Releases.
 type CIState struct {
