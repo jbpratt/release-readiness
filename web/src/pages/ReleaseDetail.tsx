@@ -1151,9 +1151,17 @@ function OperatorImages({
 								<Td>{i.name || "bundle"}</Td>
 								<Td modifier="nowrap">
 									{i.nvr ? (
-										<ExtLink href={i.build_url || null} title={i.nvr}>
-											{bundleBuilt(i.nvr) || nvrLabel(i.nvr)}
-										</ExtLink>
+										<>
+											<ExtLink href={i.build_url || null} title={i.nvr}>
+												{bundleBuilt(i.nvr) || nvrLabel(i.nvr)}
+											</ExtLink>
+											{i.history_url && (
+												<>
+													{" · "}
+													<ExtLink href={i.history_url}>history</ExtLink>
+												</>
+											)}
+										</>
 									) : (
 										<span style={muted}>external</span>
 									)}
