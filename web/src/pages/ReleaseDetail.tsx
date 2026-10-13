@@ -14,8 +14,11 @@ import {
 	DescriptionListTerm,
 	EmptyState,
 	EmptyStateBody,
+	ExpandableSection,
 	Flex,
 	FlexItem,
+	FormSelect,
+	FormSelectOption,
 	Icon,
 	Label,
 	type LabelProps,
@@ -25,6 +28,9 @@ import {
 	type ProgressStepProps,
 	ProgressStepper,
 	Spinner,
+	Tab,
+	Tabs,
+	TabTitleText,
 	Title,
 	Tooltip,
 } from "@patternfly/react-core";
@@ -38,6 +44,7 @@ import {
 } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { type ReactNode, useMemo, useState } from "react";
+import { flushSync } from "react-dom";
 import { Link, useParams } from "react-router-dom";
 import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
 import type {
@@ -45,7 +52,8 @@ import type {
 	CIJob,
 	DashboardConfig,
 	FBCCandidate,
-	FBCMember,
+	ImageCompare,
+	ImageRef,
 	JiraIssue,
 	KonfluxRelease,
 	OperatorFBC,
@@ -69,16 +77,16 @@ import {
 	ticketsJql,
 } from "../utils/links";
 import {
+	blockOpen,
 	bundleBuilt,
+	compareLine,
 	componentLabel,
 	FBC_PLACEHOLDER,
 	fbcBuildStep,
 	fbcCIStep,
 	fbcParams,
 	fbcPullspecs,
-	fbcRIText,
 	fbcStageStep,
-	imageCheckLine,
 	imagesState,
 	jobLabels,
 	nvrLabel,
@@ -86,14 +94,19 @@ import {
 	pullspecsBlocked,
 	readingLine,
 	releaseLine,
+	rowChips,
 	runsStatus,
+	type ShownOperator,
 	type StatusLine,
 	type StripCell,
 	shipsVersion,
+	shownOperators,
+	slotItem,
 	slotRows,
 	streamAhead,
 	stripCells,
 	tknCommand,
+	unshippedOf,
 	verdictLine,
 	whileChecking,
 } from "../utils/releaseDetail";
@@ -425,10 +438,10 @@ function BuildsCard({
 /**
  * The FBC candidate: its verdict and how far FBC reads are; where it is, from
  * the stream's build through CI and stage to prod, the Build and Stage steps
- * opening their FBC catalogs; a summary row per operator; and each operator's
- * slots. Unshipped, the Stage step's popover has release-from-fbc's params;
- * the Prod step's, its Release. While FBC reads are pending no step warns or
- * fails.
+ * opening their FBC catalogs; a summary row per operator, whose OCP cells
+ * open that row of its block; and each operator's block. Unshipped, the Stage
+ * step's popover has release-from-fbc's params; the Prod step's, its Release.
+ * While FBC reads are pending no step warns or fails.
  */
 function Candidate({
 	fbc,
@@ -483,6 +496,18 @@ function Candidate({
 	];
 	const labels = jobLabels(jobs);
 	const label = (job: string) => labels[jobs.indexOf(job)];
+	const shown = shownOperators(fbc, stream, shipped);
+	const operators = fbc.operators.map((o) => o.operator);
+	// Blocks the reader opened or closed, and their tabs; else open on a problem.
+	const [opened, setOpened] = useState<Record<string, boolean>>({});
+	const [tabs, setTabs] = useState<Record<string, BlockTab>>({});
+	const showRow = (operator: string, id: string) => {
+		flushSync(() => {
+			setOpened((o) => ({ ...o, [operator]: true }));
+			setTabs((t) => ({ ...t, [operator]: "fbcs" }));
+		});
+		document.getElementById(id)?.scrollIntoView({ block: "center" });
+	};
 	return (
 		<>
 			<VerdictHeader verdict={verdict} prod={prodRelease} />
@@ -567,18 +592,29 @@ function Candidate({
 				stream={stream}
 				shipped={shipped}
 				items={verdict.items}
+				onShow={showRow}
 			/>
-			{fbc.operators.map((o) => (
-				<OperatorTable
-					key={o.operator}
-					operator={o}
-					ahead={streamAhead(fbc, stream, o.operator)}
-					label={label}
-					version={version}
-					app={app}
-					konflux={konflux}
-				/>
-			))}
+			{shown.map((s) => {
+				const op = s.operator.operator;
+				return (
+					<OperatorBlock
+						key={op}
+						shown={s}
+						open={opened[op] ?? blockOpen(s, verdict.items)}
+						onToggle={(open) => setOpened((o) => ({ ...o, [op]: open }))}
+						tab={tabs[op] ?? "fbcs"}
+						onTab={(tab) => setTabs((t) => ({ ...t, [op]: tab }))}
+						ahead={shipped || s.leftOut ? null : streamAhead(fbc, stream, op)}
+						items={verdict.items}
+						shipped={shipped}
+						unshipped={unshippedOf(unshipped, operators, op)}
+						label={label}
+						version={version}
+						app={app}
+						konflux={konflux}
+					/>
+				);
+			})}
 			{fbc.unknown.length > 0 && (
 				<div style={line}>
 					<Status status="warning">
@@ -597,7 +633,6 @@ function Candidate({
 					</Status>
 				</div>
 			)}
-			<UnshippedTable builds={unshipped} app={app} konflux={konflux} />
 		</>
 	);
 }
@@ -679,18 +714,22 @@ function OperatorSummary({
 	stream,
 	shipped,
 	items,
+	onShow,
 }: {
 	fbc: FBCCandidate;
 	stream: FBCCandidate | null;
 	shipped: boolean;
 	items: VerdictItem[];
+	/** Opens an operator's block on the row of id and scrolls to it. */
+	onShow: (operator: string, id: string) => void;
 }) {
-	const { ocps, rows } = operatorSummary(fbc, stream);
+	const { ocps, rows } = operatorSummary(fbc, stream, shipped, items);
 	const flagged = (operator: string, code: string) =>
 		items.some((i) => i.operator === operator && i.code === code);
-	const absent = rows.some((r) => r.cells.includes("absent"));
 	const legend = (Object.keys(stripCells) as StripCell[]).filter(
-		(k) => k !== "absent" || absent,
+		(k) =>
+			(k !== "absent" && k !== "unknown") ||
+			rows.some((r) => r.cells.includes(k)),
 	);
 	return (
 		<>
@@ -718,7 +757,9 @@ function OperatorSummary({
 						const images = imagesState(o, shipped);
 						const unread = flagged(o.operator, "read_failed")
 							? "can't read"
-							: "reading…";
+							: flagged(o.operator, "no_head_bundle")
+								? "no known bundle"
+								: "reading…";
 						return (
 							<Tr key={o.operator}>
 								<Td>{o.operator}</Td>
@@ -751,6 +792,10 @@ function OperatorSummary({
 												href={`#${slotId(o.operator, ocps[i])}`}
 												title={title}
 												style={glyph}
+												onClick={(e) => {
+													e.preventDefault();
+													onShow(o.operator, slotId(o.operator, ocps[i]));
+												}}
 											>
 												{stripCells[k].glyph}
 											</a>
@@ -777,168 +822,432 @@ function OperatorSummary({
 /** An FBC NVR without its operator: quay-operator-fbc-3.17.6-1.ocp4.14 is 3.17.6-1.ocp4.14. */
 const fbcLabel = (nvr: string) => nvr.replace(/^.*-fbc-/, "");
 
-const slotLabels: Record<
-	"other" | "unresolved" | "missing",
-	{ color: LabelProps["color"]; text: string }
-> = {
-	other: { color: "orange", text: "other bundle" },
-	unresolved: { color: "grey", text: "head unresolved" },
-	missing: { color: "red", text: "missing" },
+type BlockTab = "fbcs" | "images";
+
+// An operator's images, by where they are.
+const imagesTexts: Record<string, string> = {
+	"on stage": "images on stage",
+	"in prod": "images in prod",
+	"not on stage": "images not on stage: CI can't install",
+	"push to stage failed": "image push to stage failed",
 };
 
+/** A date without its time: "Oct 7". */
+const day = (iso: string) =>
+	new Date(iso).toLocaleDateString(undefined, {
+		month: "short",
+		day: "numeric",
+	});
+
+/** The commit an ART NVR's ".g<sha>" names. */
+const nvrCommit = (nvr: string) => nvr.match(/\.g([0-9a-f]{7,})\./)?.[1] ?? "";
+
 /**
- * An operator's head bundle, coverage, installability and image check, then a
- * row per OCP version slot: its FBC, stage Release, and CI, runs on its own
- * digest apart from runs on another FBC of the same bundle.
+ * Since when an operator's staged FBCs are all on stage, by their newest
+ * Releases, else how many are.
  */
-function OperatorTable({
-	operator: o,
+function stageText(o: OperatorFBC): string {
+	const { staged, total } = o.stage;
+	if (total === 0) return "";
+	const done = o.members
+		.map((m) => m.release?.completion_time ?? "")
+		.filter(Boolean)
+		.sort();
+	return staged === total && done.length > 0
+		? `On stage since ${day(done[done.length - 1])} (${staged} of ${total})`
+		: `${staged} of ${total} on stage`;
+}
+
+/**
+ * An operator's block, open on a problem until the reader toggles it: the
+ * version, bundle and channel its FBCs ship, where they are, a newer stream
+ * build not on stage; then its FBCs by OCP version, with exception chips and
+ * CI where runs exist, and its images, compared with the previous z or that
+ * newer build. A left-out operator's are the stream's FBCs to add.
+ */
+function OperatorBlock({
+	shown: { operator: o, leftOut },
+	open,
+	onToggle,
+	tab,
+	onTab,
 	ahead,
+	items,
+	shipped,
+	unshipped,
 	label,
 	version,
 	app,
 	konflux,
 }: {
-	operator: OperatorFBC;
+	shown: ShownOperator;
+	open: boolean;
+	onToggle: (open: boolean) => void;
+	tab: BlockTab;
+	onTab: (tab: BlockTab) => void;
 	/** The stream's newer head bundle, when the stage candidate is behind it. */
 	ahead: string | null;
+	items: VerdictItem[];
+	shipped: boolean;
+	unshipped: UnshippedBuild[];
 	label: (job: string) => string;
 	version: string;
 	app: string;
 	konflux: KonfluxLink;
 }) {
-	const fbcApp = `fbc-${app}`;
-	const ri = o.fbc_ri_stage;
-	const pills = (jobs: CIJob[] | undefined) =>
-		jobs && jobs.length > 0 ? (
-			<JobPills jobs={jobs} label={label} version={version} />
-		) : (
-			<span style={muted}>No runs</span>
-		);
-	const stage = (m: FBCMember | null) => {
-		if (!m?.snapshot) return <span style={muted}>Not staged</span>;
-		if (!m.release) return <span style={muted}>No Release yet</span>;
-		return (
-			<ExtLink
-				href={konflux("releases", m.release.name, fbcApp)}
-				title={m.release.name}
-			>
-				{releaseLine(m.release).text}
-			</ExtLink>
-		);
-	};
+	const [compare, setCompare] = useState("");
+	const rows = slotRows(o);
+	const fbcs = rows.filter((r) => r.fbc).length;
+	const nvr = o.head_bundle_nvr;
+	const flagged = (code: string) =>
+		items.some((i) => i.operator === o.operator && i.code === code);
+	const failed = flagged("read_failed");
+	const noHead = flagged("no_head_bundle");
+	const head = nvr
+		? [shipsVersion(o), `bundle ${bundleBuilt(nvr)}`, nvrCommit(nvr), o.channel]
+				.filter(Boolean)
+				.join(" · ")
+		: failed
+			? "can't read FBC"
+			: noHead
+				? "FBC heads no known bundle"
+				: "reading…";
+	const images = imagesTexts[imagesState(o, shipped)];
+	const status = leftOut
+		? `Not in the stage shipment: add these ${fbcs} FBCs`
+		: [shipped ? "" : stageText(o), images].filter(Boolean).join(" · ");
+	const newer = o.compare.find((c) => c.kind === "newer");
+	const change = newer && compareLine(newer);
+	const ci = rows.some(
+		(r) =>
+			(r.fbc?.ci?.exact.length ?? 0) + (r.fbc?.ci?.equivalent.length ?? 0) > 0,
+	);
 	return (
-		<div style={{ marginTop: "1rem" }}>
-			<Flex
-				gap={{ default: "gapSm" }}
-				alignItems={{ default: "alignItemsCenter" }}
-			>
-				<Title headingLevel="h4" size="md">
-					{o.operator}
-				</Title>
-				<Label isCompact>
-					{`${o.coverage.members}/${o.coverage.slots} OCP`}
-				</Label>
-				<Label
-					isCompact
-					status={ri.state === "in" ? "success" : undefined}
-					color={ri.state === "failed" ? "red" : undefined}
-					href={
-						ri.release
-							? (konflux("releases", ri.release.name) ?? undefined)
-							: undefined
-					}
-				>
-					{fbcRIText[ri.state]}
-				</Label>
-			</Flex>
-			<div style={muted}>
-				{o.head_bundle_nvr ? (
-					<>
-						Head bundle{" "}
-						<span title={o.head_bundle_nvr}>{nvrLabel(o.head_bundle_nvr)}</span>
-						{o.channel && ` · ${o.channel}`}
-						{o.head_csv && ` → ${o.head_csv}`}
-					</>
-				) : (
-					"Head bundle not resolved"
-				)}
-			</div>
-			{ahead && (
-				<div style={muted}>
-					Stream heads newer bundle <span title={ahead}>{nvrLabel(ahead)}</span>
+		<ExpandableSection
+			isExpanded={open}
+			onToggle={(_e, v) => onToggle(v)}
+			toggleContent={
+				<span>
+					<strong>{o.operator}</strong>{" "}
+					<span style={muted} title={nvr || undefined}>
+						{head}
+					</span>
+				</span>
+			}
+			style={{ marginTop: "1rem" }}
+		>
+			{status && (
+				<div>
+					{status.charAt(0).toUpperCase()}
+					{status.slice(1)}
 				</div>
 			)}
-			<div style={muted}>Check: {imageCheckLine(o)}</div>
-			<Table variant="compact" aria-label={`${o.operator} FBCs by OCP version`}>
-				<Thead>
-					<Tr>
-						<Th modifier="fitContent">OCP</Th>
-						<Th>FBC</Th>
-						<Th>Stage</Th>
-						<Th>CI</Th>
-						<Th>
-							<Tooltip content="Runs that installed another FBC of this OCP version heading the same bundle; its catalog can differ, so they do not count as tested.">
-								<span>Same bundle CI</span>
-							</Tooltip>
-						</Th>
-					</Tr>
-				</Thead>
-				<Tbody>
-					{slotRows(o).map((r) => (
-						<Tr
-							key={`${r.ocp} ${r.fbc?.digest ?? ""}`}
-							id={slotId(o.operator, r.ocp)}
-						>
-							<Td style={{ whiteSpace: "nowrap" }}>{r.ocp}</Td>
-							<Td>
-								{r.fbc && (
-									<>
-										<ExtLink href={r.fbc.build_url || null} title={r.fbc.nvr}>
-											{r.fbc.nvr
-												? fbcLabel(r.fbc.nvr)
-												: shortDigest(r.fbc.pullspec)}
-										</ExtLink>{" "}
-										<ClipboardCopy
-											variant="inline-compact"
-											isCode
-											onCopy={(e) =>
-												clipboardCopyFunc(e, r.fbc?.pullspec ?? "")
-											}
-										>
-											{shortDigest(r.fbc.pullspec)}
-										</ClipboardCopy>
-									</>
-								)}
-								{r.kind !== "member" && (
-									<Label
-										isCompact
-										color={slotLabels[r.kind].color}
-										style={{ marginLeft: "0.5rem" }}
-									>
-										<span title={r.fbc?.head_bundle_nvr || undefined}>
-											{slotLabels[r.kind].text}
-										</span>
-									</Label>
-								)}
-							</Td>
-							<Td>{r.fbc ? stage(r.fbc) : null}</Td>
-							<Td>{r.fbc && pills(r.fbc.ci?.exact)}</Td>
-							<Td style={{ opacity: 0.7 }}>
-								{r.fbc && pills(r.fbc.ci?.equivalent)}
-							</Td>
+			{ahead && (
+				<Flex gap={{ default: "gapSm" }} flexWrap={{ default: "nowrap" }}>
+					<FlexItem>{levelIcons[change?.level ?? "info"]}</FlexItem>
+					<FlexItem>
+						Newer build not on stage:{" "}
+						<span title={ahead}>bundle {bundleBuilt(ahead)}</span>
+						{change && ` (${change.text})`}{" "}
+						{newer && (
+							<Button
+								variant="link"
+								isInline
+								onClick={() => {
+									setCompare("newer");
+									onTab("images");
+								}}
+							>
+								Compare
+							</Button>
+						)}
+					</FlexItem>
+				</Flex>
+			)}
+			<Tabs
+				activeKey={tab}
+				onSelect={(_e, k) => onTab(k as BlockTab)}
+				aria-label={`${o.operator} FBCs and images`}
+			>
+				<Tab eventKey="fbcs" title={<TabTitleText>FBCs {fbcs}</TabTitleText>}>
+					<Table
+						variant="compact"
+						aria-label={`${o.operator} FBCs by OCP version`}
+					>
+						<Thead>
+							<Tr>
+								<Th modifier="fitContent">OCP</Th>
+								<Th>FBC</Th>
+								<Th>Digest</Th>
+								{ci && <Th screenReaderText="CI" />}
+							</Tr>
+						</Thead>
+						<Tbody>
+							{rows.map((r) => (
+								<Tr
+									key={`${r.ocp} ${r.fbc?.digest ?? ""}`}
+									id={slotId(o.operator, r.ocp)}
+								>
+									<Td modifier="nowrap">{r.ocp}</Td>
+									<Td>
+										{r.fbc && (
+											<ExtLink href={r.fbc.build_url || null} title={r.fbc.nvr}>
+												{r.fbc.nvr
+													? fbcLabel(r.fbc.nvr)
+													: shortDigest(r.fbc.pullspec)}
+											</ExtLink>
+										)}
+									</Td>
+									<Td modifier="nowrap">
+										{r.fbc && (
+											<ClipboardCopy
+												variant="inline-compact"
+												isCode
+												onCopy={(e) =>
+													clipboardCopyFunc(e, r.fbc?.pullspec ?? "")
+												}
+											>
+												{shortDigest(r.fbc.pullspec)}
+											</ClipboardCopy>
+										)}
+										{rowChips(r, {
+											shipped,
+											leftOut,
+											unreadable: slotItem(
+												items,
+												"read_failed",
+												o.operator,
+												r.ocp,
+											)?.text,
+										}).map((c) => (
+											<Label
+												key={c.text}
+												isCompact
+												color={c.color}
+												style={{ marginLeft: "0.5rem" }}
+											>
+												<span title={c.title}>{c.text}</span>
+											</Label>
+										))}
+									</Td>
+									{ci && (
+										<Td>
+											<Flex gap={{ default: "gapXs" }}>
+												{(r.fbc?.ci?.exact.length ?? 0) > 0 && (
+													<JobPills
+														jobs={r.fbc?.ci?.exact ?? []}
+														label={label}
+														version={version}
+													/>
+												)}
+												{(r.fbc?.ci?.equivalent.length ?? 0) > 0 && (
+													<JobPills
+														jobs={r.fbc?.ci?.equivalent ?? []}
+														label={label}
+														version={version}
+														equivalent
+													/>
+												)}
+											</Flex>
+										</Td>
+									)}
+								</Tr>
+							))}
+						</Tbody>
+					</Table>
+				</Tab>
+				<Tab
+					eventKey="images"
+					title={<TabTitleText>Images {uniqueImages(o).length}</TabTitleText>}
+				>
+					<OperatorImages
+						operator={o}
+						compare={o.compare.find((c) => c.kind === compare) ?? null}
+						onCompare={setCompare}
+						unread={
+							failed
+								? "Can't read FBC"
+								: noHead
+									? "FBC heads no known bundle"
+									: "Reading FBC contents…"
+						}
+					/>
+					{!shipped && (
+						<UnshippedTable builds={unshipped} app={app} konflux={konflux} />
+					)}
+				</Tab>
+			</Tabs>
+		</ExpandableSection>
+	);
+}
+
+/** An operator's images, each once: opm can list the bundle image twice. */
+const uniqueImages = (o: OperatorFBC) =>
+	o.images.filter(
+		(i, k) =>
+			o.images.findIndex((x) => x.name === i.name && x.digest === i.digest) ===
+			k,
+	);
+
+/** An image of a compared bundle: its build and commit, else its digest. */
+function ImageRefCell({ image }: { image: ImageRef | null }) {
+	if (!image) return <span style={muted}>–</span>;
+	return (
+		<span title={image.nvr || image.digest}>
+			{image.nvr
+				? `${bundleBuilt(image.nvr) || nvrLabel(image.nvr)} ${image.commit.slice(0, 7)}`
+				: image.digest.slice(7, 19)}
+		</span>
+	);
+}
+
+// How a compared image changed: a rebuild from the same source is info,
+// anything else may change behaviour.
+const changeColors: Record<string, LabelProps["color"]> = {
+	rebuild: "blue",
+	"new source": "orange",
+	"new build": "orange",
+	added: "orange",
+	removed: "orange",
+};
+
+/**
+ * An operator's images, the relatedImages of its head bundle, each once with
+ * its build, commit, digest and whether stage and prod hold it; or, compared,
+ * each image's change against the previous z or a newer build. Under them,
+ * which FBCs ship them and whether the image shipment has their bundle.
+ */
+function OperatorImages({
+	operator: o,
+	compare,
+	onCompare,
+	unread,
+}: {
+	operator: OperatorFBC;
+	compare: ImageCompare | null;
+	onCompare: (kind: string) => void;
+	/** What the tab says without images. */
+	unread: string;
+}) {
+	if (o.images.length === 0)
+		return <div style={{ ...line, ...muted }}>{unread}</div>;
+	const images = uniqueImages(o);
+	const other = o.conflicts.filter((m) => m.head_bundle_nvr).map((m) => m.ocp);
+	const check = o.image_check;
+	const yes = (on: boolean) => (on ? "yes" : "–");
+	return (
+		<>
+			{o.compare.length > 0 && (
+				<div style={{ ...line, width: "16rem", marginLeft: "auto" }}>
+					<FormSelect
+						value={compare?.kind ?? ""}
+						onChange={(_e, v) => onCompare(v)}
+						aria-label={`Compare ${o.operator} images`}
+					>
+						<FormSelectOption value="" label="This bundle's images" />
+						{o.compare.map((c) => (
+							<FormSelectOption
+								key={c.kind}
+								value={c.kind}
+								label={
+									c.kind === "previous" ? `vs ${c.label}` : "vs newer build"
+								}
+							/>
+						))}
+					</FormSelect>
+				</div>
+			)}
+			{compare ? (
+				<Table variant="compact" aria-label={`${o.operator} images compared`}>
+					<Thead>
+						<Tr>
+							<Th>Image</Th>
+							<Th>{compare.kind === "previous" ? compare.label : "staged"}</Th>
+							<Th>{compare.kind === "previous" ? "this bundle" : "newer"}</Th>
+							<Th>Change</Th>
 						</Tr>
-					))}
-				</Tbody>
-			</Table>
-		</div>
+					</Thead>
+					<Tbody>
+						{compare.rows.map((r) => (
+							<Tr key={r.name}>
+								<Td>{r.name || "bundle"}</Td>
+								<Td modifier="nowrap">
+									<ImageRefCell image={r.from} />
+								</Td>
+								<Td modifier="nowrap">
+									<ImageRefCell image={r.to} />
+								</Td>
+								<Td>
+									{changeColors[r.change] ? (
+										<Label isCompact color={changeColors[r.change]}>
+											{r.change}
+										</Label>
+									) : (
+										<span style={muted}>{r.change}</span>
+									)}
+								</Td>
+							</Tr>
+						))}
+					</Tbody>
+				</Table>
+			) : (
+				<Table variant="compact" aria-label={`${o.operator} images`}>
+					<Thead>
+						<Tr>
+							<Th>Image</Th>
+							<Th>Build</Th>
+							<Th>Commit</Th>
+							<Th>Digest</Th>
+							<Th>Stage</Th>
+							<Th>Prod</Th>
+						</Tr>
+					</Thead>
+					<Tbody>
+						{images.map((i) => (
+							<Tr key={`${i.name} ${i.digest}`}>
+								<Td>{i.name || "bundle"}</Td>
+								<Td modifier="nowrap">
+									{i.nvr ? (
+										<span title={i.nvr}>
+											{bundleBuilt(i.nvr) || nvrLabel(i.nvr)}
+										</span>
+									) : (
+										<span style={muted}>external</span>
+									)}
+								</Td>
+								<Td>{i.commit.slice(0, 7)}</Td>
+								<Td modifier="nowrap">
+									<ClipboardCopy
+										variant="inline-compact"
+										isCode
+										onCopy={(e) => clipboardCopyFunc(e, i.image)}
+									>
+										{shortDigest(i.image)}
+									</ClipboardCopy>
+								</Td>
+								<Td>{yes(i.stage)}</Td>
+								<Td>{yes(i.prod)}</Td>
+							</Tr>
+						))}
+					</Tbody>
+				</Table>
+			)}
+			<div style={muted}>
+				{other.length > 0
+					? `OCP ${other.join(", ")} ${other.length === 1 ? "ships" : "ship"} a different build.`
+					: `All ${o.members.length} FBCs ship these images.`}
+				{check.state === "matches" && " Image shipment: same bundle."}
+				{check.state === "differs" &&
+					` Image shipment has bundle ${bundleBuilt(check.bundle_nvr)}.`}
+			</div>
+		</>
 	);
 }
 
 /**
- * The images of the components the candidate's stage shipment leaves out,
- * each with its stream build and ART build, copying its pullspec. ART stages
- * them by another path, so they are not "not staged".
+ * The images of an operator's components the candidate's image shipment
+ * leaves out, each with its stream build and ART build, copying its pullspec.
+ * ART stages them by another path, so they are not "not staged".
  */
 function UnshippedTable({
 	builds,
@@ -953,7 +1262,7 @@ function UnshippedTable({
 	return (
 		<>
 			<Title headingLevel="h4" size="md" style={{ marginTop: "1rem" }}>
-				Built, not in the stage shipment
+				Not in the image shipment
 			</Title>
 			<Table variant="compact">
 				<Thead>
@@ -1280,17 +1589,22 @@ const jobStatus = (j: CIJob): keyof typeof jobRank =>
 /**
  * A pill per job, failures first, opening its Sippy page; its runs, each
  * opening it in Prow, on hover. Passing jobs fold into one "N passed" toggle.
+ * Runs on an equivalent FBC are marked "≈".
  */
 function JobPills({
 	jobs,
 	label,
 	version,
+	equivalent,
 }: {
 	jobs: CIJob[];
 	label: (job: string) => string;
 	/** The version's X.Y.Z. */
 	version: string;
+	/** The runs installed another FBC of this OCP version on the same bundle. */
+	equivalent?: boolean;
 }) {
+	const mark = equivalent ? "≈ " : "";
 	const [showPassed, setShowPassed] = useState(false);
 	const sorted = [...jobs].sort(
 		(a, b) =>
@@ -1308,6 +1622,12 @@ function JobPills({
 				popover
 				tip={
 					<>
+						{equivalent && (
+							<div style={muted}>
+								Ran on another FBC with the same bundle; its channel graph can
+								differ.
+							</div>
+						)}
 						<div>{job.job_name}</div>
 						{job.runs.map((r) => (
 							<div key={r.prow_url}>
@@ -1318,6 +1638,7 @@ function JobPills({
 					</>
 				}
 			>
+				{mark}
 				{label(job.job_name)}
 				{job.runs.length > 1 && ` ×${job.runs.length}`}
 			</Pill>
@@ -1343,7 +1664,7 @@ function JobPills({
 						</button>
 					)}
 				>
-					{`${passed.length} passed`}
+					{`${mark}${passed.length} passed`}
 				</Label>
 			)}
 			{showPassed && passed.map(pill)}

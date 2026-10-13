@@ -1,10 +1,13 @@
 import type {
 	FBCCandidate,
 	FBCMember,
+	ImageCompare,
 	KonfluxRelease,
 	OperatorFBC,
 	ReadProgress,
+	UnshippedBuild,
 	Verdict,
+	VerdictItem,
 } from "../api/types";
 import { relative } from "./format.ts";
 
@@ -235,6 +238,7 @@ export const stripCells = {
 	other: { glyph: "◐", text: "other build" },
 	missing: { glyph: "✗", text: "no FBC" },
 	reading: { glyph: "·", text: "reading" },
+	unknown: { glyph: "?", text: "no known bundle" },
 	absent: { glyph: "–", text: "not part of release" },
 } as const;
 
@@ -253,34 +257,176 @@ const slotCells: Record<SlotRow["kind"], StripCell> = {
 	missing: "missing",
 };
 
+/** An operator as the page shows it, and whether it is the stream's. */
+export interface ShownOperator {
+	operator: OperatorFBC;
+	/** The stage shipment leaves it out: these are the stream's FBCs to add. */
+	leftOut: boolean;
+}
+
+/**
+ * Each operator of the candidate; one an unshipped stage shipment leaves out
+ * is the stream's, which would be added. A shipped one is the record.
+ */
+export const shownOperators = (
+	c: FBCCandidate,
+	stream: FBCCandidate | null,
+	shipped: boolean,
+): ShownOperator[] =>
+	c.operators.map((o) => {
+		const s = stream?.operators.find((x) => x.operator === o.operator);
+		return !shipped &&
+			c.source === "stage_snapshots" &&
+			!hasFBC(o) &&
+			s &&
+			hasFBC(s)
+			? { operator: s, leftOut: true }
+			: { operator: o, leftOut: false };
+	});
+
 /**
  * The operator summary: each OCP version an operator has a slot for, and a
- * row per operator with its cell for each. An operator the stage shipment
- * leaves out shows the stream's FBCs, which would be added.
+ * row per shown operator with its cell for each.
  */
 export function operatorSummary(
 	c: FBCCandidate,
 	stream: FBCCandidate | null,
+	shipped: boolean,
+	items: VerdictItem[] = [],
 ): { ocps: string[]; rows: SummaryRow[] } {
-	const picks = c.operators.map((o) => {
-		const s = stream?.operators.find((x) => x.operator === o.operator);
-		return c.source === "stage_snapshots" && !hasFBC(o) && s && hasFBC(s)
-			? { o: s, built: true }
-			: { o, built: c.source === "stream" };
-	});
+	const picks = shownOperators(c, stream, shipped);
 	const ocps = [
-		...new Set(picks.flatMap(({ o }) => slotRows(o).map((r) => r.ocp))),
+		...new Set(
+			picks.flatMap(({ operator }) => slotRows(operator).map((r) => r.ocp)),
+		),
 	].sort(compareVersions);
-	const rows = picks.map(({ o, built }) => {
-		const kinds = new Map(slotRows(o).map((r) => [r.ocp, r.kind]));
+	const rows = picks.map(({ operator, leftOut }) => {
+		const built = leftOut || c.source === "stream";
+		const kinds = new Map(slotRows(operator).map((r) => [r.ocp, r.kind]));
 		const cells = ocps.map((ocp): StripCell => {
 			const kind = kinds.get(ocp);
 			if (!kind) return "absent";
+			if (
+				kind === "unresolved" &&
+				slotItem(items, "no_head_bundle", operator.operator, ocp)
+			)
+				return "unknown";
 			return kind === "member" && built ? "built" : slotCells[kind];
 		});
-		return { operator: o, cells };
+		return { operator, cells };
 	});
 	return { ocps, rows };
+}
+
+/**
+ * Whether an operator's block opens: when the verdict has a blocker or
+ * warning on it, or the stage shipment leaves it out.
+ */
+export const blockOpen = (
+	{ operator, leftOut }: ShownOperator,
+	items: VerdictItem[],
+) =>
+	leftOut ||
+	items.some((i) => i.operator === operator.operator && i.level !== "info");
+
+/** The verdict item of code on an operator's FBC for an OCP version. */
+export const slotItem = (
+	items: VerdictItem[],
+	code: string,
+	operator: string,
+	ocp: string,
+) =>
+	items.find(
+		(i) =>
+			i.code === code &&
+			i.operator === operator &&
+			i.text.startsWith(`${operator} OCP ${ocp}: `),
+	);
+
+/** A chip on an FBC row, flagging an exception. */
+export interface Chip {
+	color: "red" | "orange" | "grey";
+	text: string;
+	title?: string;
+}
+
+/**
+ * An FBC row's exception chips. Shipped, only facts of the record: another
+ * build and restages; else also a missing or unreadable FBC, a failed stage
+ * Release, and the stream's FBC the stage shipment leaves out.
+ */
+export function rowChips(
+	r: SlotRow,
+	{
+		shipped,
+		leftOut,
+		unreadable,
+	}: { shipped: boolean; leftOut: boolean; unreadable?: string },
+): Chip[] {
+	const chips: Chip[] = [];
+	if (r.kind === "other")
+		chips.push({
+			color: "orange",
+			text: `other build ${bundleBuilt(r.fbc?.head_bundle_nvr ?? "")}`,
+			title: r.fbc?.head_bundle_nvr,
+		});
+	if ((r.fbc?.staged ?? 0) > 1)
+		chips.push({ color: "grey", text: `staged ${r.fbc?.staged}x` });
+	if (shipped) return chips;
+	if (r.kind === "missing") chips.push({ color: "red", text: "no FBC" });
+	if (unreadable)
+		chips.push({ color: "red", text: "can't read", title: unreadable });
+	const release = r.fbc?.release && releaseLine(r.fbc.release);
+	if (release?.status === "failed")
+		chips.push({ color: "red", text: "release failed", title: release.text });
+	if (leftOut && r.fbc) chips.push({ color: "grey", text: "not in shipment" });
+	return chips;
+}
+
+/**
+ * What changed between two bundles' images: info for rebuilds from the same
+ * source only, a warning for any new source, unknown commit, added or removed
+ * image.
+ */
+export function compareLine(c: ImageCompare): {
+	level: "info" | "warning";
+	text: string;
+} {
+	const named = (change: string) =>
+		c.rows.filter((r) => r.change === change).map((r) => r.name || "bundle");
+	const n = (change: string, one: string, many = `${one}s`) => {
+		const k = named(change).length;
+		return k > 0 ? `${k} ${k === 1 ? one : many}` : "";
+	};
+	const source = named("new source");
+	const parts = [
+		source.length > 0 ? `${source.join(", ")} new source` : "",
+		n("rebuild", "image rebuilt", "images rebuilt"),
+		n("new build", "new build"),
+		n("added", "image added", "images added"),
+		n("removed", "image removed", "images removed"),
+	].filter(Boolean);
+	return {
+		level: c.rows.every((r) => r.change === "same" || r.change === "rebuild")
+			? "info"
+			: "warning",
+		text: parts.join(", ") || "same images",
+	};
+}
+
+/**
+ * The image shipment's builds of an operator: those it names, else, as the
+ * operands' operator, quay-operator's.
+ */
+export function unshippedOf(
+	builds: UnshippedBuild[],
+	operators: string[],
+	operator: string,
+): UnshippedBuild[] {
+	const owner = (name: string) =>
+		operators.find((o) => o !== "quay-operator" && name.includes(o)) ??
+		"quay-operator";
+	return builds.filter((b) => owner(b.name) === operator);
 }
 
 /** The version an operator's FBCs ship, by their head CSV: "v3.17.6". */
@@ -292,11 +438,12 @@ export const shipsVersion = (o: OperatorFBC) =>
 const MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
 
 /**
- * When ART built a bundle, by its NVR's timestamp, in UTC as ART writes it:
- * ...-3.17.6.202610060936.p2... is "Oct 6 09:36"; "" without one.
+ * When ART built a bundle or image, by its NVR's timestamp, in UTC as ART
+ * writes it: ...-3.17.6.202610060936.p2... and ...-3.17.6-202610060936.p2...
+ * are "Oct 6 09:36"; "" without one.
  */
 export function bundleBuilt(nvr: string): string {
-	const t = nvr.match(/\.(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})\./);
+	const t = nvr.match(/[.-](\d{4})(\d{2})(\d{2})(\d{2})(\d{2})\./);
 	return t ? `${MONTHS[Number(t[2]) - 1]} ${Number(t[3])} ${t[4]}:${t[5]}` : "";
 }
 
@@ -355,26 +502,6 @@ export function readingLine(r: ReadProgress): StatusLine | null {
 		text: `Reading FBC contents: ${r.read} of ${total}${r.failed ? ` · ${r.failed} can't be read` : ""}`,
 	};
 }
-
-/** An operator's image check: the image Snapshot's bundle against its head. */
-export function imageCheckLine(o: OperatorFBC): string {
-	const { state, snapshot, bundle_nvr } = o.image_check;
-	if (state === "matches")
-		return `Image Snapshot ${snapshot} holds this bundle`;
-	if (state === "differs")
-		return `Image Snapshot ${snapshot} holds bundle ${nvrLabel(bundle_nvr)}`;
-	return snapshot
-		? `Image Snapshot ${snapshot}: no bundle to compare`
-		: "No image Snapshot to compare";
-}
-
-/** Whether an operator's head bundle reached stage through fbc-ri. */
-export const fbcRIText: Record<OperatorFBC["fbc_ri_stage"]["state"], string> = {
-	in: "installable",
-	failed: "fbc-ri Release failed",
-	none: "not installable: no fbc-ri Release",
-	unknown: "installability unknown",
-};
 
 /**
  * A component named without what the page already says, its application and
