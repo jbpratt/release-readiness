@@ -22,6 +22,11 @@ func (d *DB) UpsertStagedSnapshot(ctx context.Context, name, assembly, kind, env
 	})
 }
 
+// StageAssemblies returns the assemblies ART staged for stage, in name order.
+func (d *DB) StageAssemblies(ctx context.Context) ([]string, error) {
+	return d.queries().ListStageAssemblies(ctx)
+}
+
 var concreteVersion = regexp.MustCompile(`^quay-v((\d+)\.(\d+)\.\d+)$`)
 
 // SelectedStageBuild returns the newest image Snapshot staged for release's

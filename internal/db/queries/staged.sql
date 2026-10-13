@@ -79,3 +79,6 @@ JOIN snapshot_components sc ON sc.snapshot_id = s.id
 WHERE ss.kind = 'image' AND ss.env = 'prod' AND s.application = ?
   AND EXISTS (SELECT 1 FROM konflux_releases kr
               WHERE kr.snapshot = s.name AND kr.released_status = 'True' AND kr.released_reason = 'Succeeded');
+
+-- name: ListStageAssemblies :many
+SELECT DISTINCT assembly FROM staged_snapshots WHERE env = 'stage' ORDER BY assembly;

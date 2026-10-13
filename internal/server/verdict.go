@@ -37,6 +37,9 @@ func setVerdict(resp *model.ReleaseCandidate, assembly string) {
 		v.Items = append(v.Items, model.VerdictItem{Level: level, Operator: operator, Owner: owner, Code: code, Text: text})
 	}
 	staged := f.Source == "stage_snapshots"
+	if !staged {
+		add("blocker", "", "ART", "not_staged", "Not in a stage shipment")
+	}
 	for _, o := range f.Operators {
 		op := o.Operator
 		if staged && len(o.Members)+len(o.Conflicts) == 0 {
