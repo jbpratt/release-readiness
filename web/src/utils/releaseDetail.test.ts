@@ -20,6 +20,7 @@ import {
 	compareLine,
 	compareVersions,
 	componentLabel,
+	decisions,
 	fbcBuildStep,
 	fbcCIStep,
 	fbcParams,
@@ -32,6 +33,7 @@ import {
 	nvrLabel,
 	otherBundle,
 	readingLine,
+	readyText,
 	releaseLine,
 	releaseWord,
 	rowChips,
@@ -758,6 +760,46 @@ test("withoutStage: the Stage step words stage blockers", () => {
 		actionLabels(items, "quay-bridge-operator").map((l) => l.text),
 		["Not staged"],
 	);
+});
+
+test("decisions: the whole release's blockers, with a known code's action", () => {
+	const items = [
+		{
+			...item("blocker", "", "not_staged", "Not in a stage shipment"),
+			owner: "Quay (release-from-fbc)",
+		},
+		item("blocker", "", "unknown_fbc", "Staged FBCs with no ART build name: 1"),
+		item("blocker", "quay-operator", "csv_mismatch"),
+		item("warning", "", "stream_ahead"),
+	];
+	assert.deepEqual(
+		decisions({ state: "not_ready", items }).map((d) => [
+			d.text,
+			d.owner,
+			d.action,
+		]),
+		[
+			[
+				"Not in a stage shipment",
+				"Quay (release-from-fbc)",
+				"Stage the candidate",
+			],
+			["Staged FBCs with no ART build name: 1", "", ""],
+		],
+	);
+	assert.deepEqual(decisions({ state: "checking", items }), []);
+});
+
+test("readyText: awaiting stage while not staged", () => {
+	assert.equal(
+		readyText([item("blocker", "", "not_staged")]),
+		"FBC built, awaiting stage",
+	);
+	assert.equal(
+		readyText([item("blocker", "quay-operator", "missing_ocp")]),
+		"Ready",
+	);
+	assert.equal(readyText([]), "Ready");
 });
 
 test("stageText: by the FBCs' newest stage Releases", () => {
