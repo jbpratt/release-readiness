@@ -33,6 +33,7 @@ import {
 	ExclamationCircleIcon,
 	ExclamationTriangleIcon,
 	ExternalLinkAltIcon,
+	InfoCircleIcon,
 	InProgressIcon,
 } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
@@ -48,9 +49,12 @@ import type {
 	JiraIssue,
 	KonfluxRelease,
 	OperatorFBC,
+	ReadProgress,
 	ReleaseCandidate,
 	ReleaseVersion,
 	UnshippedBuild,
+	Verdict,
+	VerdictItem,
 } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
@@ -65,25 +69,33 @@ import {
 	ticketsJql,
 } from "../utils/links";
 import {
-	candidateLine,
+	bundleBuilt,
 	componentLabel,
 	FBC_PLACEHOLDER,
+	fbcBuildStep,
 	fbcCIStep,
-	fbcLine,
 	fbcParams,
 	fbcPullspecs,
 	fbcRIText,
 	fbcStageStep,
 	imageCheckLine,
+	imagesState,
 	jobLabels,
 	nvrLabel,
+	operatorSummary,
 	pullspecsBlocked,
+	readingLine,
 	releaseLine,
 	runsStatus,
 	type StatusLine,
+	type StripCell,
+	shipsVersion,
 	slotRows,
 	streamAhead,
+	stripCells,
 	tknCommand,
+	verdictLine,
+	whileChecking,
 } from "../utils/releaseDetail";
 
 /** A Konflux UI page of the version's application, or of application. */
@@ -350,10 +362,12 @@ function BuildsCard({
 	dueDate?: string;
 }) {
 	const fbc = data?.fbc_candidate;
-	const fbcLines = (step: "build" | "stage") => (
+	const fbcLines = (step: "build" | "stage", text: string, header?: string) => (
 		<FBCLine
 			catalogs={data?.catalogs ?? []}
 			step={step}
+			text={text}
+			header={header}
 			app={app}
 			konflux={konflux}
 		/>
@@ -363,11 +377,6 @@ function BuildsCard({
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<LinkedCardTitle href={konflux()} link="Konflux">
 				{fbc ? `${version} release candidate` : "Release candidate"}
-				{data?.shipped && (
-					<Label color="green" isCompact style={{ marginLeft: "0.5rem" }}>
-						Shipped
-					</Label>
-				)}
 			</LinkedCardTitle>
 			<CardBody>
 				{error ? (
@@ -380,6 +389,8 @@ function BuildsCard({
 						stream={data.fbc_stream}
 						prod={data.candidate?.prod ?? null}
 						shipped={data.shipped}
+						verdict={data.verdict}
+						reading={data.reading}
 						unshipped={data.unshipped_builds ?? []}
 						version={version}
 						app={app}
@@ -412,16 +423,20 @@ function BuildsCard({
 }
 
 /**
- * The FBC candidate: its state and errors; where it is, from the stream's
- * build through CI and stage to prod, with the FBC lines of the Build and
- * Stage steps; and each operator's slots. Unshipped, the Stage step's popover
- * has release-from-fbc's params; the Prod step's, its Release.
+ * The FBC candidate: its verdict and how far FBC reads are; where it is, from
+ * the stream's build through CI and stage to prod, the Build and Stage steps
+ * opening their FBC catalogs; a summary row per operator; and each operator's
+ * slots. Unshipped, the Stage step's popover has release-from-fbc's params;
+ * the Prod step's, its Release. While FBC reads are pending no step warns or
+ * fails.
  */
 function Candidate({
 	fbc,
 	stream,
 	prod: prodRelease,
 	shipped,
+	verdict,
+	reading,
 	unshipped,
 	version,
 	app,
@@ -433,27 +448,28 @@ function Candidate({
 	stream: FBCCandidate | null;
 	prod: KonfluxRelease | null;
 	shipped: boolean;
+	verdict: Verdict;
+	reading: ReadProgress;
 	unshipped: UnshippedBuild[];
 	version: string;
 	app: string;
 	konflux: KonfluxLink;
-	fbcLines: (step: "build" | "stage") => ReactNode;
+	fbcLines: (
+		step: "build" | "stage",
+		text: string,
+		header?: string,
+	) => ReactNode;
 	release?: ReactNode;
 }) {
 	const prod = prodRelease && {
 		name: prodRelease.name,
 		...releaseLine(prodRelease),
 	};
-	const head = candidateLine(fbc);
-	const tested = fbcCIStep(fbc);
-	const staged = fbcStageStep(fbc);
-	const built = (stream ?? fbc).operators.reduce(
-		(n, o) => [
-			n[0] + o.coverage.slots - o.missing_ocp.length,
-			n[1] + o.coverage.slots,
-		],
-		[0, 0],
-	);
+	const checking = verdict.state === "checking";
+	const built = whileChecking(fbcBuildStep(stream ?? fbc), checking);
+	const tested = whileChecking(fbcCIStep(fbc), checking);
+	const staged = whileChecking(fbcStageStep(fbc), checking);
+	const read = readingLine(reading);
 	const jobs = [
 		...new Set(
 			fbc.operators.flatMap((o) =>
@@ -469,12 +485,12 @@ function Candidate({
 	const label = (job: string) => labels[jobs.indexOf(job)];
 	return (
 		<>
-			<Status status={head.status}>{head.text}</Status>
-			{fbc.errors.map((e) => (
-				<div key={e} style={line}>
-					<Status status="failed">{e}</Status>
+			<VerdictHeader verdict={verdict} prod={prodRelease} />
+			{read && (
+				<div style={line}>
+					<Status status={read.status}>{read.text}</Status>
 				</div>
-			))}
+			)}
 			<ProgressStepper
 				isCenterAligned
 				aria-label="Where the release candidate is"
@@ -482,25 +498,15 @@ function Candidate({
 			>
 				<Step
 					title="Build"
-					variant="success"
-					description={
-						<>
-							{`${built[0]} of ${built[1]} slots built`}
-							{fbcLines("build")}
-						</>
-					}
+					variant={built.variant}
+					description={fbcLines("build", built.text, built.fbcs)}
 				/>
 				<Step title="CI" variant={tested.variant} description={tested.text} />
 				<Step
 					title="Stage"
 					variant={staged.variant}
 					isCurrent={!prod && !shipped}
-					description={
-						<>
-							{staged.text}
-							{fbcLines("stage")}
-						</>
-					}
+					description={fbcLines("stage", staged.text)}
 					popoverRender={
 						release
 							? (ref) => (
@@ -556,6 +562,12 @@ function Candidate({
 					}
 				/>
 			</ProgressStepper>
+			<OperatorSummary
+				fbc={fbc}
+				stream={stream}
+				shipped={shipped}
+				items={verdict.items}
+			/>
 			{fbc.operators.map((o) => (
 				<OperatorTable
 					key={o.operator}
@@ -586,6 +598,178 @@ function Candidate({
 				</div>
 			)}
 			<UnshippedTable builds={unshipped} app={app} konflux={konflux} />
+		</>
+	);
+}
+
+const levelIcons: Record<VerdictItem["level"], ReactNode> = {
+	blocker: (
+		<Icon status="danger" isInline>
+			<ExclamationCircleIcon />
+		</Icon>
+	),
+	warning: (
+		<Icon status="warning" isInline>
+			<ExclamationTriangleIcon />
+		</Icon>
+	),
+	info: (
+		<Icon status="info" isInline>
+			<InfoCircleIcon />
+		</Icon>
+	),
+};
+
+/**
+ * Whether the version can ship, then a line per blocker, warning and info,
+ * with who acts on it; a shipped version's is its prod Release.
+ */
+function VerdictHeader({
+	verdict,
+	prod,
+}: {
+	verdict: Verdict;
+	prod: KonfluxRelease | null;
+}) {
+	const head = verdictLine(verdict);
+	const text =
+		verdict.state === "shipped" && prod?.completion_time
+			? `Shipped ${when(prod.completion_time)} (${prod.name})`
+			: head.text;
+	return (
+		<>
+			<Status status={head.status}>
+				<strong>{text}</strong>
+			</Status>
+			{verdict.items.map((i) => (
+				<Flex
+					key={`${i.code} ${i.text}`}
+					gap={{ default: "gapSm" }}
+					flexWrap={{ default: "nowrap" }}
+					style={{ marginLeft: "1.5rem" }}
+				>
+					<FlexItem>{levelIcons[i.level]}</FlexItem>
+					<FlexItem>{i.text}</FlexItem>
+					<FlexItem align={{ default: "alignRight" }} style={muted}>
+						{i.owner}
+					</FlexItem>
+				</Flex>
+			))}
+		</>
+	);
+}
+
+/** The id of an operator's row for an OCP version, which its strip cell opens. */
+const slotId = (operator: string, ocp: string) => `${operator}-ocp-${ocp}`;
+
+const glyph = {
+	display: "inline-block",
+	width: "1.25em",
+	textAlign: "center",
+	color: "inherit",
+} as const;
+
+/**
+ * A row per operator: the version and bundle its FBCs ship, a cell per OCP
+ * version opening that row of its block below, and where its images are;
+ * then what the cells mean.
+ */
+function OperatorSummary({
+	fbc,
+	stream,
+	shipped,
+	items,
+}: {
+	fbc: FBCCandidate;
+	stream: FBCCandidate | null;
+	shipped: boolean;
+	items: VerdictItem[];
+}) {
+	const { ocps, rows } = operatorSummary(fbc, stream);
+	const flagged = (operator: string, code: string) =>
+		items.some((i) => i.operator === operator && i.code === code);
+	const absent = rows.some((r) => r.cells.includes("absent"));
+	const legend = (Object.keys(stripCells) as StripCell[]).filter(
+		(k) => k !== "absent" || absent,
+	);
+	return (
+		<>
+			<Table
+				variant="compact"
+				aria-label="Operators"
+				style={{ marginTop: "1rem" }}
+			>
+				<Thead>
+					<Tr>
+						<Th>Operator</Th>
+						<Th>Ships</Th>
+						<Th>Bundle</Th>
+						<Th>
+							{ocps.length > 1
+								? `OCP ${ocps[0]} … ${ocps[ocps.length - 1]}`
+								: `OCP ${ocps[0] ?? ""}`}
+						</Th>
+						<Th>Images</Th>
+					</Tr>
+				</Thead>
+				<Tbody>
+					{rows.map(({ operator: o, cells }) => {
+						const ships = shipsVersion(o);
+						const images = imagesState(o, shipped);
+						const unread = flagged(o.operator, "read_failed")
+							? "can't read"
+							: "reading…";
+						return (
+							<Tr key={o.operator}>
+								<Td>{o.operator}</Td>
+								<Td modifier="nowrap">
+									{ships ? (
+										<>
+											{ships}{" "}
+											{flagged(o.operator, "csv_mismatch") &&
+												levelIcons.blocker}
+										</>
+									) : (
+										<span style={muted}>{unread}</span>
+									)}
+								</Td>
+								<Td modifier="nowrap">
+									<span title={o.head_bundle_nvr}>
+										{bundleBuilt(o.head_bundle_nvr)}
+									</span>
+								</Td>
+								<Td modifier="nowrap">
+									{cells.map((k, i) => {
+										const title = `OCP ${ocps[i]}: ${stripCells[k].text}`;
+										return k === "absent" ? (
+											<span key={ocps[i]} title={title} style={glyph}>
+												{stripCells[k].glyph}
+											</span>
+										) : (
+											<a
+												key={ocps[i]}
+												href={`#${slotId(o.operator, ocps[i])}`}
+												title={title}
+												style={glyph}
+											>
+												{stripCells[k].glyph}
+											</a>
+										);
+									})}
+								</Td>
+								<Td modifier="nowrap">
+									{images || <span style={muted}>{unread}</span>}
+								</Td>
+							</Tr>
+						);
+					})}
+				</Tbody>
+			</Table>
+			<div style={muted}>
+				{legend
+					.map((k) => `${stripCells[k].glyph} ${stripCells[k].text}`)
+					.join("   ")}
+			</div>
 		</>
 	);
 }
@@ -702,7 +886,10 @@ function OperatorTable({
 				</Thead>
 				<Tbody>
 					{slotRows(o).map((r) => (
-						<Tr key={`${r.ocp} ${r.fbc?.digest ?? ""}`}>
+						<Tr
+							key={`${r.ocp} ${r.fbc?.digest ?? ""}`}
+							id={slotId(o.operator, r.ocp)}
+						>
 							<Td style={{ whiteSpace: "nowrap" }}>{r.ocp}</Td>
 							<Td>
 								{r.fbc && (
@@ -895,30 +1082,33 @@ const shortDigest = (image: string) =>
 	image.slice(image.indexOf("@") + 1).slice(0, 19);
 
 /**
- * A step's FBC line, opening the catalogs it counts, each with its Snapshot,
+ * A step's text, opening the catalogs it counts, each with its Snapshot,
  * pullspec and Release: at Build all of them, at Stage the staged ones.
  */
 function FBCLine({
 	catalogs,
 	step,
+	text,
+	header = "FBC catalogs",
 	app,
 	konflux,
 }: {
 	catalogs: CandidateCatalog[];
 	step: "build" | "stage";
+	text: string;
+	header?: string;
 	app: string;
 	konflux: KonfluxLink;
 }) {
-	const text = fbcLine(catalogs, step);
-	if (!text) return null;
 	const shown =
 		step === "stage" ? catalogs.filter((c) => c.state === "staged") : catalogs;
+	if (shown.length === 0) return text;
 	const fbcApp = `fbc-${app}`;
 	return (
 		<div>
 			<Popover
 				aria-label="FBC catalogs"
-				headerContent="FBC catalogs"
+				headerContent={header}
 				minWidth="48rem"
 				bodyContent={
 					<div style={{ maxHeight: "60vh", overflowY: "auto" }}>
