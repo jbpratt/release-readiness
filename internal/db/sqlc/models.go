@@ -12,13 +12,14 @@ type ArtBuild struct {
 	CheckedAt string
 }
 
-type ArtHistoryBuild struct {
+type ArtHistoryRecord struct {
 	RecordID        string
 	GroupName       string
 	BuildType       string
 	Nvr             string
 	Digest          string
 	Pullspec        string
+	Commitish       string
 	StartTime       string
 	EndTime         string
 	ArtJobUrl       string
@@ -28,7 +29,7 @@ type ArtHistoryBuild struct {
 	BundleCsvName   string
 }
 
-type ArtHistoryScanDay struct {
+type ArtHistoryRecordDay struct {
 	GroupName string
 	BuildType string
 	Day       string

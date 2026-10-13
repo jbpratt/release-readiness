@@ -98,6 +98,10 @@ func TestFBCRenderCache(t *testing.T) {
 	if !slices.Equal(gotHead, headImages) || !slices.Equal(gotPrevious, previousImages) {
 		t.Errorf("related images: head %+v, previous %+v", gotHead, gotPrevious)
 	}
+	members, err := d.StagedFBCMembers(ctx, "3.16.7", "fbc-quay-3-16")
+	if err != nil || len(members) != 1 || members[0].HeadVersion != "3.99.0-dev" || members[0].PreviousVersion != "3.16.6" {
+		t.Errorf("staged members: %+v, %v", members, err)
+	}
 	unjoined, err := d.UnjoinedFBCRenders(ctx)
 	if err != nil {
 		t.Fatal(err)

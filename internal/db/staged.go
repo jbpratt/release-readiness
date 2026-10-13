@@ -155,7 +155,7 @@ func (d *DB) StagedFBCMembers(ctx context.Context, assembly, application string)
 		_, digest, _ := strings.Cut(r.ImageUrl, "@")
 		members[i] = model.FBCMember{
 			Digest: digest, Pullspec: r.ImageUrl, NVR: r.Nvr, HeadBundleNVR: r.HeadBundleNvr, Snapshot: r.SnapshotName,
-			RecordID: r.RecordID, Channel: r.Channel, HeadCSV: r.HeadCsv,
+			RecordID: r.RecordID, Channel: r.Channel, HeadCSV: r.HeadCsv, HeadVersion: r.HeadVersion, PreviousVersion: r.PreviousVersion,
 		}
 		// releases is newest first.
 		if j := slices.IndexFunc(releases, func(kr dbsqlc.KonfluxRelease) bool { return kr.Snapshot == r.SnapshotName }); j >= 0 {
@@ -177,8 +177,14 @@ func (d *DB) ArtHistoryFBCs(ctx context.Context, group string) ([]model.FBCMembe
 		_, digest, _ := strings.Cut(r.Pullspec, "@")
 		members[i] = model.FBCMember{
 			Digest: digest, Pullspec: r.Pullspec, NVR: r.Nvr, HeadBundleNVR: r.HeadBundleNvr,
-			RecordID: r.RecordID, Channel: r.Channel, HeadCSV: r.HeadCsv,
+			RecordID: r.RecordID, Channel: r.Channel, HeadCSV: r.HeadCsv, HeadVersion: r.HeadVersion, PreviousVersion: r.PreviousVersion,
 		}
 	}
 	return members, nil
+}
+
+// ProdReleasedImages returns the images of application's image Snapshots ART
+// staged for prod that a Release shipped.
+func (d *DB) ProdReleasedImages(ctx context.Context, application string) ([]string, error) {
+	return d.queries().ListProdReleasedImages(ctx, application)
 }

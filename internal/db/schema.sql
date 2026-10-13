@@ -72,14 +72,16 @@ CREATE TABLE IF NOT EXISTS art_builds (
 -- Successful ART build history records of FBC, bundle and image builds;
 -- pending and failed records are never stored. bundle_nvrs_json is set for
 -- an FBC image; operator_nvr, operand_nvrs_json and bundle_csv_name for a
--- bundle image. Times are as ART gives them.
-CREATE TABLE IF NOT EXISTS art_history_builds (
+-- bundle image. commitish is the source commit ART built from. Times are as
+-- ART gives them.
+CREATE TABLE IF NOT EXISTS art_history_records (
     record_id          TEXT PRIMARY KEY,
     group_name         TEXT NOT NULL,
     build_type         TEXT NOT NULL,
     nvr                TEXT NOT NULL,
     digest             TEXT NOT NULL,
     pullspec           TEXT NOT NULL,
+    commitish          TEXT NOT NULL DEFAULT '',
     start_time         TEXT NOT NULL DEFAULT '',
     end_time           TEXT NOT NULL DEFAULT '',
     art_job_url        TEXT NOT NULL DEFAULT '',
@@ -89,12 +91,12 @@ CREATE TABLE IF NOT EXISTS art_history_builds (
     bundle_csv_name    TEXT NOT NULL DEFAULT ''
 );
 
-CREATE INDEX IF NOT EXISTS idx_art_history_builds_nvr ON art_history_builds(group_name, build_type, nvr);
-CREATE INDEX IF NOT EXISTS idx_art_history_builds_digest ON art_history_builds(digest);
+CREATE INDEX IF NOT EXISTS idx_art_history_records_nvr ON art_history_records(group_name, build_type, nvr);
+CREATE INDEX IF NOT EXISTS idx_art_history_records_digest ON art_history_records(digest);
 
 -- Days of ART build history whose successful builds are all stored. A day
 -- whose listing was capped or failed is not.
-CREATE TABLE IF NOT EXISTS art_history_scan_days (
+CREATE TABLE IF NOT EXISTS art_history_record_days (
     group_name  TEXT NOT NULL,
     build_type  TEXT NOT NULL,
     day         TEXT NOT NULL,

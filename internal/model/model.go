@@ -135,18 +135,62 @@ type FBCCandidate struct {
 // here, and Coverage how many of those slots Members fill. FBCRIStage tells
 // whether its head bundle reached stage through a stage Release, "unknown"
 // without a head bundle; ImageCheck compares that bundle with the image
-// Snapshot's.
+// Snapshot's. Images is the head bundle's relatedImages, by name, as its
+// newest-OCP member FBC with a render lists them; Compare compares them with
+// that FBC's previous entry's and, for a candidate, with the stream's when
+// the stream heads another bundle.
 type OperatorFBC struct {
-	Operator      string      `json:"operator"`
-	HeadBundleNVR string      `json:"head_bundle_nvr"`
-	Channel       string      `json:"channel"`
-	HeadCSV       string      `json:"head_csv"`
-	Coverage      FBCCoverage `json:"coverage"`
-	Members       []FBCMember `json:"members"`
-	MissingOCP    []string    `json:"missing_ocp"`
-	Conflicts     []FBCMember `json:"conflicts"`
-	FBCRIStage    CIState     `json:"fbc_ri_stage"`
-	ImageCheck    ImageCheck  `json:"image_check"`
+	Operator      string          `json:"operator"`
+	HeadBundleNVR string          `json:"head_bundle_nvr"`
+	Channel       string          `json:"channel"`
+	HeadCSV       string          `json:"head_csv"`
+	Coverage      FBCCoverage     `json:"coverage"`
+	Members       []FBCMember     `json:"members"`
+	MissingOCP    []string        `json:"missing_ocp"`
+	Conflicts     []FBCMember     `json:"conflicts"`
+	FBCRIStage    CIState         `json:"fbc_ri_stage"`
+	ImageCheck    ImageCheck      `json:"image_check"`
+	Images        []OperatorImage `json:"images"`
+	Compare       []ImageCompare  `json:"compare"`
+}
+
+// OperatorImage is a bundle's relatedImage with its ART build, NVR and
+// Commit "" for an image ART did not build. Stage is set when a succeeded
+// stage Release holds its digest, Prod when a succeeded prod Release does.
+type OperatorImage struct {
+	Name   string `json:"name"`
+	Image  string `json:"image"`
+	Digest string `json:"digest"`
+	NVR    string `json:"nvr"`
+	Commit string `json:"commit"`
+	Stage  bool   `json:"stage"`
+	Prod   bool   `json:"prod"`
+}
+
+// ImageCompare compares two bundles' relatedImages: Kind "previous", from the
+// previous entry of Label's version, or "newer", to the stream's head bundle
+// of NVR Label.
+type ImageCompare struct {
+	Kind  string            `json:"kind"`
+	Label string            `json:"label"`
+	Rows  []ImageCompareRow `json:"rows"`
+}
+
+// ImageCompareRow is a relatedImage name's From and To, nil where absent.
+// Change is "same" for one digest, "rebuild" for another from the same
+// commit, "new source" from another commit, "new build" when either commit
+// is unknown, or "added" or "removed".
+type ImageCompareRow struct {
+	Name   string    `json:"name"`
+	From   *ImageRef `json:"from"`
+	To     *ImageRef `json:"to"`
+	Change string    `json:"change"`
+}
+
+type ImageRef struct {
+	NVR    string `json:"nvr"`
+	Commit string `json:"commit"`
+	Digest string `json:"digest"`
 }
 
 // ImageCheck compares an operator's head bundle with the bundle of it in the
@@ -193,6 +237,10 @@ type FBCMember struct {
 	RecordID      string          `json:"-"`
 	Channel       string          `json:"-"`
 	HeadCSV       string          `json:"-"`
+	// HeadVersion is the head bundle's version, PreviousVersion the version
+	// of the entry below the head in its release channel.
+	HeadVersion     string `json:"-"`
+	PreviousVersion string `json:"-"`
 }
 
 // UnshippedBuild is an image of a component a release candidate leaves out,

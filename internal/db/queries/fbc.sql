@@ -37,7 +37,7 @@ SELECT src.pullspec, src.nvr, src.created,
        CAST(COALESCE(r.state, '') AS TEXT) AS state,
        CAST(COALESCE(r.retry_after, '') AS TEXT) AS retry_after
 FROM (
-    SELECT pullspec, nvr, start_time AS created FROM art_history_builds WHERE build_type = 'fbc'
+    SELECT pullspec, nvr, start_time AS created FROM art_history_records WHERE build_type = 'fbc'
     UNION
     SELECT sc.image_url, '', s.created_at
     FROM staged_snapshots ss
@@ -53,6 +53,6 @@ SELECT r.digest, r.label_nvr, r.channel, r.head_bundle_pullspec
 FROM fbc_renders r
 WHERE r.state = 'rendered'
   AND NOT EXISTS (
-    SELECT 1 FROM art_history_builds b
+    SELECT 1 FROM art_history_records b
     WHERE b.build_type = 'bundle'
       AND b.digest = substr(r.head_bundle_pullspec, instr(r.head_bundle_pullspec, '@') + 1));

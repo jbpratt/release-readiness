@@ -100,6 +100,7 @@ func (d *DB) UpsertArtHistoryBuild(ctx context.Context, b artbuild.HistoryBuild)
 		Nvr:             b.NVR,
 		Digest:          b.Digest,
 		Pullspec:        b.Pullspec,
+		Commitish:       b.Commitish,
 		StartTime:       b.StartTime,
 		EndTime:         b.EndTime,
 		ArtJobUrl:       b.JobURL,
@@ -108,6 +109,25 @@ func (d *DB) UpsertArtHistoryBuild(ctx context.Context, b artbuild.HistoryBuild)
 		OperandNvrsJson: jsonList(b.OperandNVRs),
 		BundleCsvName:   b.BundleCSVName,
 	})
+}
+
+// ArtHistoryImages returns the stored ART bundle and image builds among
+// digests, by digest; NVR, Digest and Commitish are set.
+func (d *DB) ArtHistoryImages(ctx context.Context, digests []string) (map[string]artbuild.HistoryBuild, error) {
+	if len(digests) == 0 {
+		return nil, nil
+	}
+	rows, err := d.queries().ListArtHistoryImages(ctx, digests)
+	if err != nil {
+		return nil, err
+	}
+	builds := make(map[string]artbuild.HistoryBuild, len(rows))
+	for _, r := range rows {
+		if _, ok := builds[r.Digest]; !ok {
+			builds[r.Digest] = artbuild.HistoryBuild{NVR: r.Nvr, Digest: r.Digest, Commitish: r.Commitish}
+		}
+	}
+	return builds, nil
 }
 
 // jsonList is s as a JSON array, [] when empty.

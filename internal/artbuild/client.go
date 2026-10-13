@@ -35,6 +35,8 @@ type record struct {
 	NVR           string `json:"nvr"`
 	RecordID      string `json:"record_id"`
 	ImagePullspec string `json:"image_pullspec"`
+	// Commitish is the source commit ART built from.
+	Commitish string `json:"commitish"`
 	// BundleNVRs is, for an FBC image, the operator bundles its catalog holds.
 	BundleNVRs []string `json:"bundle_nvrs"`
 	Outcome    string   `json:"outcome"`

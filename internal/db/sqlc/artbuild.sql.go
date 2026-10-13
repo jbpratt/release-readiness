@@ -11,7 +11,7 @@ import (
 )
 
 const hasArtHistoryDigest = `-- name: HasArtHistoryDigest :one
-SELECT EXISTS (SELECT 1 FROM art_history_builds WHERE build_type = ? AND digest = ?)
+SELECT EXISTS (SELECT 1 FROM art_history_records WHERE build_type = ? AND digest = ?)
 `
 
 type HasArtHistoryDigestParams struct {
@@ -27,7 +27,7 @@ func (q *Queries) HasArtHistoryDigest(ctx context.Context, arg HasArtHistoryDige
 }
 
 const hasArtHistoryNVR = `-- name: HasArtHistoryNVR :one
-SELECT EXISTS (SELECT 1 FROM art_history_builds WHERE group_name = ? AND build_type = ? AND nvr = ?)
+SELECT EXISTS (SELECT 1 FROM art_history_records WHERE group_name = ? AND build_type = ? AND nvr = ?)
 `
 
 type HasArtHistoryNVRParams struct {
@@ -44,7 +44,7 @@ func (q *Queries) HasArtHistoryNVR(ctx context.Context, arg HasArtHistoryNVRPara
 }
 
 const hasArtHistoryRecord = `-- name: HasArtHistoryRecord :one
-SELECT EXISTS (SELECT 1 FROM art_history_builds WHERE record_id = ?)
+SELECT EXISTS (SELECT 1 FROM art_history_records WHERE record_id = ?)
 `
 
 func (q *Queries) HasArtHistoryRecord(ctx context.Context, recordID string) (int64, error) {
@@ -128,27 +128,31 @@ const listArtHistoryFBCs = `-- name: ListArtHistoryFBCs :many
 SELECT f.record_id, f.nvr, f.pullspec,
        CAST(COALESCE(r.channel, '') AS TEXT) AS channel,
        CAST(COALESCE(r.head_csv, '') AS TEXT) AS head_csv,
+       CAST(COALESCE(r.head_version, '') AS TEXT) AS head_version,
+       CAST(COALESCE(r.previous_version, '') AS TEXT) AS previous_version,
        CAST(COALESCE(b.nvr, '') AS TEXT) AS head_bundle_nvr
-FROM art_history_builds f
+FROM art_history_records f
 LEFT JOIN fbc_renders r ON r.state = 'rendered' AND r.digest = f.digest
-LEFT JOIN art_history_builds b ON b.build_type = 'bundle'
+LEFT JOIN art_history_records b ON b.build_type = 'bundle'
   AND b.digest = substr(r.head_bundle_pullspec, instr(r.head_bundle_pullspec, '@') + 1)
 WHERE f.group_name = ? AND f.build_type = 'fbc'
 ORDER BY f.nvr DESC, f.record_id
 `
 
 type ListArtHistoryFBCsRow struct {
-	RecordID      string
-	Nvr           string
-	Pullspec      string
-	Channel       string
-	HeadCsv       string
-	HeadBundleNvr string
+	RecordID        string
+	Nvr             string
+	Pullspec        string
+	Channel         string
+	HeadCsv         string
+	HeadVersion     string
+	PreviousVersion string
+	HeadBundleNvr   string
 }
 
-// group's successful FBC builds, newest NVR first, each with the channel and
-// head CSV its render found and the NVR of its head bundle's ART build, ”
-// for none.
+// group's successful FBC builds, newest NVR first, each with the channel,
+// head CSV and version and previous entry's version its render found and the NVR of its
+// head bundle's ART build, ” for none.
 func (q *Queries) ListArtHistoryFBCs(ctx context.Context, groupName string) ([]ListArtHistoryFBCsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listArtHistoryFBCs, groupName)
 	if err != nil {
@@ -164,6 +168,8 @@ func (q *Queries) ListArtHistoryFBCs(ctx context.Context, groupName string) ([]L
 			&i.Pullspec,
 			&i.Channel,
 			&i.HeadCsv,
+			&i.HeadVersion,
+			&i.PreviousVersion,
 			&i.HeadBundleNvr,
 		); err != nil {
 			return nil, err
@@ -179,8 +185,55 @@ func (q *Queries) ListArtHistoryFBCs(ctx context.Context, groupName string) ([]L
 	return items, nil
 }
 
+const listArtHistoryImages = `-- name: ListArtHistoryImages :many
+SELECT digest, nvr, commitish
+FROM art_history_records
+WHERE build_type IN ('bundle', 'image') AND digest IN (/*SLICE:digests*/?)
+ORDER BY digest, nvr
+`
+
+type ListArtHistoryImagesRow struct {
+	Digest    string
+	Nvr       string
+	Commitish string
+}
+
+// The bundle and image builds among digests, by digest, then NVR.
+func (q *Queries) ListArtHistoryImages(ctx context.Context, digests []string) ([]ListArtHistoryImagesRow, error) {
+	query := listArtHistoryImages
+	var queryParams []interface{}
+	if len(digests) > 0 {
+		for _, v := range digests {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:digests*/?", strings.Repeat(",?", len(digests))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:digests*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtHistoryImagesRow
+	for rows.Next() {
+		var i ListArtHistoryImagesRow
+		if err := rows.Scan(&i.Digest, &i.Nvr, &i.Commitish); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listArtHistoryScanDays = `-- name: ListArtHistoryScanDays :many
-SELECT day FROM art_history_scan_days WHERE group_name = ? AND build_type = ?
+SELECT day FROM art_history_record_days WHERE group_name = ? AND build_type = ?
 `
 
 type ListArtHistoryScanDaysParams struct {
@@ -313,14 +366,15 @@ func (q *Queries) UpsertArtBuild(ctx context.Context, arg UpsertArtBuildParams) 
 }
 
 const upsertArtHistoryBuild = `-- name: UpsertArtHistoryBuild :exec
-INSERT INTO art_history_builds (record_id, group_name, build_type, nvr, digest, pullspec, start_time, end_time, art_job_url, bundle_nvrs_json, operator_nvr, operand_nvrs_json, bundle_csv_name)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO art_history_records (record_id, group_name, build_type, nvr, digest, pullspec, commitish, start_time, end_time, art_job_url, bundle_nvrs_json, operator_nvr, operand_nvrs_json, bundle_csv_name)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(record_id) DO UPDATE SET
     group_name = excluded.group_name,
     build_type = excluded.build_type,
     nvr = excluded.nvr,
     digest = excluded.digest,
     pullspec = excluded.pullspec,
+    commitish = excluded.commitish,
     start_time = excluded.start_time,
     end_time = excluded.end_time,
     art_job_url = excluded.art_job_url,
@@ -337,6 +391,7 @@ type UpsertArtHistoryBuildParams struct {
 	Nvr             string
 	Digest          string
 	Pullspec        string
+	Commitish       string
 	StartTime       string
 	EndTime         string
 	ArtJobUrl       string
@@ -354,6 +409,7 @@ func (q *Queries) UpsertArtHistoryBuild(ctx context.Context, arg UpsertArtHistor
 		arg.Nvr,
 		arg.Digest,
 		arg.Pullspec,
+		arg.Commitish,
 		arg.StartTime,
 		arg.EndTime,
 		arg.ArtJobUrl,
@@ -366,7 +422,7 @@ func (q *Queries) UpsertArtHistoryBuild(ctx context.Context, arg UpsertArtHistor
 }
 
 const upsertArtHistoryScanDay = `-- name: UpsertArtHistoryScanDay :exec
-INSERT INTO art_history_scan_days (group_name, build_type, day, checked_at)
+INSERT INTO art_history_record_days (group_name, build_type, day, checked_at)
 VALUES (?, ?, ?, ?)
 ON CONFLICT(group_name, build_type, day) DO UPDATE SET checked_at = excluded.checked_at
 `
