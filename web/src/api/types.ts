@@ -73,8 +73,7 @@ export interface ReadProgress {
  * build ("stream"). operators always holds quay-operator,
  * container-security-operator and quay-bridge-operator; unknown holds the
  * staged catalogs no NVR names, which fill no slot. pullspecs, release-from-fbc's
- * fbc-pullspecs, is empty unless state is "complete"; installable is set when
- * every operator's head bundle reached stage through a stage Release.
+ * fbc-pullspecs, is empty unless state is "complete".
  */
 export interface FBCCandidate {
 	source: "stage_snapshots" | "stream";
@@ -83,7 +82,6 @@ export interface FBCCandidate {
 	operators: OperatorFBC[];
 	unknown: FBCMember[];
 	pullspecs: string[];
-	installable: boolean;
 }
 
 /**

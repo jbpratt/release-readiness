@@ -278,7 +278,6 @@ const fbcCandidate = (c: Partial<FBCCandidate>): FBCCandidate => ({
 	operators: [],
 	unknown: [],
 	pullspecs: [],
-	installable: false,
 	...c,
 });
 
