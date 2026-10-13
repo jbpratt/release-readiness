@@ -17,11 +17,13 @@ const (
 	minStale   = 10 * time.Minute
 )
 
-// Registry holds the sources being tracked. It is in memory only.
+// Registry holds the sources being tracked.
 type Registry struct {
 	mu      sync.Mutex
 	now     func() time.Time
 	sources []*Source
+	seed    map[string]time.Time
+	save    func(source string, lastSuccess time.Time)
 }
 
 // Source is one tracked sync loop.
@@ -53,12 +55,20 @@ func New() *Registry {
 	return &Registry{now: time.Now}
 }
 
+// Persist seeds each source's last success from seed and calls save after
+// every successful pass. Call it before Track.
+func (r *Registry) Persist(seed map[string]time.Time, save func(source string, lastSuccess time.Time)) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.seed, r.save = seed, save
+}
+
 // Track registers a source that runs every interval. An interval of 0 skips
 // the staleness check.
 func (r *Registry) Track(source string, interval time.Duration) *Source {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	s := &Source{r: r, name: source, interval: interval, started: r.now().UTC()}
+	s := &Source{r: r, name: source, interval: interval, started: r.now().UTC(), lastSuccess: r.seed[source]}
 	r.sources = append(r.sources, s)
 	slices.SortStableFunc(r.sources, func(a, b *Source) int { return strings.Compare(a.name, b.name) })
 	return s
@@ -71,16 +81,20 @@ func (s *Source) Report(err error) {
 		return
 	}
 	s.r.mu.Lock()
-	defer s.r.mu.Unlock()
-	now := s.r.now().UTC()
+	now, save := s.r.now().UTC(), s.r.save
 	if err == nil {
 		s.lastSuccess = now
 		s.failingSince = time.Time{}
-		return
+	} else {
+		s.lastError = err.Error()
+		if s.failingSince.IsZero() {
+			s.failingSince = now
+		}
 	}
-	s.lastError = err.Error()
-	if s.failingSince.IsZero() {
-		s.failingSince = now
+	s.r.mu.Unlock()
+	// Saved outside the lock so a slow write does not block status reads.
+	if err == nil && save != nil {
+		save(s.name, now)
 	}
 }
 
@@ -121,8 +135,10 @@ func (s *Source) problem(now time.Time) (Problem, bool) {
 		p.Message = s.lastError
 		return p, true
 	}
+	// A success seeded from before this process started is not held
+	// against it.
 	last := s.lastSuccess
-	if last.IsZero() {
+	if last.Before(s.started) {
 		last = s.started
 	}
 	if limit := max(staleAfter*s.interval, minStale); s.interval > 0 && now.Sub(last) > limit {
