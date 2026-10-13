@@ -78,3 +78,23 @@ JOIN snapshot_components sc ON sc.snapshot_id = s.id
 WHERE ss.kind = 'image' AND ss.env = 'prod' AND s.application = ?
   AND EXISTS (SELECT 1 FROM konflux_releases kr
               WHERE kr.snapshot = s.name AND kr.released_status = 'True' AND kr.released_reason = 'Succeeded');
+
+-- name: ListFBCHistory :many
+-- group's successful FBC builds, newest first, each with whether a Release of
+-- an FBC Snapshot of application ART staged for assembly holding it
+-- succeeded, for stage and for prod.
+WITH released AS (
+    SELECT ss.env, substr(sc.image_url, instr(sc.image_url, '@') + 1) AS digest
+    FROM staged_snapshots ss
+    JOIN snapshots s ON s.name = ss.name
+    JOIN snapshot_components sc ON sc.snapshot_id = s.id
+    JOIN konflux_releases kr ON kr.snapshot = s.name
+    WHERE ss.kind = 'fbc' AND ss.assembly = sqlc.arg(assembly) AND s.application = sqlc.arg(application)
+      AND kr.released_status = 'True' AND kr.released_reason = 'Succeeded'
+)
+SELECT h.nvr, h.digest, h.start_time,
+       CAST(EXISTS (SELECT 1 FROM released WHERE env = 'stage' AND digest = h.digest) AS BOOLEAN) AS staged,
+       CAST(EXISTS (SELECT 1 FROM released WHERE env = 'prod' AND digest = h.digest) AS BOOLEAN) AS shipped
+FROM art_history_records h
+WHERE h.group_name = sqlc.arg(group_name) AND h.build_type = 'fbc'
+ORDER BY h.start_time DESC, h.nvr DESC;

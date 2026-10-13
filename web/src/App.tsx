@@ -33,6 +33,7 @@ import { ART_PIPELINES_HEALTH_URL } from "./utils/links";
 
 const ReleasesOverview = lazy(() => import("./pages/ReleasesOverview"));
 const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
+const ReleaseCI = lazy(() => import("./pages/ReleaseCI"));
 
 const glossary: [string, string][] = [
 	[
@@ -183,6 +184,7 @@ export default function App() {
 						<Routes>
 							<Route path="/" element={<ReleasesOverview />} />
 							<Route path="/releases/:version" element={<ReleaseDetail />} />
+							<Route path="/releases/:version/ci" element={<ReleaseCI />} />
 							<Route
 								path="/releases/:version/snapshots"
 								element={<Navigate to=".." relative="path" replace />}

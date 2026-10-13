@@ -52,6 +52,8 @@ A Quay version's builds are its application's stream Snapshots (not ART's assemb
 
 `/api/v1/releases/{version}/issues` lists the version's Target Version tickets, by key.
 
+`/api/v1/releases/{version}/ci` lists the version's ART FBC builds, newest first, each with its `state` (`shipped`, else `candidate`, else `staged`, else empty) and the periodic runs that installed from its catalog digest.
+
 ## Running the application
 
 ### Build

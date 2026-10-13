@@ -36,6 +36,70 @@ func (q *Queries) LatestProdImageRelease(ctx context.Context, assembly string) (
 	return i, err
 }
 
+const listFBCHistory = `-- name: ListFBCHistory :many
+WITH released AS (
+    SELECT ss.env, substr(sc.image_url, instr(sc.image_url, '@') + 1) AS digest
+    FROM staged_snapshots ss
+    JOIN snapshots s ON s.name = ss.name
+    JOIN snapshot_components sc ON sc.snapshot_id = s.id
+    JOIN konflux_releases kr ON kr.snapshot = s.name
+    WHERE ss.kind = 'fbc' AND ss.assembly = ?2 AND s.application = ?3
+      AND kr.released_status = 'True' AND kr.released_reason = 'Succeeded'
+)
+SELECT h.nvr, h.digest, h.start_time,
+       CAST(EXISTS (SELECT 1 FROM released WHERE env = 'stage' AND digest = h.digest) AS BOOLEAN) AS staged,
+       CAST(EXISTS (SELECT 1 FROM released WHERE env = 'prod' AND digest = h.digest) AS BOOLEAN) AS shipped
+FROM art_history_records h
+WHERE h.group_name = ?1 AND h.build_type = 'fbc'
+ORDER BY h.start_time DESC, h.nvr DESC
+`
+
+type ListFBCHistoryParams struct {
+	GroupName   string
+	Assembly    string
+	Application string
+}
+
+type ListFBCHistoryRow struct {
+	Nvr       string
+	Digest    string
+	StartTime string
+	Staged    bool
+	Shipped   bool
+}
+
+// group's successful FBC builds, newest first, each with whether a Release of
+// an FBC Snapshot of application ART staged for assembly holding it
+// succeeded, for stage and for prod.
+func (q *Queries) ListFBCHistory(ctx context.Context, arg ListFBCHistoryParams) ([]ListFBCHistoryRow, error) {
+	rows, err := q.db.QueryContext(ctx, listFBCHistory, arg.GroupName, arg.Assembly, arg.Application)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListFBCHistoryRow
+	for rows.Next() {
+		var i ListFBCHistoryRow
+		if err := rows.Scan(
+			&i.Nvr,
+			&i.Digest,
+			&i.StartTime,
+			&i.Staged,
+			&i.Shipped,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProdReleasedImages = `-- name: ListProdReleasedImages :many
 SELECT DISTINCT sc.image_url
 FROM staged_snapshots ss

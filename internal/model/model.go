@@ -359,6 +359,28 @@ type CIJob struct {
 	Runs    []CIRun `json:"runs"`
 }
 
+// FBCBuild is an ART FBC build of a version with the periodic runs that
+// installed from it, newest first. State is "shipped" once a prod Release
+// holding it succeeded, else "candidate" for an FBC of the version's FBC
+// candidate, else "staged" once a stage Release holding it succeeded, else "".
+type FBCBuild struct {
+	Operator string     `json:"operator"`
+	OCP      string     `json:"ocp"`
+	NVR      string     `json:"nvr"`
+	Digest   string     `json:"digest"`
+	BuiltAt  *time.Time `json:"built_at"`
+	State    string     `json:"state"`
+	Runs     []FBCRun   `json:"runs"`
+}
+
+type FBCRun struct {
+	Job       string    `json:"job"`
+	State     string    `json:"state"`
+	StartedAt time.Time `json:"started_at"`
+	ProwURL   string    `json:"prow_url"`
+	SippyURL  string    `json:"sippy_url"`
+}
+
 type CIRun struct {
 	State         string    `json:"state"`
 	StartedAt     time.Time `json:"started_at"`
