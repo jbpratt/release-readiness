@@ -119,8 +119,8 @@ export interface StageSummary {
 
 /**
  * A bundle's relatedImage; nvr and commit are "" for an image ART did not
- * build. stage and prod are set when a succeeded Release there holds its
- * digest.
+ * build, build_url until ART resolves its digest. stage and prod are set when
+ * a succeeded Release there holds its digest.
  */
 export interface OperatorImage {
 	name: string;
@@ -128,6 +128,7 @@ export interface OperatorImage {
 	digest: string;
 	nvr: string;
 	commit: string;
+	build_url: string;
 	stage: boolean;
 	prod: boolean;
 }

@@ -1284,18 +1284,21 @@ func TestGetCandidateFBCImages(t *testing.T) {
 	}
 	seedKonfluxRelease(t, srv, "prod-r", "quay-prod-3-18-0", "quay-advisory-prod-3-18", "Succeeded", "2026-09-07T00:00:00Z", "2026-09-07T00:10:00Z")
 
+	// Only quay's digest has a resolved ART build, so only it has a build page.
+	resolveNVR(t, srv, "a/quay", "a/quay-nvr")
+
 	cand, stream := getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
 	o := cand.Operators[0]
 	var images []string
 	for _, img := range o.Images {
-		images = append(images, fmt.Sprintf("%s %q %q stage=%t prod=%t", img.Name, img.NVR, img.Commit, img.Stage, img.Prod))
+		images = append(images, fmt.Sprintf("%s %q %q page=%t stage=%t prod=%t", img.Name, img.NVR, img.Commit, img.BuildURL != "", img.Stage, img.Prod))
 	}
 	checkRows(t, "images", images, []string{
-		`builder "a/builder-nvr" "b1" stage=false prod=false`,
-		`clair "a/clair-nvr" "k1" stage=false prod=false`,
-		`operator "a/operator-nvr" "c1" stage=false prod=false`,
-		`quay "a/quay-nvr" "q2" stage=true prod=false`,
-		`redis "" "" stage=false prod=true`,
+		`builder "a/builder-nvr" "b1" page=false stage=false prod=false`,
+		`clair "a/clair-nvr" "k1" page=false stage=false prod=false`,
+		`operator "a/operator-nvr" "c1" page=false stage=false prod=false`,
+		`quay "a/quay-nvr" "q2" page=true stage=true prod=false`,
+		`redis "" "" page=false stage=false prod=true`,
 	})
 	compare := func(c model.ImageCompare) []string {
 		rows := []string{c.Kind + " " + c.Label}

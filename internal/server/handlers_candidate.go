@@ -441,9 +441,10 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 }
 
 // operatorImages sets o's Images, the head bundle's relatedImages of its
-// newest-OCP member FBC with a render, each with its ART build and whether a
-// stage Release of releases or a prod Release, by prod digests, shipped it;
-// and its Compare with that FBC's previous entry.
+// newest-OCP member FBC with a render, each with its ART build, its build page
+// once ART resolves its digest, and whether a stage Release of releases or a
+// prod Release, by prod digests, shipped it; and its Compare with that FBC's
+// previous entry.
 func (s *Server) operatorImages(ctx context.Context, o *model.OperatorFBC, releases []model.StageRelease, prod map[string]bool) error {
 	o.Images, o.Compare = []model.OperatorImage{}, []model.ImageCompare{}
 	var head, previous []fbc.RelatedImage
@@ -463,15 +464,23 @@ func (s *Server) operatorImages(ctx context.Context, o *model.OperatorFBC, relea
 	if err != nil {
 		return err
 	}
+	resolved, err := s.db.ResolvedArtBuilds(ctx, digests)
+	if err != nil {
+		return err
+	}
 	images := func(related []fbc.RelatedImage) []model.OperatorImage {
 		out := []model.OperatorImage{}
 		for _, img := range related {
 			d := imageDigest(img.Image)
 			b := builds[d]
-			out = append(out, model.OperatorImage{
+			oi := model.OperatorImage{
 				Name: img.Name, Image: img.Image, Digest: d, NVR: b.NVR, Commit: b.Commitish,
 				Stage: ciState(d, releases).State == "in", Prod: prod[d],
-			})
+			}
+			if r, ok := resolved[d]; ok {
+				oi.BuildURL = artbuild.PageURL(s.artBaseURL, r.NVR, r.RecordID)
+			}
+			out = append(out, oi)
 		}
 		return out
 	}
