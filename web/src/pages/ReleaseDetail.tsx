@@ -32,7 +32,6 @@ import {
 	Tabs,
 	TabTitleText,
 	Title,
-	Tooltip,
 } from "@patternfly/react-core";
 import {
 	CheckCircleIcon,
@@ -1623,7 +1622,6 @@ function JobPills({
 				key={job.job_name}
 				status={s === "none" ? undefined : s}
 				href={sippyJobUrl(version, job.job_name)}
-				popover
 				tip={
 					<>
 						{equivalent && (
@@ -1677,20 +1675,18 @@ function JobPills({
 }
 
 /**
- * A compact label with a tooltip, or popover, opening href in a new tab;
- * without href it takes keyboard focus, which shows the tooltip.
+ * A compact label with a popover, which stays open under the pointer as tip
+ * has links, opening href in a new tab; without href it takes keyboard focus,
+ * which shows the popover.
  */
 function Pill({
 	tip,
 	href,
-	popover,
 	children,
 	...props
-}: Pick<LabelProps, "color" | "status" | "children"> & {
+}: Pick<LabelProps, "status" | "children"> & {
 	tip: ReactNode;
 	href?: string | null;
-	/** Whether tip has links, so shows in a popover that stays open under the pointer. */
-	popover?: boolean;
 }) {
 	const [open, setOpen] = useState<"hover" | "focus">();
 	const label = href ? (
@@ -1711,7 +1707,7 @@ function Pill({
 			{children}
 		</Label>
 	);
-	return popover ? (
+	return (
 		// Open while focus is inside, and inline then so Tab reaches tip's links;
 		// on hover it stays in body, where the card's overflow cannot flip it.
 		// biome-ignore lint/a11y/noStaticElementInteractions: tracks focus, not input
@@ -1738,8 +1734,6 @@ function Pill({
 				{label}
 			</Popover>
 		</span>
-	) : (
-		<Tooltip content={tip}>{label}</Tooltip>
 	);
 }
 
