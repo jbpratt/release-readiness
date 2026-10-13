@@ -1607,8 +1607,8 @@ function Pill({
 }
 
 /**
- * The CI of each slot's candidate FBC and the FBC built before it, a line per
- * slot with a run: each job opens in Sippy and each run in Prow.
+ * The CI of each slot's candidate FBC, a line per slot with a run: each job
+ * opens in Sippy and each run in Prow.
  */
 function CICard({
 	slots,
@@ -1630,8 +1630,8 @@ function CICard({
 					sippy && (
 						<Button
 							component="a"
-							variant="link"
-							isInline
+							variant="secondary"
+							size="sm"
 							href={sippy}
 							{...external}
 							icon={<ExternalLinkAltIcon />}
@@ -1645,6 +1645,7 @@ function CICard({
 				CI
 			</LinkedCardTitle>
 			<CardBody>
+				<div style={muted}>CI runs that tested this candidate's FBC.</div>
 				<List isPlain>
 					{lines.map((l) => (
 						<ListItem key={`${l.operator} ${l.ocp}`}>
@@ -1662,7 +1663,6 @@ function CICard({
 									<a href={r.run.prow_url} style={muted} {...external}>
 										{when(r.run.started_at)}
 									</a>
-									{r.note && <span style={muted}> ({r.note})</span>}
 								</Fragment>
 							))}
 						</ListItem>

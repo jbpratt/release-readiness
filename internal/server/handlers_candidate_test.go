@@ -1434,11 +1434,9 @@ func TestCandidateDigests(t *testing.T) {
 	}
 }
 
-// A slot's CI history is the candidate's FBC of it and the FBC built before
-// that, never a newer one, each with runs from its digest and from another
-// FBC of the slot on its head bundle; a slot with no run still has its FBCs,
-// one without an FBC in the candidate has its newest, and one whose candidate
-// FBC was never built has only that.
+// A slot's CI is the candidate's FBC's, runs from its digest and from another
+// FBC of the slot on its head bundle, never another FBC's own; a slot with no
+// run still has its CI, and one without an FBC in the candidate has none.
 func TestGetCandidateCIHistory(t *testing.T) {
 	srv := setupTestServer(t)
 	const a = "quay-operator-metadata-container-3.18.1.a"
@@ -1474,21 +1472,17 @@ func TestGetCandidateCIHistory(t *testing.T) {
 	}
 	var rows []string
 	for _, s := range got.CIHistory {
-		row := s.Operator + " " + s.OCP
-		for _, f := range s.FBCs {
-			mark := ""
-			if f.Current {
-				mark = "*"
-			}
-			row += fmt.Sprintf(" %s%s[%s|%s]", mark, f.NVR[len("quay-operator-fbc-3.18.1-20261"):len("quay-operator-fbc-3.18.1-2026100x")], tier(f.CI.Exact), tier(f.CI.Equivalent))
+		row := s.Operator + " " + s.OCP + " -"
+		if s.CI != nil {
+			row = fmt.Sprintf("%s %s [%s|%s]", s.Operator, s.OCP, tier(s.CI.Exact), tier(s.CI.Equivalent))
 		}
 		rows = append(rows, row)
 	}
 	checkRows(t, "ci history", rows, []string{
-		"quay-operator 4.20 *002[aws=1|gcp=2] 001[|aws=1,gcp=2]",
-		"quay-operator 4.21 *001[|]",
-		"quay-operator 4.22 002[|]",
-		"quay-operator 4.23 *002[|]",
+		"quay-operator 4.20 [aws=1|gcp=2]",
+		"quay-operator 4.21 [|]",
+		"quay-operator 4.22 -",
+		"quay-operator 4.23 [|]",
 	})
 }
 
@@ -1514,7 +1508,7 @@ func TestGetCandidateCIAdvisory(t *testing.T) {
 		t.Fatal(err)
 	}
 	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &after)
-	if s := after.CIHistory[0].FBCs[0]; !s.Current || len(s.CI.Exact) != 1 || s.CI.Exact[0].Runs[0].State != "failure" {
+	if s := after.CIHistory[0]; s.CI == nil || len(s.CI.Exact) != 1 || s.CI.Exact[0].Runs[0].State != "failure" {
 		t.Fatalf("quay-operator 4.20 CI %+v, want the failed run", s)
 	}
 	if !reflect.DeepEqual(after.Verdict, before.Verdict) || after.Reason != before.Reason {

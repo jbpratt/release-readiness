@@ -1,5 +1,4 @@
 import type {
-	CIRun,
 	CISlot,
 	FBCCandidate,
 	FBCMember,
@@ -114,27 +113,14 @@ export function fbcsBuilt(c: FBCCandidate): string {
 }
 
 /**
- * The CI list: a line per slot with a run, each run of its FBCs once, exact
- * runs first, noted when on an FBC not the candidate's: the prior FBC, or,
- * in a slot the candidate has no FBC of, one not in the candidate. And how
- * many slots have none.
+ * The CI list: a line per slot whose candidate FBC has a run, exact runs
+ * first, and how many slots have none.
  */
 export function ciList(slots: CISlot[]) {
 	const lines = slots.flatMap((s) => {
-		const other = s.fbcs.some((f) => f.current)
-			? "prior FBC"
-			: "not in candidate";
-		const runs: { job: string; run: CIRun; note: string | null }[] = [];
-		for (const tier of ["exact", "equivalent"] as const)
-			for (const f of s.fbcs)
-				for (const j of f.ci[tier])
-					for (const run of j.runs)
-						if (!runs.some((r) => r.run.prow_url === run.prow_url))
-							runs.push({
-								job: j.job_name,
-								run,
-								note: f.current ? null : other,
-							});
+		const runs = [...(s.ci?.exact ?? []), ...(s.ci?.equivalent ?? [])].flatMap(
+			(j) => j.runs.map((run) => ({ job: j.job_name, run })),
+		);
 		return runs.length > 0 ? [{ operator: s.operator, ocp: s.ocp, runs }] : [];
 	});
 	return { lines, untested: slots.length - lines.length };
