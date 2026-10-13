@@ -33,6 +33,7 @@ import {
 	issueSummary,
 	jobLabels,
 	jobShortName,
+	noFbcText,
 	nvrLabel,
 	otherBundle,
 	readingLine,
@@ -1231,4 +1232,11 @@ test("issueSummary", () => {
 		"4 issues: 2 Bug, 1 Epic, 1 Story",
 	);
 	assert.equal(issueSummary([issue("A", "Bug")]), "1 issue: 1 Bug");
+});
+
+test("noFbcText", () => {
+	const base = "No FBC build or staged catalog found for this version.";
+	assert.equal(noFbcText("no stage candidate"), `${base} No stage candidate.`);
+	assert.equal(noFbcText(""), base);
+	assert.equal(noFbcText(undefined), base);
 });

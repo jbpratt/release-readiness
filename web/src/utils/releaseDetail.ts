@@ -821,3 +821,11 @@ export function issueSummary(issues: JiraIssue[]): string {
 		.map(([type, count]) => `${count} ${type}`);
 	return `${issues.length} issue${issues.length === 1 ? "" : "s"}: ${types.join(", ")}`;
 }
+
+/** The release candidate card's text when a version has no FBC, with the backend's reason. */
+export function noFbcText(reason?: string): string {
+	const text = "No FBC build or staged catalog found for this version.";
+	return reason
+		? `${text} ${reason.charAt(0).toUpperCase()}${reason.slice(1)}.`
+		: text;
+}
