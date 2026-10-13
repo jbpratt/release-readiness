@@ -35,8 +35,9 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, struct {
-		Problems []syncstatus.Problem `json:"problems"`
-	}{s.syncStatus.Problems(time.Now())})
+		Problems []syncstatus.Problem   `json:"problems"`
+		Sources  []syncstatus.Freshness `json:"sources"`
+	}{s.syncStatus.Problems(time.Now()), s.syncStatus.Sources()})
 }
 
 // --- Releases (version-centric) ---

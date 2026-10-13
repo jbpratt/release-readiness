@@ -4,10 +4,13 @@ import type {
 	FBCMember,
 	ImageCompare,
 	ImageScan,
+	JiraIssue,
 	KonfluxRelease,
 	OperatorFBC,
 	ReadProgress,
 	ScanCounts,
+	SyncProblem,
+	SyncStatus,
 	UnshippedBuild,
 	Verdict,
 	VerdictItem,
@@ -760,4 +763,72 @@ export function scanCell(scan: ImageScan | null): {
 		default:
 			return { text: "-", color: "grey" };
 	}
+}
+
+// The syncs the candidate verdict reads (handlers_candidate.go): konflux its
+// Snapshots and Releases, art-builds their images' NVRs, art-history the
+// stream's FBC builds and scanned days, fbc-render the FBC reads, catalog
+// whether the version shipped. Jira and Prow never gate it.
+const VERDICT_SOURCES = [
+	"art-builds",
+	"art-history",
+	"catalog",
+	"fbc-render",
+	"konflux",
+];
+
+/**
+ * How fresh the verdict's data is: its failing or stale syncs, if any, else
+ * when the least recent of them last succeeded. Null while one has yet to
+ * succeed or none is tracked.
+ */
+export function freshnessLine(
+	s: SyncStatus,
+): { text: string; problems: SyncProblem[] } | null {
+	const problems = s.problems.filter((p) => VERDICT_SOURCES.includes(p.source));
+	if (problems.length > 0) {
+		// Failing sources carry since; stale ones do not.
+		const failing = problems.filter((p) => p.since).map((p) => p.source);
+		const stale = problems.filter((p) => !p.since).map((p) => p.source);
+		const what = [];
+		if (failing.length) what.push(`${failing.join(", ")} failing`);
+		if (stale.length) what.push(`${stale.join(", ")} stale`);
+		return {
+			text: `Data may be stale: ${what.join(", ")}, last success ${oldest(problems.map((p) => p.last_success))}`,
+			problems,
+		};
+	}
+	const last = s.sources
+		.filter((f) => VERDICT_SOURCES.includes(f.source))
+		.map((f) => f.last_success);
+	if (last.length === 0 || last.includes(null)) return null;
+	return { text: `Refreshed ${oldest(last)}`, problems };
+}
+
+/** The oldest of times, relative, or "never" if one is null. */
+function oldest(times: (string | null)[]): string {
+	if (times.includes(null)) return "never";
+	const t = Math.min(...times.map((t) => Date.parse(t!)));
+	return relative(new Date(t).toISOString());
+}
+
+/** A version's fixVersion issues split into its release ticket, if among them, and the rest. */
+export function splitTickets(issues: JiraIssue[], ticketKey?: string) {
+	return {
+		ticket: issues.find((i) => i.key === ticketKey),
+		work: issues.filter((i) => i.key !== ticketKey),
+	};
+}
+
+/**
+ * "42 issues: 30 Bug, 12 Story", by type, most first. Synced issues carry no
+ * status, so there is no open or closed count.
+ */
+export function issueSummary(issues: JiraIssue[]): string {
+	const n = new Map<string, number>();
+	for (const i of issues) n.set(i.issue_type, (n.get(i.issue_type) ?? 0) + 1);
+	const types = [...n]
+		.sort(([a, x], [b, y]) => y - x || a.localeCompare(b))
+		.map(([type, count]) => `${count} ${type}`);
+	return `${issues.length} issue${issues.length === 1 ? "" : "s"}: ${types.join(", ")}`;
 }

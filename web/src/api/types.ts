@@ -380,13 +380,20 @@ export interface DashboardConfig {
 	konflux_namespace: string;
 }
 
-interface SyncProblem {
+export interface SyncProblem {
 	source: string;
 	message: string;
 	since: string | null;
 	last_success: string | null;
 }
 
+interface SyncSource {
+	source: string;
+	last_success: string | null;
+}
+
 export interface SyncStatus {
 	problems: SyncProblem[];
+	/** Every tracked source, sorted. */
+	sources: SyncSource[];
 }

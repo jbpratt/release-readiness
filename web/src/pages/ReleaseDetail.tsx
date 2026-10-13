@@ -10,6 +10,7 @@ import {
 	clipboardCopyFunc,
 	EmptyState,
 	EmptyStateBody,
+	ExpandableSection,
 	Flex,
 	FlexItem,
 	FormSelect,
@@ -72,6 +73,7 @@ import type {
 	VerdictItem,
 } from "../api/types";
 import { Status } from "../components/Status";
+import { SyncProblems, useSyncStatus } from "../components/SyncStatusWarning";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
 import { days, due } from "../utils/format";
@@ -99,6 +101,8 @@ import {
 	fbcPullspecs,
 	fbcStageStep,
 	fbcsBuilt,
+	freshnessLine,
+	issueSummary,
 	jobLabels,
 	nvrLabel,
 	otherBundle,
@@ -114,6 +118,7 @@ import {
 	shownOperators,
 	slotItem,
 	slotRows,
+	splitTickets,
 	stageText,
 	streamAhead,
 	tknCommand,
@@ -262,6 +267,8 @@ export default function ReleaseDetail() {
 				error={ticketsError}
 				version={version!}
 				config={config}
+				ticketKey={release.release_ticket_key}
+				shipped={candidate.data?.shipped ?? release.released}
 			/>
 		</PageSection>
 	);
@@ -809,7 +816,7 @@ function VerdictHeader({
 	return (
 		<>
 			<Status status={head.status}>
-				<strong>{text}</strong>
+				<strong>{text}</strong> <DataFreshness />
 			</Status>
 			{verdict.items
 				.filter((i) => !i.operator && i.level !== "blocker")
@@ -828,6 +835,25 @@ function VerdictHeader({
 					</Flex>
 				))}
 		</>
+	);
+}
+
+/** How fresh the verdict's data is; a stale line opens its sync problems. */
+function DataFreshness() {
+	const status = useSyncStatus();
+	const line = status && freshnessLine(status);
+	if (!line) return null;
+	if (line.problems.length === 0)
+		return <span style={muted}>· {line.text}</span>;
+	return (
+		<Popover
+			headerContent="Sync problems"
+			bodyContent={<SyncProblems problems={line.problems} />}
+		>
+			<Button variant="link" isInline icon={levelIcons.warning}>
+				{line.text}
+			</Button>
+		</Popover>
 	);
 }
 
@@ -1651,18 +1677,28 @@ function CICard({
 	);
 }
 
+/**
+ * The version's fixVersion issues: its release ticket apart from the work,
+ * which a shipped version folds behind a summary.
+ */
 function TicketsCard({
 	issues,
 	error,
 	version,
 	config,
+	ticketKey,
+	shipped,
 }: {
 	issues?: JiraIssue[];
 	error?: Error;
 	version: string;
 	config?: DashboardConfig;
+	ticketKey?: string;
+	shipped: boolean;
 }) {
-	const hasIssues = (issues ?? []).length > 0;
+	const [expanded, setExpanded] = useState(false);
+	const { ticket, work } = splitTickets(issues ?? [], ticketKey);
+	const hasIssues = work.length > 0;
 	const jira = config?.jira_project
 		? jiraSearchUrl(
 				ticketsJql(config.jira_project, version),
@@ -1674,11 +1710,34 @@ function TicketsCard({
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<LinkedCardTitle href={jira} link="Jira">
 				Tickets
-				{hasIssues && ` (${issues!.length})`}
+				{hasIssues && ` (${work.length})`}
 			</LinkedCardTitle>
 			<CardBody>
-				{hasIssues ? (
-					<IssuesTable issues={issues!} />
+				{ticketKey && (
+					<div style={{ marginBottom: "0.5rem" }}>
+						<span className="rr-label">Release ticket</span>{" "}
+						<a
+							href={jiraIssueUrl(
+								ticketKey,
+								config?.jira_base_url || "https://redhat.atlassian.net",
+							)}
+							{...external}
+						>
+							{ticketKey}
+						</a>{" "}
+						{ticket?.summary}
+					</div>
+				)}
+				{hasIssues && shipped ? (
+					<ExpandableSection
+						toggleText={issueSummary(work)}
+						isExpanded={expanded}
+						onToggle={(_e, open) => setExpanded(open)}
+					>
+						<IssuesTable issues={work} />
+					</ExpandableSection>
+				) : hasIssues ? (
+					<IssuesTable issues={work} />
 				) : error ? (
 					error.message
 				) : !issues ? (
@@ -1686,7 +1745,7 @@ function TicketsCard({
 				) : config?.jira_enabled === false ? (
 					"Jira sync off."
 				) : (
-					"No tickets."
+					"No linked fixVersion issues."
 				)}
 			</CardBody>
 		</Card>

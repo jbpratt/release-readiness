@@ -95,6 +95,19 @@ func TestDisabledSource(t *testing.T) {
 	}
 }
 
+func TestSources(t *testing.T) {
+	now := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	r := newTestRegistry(&now)
+	r.Track("konflux", time.Minute).Report(nil)
+	r.Track("art-history", time.Minute).Report(errors.New("boom"))
+
+	got := r.Sources()
+	if len(got) != 2 || got[0].Source != "art-history" || got[0].LastSuccess != nil ||
+		got[1].Source != "konflux" || !got[1].LastSuccess.Equal(now) {
+		t.Errorf("sources = %+v, want art-history never then konflux at %v", got, now)
+	}
+}
+
 func TestPass(t *testing.T) {
 	var p Pass
 	if p.Err() != nil {
