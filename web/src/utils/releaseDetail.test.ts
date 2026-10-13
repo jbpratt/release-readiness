@@ -354,12 +354,11 @@ test("missing operator (3.17.6): CSO and QBO not in stage show the stream's FBCs
 	assert.equal(pullspecsBlocked(c), errors.join("; "));
 	assert.deepEqual(fbcBuildStep(stream), {
 		variant: "success",
-		text: "3 of 3 operators built",
-		fbcs: "6 of 6 FBCs",
+		text: "",
 	});
 	assert.deepEqual(fbcStageStep(c), {
 		variant: "warning",
-		text: "1 of 3 operators staged",
+		text: "CSO, QBO not staged",
 	});
 	assert.deepEqual(slotRows(cso), [
 		{ ocp: "4.12", kind: "missing", fbc: null },
@@ -383,7 +382,7 @@ test("restaged slots (3.18.1): a failed latest Release fails the Stage step", ()
 	const c = fbcCandidate({ operators: [staged] });
 	assert.deepEqual(fbcStageStep(c), {
 		variant: "danger",
-		text: "0 of 1 operators staged · quay-operator release failed",
+		text: "quay-operator release failed",
 	});
 	assert.deepEqual(
 		fbcStageStep(
@@ -396,7 +395,7 @@ test("restaged slots (3.18.1): a failed latest Release fails the Stage step", ()
 				],
 			}),
 		),
-		{ variant: "info", text: "0 of 1 operators staged" },
+		{ variant: "info", text: "Release in progress" },
 	);
 	assert.deepEqual(
 		fbcStageStep(
@@ -408,7 +407,7 @@ test("restaged slots (3.18.1): a failed latest Release fails the Stage step", ()
 				],
 			}),
 		),
-		{ variant: "success", text: "1 of 1 operators staged" },
+		{ variant: "success", text: "" },
 	);
 	const stream = fbcCandidate({
 		source: "stream",
@@ -516,7 +515,7 @@ test("restaged FBCs (3.18.1): the newest Release of each counts", () => {
 	});
 	assert.deepEqual(fbcStageStep(c), {
 		variant: "success",
-		text: "3 of 3 operators staged",
+		text: "",
 	});
 });
 
@@ -627,7 +626,7 @@ test("shipped (3.18.1): record mode", () => {
 	});
 });
 
-test("history and stage failures (5.0.0): no count from a partial history, failed operators named", () => {
+test("history and stage failures (5.0.0): only reading from a partial history, failed operators named", () => {
 	const head = bundle("202610121052");
 	const ok = release({ name: "ok", released_status: "True" });
 	const failed = release({ name: "f", released_reason: "Failed" });
@@ -642,7 +641,7 @@ test("history and stage failures (5.0.0): no count from a partial history, faile
 	});
 	assert.deepEqual(fbcStageStep(c), {
 		variant: "danger",
-		text: "2 of 3 operators staged · CSO release failed",
+		text: "CSO release failed",
 	});
 	const empty = fbcCandidate({
 		source: "stream",
@@ -651,9 +650,11 @@ test("history and stage failures (5.0.0): no count from a partial history, faile
 	assert.deepEqual(fbcBuildStep(empty, 30), {
 		variant: "info",
 		text: "Reading build history",
-		fbcs: "0 of 0 FBCs",
 	});
-	assert.equal(fbcBuildStep(empty).text, "0 of 1 operators built");
+	assert.deepEqual(fbcBuildStep(empty), {
+		variant: "warning",
+		text: "quay-operator not built",
+	});
 });
 
 test("compareVersions: numeric by dot-separated part", () => {

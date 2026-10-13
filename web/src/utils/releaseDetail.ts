@@ -100,41 +100,31 @@ export function fbcCIStep(c: FBCCandidate): CIStep {
 /** Whether an operator has an FBC, on the head bundle or not. */
 const hasFBC = (o: OperatorFBC) => o.members.length + o.conflicts.length > 0;
 
-const withFBC = (c: FBCCandidate) => c.operators.filter(hasFBC);
-
 /**
- * The Build step, of the stream's FBCs: how many operators have one, and how
- * many of their OCP version slots do; while history, the days of ART build
- * history left to read, is not 0, no count, as one may be missing.
+ * The Build step, of the stream's FBCs, naming any operator without one;
+ * while history, the days of ART build history left to read, is not 0, only
+ * that it is reading, as one may be missing.
  */
-export function fbcBuildStep(
-	c: FBCCandidate,
-	history = 0,
-): CIStep & { fbcs: string } {
-	const built = withFBC(c).length;
-	const slots = c.operators.reduce((n, o) => n + o.coverage.slots, 0);
-	const missing = c.operators.reduce((n, o) => n + o.missing_ocp.length, 0);
-	const fbcs = `${slots - missing} of ${slots} FBCs`;
-	if (history > 0)
-		return { variant: "info", text: "Reading build history", fbcs };
-	return {
-		variant: built === c.operators.length ? "success" : "warning",
-		text: `${built} of ${c.operators.length} operators built`,
-		fbcs,
-	};
+export function fbcBuildStep(c: FBCCandidate, history = 0): CIStep {
+	if (history > 0) return { variant: "info", text: "Reading build history" };
+	const unbuilt = c.operators.filter((o) => !hasFBC(o)).map(shortName);
+	return unbuilt.length > 0
+		? { variant: "warning", text: `${unbuilt.join(", ")} not built` }
+		: { variant: "success", text: "" };
 }
 
-// Operators as the Stage step names them.
+// Operators as the stepper names them.
 const shortNames: Record<string, string> = {
 	"container-security-operator": "CSO",
 	"quay-bridge-operator": "QBO",
 };
 
+const shortName = (o: OperatorFBC) => shortNames[o.operator] ?? o.operator;
+
 /**
- * The candidate's Stage step: not staged for the stream; else how many
- * operators are staged, every FBC's newest Release succeeded, and which
- * failed, any failed Release failing it and an operator the shipment leaves
- * out warning.
+ * The candidate's Stage step: not staged for the stream; else any operator
+ * whose FBC's newest Release failed fails it, one the shipment leaves out
+ * warns, and one with a Release still running is in progress.
  */
 export function fbcStageStep(c: FBCCandidate): CIStep {
 	if (c.source === "stream")
@@ -143,24 +133,17 @@ export function fbcStageStep(c: FBCCandidate): CIStep {
 		[...o.members, ...o.conflicts].map((m) =>
 			m.release ? releaseLine(m.release).status : "running",
 		);
-	const staged = withFBC(c).filter((o) =>
-		states(o).every((s) => s === "done"),
-	).length;
 	const failed = c.operators
 		.filter((o) => states(o).includes("failed"))
-		.map((o) => shortNames[o.operator] ?? o.operator);
-	const text = `${staged} of ${c.operators.length} operators staged`;
+		.map(shortName);
 	if (failed.length > 0)
-		return {
-			variant: "danger",
-			text: `${text} · ${failed.join(", ")} release failed`,
-		};
-	if (withFBC(c).length < c.operators.length)
-		return { variant: "warning", text };
-	return {
-		variant: staged === c.operators.length ? "success" : "info",
-		text,
-	};
+		return { variant: "danger", text: `${failed.join(", ")} release failed` };
+	const unstaged = c.operators.filter((o) => !hasFBC(o)).map(shortName);
+	if (unstaged.length > 0)
+		return { variant: "warning", text: `${unstaged.join(", ")} not staged` };
+	return c.operators.every((o) => states(o).every((s) => s === "done"))
+		? { variant: "success", text: "" }
+		: { variant: "info", text: "Release in progress" };
 }
 
 /**

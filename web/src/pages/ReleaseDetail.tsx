@@ -373,16 +373,6 @@ function BuildsCard({
 	dueDate?: string;
 }) {
 	const fbc = data?.fbc_candidate;
-	const fbcLines = (step: "build" | "stage", text: string, header?: string) => (
-		<FBCLine
-			catalogs={data?.catalogs ?? []}
-			step={step}
-			text={text}
-			header={header}
-			app={app}
-			konflux={konflux}
-		/>
-	);
 	const reason = data?.reason || "no FBC built or staged yet";
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
@@ -403,10 +393,10 @@ function BuildsCard({
 						verdict={data.verdict}
 						reading={data.reading}
 						unshipped={data.unshipped_builds ?? []}
+						catalogs={data.catalogs ?? []}
 						version={version}
 						app={app}
 						konflux={konflux}
-						fbcLines={fbcLines}
 						release={
 							!data.shipped && (
 								<ReleaseFromFBC
@@ -435,10 +425,9 @@ function BuildsCard({
 
 /**
  * The FBC candidate: its verdict and how far FBC reads are; where it is, from
- * the stream's build through CI and stage to prod, the Build and Stage steps
- * opening their FBC catalogs; a summary row per operator; and each operator's
- * block. Unshipped, the Stage step's popover has release-from-fbc's params;
- * the Prod step's, its Release.
+ * the stream's build through CI and stage to prod; a summary row per
+ * operator; and each operator's block. Unshipped, a collapsed section has
+ * release-from-fbc's params; the Prod step's popover, its Release.
  * While FBC reads are pending no step warns or fails.
  */
 function Candidate({
@@ -449,10 +438,10 @@ function Candidate({
 	verdict,
 	reading,
 	unshipped,
+	catalogs,
 	version,
 	app,
 	konflux,
-	fbcLines,
 	release,
 }: {
 	fbc: FBCCandidate;
@@ -462,14 +451,10 @@ function Candidate({
 	verdict: Verdict;
 	reading: ReadProgress;
 	unshipped: UnshippedBuild[];
+	catalogs: CandidateCatalog[];
 	version: string;
 	app: string;
 	konflux: KonfluxLink;
-	fbcLines: (
-		step: "build" | "stage",
-		text: string,
-		header?: string,
-	) => ReactNode;
 	release?: ReactNode;
 }) {
 	const prod = prodRelease && {
@@ -515,29 +500,13 @@ function Candidate({
 				aria-label="Where the release candidate is"
 				style={{ marginTop: "1rem" }}
 			>
-				<Step
-					title="Build"
-					variant={built.variant}
-					description={fbcLines("build", built.text, built.fbcs)}
-				/>
+				<Step title="Build" variant={built.variant} description={built.text} />
 				<Step title="CI" variant={tested.variant} description={tested.text} />
 				<Step
 					title="Stage"
 					variant={staged.variant}
 					isCurrent={!prod && !shipped}
-					description={fbcLines("stage", staged.text)}
-					popoverRender={
-						release
-							? (ref) => (
-									<Popover
-										aria-label="Release from FBC"
-										triggerRef={ref}
-										minWidth="40rem"
-										bodyContent={release}
-									/>
-								)
-							: undefined
-					}
+					description={staged.text}
 				/>
 				<Step
 					title="Prod"
@@ -601,6 +570,7 @@ function Candidate({
 						items={verdict.items}
 						shipped={shipped}
 						unshipped={unshippedOf(unshipped, operators, op)}
+						catalogs={catalogs}
 						label={label}
 						version={version}
 						app={app}
@@ -625,6 +595,14 @@ function Candidate({
 						))}
 					</Status>
 				</div>
+			)}
+			{release && (
+				<ExpandableSection
+					toggleText="Release from FBC"
+					style={{ marginTop: "1rem" }}
+				>
+					{release}
+				</ExpandableSection>
 			)}
 		</>
 	);
@@ -771,9 +749,10 @@ const nvrCommit = (nvr: string) => nvr.match(/\.g([0-9a-f]{7,})\./)?.[1] ?? "";
 /**
  * An operator's block, open on a problem until the reader toggles it: the
  * version, bundle and channel its FBCs ship, where they are, a newer stream
- * build not on stage; then its FBCs by OCP version, with exception chips and
- * CI where runs exist, and its images, compared with the previous z or that
- * newer build. A left-out operator's are the stream's FBCs to add.
+ * build not on stage; then its FBCs by OCP version, with exception chips,
+ * their Snapshot and Release, and CI where runs exist, and its images,
+ * compared with the previous z or that newer build. A left-out operator's
+ * are the stream's FBCs to add.
  */
 function OperatorBlock({
 	shown: { operator: o, leftOut },
@@ -785,6 +764,7 @@ function OperatorBlock({
 	items,
 	shipped,
 	unshipped,
+	catalogs,
 	label,
 	version,
 	app,
@@ -800,6 +780,7 @@ function OperatorBlock({
 	items: VerdictItem[];
 	shipped: boolean;
 	unshipped: UnshippedBuild[];
+	catalogs: CandidateCatalog[];
 	label: (job: string) => string;
 	version: string;
 	app: string;
@@ -821,6 +802,9 @@ function OperatorBlock({
 		: [shipped ? "" : stageText(o, items), images].filter(Boolean).join(" · ");
 	const newer = o.compare.find((c) => c.kind === "newer");
 	const change = newer && compareLine(newer);
+	const fbcApp = `fbc-${app}`;
+	const plan = (snapshot: string) =>
+		catalogs.find((c) => c.snapshot === snapshot)?.release_plan;
 	const ci = rows.some(
 		(r) =>
 			(r.fbc?.ci?.exact.length ?? 0) + (r.fbc?.ci?.equivalent.length ?? 0) > 0,
@@ -882,6 +866,7 @@ function OperatorBlock({
 								<Th modifier="fitContent">OCP</Th>
 								<Th>FBC</Th>
 								<Th>Digest</Th>
+								<Th>Konflux</Th>
 								{ci && <Th screenReaderText="CI" />}
 							</Tr>
 						</Thead>
@@ -928,6 +913,27 @@ function OperatorBlock({
 												<span title={c.title}>{c.text}</span>
 											</Label>
 										))}
+									</Td>
+									<Td>
+										{r.fbc?.snapshot && (
+											<ExtLink
+												href={konflux("snapshots", r.fbc.snapshot, fbcApp)}
+												title={r.fbc.snapshot}
+											>
+												Snapshot
+											</ExtLink>
+										)}
+										{r.fbc?.release && (
+											<>
+												{" · "}
+												<ExtLink
+													href={konflux("releases", r.fbc.release.name, fbcApp)}
+													title={plan(r.fbc.snapshot) || r.fbc.release.name}
+												>
+													{releaseLine(r.fbc.release).text}
+												</ExtLink>
+											</>
+										)}
 									</Td>
 									{ci && (
 										<Td>
@@ -1237,25 +1243,17 @@ function ReleaseFromFBC({
 	);
 	return (
 		<>
-			<Flex
-				justifyContent={{ default: "justifyContentSpaceBetween" }}
-				alignItems={{ default: "alignItemsCenter" }}
+			<Button
+				component="a"
+				variant="link"
+				isInline
+				href={RELEASE_FROM_FBC_URL}
+				{...external}
+				icon={<ExternalLinkAltIcon />}
+				iconPosition="end"
 			>
-				<Title headingLevel="h4" size="md">
-					Release from FBC
-				</Title>
-				<Button
-					component="a"
-					variant="link"
-					isInline
-					href={RELEASE_FROM_FBC_URL}
-					{...external}
-					icon={<ExternalLinkAltIcon />}
-					iconPosition="end"
-				>
-					Pipeline
-				</Button>
-			</Flex>
+				Pipeline
+			</Button>
 			<DescriptionList
 				isHorizontal
 				isCompact
@@ -1295,106 +1293,6 @@ function ReleaseFromFBC({
 /** An image's digest to 12 hex digits: "sha256:0123456789ab". */
 const shortDigest = (image: string) =>
 	image.slice(image.indexOf("@") + 1).slice(0, 19);
-
-/**
- * A step's text, opening the catalogs it counts, each with its Snapshot,
- * pullspec and Release: at Build all of them, at Stage the staged ones.
- */
-function FBCLine({
-	catalogs,
-	step,
-	text,
-	header = "FBC catalogs",
-	app,
-	konflux,
-}: {
-	catalogs: CandidateCatalog[];
-	step: "build" | "stage";
-	text: string;
-	header?: string;
-	app: string;
-	konflux: KonfluxLink;
-}) {
-	const shown =
-		step === "stage" ? catalogs.filter((c) => c.state === "staged") : catalogs;
-	if (shown.length === 0) return text;
-	const fbcApp = `fbc-${app}`;
-	return (
-		<div>
-			<Popover
-				aria-label="FBC catalogs"
-				headerContent={header}
-				minWidth="48rem"
-				bodyContent={
-					<div style={{ maxHeight: "60vh", overflowY: "auto" }}>
-						<Table variant="compact">
-							<Thead>
-								<Tr>
-									<Th>Catalog</Th>
-									<Th>Pullspec</Th>
-									<Th>Release</Th>
-								</Tr>
-							</Thead>
-							<Tbody>
-								{shown.map((c) => (
-									<Tr key={c.pullspec}>
-										<Td>
-											<ExtLink
-												href={konflux("snapshots", c.snapshot, fbcApp)}
-												title={c.nvr || c.snapshot}
-											>
-												{componentLabel(c.component, fbcApp)}
-												{c.ocp && ` · OCP ${c.ocp}`}
-											</ExtLink>{" "}
-											<Label
-												isCompact
-												color={c.state === "staged" ? "green" : "grey"}
-											>
-												{c.state}
-											</Label>
-										</Td>
-										<Td modifier="nowrap">
-											<ClipboardCopy
-												variant="inline-compact"
-												isCode
-												onCopy={(e) => clipboardCopyFunc(e, c.pullspec)}
-											>
-												{shortDigest(c.pullspec)}
-											</ClipboardCopy>
-										</Td>
-										<Td>
-											{c.release ? (
-												<>
-													<ExtLink
-														href={konflux("releases", c.release.name, fbcApp)}
-														title={c.release.name}
-													>
-														{releaseLine(c.release).text}
-													</ExtLink>
-													<div style={muted}>{c.release_plan}</div>
-												</>
-											) : (
-												<span style={muted}>
-													{c.state === "staged"
-														? "No Release yet"
-														: "Not staged"}
-												</span>
-											)}
-										</Td>
-									</Tr>
-								))}
-							</Tbody>
-						</Table>
-					</div>
-				}
-			>
-				<Button variant="link" isInline>
-					{text}
-				</Button>
-			</Popover>
-		</div>
-	);
-}
 
 const line = { marginTop: "0.5rem" };
 
