@@ -1648,13 +1648,24 @@ function CICard({
 					</>
 				}
 			>
-				CI (advisory)
+				CI{" "}
+				<Popover
+					bodyContent={
+						<>
+							<div>CI runs that tested this candidate's FBC.</div>
+							<div>Failed or missing CI runs do not block the verdict.</div>
+						</>
+					}
+				>
+					<Button
+						variant="plain"
+						hasNoPadding
+						aria-label="About CI"
+						icon={<OutlinedQuestionCircleIcon />}
+					/>
+				</Popover>
 			</LinkedCardTitle>
 			<CardBody>
-				<div style={muted}>CI runs that tested this candidate's FBC.</div>
-				<div style={muted}>
-					Failed or missing CI runs do not block the verdict.
-				</div>
 				<List isPlain>
 					{lines.map((l) => (
 						<ListItem key={`${l.operator} ${l.ocp}`}>
