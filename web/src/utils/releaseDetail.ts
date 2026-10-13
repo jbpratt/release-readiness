@@ -375,16 +375,12 @@ export interface Chip {
 
 /**
  * An FBC row's exception chips. Shipped, only facts of the record: another
- * build and restages; else also a missing or unreadable FBC, a failed stage
- * Release, and the stream's FBC the stage shipment leaves out.
+ * build and restages; else also a missing or unreadable FBC and a failed
+ * stage Release.
  */
 export function rowChips(
 	r: SlotRow,
-	{
-		shipped,
-		leftOut,
-		unreadable,
-	}: { shipped: boolean; leftOut: boolean; unreadable?: string },
+	{ shipped, unreadable }: { shipped: boolean; unreadable?: string },
 ): Chip[] {
 	const chips: Chip[] = [];
 	if (r.kind === "other")
@@ -402,7 +398,6 @@ export function rowChips(
 	const release = r.fbc?.release && releaseLine(r.fbc.release);
 	if (release?.status === "failed")
 		chips.push({ color: "red", text: "release failed", title: release.text });
-	if (leftOut && r.fbc) chips.push({ color: "grey", text: "not in shipment" });
 	return chips;
 }
 
@@ -426,6 +421,7 @@ export function compareLine(c: ImageCompare): {
 		source.length > 0 ? `${source.join(", ")} new source` : "",
 		n("rebuild", "image rebuilt", "images rebuilt"),
 		n("new build", "new build"),
+		n("renamed", "image renamed", "images renamed"),
 		n("added", "image added", "images added"),
 		n("removed", "image removed", "images removed"),
 	].filter(Boolean);

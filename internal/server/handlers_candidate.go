@@ -393,6 +393,16 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 				}
 			}
 			o.ImageCheck = model.ImageCheck{State: "absent", Snapshot: image, BundleNVR: bundles[app+"-"+o.Operator+"-bundle"]}
+			// The image shipment can hold the bundle under another component
+			// name, so it is found by its NVR's name, whatever its version.
+			for _, nvr := range bundles {
+				if o.ImageCheck.BundleNVR == o.HeadBundleNVR {
+					break
+				}
+				if name := nvrName(nvr); name != "" && name == nvrName(o.HeadBundleNVR) {
+					o.ImageCheck.BundleNVR = nvr
+				}
+			}
 			if o.ImageCheck.BundleNVR != "" && o.HeadBundleNVR != "" {
 				o.ImageCheck.State = "differs"
 				if o.ImageCheck.BundleNVR == o.HeadBundleNVR {
@@ -474,19 +484,47 @@ func (s *Server) operatorImages(ctx context.Context, o *model.OperatorFBC, relea
 	return nil
 }
 
-// compareImages matches from and to by name: to's names in its order, then
-// those only from has.
+// compareImages pairs from and to by repository where each side has one
+// image of it, else by name: ART renames relatedImages between bundles. A
+// pair by name across repositories is "renamed". Rows are to's in its order,
+// as to names them, then those only from has.
 func compareImages(from, to []model.OperatorImage) []model.ImageCompareRow {
 	ref := func(img model.OperatorImage) *model.ImageRef {
-		return &model.ImageRef{NVR: img.NVR, Commit: img.Commit, Digest: img.Digest}
+		return &model.ImageRef{Repository: repository(img.Image), NVR: img.NVR, Commit: img.Commit, Digest: img.Digest}
+	}
+	count := func(imgs []model.OperatorImage, repo string) int {
+		n := 0
+		for _, img := range imgs {
+			if repository(img.Image) == repo {
+				n++
+			}
+		}
+		return n
+	}
+	pair, paired := make([]int, len(to)), make([]bool, len(from))
+	for i, t := range to {
+		pair[i] = -1
+		if r := repository(t.Image); count(to, r) == 1 && count(from, r) == 1 {
+			j := slices.IndexFunc(from, func(f model.OperatorImage) bool { return repository(f.Image) == r })
+			pair[i], paired[j] = j, true
+		}
+	}
+	for i, t := range to {
+		for j, f := range from {
+			if pair[i] < 0 && !paired[j] && f.Name == t.Name {
+				pair[i], paired[j] = j, true
+			}
+		}
 	}
 	rows := []model.ImageCompareRow{}
-	for _, t := range to {
+	for i, t := range to {
 		row := model.ImageCompareRow{Name: t.Name, To: ref(t), Change: "added"}
-		if i := slices.IndexFunc(from, func(f model.OperatorImage) bool { return f.Name == t.Name }); i >= 0 {
-			f := from[i]
+		if j := pair[i]; j >= 0 {
+			f := from[j]
 			row.From = ref(f)
 			switch {
+			case row.From.Repository != row.To.Repository:
+				row.Change = "renamed"
 			case f.Digest == t.Digest:
 				row.Change = "same"
 			case f.Commit == "" || t.Commit == "":
@@ -499,12 +537,21 @@ func compareImages(from, to []model.OperatorImage) []model.ImageCompareRow {
 		}
 		rows = append(rows, row)
 	}
-	for _, f := range from {
-		if !slices.ContainsFunc(to, func(t model.OperatorImage) bool { return t.Name == f.Name }) {
+	for j, f := range from {
+		if !paired[j] {
 			rows = append(rows, model.ImageCompareRow{Name: f.Name, From: ref(f), Change: "removed"})
 		}
 	}
 	return rows
+}
+
+// repository returns image without its digest or tag.
+func repository(image string) string {
+	image, _, _ = strings.Cut(image, "@")
+	if i := strings.LastIndex(image, ":"); i > strings.LastIndex(image, "/") {
+		image = image[:i]
+	}
+	return image
 }
 
 // projectFBC returns the operator FBCs that rows, newest first, give each of
@@ -723,6 +770,16 @@ func nvrVersion(nvr string) string {
 		return m[1]
 	}
 	return ""
+}
+
+// nvrName returns an NVR's name, the fields before its version and release,
+// or "".
+func nvrName(nvr string) string {
+	f := strings.Split(nvr, "-")
+	if len(f) < 3 {
+		return ""
+	}
+	return strings.Join(f[:len(f)-2], "-")
 }
 
 // candidateBuild returns the version's selected STAGE build, or nil when it

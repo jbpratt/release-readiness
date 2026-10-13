@@ -730,7 +730,7 @@ test("rowChips: exceptions only, per row", () => {
 	const chips = (
 		r: Parameters<typeof rowChips>[0],
 		o: Partial<Parameters<typeof rowChips>[1]> = {},
-	) => rowChips(r, { shipped: false, leftOut: false, ...o }).map((c) => c.text);
+	) => rowChips(r, { shipped: false, ...o }).map((c) => c.text);
 	const member = (m: Partial<FBCMember>) => ({
 		ocp: "4.14",
 		kind: "member" as const,
@@ -746,7 +746,6 @@ test("rowChips: exceptions only, per row", () => {
 	assert.deepEqual(chips({ ocp: "4.12", kind: "missing", fbc: null }), [
 		"no FBC",
 	]);
-	assert.deepEqual(chips(member({}), { leftOut: true }), ["not in shipment"]);
 	const unread = {
 		ocp: "4.20",
 		kind: "unresolved" as const,
@@ -771,10 +770,9 @@ test("rowChips: exceptions only, per row", () => {
 		"quay-bridge-operator",
 		"4.20",
 	)?.text;
-	assert.deepEqual(
-		rowChips(unread, { shipped: false, leftOut: false, unreadable: why }),
-		[{ color: "red", text: "can't read", title: items[0].text }],
-	);
+	assert.deepEqual(rowChips(unread, { shipped: false, unreadable: why }), [
+		{ color: "red", text: "can't read", title: items[0].text },
+	]);
 });
 
 test("record mode: no prompts, only facts", () => {
@@ -793,7 +791,7 @@ test("record mode: no prompts, only facts", () => {
 					staged: 2,
 				}),
 			},
-			{ shipped: true, leftOut: false, unreadable: "x" },
+			{ shipped: true, unreadable: "x" },
 		).map((c) => c.text),
 		["other build Oct 12 16:13", "staged 2x"],
 	);
@@ -854,6 +852,10 @@ test("compareLine: rebuild-only is info, any new source a warning", () => {
 	assert.deepEqual(line(row("redis-6", "removed"), row("", "new build")), {
 		level: "warning",
 		text: "1 new build, 1 image removed",
+	});
+	assert.deepEqual(line(row("operator", "renamed")), {
+		level: "warning",
+		text: "1 image renamed",
 	});
 	assert.deepEqual(line(row("quay", "same")), {
 		level: "info",

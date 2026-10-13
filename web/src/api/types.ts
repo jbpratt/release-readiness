@@ -143,15 +143,26 @@ export interface ImageCompare {
 	rows: ImageCompareRow[];
 }
 
-/** A relatedImage name's from and to, null where absent. */
+/**
+ * A relatedImage's from and to, null where absent, named as to names it;
+ * "renamed" when they are in different repositories.
+ */
 export interface ImageCompareRow {
 	name: string;
 	from: ImageRef | null;
 	to: ImageRef | null;
-	change: "same" | "rebuild" | "new source" | "new build" | "added" | "removed";
+	change:
+		| "renamed"
+		| "same"
+		| "rebuild"
+		| "new source"
+		| "new build"
+		| "added"
+		| "removed";
 }
 
 export interface ImageRef {
+	repository: string;
 	nvr: string;
 	commit: string;
 	digest: string;

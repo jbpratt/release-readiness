@@ -217,10 +217,11 @@ type ImageCompare struct {
 	Rows  []ImageCompareRow `json:"rows"`
 }
 
-// ImageCompareRow is a relatedImage name's From and To, nil where absent.
-// Change is "same" for one digest, "rebuild" for another from the same
-// commit, "new source" from another commit, "new build" when either commit
-// is unknown, or "added" or "removed".
+// ImageCompareRow is a relatedImage's From and To, nil where absent, named as
+// To names it. Change is "renamed" for another repository, "same" for one
+// digest, "rebuild" for another from the same commit, "new source" from
+// another commit, "new build" when either commit is unknown, or "added" or
+// "removed".
 type ImageCompareRow struct {
 	Name   string    `json:"name"`
 	From   *ImageRef `json:"from"`
@@ -229,13 +230,15 @@ type ImageCompareRow struct {
 }
 
 type ImageRef struct {
-	NVR    string `json:"nvr"`
-	Commit string `json:"commit"`
-	Digest string `json:"digest"`
+	Repository string `json:"repository"`
+	NVR        string `json:"nvr"`
+	Commit     string `json:"commit"`
+	Digest     string `json:"digest"`
 }
 
 // ImageCheck compares an operator's head bundle with the bundle of it in the
-// version's image Snapshot, its STAGE build, else its newest build: State
+// version's image Snapshot, its STAGE build, else its newest build, found by
+// NVR in any component, else as component <app>-<operator>-bundle: State
 // "matches" or "differs" by NVR, or "absent" when either NVR is unknown or
 // there is no image Snapshot.
 type ImageCheck struct {
