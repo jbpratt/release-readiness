@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/db/sqlc"
@@ -182,6 +183,37 @@ func (d *DB) ArtHistoryFBCs(ctx context.Context, group string) ([]model.FBCMembe
 		}
 	}
 	return members, nil
+}
+
+// FBCHistory returns group's successful ART FBC builds of assembly, newest
+// first, "shipped" or "staged" by the Releases of application's FBC Snapshots
+// ART staged for assembly. Runs is unset.
+func (d *DB) FBCHistory(ctx context.Context, group, assembly, application string) ([]model.FBCBuild, error) {
+	rows, err := d.queries().ListFBCHistory(ctx, dbsqlc.ListFBCHistoryParams{GroupName: group, Assembly: assembly, Application: application})
+	if err != nil {
+		return nil, err
+	}
+	builds := []model.FBCBuild{}
+	for _, r := range rows {
+		// The group holds every z of the stream.
+		operator, version, ocp, ok := artbuild.ParseFBC(r.Nvr)
+		if !ok || version != assembly {
+			continue
+		}
+		b := model.FBCBuild{Operator: operator, OCP: ocp, NVR: r.Nvr, Digest: r.Digest}
+		// ART gives the start time in UTC with no zone.
+		if t, err := time.Parse("2006-01-02T15:04:05", r.StartTime); err == nil {
+			b.BuiltAt = &t
+		}
+		switch {
+		case r.Shipped:
+			b.State = "shipped"
+		case r.Staged:
+			b.State = "staged"
+		}
+		builds = append(builds, b)
+	}
+	return builds, nil
 }
 
 // ProdReleasedImages returns the images of application's image Snapshots ART

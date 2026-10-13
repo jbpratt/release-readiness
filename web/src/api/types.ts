@@ -272,6 +272,28 @@ export interface CIJob {
 	runs: CIRun[];
 }
 
+/**
+ * An ART FBC build of a version with the runs that installed from it, newest
+ * first. state is "" unless shipped, the candidate's, or staged.
+ */
+export interface FBCBuild {
+	operator: string;
+	ocp: string;
+	nvr: string;
+	digest: string;
+	built_at: string | null;
+	state: "" | "candidate" | "staged" | "shipped";
+	runs: FBCRun[];
+}
+
+export interface FBCRun {
+	job: string;
+	state: string;
+	started_at: string;
+	prow_url: string;
+	sippy_url: string;
+}
+
 export interface CIRun {
 	state: string;
 	started_at: string;

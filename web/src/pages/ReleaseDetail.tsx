@@ -1591,19 +1591,29 @@ function CICard({
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<LinkedCardTitle
 				actions={
-					sippy && (
+					<>
 						<Button
-							component="a"
+							component={(p) => <Link {...p} to="ci" />}
 							variant="secondary"
 							size="sm"
-							href={sippy}
-							{...external}
-							icon={<ExternalLinkAltIcon />}
-							iconPosition="end"
+							style={{ marginRight: "0.5rem" }}
 						>
-							Runs in Sippy
+							FBC CI history
 						</Button>
-					)
+						{sippy && (
+							<Button
+								component="a"
+								variant="secondary"
+								size="sm"
+								href={sippy}
+								{...external}
+								icon={<ExternalLinkAltIcon />}
+								iconPosition="end"
+							>
+								Runs in Sippy
+							</Button>
+						)}
+					</>
 				}
 			>
 				CI
