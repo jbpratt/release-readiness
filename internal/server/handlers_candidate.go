@@ -709,9 +709,9 @@ func (s *Server) selectCandidate(ctx context.Context, release *model.ReleaseVers
 }
 
 // versionBuilds returns, of an application's stream builds, newest first,
-// those of version: whose buildVersion is version and after which ART built
-// no lower version. ART can go back to a lower version; the builds before
-// that were premature.
+// those of version: whose buildVersion, that of its operator bundles when ART
+// resolved any, is version and after which ART built no lower version. ART can
+// go back to a lower version; the builds before that were premature.
 func versionBuilds(app string, builds []model.ReleaseSnapshot, nvrs map[string]string, version string) []model.ReleaseSnapshot {
 	var out []model.ReleaseSnapshot
 	for i := range builds {
@@ -736,12 +736,23 @@ func compareVersions(a, b string) int {
 }
 
 // buildVersion returns the version of a stream build: the X.Y.Z that the NVR
-// of every image of it ART resolved, base image excluded, carries. It is ""
-// when ART resolved none or they differ, as while ART switches the stream to
+// of every operator bundle of it ART resolved carries, whatever its other
+// images carry, as ART moves a stream to the next z without rebuilding
+// unchanged images. With no bundle resolved, it is the X.Y.Z that the NVR of
+// every image of it ART resolved, base image excluded, carries. It is "" when
+// ART resolved none or they differ, as while ART switches the stream to
 // another version. nvrs holds ART's resolved NVRs by image.
 func buildVersion(app string, snap *model.ReleaseSnapshot, nvrs map[string]string) string {
+	images := buildImages(app, snap)
+	bundles := slices.DeleteFunc(slices.Clone(images), func(c model.SnapshotImage) bool {
+		_, ok := nvrs[c.Image]
+		return !ok || !strings.HasSuffix(c.Name, "-bundle")
+	})
+	if len(bundles) > 0 {
+		images = bundles
+	}
 	version := ""
-	for _, img := range buildImages(app, snap) {
+	for _, img := range images {
 		nvr, ok := nvrs[img.Image]
 		if !ok {
 			continue
