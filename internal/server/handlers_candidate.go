@@ -58,11 +58,31 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 		resp.Reason = ""
 	}
 	r := &resp.Reading
-	if r.Read, r.Failed, r.Pending, err = s.db.FBCReadProgress(ctx); err != nil {
+	if r.Read, r.Failed, r.Pending, err = s.db.FBCReadProgress(ctx, fbcDigests(resp.FBCCandidate, resp.FBCStream)); err != nil {
 		return nil, err
 	}
 	setVerdict(resp, c.assembly)
 	return resp, nil
+}
+
+// fbcDigests returns the digests of the FBC images of cs, the ones the page
+// shows.
+func fbcDigests(cs ...*model.FBCCandidate) []string {
+	var digests []string
+	for _, c := range cs {
+		if c == nil {
+			continue
+		}
+		for _, o := range c.Operators {
+			for _, m := range slices.Concat(o.Members, o.Conflicts) {
+				digests = append(digests, m.Digest)
+			}
+		}
+		for _, m := range c.Unknown {
+			digests = append(digests, m.Digest)
+		}
+	}
+	return digests
 }
 
 func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVersion, c *candidate) (*model.ReleaseCandidate, error) {
