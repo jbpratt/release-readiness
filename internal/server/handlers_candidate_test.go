@@ -977,3 +977,144 @@ func TestGetCandidateFBCImageCheck(t *testing.T) {
 		t.Errorf("state %s, quay-operator head %q: the image check must not change the candidate", cand.State, cand.Operators[0].HeadBundleNVR)
 	}
 }
+
+// seedImagesFBC stores ART's successful build of the FBC image of nvr,
+// rendered with its channel headed by the bundle of NVR bundle, whose
+// relatedImages are head, above the entry of version previousVersion, whose
+// bundle's are previous. It returns the image's pullspec.
+func seedImagesFBC(t *testing.T, srv *Server, nvr, bundle, previousVersion string, head, previous []fbc.RelatedImage) string {
+	t.Helper()
+	ctx := t.Context()
+	pullspec, bundleImage := testImage("fbc/"+nvr), testImage("bundle/"+bundle)
+	for _, b := range []artbuild.HistoryBuild{
+		{RecordID: "rec-" + nvr, Group: "quay-3.18", Type: "fbc", NVR: nvr, Digest: testDigest("fbc/" + nvr), Pullspec: pullspec},
+		{RecordID: "rec-" + bundle, Group: "quay-3.18", Type: "bundle", NVR: bundle, Digest: testDigest("bundle/" + bundle), Pullspec: bundleImage},
+	} {
+		if err := srv.db.UpsertArtHistoryBuild(ctx, b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := srv.db.UpsertFBCRender(ctx, fbc.Render{
+		Digest: imageDigest(pullspec), State: fbc.StateRendered, RenderedAt: time.Now(),
+		Channel: fbc.Channel{
+			Name: "stable-3.18", HeadCSV: "csv-" + bundle, HeadBundlePullspec: bundleImage, HeadRelatedImages: head,
+			Previous: fbc.Bundle{Version: previousVersion, RelatedImages: previous},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return pullspec
+}
+
+// Like 3.17.6's quay-operator: the staged bundle's images, joined to ART's
+// builds by digest, compared with the previous z's and with the newer bundle
+// the stream heads.
+func TestGetCandidateFBCImages(t *testing.T) {
+	srv := setupTestServer(t)
+	srv.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
+	ctx := t.Context()
+	art := func(label, commit string) fbc.RelatedImage {
+		if err := srv.db.UpsertArtHistoryBuild(ctx, artbuild.HistoryBuild{
+			RecordID: "rec-" + label, Group: "quay-3.18", Type: "image", NVR: label + "-nvr",
+			Digest: testDigest(label), Pullspec: testImage(label), Commitish: commit,
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return fbc.RelatedImage{Image: testImage(label)}
+	}
+	named := func(name string, img fbc.RelatedImage) fbc.RelatedImage {
+		img.Name = name
+		return img
+	}
+	// redis and postgresql-10 are external: ART has no build of them.
+	redis := fbc.RelatedImage{Name: "redis", Image: "registry.redhat.io/rhel9/redis-7@" + testDigest("redis")}
+	previous := []fbc.RelatedImage{
+		named("operator", art("prev/operator", "c1")),
+		named("quay", art("prev/quay", "q1")),
+		{Name: "clair", Image: testImage("prev/clair")},
+		redis,
+		{Name: "postgresql-10", Image: testImage("pg10")},
+	}
+	staged := []fbc.RelatedImage{
+		named("operator", art("a/operator", "c1")),
+		named("quay", art("a/quay", "q2")),
+		named("clair", art("a/clair", "k1")),
+		redis,
+		named("builder", art("a/builder", "b1")),
+	}
+	newer := []fbc.RelatedImage{
+		named("operator", art("b/operator", "c1")),
+		named("quay", art("b/quay", "q3")),
+		named("clair", art("a/clair", "k1")),
+		redis,
+		named("builder", art("a/builder", "b1")),
+	}
+	const bundleA, bundleB = "quay-operator-metadata-container-3.18.1.202610060936", "quay-operator-metadata-container-3.18.1.202610122028"
+	fbcA := seedImagesFBC(t, srv, "quay-operator-fbc-3.18.1-20261006151933.ocp4.21", bundleA, "3.18.0", staged, previous)
+	seedImagesFBC(t, srv, "quay-operator-fbc-3.18.1-20261012203000.ocp4.21", bundleB, "3.18.0", newer, previous)
+	seedStagedFBC(t, srv, "fbc-quay-3-18", "3.18.1", "fbc-quay-3-18-a", "2026-10-07T00:00:00Z", []string{fbcA}, "Succeeded")
+
+	// A stage Release ships quay and a prod Release redis.
+	seedImages(t, srv, "quay-stage-3-18-1", "2026-10-07T00:00:00Z", map[string]string{"quay-3-18-quay-quay": testImage("a/quay")})
+	seedKonfluxRelease(t, srv, "stage-r", "quay-stage-3-18-1", "quay-advisory-stage-3-18", "Succeeded", "2026-10-07T00:00:00Z", "2026-10-07T00:10:00Z")
+	seedImages(t, srv, "quay-prod-3-18-0", "2026-09-07T00:00:00Z", map[string]string{"quay-3-18-redis": redis.Image})
+	if err := srv.db.UpsertStagedSnapshot(ctx, "quay-prod-3-18-0", "3.18.0", "image", "prod"); err != nil {
+		t.Fatal(err)
+	}
+	seedKonfluxRelease(t, srv, "prod-r", "quay-prod-3-18-0", "quay-advisory-prod-3-18", "Succeeded", "2026-09-07T00:00:00Z", "2026-09-07T00:10:00Z")
+
+	cand, stream := getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
+	o := cand.Operators[0]
+	var images []string
+	for _, img := range o.Images {
+		images = append(images, fmt.Sprintf("%s %q %q stage=%t prod=%t", img.Name, img.NVR, img.Commit, img.Stage, img.Prod))
+	}
+	checkRows(t, "images", images, []string{
+		`builder "a/builder-nvr" "b1" stage=false prod=false`,
+		`clair "a/clair-nvr" "k1" stage=false prod=false`,
+		`operator "a/operator-nvr" "c1" stage=false prod=false`,
+		`quay "a/quay-nvr" "q2" stage=true prod=false`,
+		`redis "" "" stage=false prod=true`,
+	})
+	compare := func(c model.ImageCompare) []string {
+		rows := []string{c.Kind + " " + c.Label}
+		ref := func(r *model.ImageRef) string {
+			if r == nil {
+				return "-"
+			}
+			return r.NVR + "@" + r.Commit
+		}
+		for _, r := range c.Rows {
+			rows = append(rows, r.Name+" "+ref(r.From)+" "+ref(r.To)+" "+r.Change)
+		}
+		return rows
+	}
+	if len(o.Compare) != 2 {
+		t.Fatalf("compare %+v, want previous and newer", o.Compare)
+	}
+	checkRows(t, "previous", compare(o.Compare[0]), []string{
+		"previous 3.18.0",
+		"builder - a/builder-nvr@b1 added",
+		"clair @ a/clair-nvr@k1 new build",
+		"operator prev/operator-nvr@c1 a/operator-nvr@c1 rebuild",
+		"quay prev/quay-nvr@q1 a/quay-nvr@q2 new source",
+		"redis @ @ same",
+		"postgresql-10 @ - removed",
+	})
+	checkRows(t, "newer", compare(o.Compare[1]), []string{
+		"newer " + bundleB,
+		"builder a/builder-nvr@b1 a/builder-nvr@b1 same",
+		"clair a/clair-nvr@k1 a/clair-nvr@k1 same",
+		"operator a/operator-nvr@c1 b/operator-nvr@c1 rebuild",
+		"quay a/quay-nvr@q2 b/quay-nvr@q3 new source",
+		"redis @ @ same",
+	})
+	// The stream heads the newer bundle: it has only the previous compare.
+	if s := stream.Operators[0]; len(s.Compare) != 1 || s.Compare[0].Kind != "previous" || s.Images[0].Digest != testDigest("a/builder") {
+		t.Errorf("stream compare %+v, images %+v", s.Compare, s.Images)
+	}
+	// An operator without an FBC has no images.
+	if c := cand.Operators[1]; c.Images == nil || len(c.Images) != 0 || len(c.Compare) != 0 {
+		t.Errorf("%s images %+v, compare %+v, want none", c.Operator, c.Images, c.Compare)
+	}
+}

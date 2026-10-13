@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/quay/release-readiness/internal/artbuild"
+	"github.com/quay/release-readiness/internal/fbc"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/prow"
 )
@@ -200,7 +201,7 @@ func (s *Server) candidateCatalogs(ctx context.Context, app, assembly string) ([
 // stream built them; nil while it has no FBC built or staged. Each slot's FBC
 // carries the runs that installed from it or from equivalent content, and
 // each operator whether releases, the stage Releases, staged its head
-// bundle and how that bundle compares with the image Snapshot's.
+// bundle, how that bundle compares with the image Snapshot's, and its images.
 func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, releases []model.StageRelease, runs []prow.Run) (cand, stream *model.FBCCandidate, err error) {
 	assembly := c.assembly
 	built, err := s.db.ArtHistoryFBCs(ctx, "quay-"+assembly[:strings.LastIndex(assembly, ".")])
@@ -315,7 +316,110 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 			}
 		}
 	}
+
+	shipped, err := s.db.ProdReleasedImages(ctx, app)
+	if err != nil {
+		return nil, nil, err
+	}
+	prod := map[string]bool{}
+	for _, img := range shipped {
+		prod[imageDigest(img)] = true
+	}
+	fs := []*model.FBCCandidate{cand}
+	if stream != cand {
+		fs = append(fs, stream)
+	}
+	for _, f := range fs {
+		for i := range f.Operators {
+			if err := s.operatorImages(ctx, &f.Operators[i], releases, prod); err != nil {
+				return nil, nil, err
+			}
+		}
+	}
+	if stream != cand {
+		for i := range cand.Operators {
+			o, so := &cand.Operators[i], &stream.Operators[i]
+			if o.HeadBundleNVR != "" && so.HeadBundleNVR != "" && so.HeadBundleNVR != o.HeadBundleNVR && len(o.Images) > 0 && len(so.Images) > 0 {
+				o.Compare = append(o.Compare, model.ImageCompare{Kind: "newer", Label: so.HeadBundleNVR, Rows: compareImages(o.Images, so.Images)})
+			}
+		}
+	}
 	return cand, stream, nil
+}
+
+// operatorImages sets o's Images, the head bundle's relatedImages of its
+// newest-OCP member FBC with a render, each with its ART build and whether a
+// stage Release of releases or a prod Release, by prod digests, shipped it;
+// and its Compare with that FBC's previous entry.
+func (s *Server) operatorImages(ctx context.Context, o *model.OperatorFBC, releases []model.StageRelease, prod map[string]bool) error {
+	o.Images, o.Compare = []model.OperatorImage{}, []model.ImageCompare{}
+	var head, previous []fbc.RelatedImage
+	var m model.FBCMember
+	for i := len(o.Members) - 1; i >= 0 && len(head) == 0; i-- {
+		m = o.Members[i]
+		var err error
+		if head, previous, err = s.db.FBCRelatedImages(ctx, m.Digest); err != nil {
+			return err
+		}
+	}
+	var digests []string
+	for _, img := range slices.Concat(head, previous) {
+		digests = append(digests, imageDigest(img.Image))
+	}
+	builds, err := s.db.ArtHistoryImages(ctx, digests)
+	if err != nil {
+		return err
+	}
+	images := func(related []fbc.RelatedImage) []model.OperatorImage {
+		out := []model.OperatorImage{}
+		for _, img := range related {
+			d := imageDigest(img.Image)
+			b := builds[d]
+			out = append(out, model.OperatorImage{
+				Name: img.Name, Image: img.Image, Digest: d, NVR: b.NVR, Commit: b.Commitish,
+				Stage: ciState(d, releases).State == "in", Prod: prod[d],
+			})
+		}
+		return out
+	}
+	o.Images = images(head)
+	if len(previous) > 0 {
+		o.Compare = append(o.Compare, model.ImageCompare{Kind: "previous", Label: m.PreviousVersion, Rows: compareImages(images(previous), o.Images)})
+	}
+	return nil
+}
+
+// compareImages matches from and to by name: to's names in its order, then
+// those only from has.
+func compareImages(from, to []model.OperatorImage) []model.ImageCompareRow {
+	ref := func(img model.OperatorImage) *model.ImageRef {
+		return &model.ImageRef{NVR: img.NVR, Commit: img.Commit, Digest: img.Digest}
+	}
+	rows := []model.ImageCompareRow{}
+	for _, t := range to {
+		row := model.ImageCompareRow{Name: t.Name, To: ref(t), Change: "added"}
+		if i := slices.IndexFunc(from, func(f model.OperatorImage) bool { return f.Name == t.Name }); i >= 0 {
+			f := from[i]
+			row.From = ref(f)
+			switch {
+			case f.Digest == t.Digest:
+				row.Change = "same"
+			case f.Commit == "" || t.Commit == "":
+				row.Change = "new build"
+			case f.Commit == t.Commit:
+				row.Change = "rebuild"
+			default:
+				row.Change = "new source"
+			}
+		}
+		rows = append(rows, row)
+	}
+	for _, f := range from {
+		if !slices.ContainsFunc(to, func(t model.OperatorImage) bool { return t.Name == f.Name }) {
+			rows = append(rows, model.ImageCompareRow{Name: f.Name, From: ref(f), Change: "removed"})
+		}
+	}
+	return rows
 }
 
 // projectFBC returns the operator FBCs that rows, newest first, give each of

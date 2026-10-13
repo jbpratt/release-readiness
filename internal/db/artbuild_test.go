@@ -3,6 +3,7 @@ package db
 import (
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -175,7 +176,7 @@ func TestArtHistory(t *testing.T) {
 	b := artbuild.HistoryBuild{
 		RecordID: "r1", Group: "quay-3.17", Type: artbuild.TypeBundle,
 		NVR:    "quay-operator-metadata-container-3.17.6.202610081142.p2.g3c4984a.assembly.stream.el9-1",
-		Digest: "sha256:aaaa", Pullspec: "quay.io/x/art-images@sha256:aaaa",
+		Digest: "sha256:aaaa", Pullspec: "quay.io/x/art-images@sha256:aaaa", Commitish: "3c4984a",
 		OperatorNVR: "quay-operator-container-3.17.6", OperandNVRs: []string{"external"},
 	}
 	for range 2 {
@@ -196,11 +197,15 @@ func TestArtHistory(t *testing.T) {
 		t.Errorf("has the bundle NVR as an image = %v, %v; want false", ok, err)
 	}
 	var bundles, operands string
-	if err := d.conn.QueryRow(`SELECT bundle_nvrs_json, operand_nvrs_json FROM art_history_builds WHERE record_id = 'r1'`).Scan(&bundles, &operands); err != nil {
+	if err := d.conn.QueryRow(`SELECT bundle_nvrs_json, operand_nvrs_json FROM art_history_records WHERE record_id = 'r1'`).Scan(&bundles, &operands); err != nil {
 		t.Fatal(err)
 	}
 	if bundles != "[]" || operands != `["external"]` {
 		t.Errorf("bundle_nvrs_json %s, operand_nvrs_json %s", bundles, operands)
+	}
+	images, err := d.ArtHistoryImages(ctx, []string{b.Digest, "sha256:none"})
+	if want := (artbuild.HistoryBuild{NVR: b.NVR, Digest: b.Digest, Commitish: "3c4984a"}); err != nil || len(images) != 1 || !reflect.DeepEqual(images[b.Digest], want) {
+		t.Errorf("images %+v, %v; want only %+v", images, err, want)
 	}
 
 	at := time.Date(2026, 10, 12, 0, 0, 0, 0, time.UTC)

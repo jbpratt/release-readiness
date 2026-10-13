@@ -39,11 +39,12 @@ const (
 // infers a search date range only from image NVRs.
 var nvrDate = regexp.MustCompile(`[.-](\d{8})\d{4}`)
 
-// HistoryBuild is a successful ART build record. BundleNVRs is set for an FBC
-// image; OperatorNVR, OperandNVRs and BundleCSVName for a bundle image. Times
-// are as ART gives them.
+// HistoryBuild is a successful ART build record, with the source commit ART
+// built from. BundleNVRs is set for an FBC image; OperatorNVR, OperandNVRs and
+// BundleCSVName for a bundle image. Times are as ART gives them.
 type HistoryBuild struct {
 	RecordID, Group, Type, NVR, Digest, Pullspec string
+	Commitish                                    string
 	StartTime, EndTime, JobURL                   string
 	BundleNVRs                                   []string
 	OperatorNVR                                  string
@@ -376,6 +377,7 @@ func historyBuild(group, buildType string, rec *record) HistoryBuild {
 		NVR:           rec.NVR,
 		Digest:        rec.ImagePullspec[strings.Index(rec.ImagePullspec, "@")+1:],
 		Pullspec:      rec.ImagePullspec,
+		Commitish:     rec.Commitish,
 		StartTime:     rec.StartTime,
 		EndTime:       rec.EndTime,
 		JobURL:        rec.ArtJobURL,

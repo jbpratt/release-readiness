@@ -40,14 +40,15 @@ FROM art_builds
 WHERE state = 'resolved' AND digest IN (sqlc.slice('digests'));
 
 -- name: UpsertArtHistoryBuild :exec
-INSERT INTO art_history_builds (record_id, group_name, build_type, nvr, digest, pullspec, start_time, end_time, art_job_url, bundle_nvrs_json, operator_nvr, operand_nvrs_json, bundle_csv_name)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO art_history_records (record_id, group_name, build_type, nvr, digest, pullspec, commitish, start_time, end_time, art_job_url, bundle_nvrs_json, operator_nvr, operand_nvrs_json, bundle_csv_name)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(record_id) DO UPDATE SET
     group_name = excluded.group_name,
     build_type = excluded.build_type,
     nvr = excluded.nvr,
     digest = excluded.digest,
     pullspec = excluded.pullspec,
+    commitish = excluded.commitish,
     start_time = excluded.start_time,
     end_time = excluded.end_time,
     art_job_url = excluded.art_job_url,
@@ -56,20 +57,27 @@ ON CONFLICT(record_id) DO UPDATE SET
     operand_nvrs_json = excluded.operand_nvrs_json,
     bundle_csv_name = excluded.bundle_csv_name;
 
+-- name: ListArtHistoryImages :many
+-- The bundle and image builds among digests, by digest, then NVR.
+SELECT digest, nvr, commitish
+FROM art_history_records
+WHERE build_type IN ('bundle', 'image') AND digest IN (sqlc.slice('digests'))
+ORDER BY digest, nvr;
+
 -- name: HasArtHistoryRecord :one
-SELECT EXISTS (SELECT 1 FROM art_history_builds WHERE record_id = ?);
+SELECT EXISTS (SELECT 1 FROM art_history_records WHERE record_id = ?);
 
 -- name: HasArtHistoryNVR :one
-SELECT EXISTS (SELECT 1 FROM art_history_builds WHERE group_name = ? AND build_type = ? AND nvr = ?);
+SELECT EXISTS (SELECT 1 FROM art_history_records WHERE group_name = ? AND build_type = ? AND nvr = ?);
 
 -- name: HasArtHistoryDigest :one
-SELECT EXISTS (SELECT 1 FROM art_history_builds WHERE build_type = ? AND digest = ?);
+SELECT EXISTS (SELECT 1 FROM art_history_records WHERE build_type = ? AND digest = ?);
 
 -- name: ListArtHistoryScanDays :many
-SELECT day FROM art_history_scan_days WHERE group_name = ? AND build_type = ?;
+SELECT day FROM art_history_record_days WHERE group_name = ? AND build_type = ?;
 
 -- name: UpsertArtHistoryScanDay :exec
-INSERT INTO art_history_scan_days (group_name, build_type, day, checked_at)
+INSERT INTO art_history_record_days (group_name, build_type, day, checked_at)
 VALUES (?, ?, ?, ?)
 ON CONFLICT(group_name, build_type, day) DO UPDATE SET checked_at = excluded.checked_at;
 
@@ -77,16 +85,18 @@ ON CONFLICT(group_name, build_type, day) DO UPDATE SET checked_at = excluded.che
 SELECT DISTINCT application FROM snapshots ORDER BY application;
 
 -- name: ListArtHistoryFBCs :many
--- group's successful FBC builds, newest NVR first, each with the channel and
--- head CSV its render found and the NVR of its head bundle's ART build, ''
--- for none.
+-- group's successful FBC builds, newest NVR first, each with the channel,
+-- head CSV and version and previous entry's version its render found and the NVR of its
+-- head bundle's ART build, '' for none.
 SELECT f.record_id, f.nvr, f.pullspec,
        CAST(COALESCE(r.channel, '') AS TEXT) AS channel,
        CAST(COALESCE(r.head_csv, '') AS TEXT) AS head_csv,
+       CAST(COALESCE(r.head_version, '') AS TEXT) AS head_version,
+       CAST(COALESCE(r.previous_version, '') AS TEXT) AS previous_version,
        CAST(COALESCE(b.nvr, '') AS TEXT) AS head_bundle_nvr
-FROM art_history_builds f
+FROM art_history_records f
 LEFT JOIN fbc_renders r ON r.state = 'rendered' AND r.digest = f.digest
-LEFT JOIN art_history_builds b ON b.build_type = 'bundle'
+LEFT JOIN art_history_records b ON b.build_type = 'bundle'
   AND b.digest = substr(r.head_bundle_pullspec, instr(r.head_bundle_pullspec, '@') + 1)
 WHERE f.group_name = ? AND f.build_type = 'fbc'
 ORDER BY f.nvr DESC, f.record_id;

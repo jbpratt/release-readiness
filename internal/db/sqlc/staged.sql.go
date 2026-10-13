@@ -36,6 +36,41 @@ func (q *Queries) LatestProdImageRelease(ctx context.Context, assembly string) (
 	return i, err
 }
 
+const listProdReleasedImages = `-- name: ListProdReleasedImages :many
+SELECT DISTINCT sc.image_url
+FROM staged_snapshots ss
+JOIN snapshots s ON s.name = ss.name
+JOIN snapshot_components sc ON sc.snapshot_id = s.id
+WHERE ss.kind = 'image' AND ss.env = 'prod' AND s.application = ?
+  AND EXISTS (SELECT 1 FROM konflux_releases kr
+              WHERE kr.snapshot = s.name AND kr.released_status = 'True' AND kr.released_reason = 'Succeeded')
+`
+
+// The component images of the application's image Snapshots ART staged for
+// prod that a Release shipped.
+func (q *Queries) ListProdReleasedImages(ctx context.Context, application string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listProdReleasedImages, application)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var image_url string
+		if err := rows.Scan(&image_url); err != nil {
+			return nil, err
+		}
+		items = append(items, image_url)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listStagedFBCCatalogs = `-- name: ListStagedFBCCatalogs :many
 SELECT s.name AS snapshot_name, sc.component, sc.image_url, CAST(COALESCE(a.nvr, '') AS TEXT) AS nvr
 FROM staged_snapshots ss
@@ -96,17 +131,19 @@ SELECT s.name AS snapshot_name, sc.image_url,
        CAST(COALESCE(h.record_id, a.record_id, '') AS TEXT) AS record_id,
        CAST(COALESCE(r.channel, '') AS TEXT) AS channel,
        CAST(COALESCE(r.head_csv, '') AS TEXT) AS head_csv,
+       CAST(COALESCE(r.head_version, '') AS TEXT) AS head_version,
+       CAST(COALESCE(r.previous_version, '') AS TEXT) AS previous_version,
        CAST(COALESCE(b.nvr, '') AS TEXT) AS head_bundle_nvr
 FROM staged_snapshots ss
 JOIN snapshots s ON s.name = ss.name
 JOIN snapshot_components sc ON sc.snapshot_id = s.id
-LEFT JOIN art_history_builds h ON h.build_type = 'fbc'
+LEFT JOIN art_history_records h ON h.build_type = 'fbc'
   AND h.digest = substr(sc.image_url, instr(sc.image_url, '@') + 1)
 LEFT JOIN art_builds a ON a.state = 'resolved'
   AND a.digest = substr(sc.image_url, instr(sc.image_url, '@') + 1)
 LEFT JOIN fbc_renders r ON r.state = 'rendered'
   AND r.digest = substr(sc.image_url, instr(sc.image_url, '@') + 1)
-LEFT JOIN art_history_builds b ON b.build_type = 'bundle'
+LEFT JOIN art_history_records b ON b.build_type = 'bundle'
   AND b.digest = substr(r.head_bundle_pullspec, instr(r.head_bundle_pullspec, '@') + 1)
 WHERE ss.assembly = ?1 AND ss.kind = 'fbc' AND ss.env = 'stage'
   AND s.application = ?2
@@ -119,20 +156,23 @@ type ListStagedFBCMembersParams struct {
 }
 
 type ListStagedFBCMembersRow struct {
-	SnapshotName  string
-	ImageUrl      string
-	Nvr           string
-	RecordID      string
-	Channel       string
-	HeadCsv       string
-	HeadBundleNvr string
+	SnapshotName    string
+	ImageUrl        string
+	Nvr             string
+	RecordID        string
+	Channel         string
+	HeadCsv         string
+	HeadVersion     string
+	PreviousVersion string
+	HeadBundleNvr   string
 }
 
 // The catalog images of the application's FBC Snapshots ART staged for stage
 // for assembly, newest Snapshot first, each with its NVR: that of its ART
 // build in build history, else of its resolved ART build, else its rendered
-// label, ” for none, and that build's record ID; the channel and head CSV
-// its render found; and the NVR of its head bundle's ART build, ” for none.
+// label, ” for none, and that build's record ID; the channel, head CSV and
+// version and previous entry's version its render found; and the NVR of its head
+// bundle's ART build, ” for none.
 func (q *Queries) ListStagedFBCMembers(ctx context.Context, arg ListStagedFBCMembersParams) ([]ListStagedFBCMembersRow, error) {
 	rows, err := q.db.QueryContext(ctx, listStagedFBCMembers, arg.Assembly, arg.Application)
 	if err != nil {
@@ -149,6 +189,8 @@ func (q *Queries) ListStagedFBCMembers(ctx context.Context, arg ListStagedFBCMem
 			&i.RecordID,
 			&i.Channel,
 			&i.HeadCsv,
+			&i.HeadVersion,
+			&i.PreviousVersion,
 			&i.HeadBundleNvr,
 		); err != nil {
 			return nil, err
