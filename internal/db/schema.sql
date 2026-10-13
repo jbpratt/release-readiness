@@ -184,3 +184,10 @@ CREATE TABLE IF NOT EXISTS image_scans (
     reports_json TEXT,
     checked_at   TEXT NOT NULL
 );
+
+-- Last successful pass of each background sync, so freshness survives a
+-- restart.
+CREATE TABLE IF NOT EXISTS sync_status (
+    source       TEXT PRIMARY KEY,
+    last_success TIMESTAMP NOT NULL
+);

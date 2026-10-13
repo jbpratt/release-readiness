@@ -108,6 +108,32 @@ func TestSources(t *testing.T) {
 	}
 }
 
+func TestPersist(t *testing.T) {
+	t0 := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	now := t0
+	r := newTestRegistry(&now)
+	saved := map[string]time.Time{}
+	r.Persist(map[string]time.Time{"konflux": t0.Add(-24 * time.Hour)}, func(source string, at time.Time) { saved[source] = at })
+	s := r.Track("konflux", time.Minute)
+
+	if got := r.Sources(); !got[0].LastSuccess.Equal(t0.Add(-24 * time.Hour)) {
+		t.Errorf("sources = %+v, want the seeded last success", got)
+	}
+	if p := r.Problems(t0.Add(10 * time.Minute)); len(p) != 0 {
+		t.Errorf("problems within the floor of start = %+v, want none despite an old seed", p)
+	}
+
+	s.Report(errors.New("boom"))
+	if len(saved) != 0 {
+		t.Errorf("saved after a failure = %v, want nothing", saved)
+	}
+	now = t0.Add(time.Minute)
+	s.Report(nil)
+	if !saved["konflux"].Equal(now) {
+		t.Errorf("saved = %v, want konflux at %v", saved, now)
+	}
+}
+
 func TestPass(t *testing.T) {
 	var p Pass
 	if p.Err() != nil {

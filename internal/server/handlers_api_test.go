@@ -90,6 +90,31 @@ func TestSyncStatus(t *testing.T) {
 	}
 }
 
+func TestSyncStatusSeeded(t *testing.T) {
+	srv := setupTestServer(t)
+	t0 := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	if err := srv.db.UpsertSyncStatus(t.Context(), "konflux", t0); err != nil {
+		t.Fatal(err)
+	}
+	seed, err := srv.db.SyncStatus(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv.syncStatus.Persist(seed, nil)
+	srv.syncStatus.Track("konflux", time.Minute)
+
+	var got struct {
+		Sources []struct {
+			Source      string     `json:"source"`
+			LastSuccess *time.Time `json:"last_success"`
+		} `json:"sources"`
+	}
+	getJSON(t, srv, "/api/v1/sync-status", http.StatusOK, &got)
+	if len(got.Sources) != 1 || got.Sources[0].LastSuccess == nil || !got.Sources[0].LastSuccess.Equal(t0) {
+		t.Errorf("sources = %+v, want konflux last success %v", got.Sources, t0)
+	}
+}
+
 // seedSnapshot creates a snapshot whose components are named comps, each
 // image labelled <name>/<component>.
 func seedSnapshot(t *testing.T, srv *Server, app, name string, created time.Time, comps ...string) {

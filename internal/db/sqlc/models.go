@@ -6,6 +6,7 @@ package dbsqlc
 
 import (
 	"database/sql"
+	"time"
 )
 
 type ArtBuild struct {
@@ -144,4 +145,9 @@ type StagedSnapshot struct {
 	Assembly string
 	Kind     string
 	Env      string
+}
+
+type SyncStatus struct {
+	Source      string
+	LastSuccess time.Time
 }

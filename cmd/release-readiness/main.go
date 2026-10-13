@@ -94,6 +94,15 @@ func main() {
 
 	var wg sync.WaitGroup
 	status := syncstatus.New()
+	lastSuccess, err := database.SyncStatus(ctx)
+	if err != nil {
+		logger.Warn("load sync status, last success starts empty", "error", err)
+	}
+	status.Persist(lastSuccess, func(source string, at time.Time) {
+		if err := database.UpsertSyncStatus(ctx, source, at); err != nil {
+			logger.Warn("save sync status", "source", source, "error", err)
+		}
+	})
 
 	kubeCfg, err := kube.RESTConfig(*kubeconfig)
 	var kc *dynamic.DynamicClient
