@@ -843,10 +843,6 @@ function OperatorDetail({
 	);
 	const newer = o.compare.find((c) => c.kind === "newer");
 	const change = newer && compareLine(newer);
-	const ci = rows.some(
-		(r) =>
-			(r.fbc?.ci?.exact.length ?? 0) + (r.fbc?.ci?.equivalent.length ?? 0) > 0,
-	);
 	return (
 		<>
 			<div style={muted}>{head}</div>
@@ -879,82 +875,84 @@ function OperatorDetail({
 				<Tab eventKey="fbcs" title={<TabTitleText>FBCs {fbcs}</TabTitleText>}>
 					<Table
 						variant="compact"
+						className="rr-fbcs"
 						aria-label={`${o.operator} FBCs by OCP version`}
 					>
 						<Thead>
 							<Tr>
 								<Th modifier="fitContent">OCP</Th>
-								<Th>FBC</Th>
-								{ci && <Th screenReaderText="CI" />}
+								<Th modifier="fitContent">FBC</Th>
+								<Th modifier="fitContent">Digest</Th>
+								<Th modifier="fitContent" screenReaderText="Status" />
+								<Th screenReaderText="CI" />
 							</Tr>
 						</Thead>
 						<Tbody>
 							{rows.map((r) => (
 								<Tr key={`${r.ocp} ${r.fbc?.digest ?? ""}`}>
 									<Td modifier="nowrap">{r.ocp}</Td>
-									<Td>
+									<Td modifier="fitContent" className="rr-nvr">
 										{r.fbc && (
-											<>
-												<ExtLink
-													href={r.fbc.build_url || null}
-													title={r.fbc.nvr}
-												>
-													{r.fbc.nvr
-														? fbcLabel(r.fbc.nvr)
-														: shortDigest(r.fbc.pullspec)}
-												</ExtLink>{" "}
-												<ClipboardCopy
-													variant="inline-compact"
-													isCode
-													onCopy={(e) =>
-														clipboardCopyFunc(e, r.fbc?.pullspec ?? "")
-													}
-												>
-													{shortDigest(r.fbc.pullspec)}
-												</ClipboardCopy>
-											</>
+											<ExtLink href={r.fbc.build_url || null} title={r.fbc.nvr}>
+												{r.fbc.nvr
+													? fbcLabel(r.fbc.nvr)
+													: shortDigest(r.fbc.pullspec)}
+											</ExtLink>
 										)}
-										{rowChips(r, {
-											shipped,
-											unreadable: slotItem(
-												items,
-												"read_failed",
-												o.operator,
-												r.ocp,
-											)?.text,
-										}).map((c) => (
-											<Label
-												key={c.text}
-												isCompact
-												color={c.color}
-												style={{ marginLeft: "0.5rem" }}
-											>
-												<span title={c.title}>{c.text}</span>
-											</Label>
-										))}
-										<OtherBundle row={r} />
 									</Td>
-									{ci && (
-										<Td>
-											<Flex gap={{ default: "gapXs" }}>
-												{(r.fbc?.ci?.exact.length ?? 0) > 0 && (
-													<JobPills
-														jobs={r.fbc?.ci?.exact ?? []}
-														label={label}
-														version={version}
-													/>
-												)}
-												{(r.fbc?.ci?.equivalent.length ?? 0) > 0 && (
-													<JobPills
-														jobs={r.fbc?.ci?.equivalent ?? []}
-														label={label}
-														version={version}
-														equivalent
-													/>
-												)}
-											</Flex>
-										</Td>
-									)}
+									<Td modifier="fitContent">
+										{r.fbc && (
+											<ClipboardCopy
+												variant="inline-compact"
+												isCode
+												onCopy={(e) =>
+													clipboardCopyFunc(e, r.fbc?.pullspec ?? "")
+												}
+											>
+												{shortDigest(r.fbc.pullspec)}
+											</ClipboardCopy>
+										)}
+									</Td>
+									<Td modifier="fitContent">
+										<Flex
+											gap={{ default: "gapXs" }}
+											flexWrap={{ default: "nowrap" }}
+										>
+											{rowChips(r, {
+												shipped,
+												unreadable: slotItem(
+													items,
+													"read_failed",
+													o.operator,
+													r.ocp,
+												)?.text,
+											}).map((c) => (
+												<Label key={c.text} isCompact color={c.color}>
+													<span title={c.title}>{c.text}</span>
+												</Label>
+											))}
+											<OtherBundle row={r} />
+										</Flex>
+									</Td>
+									<Td>
+										<Flex gap={{ default: "gapXs" }}>
+											{(r.fbc?.ci?.exact.length ?? 0) > 0 && (
+												<JobPills
+													jobs={r.fbc?.ci?.exact ?? []}
+													label={label}
+													version={version}
+												/>
+											)}
+											{(r.fbc?.ci?.equivalent.length ?? 0) > 0 && (
+												<JobPills
+													jobs={r.fbc?.ci?.equivalent ?? []}
+													label={label}
+													version={version}
+													equivalent
+												/>
+											)}
+										</Flex>
+									</Td>
 								</Tr>
 							))}
 						</Tbody>
@@ -986,7 +984,7 @@ function OtherBundle({ row }: { row: SlotRow }) {
 	const held = otherBundle(row);
 	return (
 		held && (
-			<span style={{ marginLeft: "0.5rem", whiteSpace: "nowrap" }}>
+			<span style={{ whiteSpace: "nowrap" }}>
 				{levelIcons.warning}{" "}
 				<ExtLink href={held.href} title={held.title}>
 					{held.text}
