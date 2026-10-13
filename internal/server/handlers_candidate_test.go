@@ -914,6 +914,34 @@ func TestGetCandidateFBCInstallable(t *testing.T) {
 	}
 }
 
+// Like 3.17.6's quay-operator and all of 5.0, head bundles that reached stage
+// only through the version's image shipment, in no fbc-ri Snapshot, are
+// installable.
+func TestGetCandidateFBCInstallableImageShipment(t *testing.T) {
+	srv := setupTestServer(t)
+	srv.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
+	images := map[string]string{}
+	for _, operator := range artbuild.Operators {
+		head := operator + "-metadata-container-3.18.1.202610090339"
+		seedHistoryFBC(t, srv, operator+"-fbc-3.18.1-20261009044841.ocp4.20", head)
+		label := "shipment/" + operator
+		resolveNVR(t, srv, label, head)
+		images["quay-3-18-"+operator+"-bundle"] = testImage(label)
+	}
+	snap := "quay-stage-3-18-1-image-20261008082443"
+	seedImages(t, srv, snap, "2026-10-08T08:24:43Z", images)
+	seedKonfluxRelease(t, srv, snap, snap, "quay-advisory-stage-3-18", "Succeeded", "2026-10-08T08:24:43Z", "2026-10-08T08:40:00Z")
+
+	cand, _ := getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
+	got := fmt.Sprint(cand.Installable)
+	for _, o := range cand.Operators {
+		got += " " + o.FBCRIStage.State
+	}
+	if got != "true in in in" {
+		t.Errorf("with an image-shipment Release: %s, want true in in in", got)
+	}
+}
+
 // Each operator's head bundle is checked against the image Snapshot's bundle
 // of it, which never keys the candidate.
 func TestGetCandidateFBCImageCheck(t *testing.T) {

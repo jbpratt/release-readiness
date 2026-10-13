@@ -68,9 +68,6 @@ func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVe
 	if err != nil {
 		return nil, err
 	}
-	// Only the per-build stage Releases, of fbc-ri-* Snapshots, feed the
-	// catalog CI installs from; the version's own stage Releases do not.
-	releases = slices.DeleteFunc(releases, func(r model.StageRelease) bool { return !strings.HasPrefix(r.Snapshot, "fbc-ri-") })
 	runs, err := s.db.ListProwRunsByApplication(ctx, app)
 	if err != nil {
 		return nil, err
@@ -202,8 +199,8 @@ func (s *Server) candidateCatalogs(ctx context.Context, app, assembly string) ([
 // for stage in app's FBC Snapshots, else as its stream built them, and as its
 // stream built them; nil while it has no FBC built or staged. Each slot's FBC
 // carries the runs that installed from it or from equivalent content, and
-// each operator whether releases, the per-build stage Releases, staged its
-// head bundle and how that bundle compares with the image Snapshot's.
+// each operator whether releases, the stage Releases, staged its head
+// bundle and how that bundle compares with the image Snapshot's.
 func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, releases []model.StageRelease, runs []prow.Run) (cand, stream *model.FBCCandidate, err error) {
 	assembly := c.assembly
 	built, err := s.db.ArtHistoryFBCs(ctx, "quay-"+assembly[:strings.LastIndex(assembly, ".")])
@@ -402,8 +399,7 @@ func projectFBC(source string, rows []model.FBCMember, slots map[string][]string
 }
 
 // ciState tells whether the operator bundle of digest bundle reached the
-// catalog CI installs from, by releases, the per-build stage Releases, newest
-// first.
+// catalog CI installs from, by releases, the stage Releases, newest first.
 func ciState(bundle string, releases []model.StageRelease) model.CIState {
 	if bundle == "" || len(releases) == 0 {
 		return model.CIState{State: "unknown"}

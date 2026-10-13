@@ -41,7 +41,7 @@ export interface ReleaseCandidate {
  * container-security-operator and quay-bridge-operator; unknown holds the
  * staged catalogs no NVR names, which fill no slot. pullspecs, release-from-fbc's
  * fbc-pullspecs, is empty unless state is "complete"; installable is set when
- * every operator's head bundle reached stage through an fbc-ri Release.
+ * every operator's head bundle reached stage through a stage Release.
  */
 export interface FBCCandidate {
 	source: "stage_snapshots" | "stream";
@@ -66,7 +66,7 @@ export interface OperatorFBC {
 	members: FBCMember[];
 	missing_ocp: string[];
 	conflicts: FBCMember[];
-	/** Whether the head bundle reached stage through an fbc-ri Release. */
+	/** Whether the head bundle reached stage through a stage Release. */
 	fbc_ri_stage: CIState;
 	image_check: ImageCheck;
 }
