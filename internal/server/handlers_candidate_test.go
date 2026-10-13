@@ -1307,6 +1307,9 @@ func TestGetCandidateFBCImages(t *testing.T) {
 			if r == nil {
 				return "-"
 			}
+			if r.BuildURL != "" {
+				return r.NVR + "@" + r.Commit + "+page"
+			}
 			return r.NVR + "@" + r.Commit
 		}
 		for _, r := range c.Rows {
@@ -1322,7 +1325,7 @@ func TestGetCandidateFBCImages(t *testing.T) {
 		"builder - a/builder-nvr@b1 added",
 		"clair @ a/clair-nvr@k1 new build",
 		"operator prev/operator-nvr@c1 a/operator-nvr@c1 rebuild",
-		"quay prev/quay-nvr@q1 a/quay-nvr@q2 new source",
+		"quay prev/quay-nvr@q1 a/quay-nvr@q2+page new source",
 		"redis @ @ same",
 		"postgresql-10 @ - removed",
 	})
@@ -1331,7 +1334,7 @@ func TestGetCandidateFBCImages(t *testing.T) {
 		"builder a/builder-nvr@b1 a/builder-nvr@b1 same",
 		"clair a/clair-nvr@k1 a/clair-nvr@k1 same",
 		"operator a/operator-nvr@c1 b/operator-nvr@c1 rebuild",
-		"quay a/quay-nvr@q2 b/quay-nvr@q3 new source",
+		"quay a/quay-nvr@q2+page b/quay-nvr@q3 new source",
 		"redis @ @ same",
 	})
 	// The stream heads the newer bundle: it has only the previous compare.

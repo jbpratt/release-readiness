@@ -168,11 +168,13 @@ export interface ImageCompareRow {
 		| "removed";
 }
 
+/** A compared image; build_url is "" until ART resolves its digest. */
 export interface ImageRef {
 	repository: string;
 	nvr: string;
 	commit: string;
 	digest: string;
+	build_url: string;
 }
 
 /**

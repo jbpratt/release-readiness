@@ -243,6 +243,7 @@ type ImageRef struct {
 	NVR        string `json:"nvr"`
 	Commit     string `json:"commit"`
 	Digest     string `json:"digest"`
+	BuildURL   string `json:"build_url"`
 }
 
 // ImageCheck compares an operator's head bundle with the bundle of it in the
