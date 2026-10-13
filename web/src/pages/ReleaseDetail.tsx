@@ -42,6 +42,7 @@ import {
 	ExclamationTriangleIcon,
 	ExternalLinkAltIcon,
 	InfoCircleIcon,
+	OutlinedQuestionCircleIcon,
 } from "@patternfly/react-icons";
 import {
 	ExpandableRowContent,
@@ -533,22 +534,11 @@ function Candidate({
 	const [tabs, setTabs] = useState<Record<string, BlockTab>>({});
 	return (
 		<>
-			<VerdictHeader verdict={withoutStage(verdict)} prod={prodRelease} />
-			{decisions(verdict).map((d) => (
-				<Flex
-					key={`${d.code} ${d.text}`}
-					gap={{ default: "gapSm" }}
-					alignItems={{ default: "alignItemsCenter" }}
-					style={{ marginLeft: "1.5rem" }}
-				>
-					<FlexItem>{levelIcons.blocker}</FlexItem>
-					<FlexItem className="rr-decision-text">
-						{d.text}
-						{d.owner && <span style={muted}> · {d.owner}</span>}
-						{d.action && <div>Next: {d.action}</div>}
-					</FlexItem>
-				</Flex>
-			))}
+			<VerdictHeader
+				verdict={withoutStage(verdict)}
+				blockers={decisions(verdict)}
+				prod={prodRelease}
+			/>
 			{read && (
 				<div style={line}>
 					<Status status={read.status}>{read.text}</Status>
@@ -775,15 +765,18 @@ function StageCell({ stage }: { stage: StatusLine | null }) {
 }
 
 /**
- * Whether the version can ship, then a line per warning or info on no one
- * operator, with who acts on it, as the decision block shows such blockers
- * and the operator table the rest; a shipped version's is its prod Release.
+ * Whether the version can ship; its blockers on no one operator, with who
+ * acts and the next action, and its warnings and info on no one operator
+ * open in a popover, as the operator table shows the rest. A shipped
+ * version's is its prod Release.
  */
 function VerdictHeader({
 	verdict,
+	blockers,
 	prod,
 }: {
 	verdict: Verdict;
+	blockers: ReturnType<typeof decisions>;
 	prod: KonfluxRelease | null;
 }) {
 	const head = verdictLine(verdict);
@@ -791,28 +784,57 @@ function VerdictHeader({
 		verdict.state === "shipped" && prod?.completion_time
 			? `Shipped ${when(prod.completion_time, "UTC")} UTC`
 			: head.text;
+	const notes = verdict.items.filter(
+		(i) => !i.operator && i.level !== "blocker",
+	);
 	return (
-		<>
-			<Status status={head.status}>
-				<strong>{text}</strong> <DataFreshness />
-			</Status>
-			{verdict.items
-				.filter((i) => !i.operator && i.level !== "blocker")
-				.map((i) => (
-					<Flex
-						key={`${i.code} ${i.text}`}
-						gap={{ default: "gapSm" }}
-						flexWrap={{ default: "nowrap" }}
-						style={{ marginLeft: "1.5rem" }}
-					>
-						<FlexItem>{levelIcons[i.level]}</FlexItem>
-						<FlexItem>{i.text}</FlexItem>
-						<FlexItem align={{ default: "alignRight" }} style={muted}>
-							{i.owner}
-						</FlexItem>
-					</Flex>
-				))}
-		</>
+		<Status status={head.status}>
+			<strong>{text}</strong>{" "}
+			{(blockers.length > 0 || notes.length > 0) && (
+				<Popover
+					headerContent="Why not ready"
+					bodyContent={
+						<>
+							{blockers.map((d) => (
+								<Flex
+									key={`${d.code} ${d.text}`}
+									gap={{ default: "gapSm" }}
+									flexWrap={{ default: "nowrap" }}
+								>
+									<FlexItem>{levelIcons.blocker}</FlexItem>
+									<FlexItem>
+										{d.text}
+										{d.owner && <span style={muted}> · {d.owner}</span>}
+										{d.action && <div>Next: {d.action}</div>}
+									</FlexItem>
+								</Flex>
+							))}
+							{notes.map((i) => (
+								<Flex
+									key={`${i.code} ${i.text}`}
+									gap={{ default: "gapSm" }}
+									flexWrap={{ default: "nowrap" }}
+								>
+									<FlexItem>{levelIcons[i.level]}</FlexItem>
+									<FlexItem>
+										{i.text}
+										{i.owner && <span style={muted}> · {i.owner}</span>}
+									</FlexItem>
+								</Flex>
+							))}
+						</>
+					}
+				>
+					<Button
+						variant="plain"
+						hasNoPadding
+						aria-label="Why not ready"
+						icon={<OutlinedQuestionCircleIcon />}
+					/>
+				</Popover>
+			)}{" "}
+			<DataFreshness />
+		</Status>
 	);
 }
 
