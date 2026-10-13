@@ -149,16 +149,14 @@ type ReadProgress struct {
 // head bundle or a staged catalog's identity is unresolved, else "complete".
 // Unknown holds, once per digest, the staged catalogs no NVR names, which
 // fill no slot. Pullspecs, release-from-fbc's fbc-pullspecs by operator, then
-// OCP version, is empty unless State is "complete". Installable is set when
-// every operator's head bundle reached stage through a stage Release.
+// OCP version, is empty unless State is "complete".
 type FBCCandidate struct {
-	Source      string        `json:"source"`
-	State       string        `json:"state"`
-	Errors      []string      `json:"errors"`
-	Operators   []OperatorFBC `json:"operators"`
-	Unknown     []FBCMember   `json:"unknown"`
-	Pullspecs   []string      `json:"pullspecs"`
-	Installable bool          `json:"installable"`
+	Source    string        `json:"source"`
+	State     string        `json:"state"`
+	Errors    []string      `json:"errors"`
+	Operators []OperatorFBC `json:"operators"`
+	Unknown   []FBCMember   `json:"unknown"`
+	Pullspecs []string      `json:"pullspecs"`
 }
 
 // OperatorFBC is one operator's FBCs, keyed by HeadBundleNVR, the NVR of the

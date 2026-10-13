@@ -370,7 +370,6 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 		return &model.FBCCI{Exact: jobRuns(exact), Equivalent: jobRuns(equivalent)}
 	}
 	for _, f := range []*model.FBCCandidate{cand, stream} {
-		f.Installable = true
 		for i := range f.Operators {
 			o := &f.Operators[i]
 			for _, ms := range [][]model.FBCMember{o.Members, o.Conflicts} {
@@ -385,7 +384,6 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 					o.FBCRIStage = ciState(d, releases)
 				}
 			}
-			f.Installable = f.Installable && o.FBCRIStage.State == "in"
 			o.Stage = model.StageSummary{Total: len(o.Members)}
 			for _, m := range o.Members {
 				if succeeded(m.Release) {

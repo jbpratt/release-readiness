@@ -1033,10 +1033,9 @@ func TestGetCandidateFBCEvidence(t *testing.T) {
 	})
 }
 
-// Like 3.16 on 12 Oct 2026, a candidate whose head bundles have no fbc-ri
-// stage Release is not installable; once each operator's succeeded, it is. A
-// failed one is not.
-func TestGetCandidateFBCInstallable(t *testing.T) {
+// Like 3.16 on 12 Oct 2026, head bundles with no fbc-ri stage Release are not
+// on stage; once each operator's succeeded, they are. A failed one is not.
+func TestGetCandidateFBCRIStage(t *testing.T) {
 	srv := setupTestServer(t)
 	srv.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
 	heads := map[string]string{
@@ -1048,15 +1047,15 @@ func TestGetCandidateFBCInstallable(t *testing.T) {
 		seedHistoryFBC(t, srv, operator+"-fbc-3.18.1-20261009044841.ocp4.20", heads[operator])
 	}
 	states := func(c *model.FBCCandidate) string {
-		s := fmt.Sprint(c.Installable)
+		var s []string
 		for _, o := range c.Operators {
-			s += " " + o.FBCRIStage.State
+			s = append(s, o.FBCRIStage.State)
 		}
-		return s
+		return strings.Join(s, " ")
 	}
 	cand, _ := getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
-	if got := states(cand); got != "false none none none" {
-		t.Errorf("without fbc-ri Releases: %s, want false none none none", got)
+	if got := states(cand); got != "none none none" {
+		t.Errorf("without fbc-ri Releases: %s, want none none none", got)
 	}
 
 	for i, operator := range artbuild.Operators {
@@ -1067,24 +1066,24 @@ func TestGetCandidateFBCInstallable(t *testing.T) {
 		seedKonfluxRelease(t, srv, snap+"-r", snap, "quay-advisory-stage-3-18", "Succeeded", "2026-10-09T05:00:00Z", "2026-10-09T05:10:00Z")
 	}
 	cand, _ = getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
-	if got := states(cand); got != "true in in in" {
-		t.Errorf("with fbc-ri Releases: %s, want true in in in", got)
+	if got := states(cand); got != "in in in" {
+		t.Errorf("with fbc-ri Releases: %s, want in in in", got)
 	}
 
 	seedImages(t, srv, "fbc-ri-stage-quay-3-18-quay-operator-x", "2026-10-09T06:00:00Z", map[string]string{"quay-3-18-quay-operator-bundle": testImage("ri/quay-operator")})
 	seedKonfluxRelease(t, srv, "fbc-ri-stage-quay-3-18-quay-operator-x-r", "fbc-ri-stage-quay-3-18-quay-operator-x",
 		"quay-advisory-stage-3-18", "Failed", "2026-10-09T06:00:00Z", "2026-10-09T06:10:00Z")
-	// The bundle reached stage once, so it stays installable.
+	// The bundle reached stage once, so it stays on stage.
 	cand, _ = getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
-	if got := states(cand); got != "true in in in" {
-		t.Errorf("after a later failed fbc-ri Release: %s, want true in in in", got)
+	if got := states(cand); got != "in in in" {
+		t.Errorf("after a later failed fbc-ri Release: %s, want in in in", got)
 	}
 }
 
 // Like 3.17.6's quay-operator and all of 5.0, head bundles that reached stage
-// only through the version's image shipment, in no fbc-ri Snapshot, are
-// installable.
-func TestGetCandidateFBCInstallableImageShipment(t *testing.T) {
+// only through the version's image shipment, in no fbc-ri Snapshot, are on
+// stage.
+func TestGetCandidateFBCRIStageImageShipment(t *testing.T) {
 	srv := setupTestServer(t)
 	srv.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
 	images := map[string]string{}
@@ -1100,12 +1099,12 @@ func TestGetCandidateFBCInstallableImageShipment(t *testing.T) {
 	seedKonfluxRelease(t, srv, snap, snap, "quay-advisory-stage-3-18", "Succeeded", "2026-10-08T08:24:43Z", "2026-10-08T08:40:00Z")
 
 	cand, _ := getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
-	got := fmt.Sprint(cand.Installable)
+	var got []string
 	for _, o := range cand.Operators {
-		got += " " + o.FBCRIStage.State
+		got = append(got, o.FBCRIStage.State)
 	}
-	if got != "true in in in" {
-		t.Errorf("with an image-shipment Release: %s, want true in in in", got)
+	if strings.Join(got, " ") != "in in in" {
+		t.Errorf("with an image-shipment Release: %v, want in in in", got)
 	}
 }
 
