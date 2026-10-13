@@ -46,6 +46,7 @@ import {
 	stageText,
 	streamAhead,
 	tknCommand,
+	topReason,
 	unreadText,
 	unshippedOf,
 	verdictLine,
@@ -788,6 +789,21 @@ test("decisions: the whole release's blockers, with a known code's action", () =
 		],
 	);
 	assert.deepEqual(decisions({ state: "checking", items }), []);
+});
+
+test("topReason: a whole-release blocker, else the first blocker", () => {
+	const warning = item("warning", "", "stream_ahead", "Stream ahead");
+	const csv = item("blocker", "quay-operator", "csv_mismatch", "CSV mismatch");
+	const staged = item("blocker", "", "not_staged", "Not in a stage shipment");
+	assert.equal(
+		topReason({ state: "not_ready", items: [warning, csv, staged] }),
+		"Not in a stage shipment",
+	);
+	assert.equal(
+		topReason({ state: "not_ready", items: [warning, csv] }),
+		"CSV mismatch",
+	);
+	assert.equal(topReason({ state: "ready", items: [warning] }), null);
 });
 
 test("readyText: awaiting stage while not staged", () => {
