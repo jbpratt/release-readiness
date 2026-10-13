@@ -189,6 +189,11 @@ export interface FBCMember {
 	release: KonfluxRelease | null;
 	/** Set on a slot's FBC; null on an unknown catalog. */
 	ci: FBCCI | null;
+	/**
+	 * In a candidate's slot, how many staged FBC Snapshots holding a catalog
+	 * of it last released successfully.
+	 */
+	staged: number;
 }
 
 /** An image of a component the candidate leaves out, and its stream build. */
