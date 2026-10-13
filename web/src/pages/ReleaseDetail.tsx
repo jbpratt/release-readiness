@@ -430,16 +430,9 @@ function BuildsCard({
 }) {
 	const fbc = data?.fbc_candidate;
 	const reason = data?.reason || "no FBC built or staged yet";
-	// An unstaged candidate's decision block carries the inputs instead.
-	const unstaged =
-		data && decisions(data.verdict).some((d) => d.code === "not_staged");
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<LinkedCardTitle
-				href={konflux()}
-				link="Konflux"
-				actions={fbc && !unstaged && inputs}
-			>
+			<LinkedCardTitle href={konflux()} link="Konflux" actions={fbc && inputs}>
 				Release candidate
 			</LinkedCardTitle>
 			<CardBody>
@@ -459,7 +452,6 @@ function BuildsCard({
 						version={version}
 						app={app}
 						konflux={konflux}
-						inputs={inputs}
 					/>
 				) : data.shipped ? (
 					"Shipped; no FBC data."
@@ -488,7 +480,6 @@ function Candidate({
 	version,
 	app,
 	konflux,
-	inputs,
 }: {
 	fbc: FBCCandidate;
 	stream: FBCCandidate | null;
@@ -500,7 +491,6 @@ function Candidate({
 	version: string;
 	app: string;
 	konflux: KonfluxLink;
-	inputs?: ReactNode;
 }) {
 	const prod = prodRelease && {
 		name: prodRelease.name,
@@ -557,7 +547,6 @@ function Candidate({
 						{d.owner && <span style={muted}> · {d.owner}</span>}
 						{d.action && <div>Next: {d.action}</div>}
 					</FlexItem>
-					{d.code === "not_staged" && inputs && <FlexItem>{inputs}</FlexItem>}
 				</Flex>
 			))}
 			{read && (
