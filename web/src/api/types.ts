@@ -32,6 +32,37 @@ export interface ReleaseCandidate {
 	fbc_candidate: FBCCandidate | null;
 	/** The version's operator FBCs as its stream built them. */
 	fbc_stream: FBCCandidate | null;
+	verdict: Verdict;
+	reading: ReadProgress;
+}
+
+/**
+ * Whether a version can ship, by its FBC candidate: "checking" while FBC
+ * reads are pending, "shipped", else "not_ready" with a blocker or "ready".
+ * items are its blockers, then warnings, then info.
+ */
+export interface Verdict {
+	state: "checking" | "shipped" | "not_ready" | "ready";
+	items: VerdictItem[];
+}
+
+/**
+ * A blocker, warning or info on operator, "" for the whole release, for
+ * owner, "ART", "Quay", "Quay/ART" or "", to act on.
+ */
+export interface VerdictItem {
+	level: "blocker" | "warning" | "info";
+	operator: string;
+	owner: string;
+	code: string;
+	text: string;
+}
+
+/** The FBC images the render sync reads, by the state of their read. */
+export interface ReadProgress {
+	read: number;
+	failed: number;
+	pending: number;
 }
 
 /**
@@ -69,6 +100,59 @@ export interface OperatorFBC {
 	/** Whether the head bundle reached stage through a stage Release. */
 	fbc_ri_stage: CIState;
 	image_check: ImageCheck;
+	/** The head bundle's relatedImages, by name. */
+	images: OperatorImage[];
+	/**
+	 * The images against the previous entry's and, for a candidate, against
+	 * the stream's newer head bundle.
+	 */
+	compare: ImageCompare[];
+	stage: StageSummary;
+}
+
+/** How many of an operator's members' newest stage Release succeeded. */
+export interface StageSummary {
+	staged: number;
+	total: number;
+}
+
+/**
+ * A bundle's relatedImage; nvr and commit are "" for an image ART did not
+ * build. stage and prod are set when a succeeded Release there holds its
+ * digest.
+ */
+export interface OperatorImage {
+	name: string;
+	image: string;
+	digest: string;
+	nvr: string;
+	commit: string;
+	stage: boolean;
+	prod: boolean;
+}
+
+/**
+ * Two bundles' relatedImages: "previous" from the previous entry of label's
+ * version, "newer" to the stream's head bundle of NVR label.
+ */
+export interface ImageCompare {
+	kind: "previous" | "newer";
+	label: string;
+	rows: ImageCompareRow[];
+}
+
+/** A relatedImage name's from and to, null where absent. */
+export interface ImageCompareRow {
+	name: string;
+	from: ImageRef | null;
+	to: ImageRef | null;
+	change: "same" | "rebuild" | "new source" | "new build" | "added" | "removed";
+}
+
+export interface ImageRef {
+	nvr: string;
+	commit: string;
+	digest: string;
 }
 
 /**
@@ -184,6 +268,8 @@ export interface ReleaseVersion {
 	release_ticket_assignee?: string;
 	konflux_application?: string;
 	due_date?: string;
+	/** A version ART staged that has no Jira fixVersion. */
+	no_jira: boolean;
 }
 
 export interface ReadinessResponse {

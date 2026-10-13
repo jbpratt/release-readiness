@@ -1,9 +1,10 @@
 import type {
-	CandidateCatalog,
 	FBCCandidate,
 	FBCMember,
 	KonfluxRelease,
 	OperatorFBC,
+	ReadProgress,
+	Verdict,
 } from "../api/types";
 import { relative } from "./format.ts";
 
@@ -86,34 +87,66 @@ export function fbcCIStep(c: FBCCandidate): CIStep {
 	const exact = runsStep(states("exact"));
 	if (exact) return exact;
 	const same = runsStep(states("equivalent"));
+	if (!same) return { variant: "warning", text: "No CI ran on these FBCs" };
 	return {
 		variant: "warning",
-		text: same ? `Not tested · same bundle: ${same.text}` : "Not tested",
+		text: `${same.text} on an equivalent FBC (same bundle)`,
+	};
+}
+
+/** Whether an operator has an FBC, on the head bundle or not. */
+const hasFBC = (o: OperatorFBC) => o.members.length + o.conflicts.length > 0;
+
+const withFBC = (c: FBCCandidate) => c.operators.filter(hasFBC);
+
+/**
+ * The Build step, of the stream's FBCs: how many operators have one, and how
+ * many of their OCP version slots do.
+ */
+export function fbcBuildStep(c: FBCCandidate): CIStep & { fbcs: string } {
+	const built = withFBC(c).length;
+	const slots = c.operators.reduce((n, o) => n + o.coverage.slots, 0);
+	const missing = c.operators.reduce((n, o) => n + o.missing_ocp.length, 0);
+	return {
+		variant: built === c.operators.length ? "success" : "warning",
+		text: `${built} of ${c.operators.length} operators built`,
+		fbcs: `${slots - missing} of ${slots} FBCs`,
 	};
 }
 
 /**
- * The candidate's Stage step: not staged for the stream, else by the newest
- * Release of each staged slot's Snapshot, a failed one first. Released slots
- * are a warning while the candidate has errors, as a missing operator.
+ * The candidate's Stage step: not staged for the stream; how many operators
+ * the stage shipment holds while it leaves one out; else how many of its
+ * FBCs' newest Releases succeeded, any failed one failing it.
  */
 export function fbcStageStep(c: FBCCandidate): CIStep {
-	if (c.source === "stream") return { variant: "pending", text: "Not staged" };
+	if (c.source === "stream")
+		return { variant: "pending", text: "Not in a stage shipment" };
+	const staged = withFBC(c).length;
+	if (staged < c.operators.length)
+		return {
+			variant: "warning",
+			text: `${staged} of ${c.operators.length} operators staged`,
+		};
 	const states = slotFBCs(c).map((m) =>
 		m.release ? releaseLine(m.release).status : "running",
 	);
+	const done = states.filter((s) => s === "done").length;
 	const failed = states.filter((s) => s === "failed").length;
+	const text = `${done} of ${states.length} FBCs released`;
 	if (failed > 0)
-		return {
-			variant: "danger",
-			text: `${failed} Release${failed === 1 ? "" : "s"} failed`,
-		};
-	if (states.length > 0 && states.every((s) => s === "done"))
-		return c.errors.length > 0
-			? { variant: "warning", text: "Released with errors" }
-			: { variant: "success", text: "Released" };
-	return { variant: "info", text: "Release in progress" };
+		return { variant: "danger", text: `${text} · ${failed} failed` };
+	return { variant: done === states.length ? "success" : "info", text };
 }
+
+/**
+ * A step, in progress rather than a warning or failure while checking, as FBC
+ * reads are pending: nothing is wrong with the release until they finish.
+ */
+export const whileChecking = <S extends CIStep>(s: S, checking: boolean): S =>
+	checking && (s.variant === "warning" || s.variant === "danger")
+		? { ...s, variant: "info" }
+		: s;
 
 // What each candidate state means.
 const stateTexts: Record<FBCCandidate["state"], string> = {
@@ -122,21 +155,6 @@ const stateTexts: Record<FBCCandidate["state"], string> = {
 	inconsistent: "an operator's FBCs head more than one bundle",
 	unknown: "a head bundle or staged catalog is not resolved yet",
 };
-
-/** The candidate's headline: where its FBCs come from and their state. */
-export function candidateLine(c: FBCCandidate): StatusLine {
-	const source =
-		c.source === "stream" ? "Not staged: the stream's newest FBCs" : "Staged";
-	const status =
-		c.state === "complete"
-			? c.source === "stream"
-				? "warning"
-				: "done"
-			: c.state === "unknown"
-				? "warning"
-				: "failed";
-	return { status, text: `${source}; ${stateTexts[c.state]}.` };
-}
 
 /**
  * release-from-fbc's fbc-pullspecs, comma-separated, only for a complete
@@ -208,6 +226,134 @@ export function streamAhead(
 		(o) => o.operator === operator,
 	)?.head_bundle_nvr;
 	return ahead && ahead !== head ? ahead : null;
+}
+
+/** The OCP strip's cells: a glyph and what it means. */
+export const stripCells = {
+	staged: { glyph: "●", text: "staged" },
+	built: { glyph: "○", text: "built, not in shipment" },
+	other: { glyph: "◐", text: "other build" },
+	missing: { glyph: "✗", text: "no FBC" },
+	reading: { glyph: "·", text: "reading" },
+	absent: { glyph: "–", text: "not part of release" },
+} as const;
+
+export type StripCell = keyof typeof stripCells;
+
+/** An operator whose FBCs a summary row shows, and its OCP strip. */
+export interface SummaryRow {
+	operator: OperatorFBC;
+	cells: StripCell[];
+}
+
+const slotCells: Record<SlotRow["kind"], StripCell> = {
+	member: "staged",
+	other: "other",
+	unresolved: "reading",
+	missing: "missing",
+};
+
+/**
+ * The operator summary: each OCP version an operator has a slot for, and a
+ * row per operator with its cell for each. An operator the stage shipment
+ * leaves out shows the stream's FBCs, which would be added.
+ */
+export function operatorSummary(
+	c: FBCCandidate,
+	stream: FBCCandidate | null,
+): { ocps: string[]; rows: SummaryRow[] } {
+	const picks = c.operators.map((o) => {
+		const s = stream?.operators.find((x) => x.operator === o.operator);
+		return c.source === "stage_snapshots" && !hasFBC(o) && s && hasFBC(s)
+			? { o: s, built: true }
+			: { o, built: c.source === "stream" };
+	});
+	const ocps = [
+		...new Set(picks.flatMap(({ o }) => slotRows(o).map((r) => r.ocp))),
+	].sort(compareVersions);
+	const rows = picks.map(({ o, built }) => {
+		const kinds = new Map(slotRows(o).map((r) => [r.ocp, r.kind]));
+		const cells = ocps.map((ocp): StripCell => {
+			const kind = kinds.get(ocp);
+			if (!kind) return "absent";
+			return kind === "member" && built ? "built" : slotCells[kind];
+		});
+		return { operator: o, cells };
+	});
+	return { ocps, rows };
+}
+
+/** The version an operator's FBCs ship, by their head CSV: "v3.17.6". */
+export const shipsVersion = (o: OperatorFBC) =>
+	o.head_csv.includes(".v")
+		? o.head_csv.slice(o.head_csv.indexOf(".v") + 1)
+		: "";
+
+const MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
+
+/**
+ * When ART built a bundle, by its NVR's timestamp, in UTC as ART writes it:
+ * ...-3.17.6.202610060936.p2... is "Oct 6 09:36"; "" without one.
+ */
+export function bundleBuilt(nvr: string): string {
+	const t = nvr.match(/\.(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})\./);
+	return t ? `${MONTHS[Number(t[2]) - 1]} ${Number(t[3])} ${t[4]}:${t[5]}` : "";
+}
+
+/**
+ * Where an operator's ART-built images are: in prod for a shipped version
+ * once all are, else on stage, or why not; "" until its head bundle is read.
+ */
+export function imagesState(o: OperatorFBC, shipped: boolean): string {
+	const art = o.images.filter((i) => i.nvr);
+	if (art.length === 0) return "";
+	if (shipped && art.every((i) => i.prod)) return "in prod";
+	if (art.every((i) => i.stage)) return "on stage";
+	return o.fbc_ri_stage.state === "failed"
+		? "push to stage failed"
+		: "not on stage";
+}
+
+/**
+ * The verdict's headline; a shipped version's is the record of its prod
+ * Release, which the page adds.
+ */
+export function verdictLine(v: Verdict): StatusLine {
+	const blockers = v.items.filter((i) => i.level === "blocker").length;
+	switch (v.state) {
+		case "checking":
+			return { status: "running", text: "Checking…" };
+		case "shipped":
+			return { status: "done", text: "Shipped" };
+		case "ready":
+			return { status: "done", text: "Ready" };
+		default:
+			return {
+				status: "failed",
+				text: blockers
+					? `Not ready: ${blockers} blocker${blockers === 1 ? "" : "s"}`
+					: "Not ready",
+			};
+	}
+}
+
+/**
+ * How far the render sync has read FBC images, null with nothing pending or
+ * failed: in progress while reads are pending, a warning for failed reads
+ * only once none is.
+ */
+export function readingLine(r: ReadProgress): StatusLine | null {
+	if (r.pending === 0 && r.failed === 0) return null;
+	const total = r.read + r.failed + r.pending;
+	if (r.pending === 0)
+		return {
+			status: "warning",
+			text: `${r.failed} of ${total} FBCs can't be read`,
+		};
+	return {
+		status: "running",
+		text: `Reading FBC contents: ${r.read} of ${total}${r.failed ? ` · ${r.failed} can't be read` : ""}`,
+	};
 }
 
 /** An operator's image check: the image Snapshot's bundle against its head. */
@@ -294,40 +440,6 @@ export function releaseLine(r: KonfluxRelease): StatusLine {
 		};
 	}
 	return { status: "running", text: "Release in progress" };
-}
-
-const fbcs = (n: number) => `${n} FBC${n === 1 ? "" : "s"}`;
-
-/**
- * A step's FBC line, null without a catalog to show: at Build, how many
- * catalogs are staged and how many built, not staged; at Stage, how many are
- * staged and how their Releases went.
- */
-export function fbcLine(
-	catalogs: CandidateCatalog[],
-	step: "build" | "stage",
-): string | null {
-	const staged = catalogs.filter((c) => c.state === "staged");
-	const built = catalogs.length - staged.length;
-	if (step === "build") {
-		const parts = [
-			staged.length > 0 && `${fbcs(staged.length)} staged`,
-			built > 0 &&
-				`${staged.length > 0 ? built : fbcs(built)} built, not staged`,
-		].filter(Boolean);
-		return parts.length > 0 ? parts.join(" · ") : null;
-	}
-	if (staged.length === 0) return null;
-	const states = staged.map((c) =>
-		c.release ? releaseLine(c.release).status : "running",
-	);
-	const failed = states.filter((s) => s === "failed").length;
-	const outcome = failed
-		? `${failed} Release${failed === 1 ? "" : "s"} failed`
-		: states.every((s) => s === "done")
-			? "Released"
-			: "Release in progress";
-	return `${fbcs(staged.length)} staged · ${outcome}`;
 }
 
 /** release-from-fbc's fbc-pullspecs while there are none to run with. */
