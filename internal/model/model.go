@@ -200,11 +200,11 @@ type StageSummary struct {
 	Total  int `json:"total"`
 }
 
-// OperatorImage is a bundle's relatedImage with its ART build, NVR and
-// Commit "" for an image ART did not build, and BuildURL its ART build page,
-// "" until ART resolves its digest. Stage is set when a succeeded stage
-// Release holds its digest, Prod when a succeeded prod Release does. Scan is
-// its CVE scan, null until the scan sync reads it.
+// OperatorImage is a bundle's relatedImage with its ART build: NVR, Commit
+// and BuildURL (its ART build page) are "" for an image ART did not build.
+// Stage is set when a succeeded stage Release holds its digest, Prod when a
+// succeeded prod Release does. Scan is its CVE scan, null until the scan sync
+// reads it.
 type OperatorImage struct {
 	Name     string     `json:"name"`
 	Image    string     `json:"image"`
