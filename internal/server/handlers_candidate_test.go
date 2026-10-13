@@ -790,7 +790,8 @@ func TestGetCandidateFBCRestage(t *testing.T) {
 // Like 3.18.1's restaged slots: a slot counts each staged Snapshot holding a
 // catalog of it whose newest Release succeeded, never one that failed and was
 // superseded; an operator counts its slots' FBCs on stage. A staged FBC RR
-// failed to read blocks the release.
+// failed to read blocks the release. Reading counts only the version's FBCs
+// on the page, not a superseded one or another version's.
 func TestGetCandidateFBCStaged(t *testing.T) {
 	srv := setupTestServer(t)
 	const app, head = "fbc-quay-3-18", "quay-operator-metadata-container-3.18.1.202610090339"
@@ -798,6 +799,7 @@ func TestGetCandidateFBCStaged(t *testing.T) {
 	op20 := seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261009000000.ocp4.20", head)
 	op21 := seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261007000000.ocp4.21", head)
 	qbo := seedHistoryFBC(t, srv, "quay-bridge-operator-fbc-3.18.1-20261007000000.ocp4.20", "qbo-bundle")
+	seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.2-20261009000000.ocp4.20", head)
 	const csoNVR = "container-security-operator-fbc-3.18.1-20261007000000.ocp4.20"
 	cso := testImage("fbc/" + csoNVR)
 	if err := srv.db.UpsertArtHistoryBuild(t.Context(), artbuild.HistoryBuild{
@@ -827,8 +829,8 @@ func TestGetCandidateFBCStaged(t *testing.T) {
 		Level: "blocker", Operator: "container-security-operator", Code: "read_failed",
 		Text: "container-security-operator OCP 4.20: can't read FBC: no channel stable-3.18",
 	}}}
-	if !reflect.DeepEqual(got.Verdict, want) || got.Reading != (model.ReadProgress{Read: 4, Failed: 1}) {
-		t.Errorf("verdict %+v, reading %+v; want %+v, 4 read, 1 failed", got.Verdict, got.Reading, want)
+	if !reflect.DeepEqual(got.Verdict, want) || got.Reading != (model.ReadProgress{Read: 3, Failed: 1}) {
+		t.Errorf("verdict %+v, reading %+v; want %+v, 3 read, 1 failed", got.Verdict, got.Reading, want)
 	}
 }
 

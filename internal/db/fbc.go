@@ -5,6 +5,7 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/quay/release-readiness/internal/artbuild"
@@ -72,14 +73,24 @@ func (d *DB) FBCsToRender(ctx context.Context, now time.Time, limit int) ([]stri
 	return pullspecs, nil
 }
 
-// FBCReadProgress counts the FBC images the render sync reads by the state
-// of their render: rendered, failed, or none yet.
-func (d *DB) FBCReadProgress(ctx context.Context) (read, failed, pending int, err error) {
+// FBCReadProgress counts the FBC images of digests the render sync reads by
+// the state of their render: rendered, failed, or none yet.
+func (d *DB) FBCReadProgress(ctx context.Context, digests []string) (read, failed, pending int, err error) {
 	sources, err := d.fbcRenderSources(ctx)
 	if err != nil {
 		return 0, 0, 0, err
 	}
+	want := map[string]bool{}
+	for _, dg := range digests {
+		want[dg] = true
+	}
 	for _, r := range sources {
+		_, digest, _ := strings.Cut(r.Pullspec, "@")
+		if !want[digest] {
+			continue
+		}
+		// Count a digest once, whichever repo names it.
+		delete(want, digest)
 		switch r.State {
 		case fbc.StateRendered:
 			read++

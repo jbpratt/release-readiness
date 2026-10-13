@@ -80,8 +80,13 @@ func TestFBCRenderCache(t *testing.T) {
 	if got, want := toRender(now), []string{ocp420}; !slices.Equal(got, want) {
 		t.Errorf("to render before the retry: got %v, want %v", got, want)
 	}
-	if read, failed, pending, err := d.FBCReadProgress(ctx); err != nil || read != 1 || failed != 1 || pending != 1 {
+	// The superseded build is no render source, so it never counts.
+	all := []string{"sha256:0001", "sha256:0002", "sha256:0003", "sha256:0004"}
+	if read, failed, pending, err := d.FBCReadProgress(ctx, all); err != nil || read != 1 || failed != 1 || pending != 1 {
 		t.Errorf("read progress: %d read, %d failed, %d pending, %v; want 1, 1, 1", read, failed, pending, err)
+	}
+	if read, failed, pending, err := d.FBCReadProgress(ctx, []string{"sha256:0003"}); err != nil || read != 0 || failed != 0 || pending != 1 {
+		t.Errorf("read progress of 0003: %d read, %d failed, %d pending, %v; want 0, 0, 1", read, failed, pending, err)
 	}
 	if got, want := toRender(now.Add(time.Hour)), []string{newer, ocp420}; !slices.Equal(got, want) {
 		t.Errorf("to render at the retry: got %v, want %v", got, want)
