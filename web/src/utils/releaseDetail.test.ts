@@ -50,7 +50,6 @@ import {
 	stageText,
 	streamAhead,
 	tknCommand,
-	topReason,
 	unreadText,
 	unshippedOf,
 	verdictLine,
@@ -793,31 +792,6 @@ test("decisions: the whole release's blockers, with a known code's action", () =
 		],
 	);
 	assert.deepEqual(decisions({ state: "checking", items }), []);
-});
-
-test("topReason: a whole-release blocker, else the first blocker", () => {
-	const warning = item("warning", "", "stream_ahead", "Stream ahead");
-	const csv = item("blocker", "quay-operator", "csv_mismatch", "CSV mismatch");
-	const staged = item("blocker", "", "not_staged", "Not in a stage shipment");
-	assert.equal(
-		topReason({ state: "not_ready", items: [warning, csv, staged] })?.text,
-		"Not in a stage shipment",
-	);
-	assert.equal(
-		topReason({ state: "not_ready", items: [warning, csv] })?.text,
-		"CSV mismatch",
-	);
-	assert.equal(topReason({ state: "ready", items: [warning] }), null);
-});
-
-test("topReason: a bundle mismatch drops its NVRs, kept in full", () => {
-	const full =
-		"Image shipment has bundle quay-operator-bundle-container-v3.17.6-1, the FBCs ship quay-operator-bundle-container-v3.17.6-2";
-	const mismatch = item("blocker", "quay-operator", "image_mismatch", full);
-	assert.deepEqual(topReason({ state: "not_ready", items: [mismatch] }), {
-		text: "Image shipment and FBCs ship different bundles",
-		full,
-	});
 });
 
 test("readyText: awaiting stage while not staged", () => {

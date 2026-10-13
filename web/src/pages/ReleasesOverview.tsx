@@ -11,6 +11,7 @@ import {
 	Flex,
 	FlexItem,
 	Gallery,
+	Label,
 	PageSection,
 	Spinner,
 	Switch,
@@ -22,25 +23,24 @@ import {
 	ToolbarGroup,
 	ToolbarItem,
 } from "@patternfly/react-core";
-import { ListIcon, ThIcon } from "@patternfly/react-icons";
-import type { CSSProperties } from "react";
+import {
+	CheckCircleIcon,
+	ExclamationCircleIcon,
+	ExclamationTriangleIcon,
+	ListIcon,
+	ThIcon,
+} from "@patternfly/react-icons";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { getCandidate, listReleasesOverview } from "../api/client";
+import { listReleasesOverview } from "../api/client";
 import type {
 	IssueSummary,
 	ReadinessResponse,
 	ReleaseVersion,
 } from "../api/types";
-import { Status } from "../components/Status";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
 import { day } from "../utils/format";
 import { formatReleaseName, jiraIssueUrl } from "../utils/links";
-import {
-	type StatusLine,
-	topReason,
-	verdictLine,
-} from "../utils/releaseDetail";
 
 type ViewMode = "compact" | "expanded";
 
@@ -173,6 +173,12 @@ function ReleaseCard({
 	const target = release.due_date ?? release.release_date;
 	const targetDate = target && day(target);
 
+	const signalIcons = {
+		green: <CheckCircleIcon />,
+		red: <ExclamationCircleIcon />,
+		yellow: <ExclamationTriangleIcon />,
+	};
+
 	const lastBuild = latestBuild
 		? new Date(latestBuild).toLocaleDateString()
 		: "None";
@@ -204,19 +210,28 @@ function ReleaseCard({
 				navigate(`/releases/${encodeURIComponent(release.name)}`);
 			}}
 		>
-			<CardTitle>{displayName}</CardTitle>
+			<CardTitle>
+				<Flex
+					justifyContent={{ default: "justifyContentSpaceBetween" }}
+					alignItems={{ default: "alignItemsCenter" }}
+				>
+					<FlexItem>{displayName}</FlexItem>
+					{readinessSignal.signal && (
+						<FlexItem>
+							<Label
+								color={readinessSignal.signal}
+								icon={signalIcons[readinessSignal.signal]}
+								isCompact
+							>
+								{readinessSignal.message}
+							</Label>
+						</FlexItem>
+					)}
+				</Flex>
+			</CardTitle>
 			<CardBody>
-				{release.released ? (
-					<Lead status="done" text="Shipped" />
-				) : (
-					<CandidateLead version={release.name} />
-				)}
-				{/* Released and Shipped repeat the lead. */}
-				{readinessSignal.signal && readinessSignal.signal !== "green" && (
-					<div style={secondary}>{readinessSignal.message}</div>
-				)}
 				{viewMode === "compact" ? (
-					<DescriptionList isCompact isHorizontal style={secondary}>
+					<DescriptionList isCompact isHorizontal>
 						{targetDate && (
 							<DescriptionListGroup>
 								<DescriptionListTerm>Target</DescriptionListTerm>
@@ -241,10 +256,7 @@ function ReleaseCard({
 						)}
 					</DescriptionList>
 				) : (
-					<Flex
-						justifyContent={{ default: "justifyContentSpaceBetween" }}
-						style={secondary}
-					>
+					<Flex justifyContent={{ default: "justifyContentSpaceBetween" }}>
 						{targetDate && (
 							<FlexItem>
 								<span className="rr-label">Target</span>
@@ -271,48 +283,5 @@ function ReleaseCard({
 				)}
 			</CardBody>
 		</Card>
-	);
-}
-
-const secondary = {
-	marginTop: "0.5rem",
-	color: "var(--pf-t--global--text--color--subtle)",
-	fontSize: "var(--pf-t--global--font--size--body--sm)",
-	"--pf-v6-c-description-list__term--FontSize":
-		"var(--pf-t--global--font--size--body--sm)",
-} as CSSProperties;
-
-/** Whether the version can ship, as the release page heads it, and why not. */
-function Lead({
-	status,
-	text,
-	reason,
-}: StatusLine & { reason?: { text: string; full: string } | null }) {
-	return (
-		<Status status={status}>
-			<span style={{ overflowWrap: "anywhere" }} title={reason?.full}>
-				<strong>{text}</strong>
-				{reason && ` · ${reason.text}`}
-			</span>
-		</Status>
-	);
-}
-
-/** The lead of an unreleased version, from its release candidate's verdict. */
-function CandidateLead({ version }: { version: string }) {
-	const { data, loading, error } = useCachedFetch(`candidate:${version}`, () =>
-		getCandidate(version),
-	);
-	if (loading && !data) return <Spinner size="md" aria-label="Loading" />;
-	if (error) return <div>{error.message}</div>;
-	if (!data || (!data.fbc_candidate && data.verdict.state !== "shipped"))
-		return <div>No release candidate yet</div>;
-	const head = verdictLine(data.verdict);
-	const reason = topReason(data.verdict);
-	// The reason stands in for the blocker count the release page shows.
-	return reason ? (
-		<Lead status={head.status} text="Not ready" reason={reason} />
-	) : (
-		<Lead {...head} />
 	);
 }
