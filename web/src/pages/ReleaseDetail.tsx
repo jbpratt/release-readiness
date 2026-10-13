@@ -43,7 +43,6 @@ import {
 } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { type ReactNode, useMemo, useState } from "react";
-import { flushSync } from "react-dom";
 import { Link, useParams } from "react-router-dom";
 import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
 import type {
@@ -89,7 +88,6 @@ import {
 	imagesState,
 	jobLabels,
 	nvrLabel,
-	operatorSummary,
 	pullspecsBlocked,
 	readingLine,
 	releaseLine,
@@ -97,13 +95,12 @@ import {
 	runsStatus,
 	type ShownOperator,
 	type StatusLine,
-	type StripCell,
 	shipsVersion,
 	shownOperators,
 	slotItem,
 	slotRows,
+	stageText,
 	streamAhead,
-	stripCells,
 	tknCommand,
 	unreadText,
 	unshippedOf,
@@ -439,9 +436,9 @@ function BuildsCard({
 /**
  * The FBC candidate: its verdict and how far FBC reads are; where it is, from
  * the stream's build through CI and stage to prod, the Build and Stage steps
- * opening their FBC catalogs; a summary row per operator, whose OCP cells
- * open that row of its block; and each operator's block. Unshipped, the Stage
- * step's popover has release-from-fbc's params; the Prod step's, its Release.
+ * opening their FBC catalogs; a summary row per operator; and each operator's
+ * block. Unshipped, the Stage step's popover has release-from-fbc's params;
+ * the Prod step's, its Release.
  * While FBC reads are pending no step warns or fails.
  */
 function Candidate({
@@ -505,13 +502,6 @@ function Candidate({
 	// Blocks the reader opened or closed, and their tabs; else open on a problem.
 	const [opened, setOpened] = useState<Record<string, boolean>>({});
 	const [tabs, setTabs] = useState<Record<string, BlockTab>>({});
-	const showRow = (operator: string, id: string) => {
-		flushSync(() => {
-			setOpened((o) => ({ ...o, [operator]: true }));
-			setTabs((t) => ({ ...t, [operator]: "fbcs" }));
-		});
-		document.getElementById(id)?.scrollIntoView({ block: "center" });
-	};
 	return (
 		<>
 			<VerdictHeader verdict={verdict} prod={prodRelease} />
@@ -596,7 +586,6 @@ function Candidate({
 				stream={stream}
 				shipped={shipped}
 				items={verdict.items}
-				onShow={showRow}
 			/>
 			{shown.map((s) => {
 				const op = s.operator.operator;
@@ -698,125 +687,68 @@ function VerdictHeader({
 	);
 }
 
-/** The id of an operator's row for an OCP version, which its strip cell opens. */
-const slotId = (operator: string, ocp: string) => `${operator}-ocp-${ocp}`;
-
-const glyph = {
-	display: "inline-block",
-	width: "1.25em",
-	textAlign: "center",
-	color: "inherit",
-} as const;
-
 /**
- * A row per operator: the version and bundle its FBCs ship, a cell per OCP
- * version opening that row of its block below, and where its images are;
- * then what the cells mean.
+ * A row per operator: the version and bundle its FBCs ship and where its
+ * images are.
  */
 function OperatorSummary({
 	fbc,
 	stream,
 	shipped,
 	items,
-	onShow,
 }: {
 	fbc: FBCCandidate;
 	stream: FBCCandidate | null;
 	shipped: boolean;
 	items: VerdictItem[];
-	/** Opens an operator's block on the row of id and scrolls to it. */
-	onShow: (operator: string, id: string) => void;
 }) {
-	const { ocps, rows } = operatorSummary(fbc, stream, shipped, items);
 	const flagged = (operator: string, code: string) =>
 		items.some((i) => i.operator === operator && i.code === code);
-	const legend = (Object.keys(stripCells) as StripCell[]).filter(
-		(k) =>
-			k !== "blank" &&
-			((k !== "absent" && k !== "unknown" && k !== "failed") ||
-				rows.some((r) => r.cells.includes(k))),
-	);
 	return (
-		<>
-			<Table
-				variant="compact"
-				aria-label="Operators"
-				style={{ marginTop: "1rem" }}
-			>
-				<Thead>
-					<Tr>
-						<Th>Operator</Th>
-						<Th>Ships</Th>
-						<Th>Bundle</Th>
-						<Th>
-							{ocps.length > 1
-								? `OCP ${ocps[0]} … ${ocps[ocps.length - 1]}`
-								: `OCP ${ocps[0] ?? ""}`}
-						</Th>
-						<Th>Images</Th>
-					</Tr>
-				</Thead>
-				<Tbody>
-					{rows.map(({ operator: o, cells }) => {
-						const ships = shipsVersion(o);
-						const images = imagesState(o, shipped);
-						const unread = unreadText(items, o.operator) ?? "reading…";
-						return (
-							<Tr key={o.operator}>
-								<Td>{o.operator}</Td>
-								<Td modifier="nowrap">
-									{ships ? (
-										<>
-											{ships}{" "}
-											{flagged(o.operator, "csv_mismatch") &&
-												levelIcons.blocker}
-										</>
-									) : (
-										<span style={muted}>{unread}</span>
-									)}
-								</Td>
-								<Td modifier="nowrap">
-									<span title={o.head_bundle_nvr}>
-										{bundleBuilt(o.head_bundle_nvr)}
-									</span>
-								</Td>
-								<Td modifier="nowrap">
-									{cells.map((k, i) => {
-										const title = `OCP ${ocps[i]}: ${stripCells[k].text}`;
-										return k === "absent" || k === "blank" ? (
-											<span key={ocps[i]} title={title} style={glyph}>
-												{stripCells[k].glyph}
-											</span>
-										) : (
-											<a
-												key={ocps[i]}
-												href={`#${slotId(o.operator, ocps[i])}`}
-												title={title}
-												style={glyph}
-												onClick={(e) => {
-													e.preventDefault();
-													onShow(o.operator, slotId(o.operator, ocps[i]));
-												}}
-											>
-												{stripCells[k].glyph}
-											</a>
-										);
-									})}
-								</Td>
-								<Td modifier="nowrap">
-									{images || <span style={muted}>{unread}</span>}
-								</Td>
-							</Tr>
-						);
-					})}
-				</Tbody>
-			</Table>
-			<div style={muted}>
-				{legend
-					.map((k) => `${stripCells[k].glyph} ${stripCells[k].text}`)
-					.join("   ")}
-			</div>
-		</>
+		<Table
+			variant="compact"
+			aria-label="Operators"
+			style={{ marginTop: "1rem" }}
+		>
+			<Thead>
+				<Tr>
+					<Th>Operator</Th>
+					<Th>Ships</Th>
+					<Th>Bundle</Th>
+					<Th>Images</Th>
+				</Tr>
+			</Thead>
+			<Tbody>
+				{shownOperators(fbc, stream, shipped).map(({ operator: o }) => {
+					const ships = shipsVersion(o);
+					const images = imagesState(o, shipped);
+					const unread = unreadText(items, o.operator) ?? "reading…";
+					return (
+						<Tr key={o.operator}>
+							<Td>{o.operator}</Td>
+							<Td modifier="nowrap">
+								{ships ? (
+									<>
+										{ships}{" "}
+										{flagged(o.operator, "csv_mismatch") && levelIcons.blocker}
+									</>
+								) : (
+									<span style={muted}>{unread}</span>
+								)}
+							</Td>
+							<Td modifier="nowrap">
+								<span title={o.head_bundle_nvr}>
+									{bundleBuilt(o.head_bundle_nvr)}
+								</span>
+							</Td>
+							<Td modifier="nowrap">
+								{images || <span style={muted}>{unread}</span>}
+							</Td>
+						</Tr>
+					);
+				})}
+			</Tbody>
+		</Table>
 	);
 }
 
@@ -833,31 +765,8 @@ const imagesTexts: Record<string, string> = {
 	"push to stage failed": "image push to stage failed",
 };
 
-/** A date without its time: "Oct 7". */
-const day = (iso: string) =>
-	new Date(iso).toLocaleDateString(undefined, {
-		month: "short",
-		day: "numeric",
-	});
-
 /** The commit an ART NVR's ".g<sha>" names. */
 const nvrCommit = (nvr: string) => nvr.match(/\.g([0-9a-f]{7,})\./)?.[1] ?? "";
-
-/**
- * Since when an operator's staged FBCs are all on stage, by their newest
- * Releases, else how many are.
- */
-function stageText(o: OperatorFBC): string {
-	const { staged, total } = o.stage;
-	if (total === 0) return "";
-	const done = o.members
-		.map((m) => m.release?.completion_time ?? "")
-		.filter(Boolean)
-		.sort();
-	return staged === total && done.length > 0
-		? `On stage since ${day(done[done.length - 1])} (${staged} of ${total})`
-		: `${staged} of ${total} on stage`;
-}
 
 /**
  * An operator's block, open on a problem until the reader toggles it: the
@@ -909,7 +818,7 @@ function OperatorBlock({
 	const images = imagesTexts[imagesState(o, shipped)];
 	const status = leftOut
 		? `Not in the stage shipment: add these ${fbcs} FBCs`
-		: [shipped ? "" : stageText(o), images].filter(Boolean).join(" · ");
+		: [shipped ? "" : stageText(o, items), images].filter(Boolean).join(" · ");
 	const newer = o.compare.find((c) => c.kind === "newer");
 	const change = newer && compareLine(newer);
 	const ci = rows.some(
@@ -978,10 +887,7 @@ function OperatorBlock({
 						</Thead>
 						<Tbody>
 							{rows.map((r) => (
-								<Tr
-									key={`${r.ocp} ${r.fbc?.digest ?? ""}`}
-									id={slotId(o.operator, r.ocp)}
-								>
+								<Tr key={`${r.ocp} ${r.fbc?.digest ?? ""}`}>
 									<Td modifier="nowrap">{r.ocp}</Td>
 									<Td>
 										{r.fbc && (
@@ -1109,7 +1015,8 @@ const changeColors: Record<string, LabelProps["color"]> = {
  * An operator's images, the relatedImages of its head bundle, each once with
  * its build, commit, digest and whether stage and prod hold it; or, compared,
  * each image's change against the previous z or a newer build. Under them,
- * which FBCs ship them and whether the image shipment has their bundle.
+ * the OCP versions shipping another build and an image shipment's other
+ * bundle.
  */
 function OperatorImages({
 	operator: o,
@@ -1209,9 +1116,9 @@ function OperatorImages({
 								<Td>{i.name || "bundle"}</Td>
 								<Td modifier="nowrap">
 									{i.nvr ? (
-										<span title={i.nvr}>
+										<ExtLink href={i.build_url || null} title={i.nvr}>
 											{bundleBuilt(i.nvr) || nvrLabel(i.nvr)}
-										</span>
+										</ExtLink>
 									) : (
 										<span style={muted}>external</span>
 									)}
@@ -1234,14 +1141,10 @@ function OperatorImages({
 				</Table>
 			)}
 			<div style={muted}>
-				{other.length > 0
-					? `OCP ${other.join(", ")} ${other.length === 1 ? "ships" : "ship"} a different build.`
-					: o.members.length === 1
-						? "The FBC ships these images."
-						: `All ${o.members.length} FBCs ship these images.`}
-				{check.state === "matches" && " Image shipment: same bundle."}
+				{other.length > 0 &&
+					`OCP ${other.join(", ")} ${other.length === 1 ? "ships" : "ship"} a different build. `}
 				{check.state === "differs" &&
-					` Image shipment has bundle ${bundleBuilt(check.bundle_nvr)}.`}
+					`Image shipment has bundle ${bundleBuilt(check.bundle_nvr)}.`}
 			</div>
 		</>
 	);

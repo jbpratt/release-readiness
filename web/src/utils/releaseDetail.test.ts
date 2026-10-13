@@ -25,7 +25,6 @@ import {
 	jobLabels,
 	jobShortName,
 	nvrLabel,
-	operatorSummary,
 	pullspecsBlocked,
 	readingLine,
 	releaseLine,
@@ -35,6 +34,7 @@ import {
 	shownOperators,
 	slotItem,
 	slotRows,
+	stageText,
 	streamAhead,
 	tknCommand,
 	unreadText,
@@ -365,15 +365,9 @@ test("missing operator (3.17.6): CSO and QBO not in stage show the stream's FBCs
 		{ ocp: "4.12", kind: "missing", fbc: null },
 		{ ocp: "4.14", kind: "missing", fbc: null },
 	]);
-	const summary = operatorSummary(c, stream, false);
-	assert.deepEqual(summary.ocps, ["4.12", "4.13", "4.14"]);
 	assert.deepEqual(
-		summary.rows.map((r) => [r.operator, r.cells]),
-		[
-			[qo, ["staged", "staged", "staged"]],
-			[streamCSO, ["built", "blank", "built"]],
-			[streamQBO, ["built", "blank", "blank"]],
-		],
+		shownOperators(c, stream, false).map((s) => s.operator),
+		[qo, streamCSO, streamQBO],
 	);
 });
 
@@ -526,34 +520,22 @@ test("restaged FBCs (3.18.1): the newest Release of each counts", () => {
 	});
 });
 
-test("checking: reading cells, nothing warns or fails", () => {
+test("checking: nothing warns or fails", () => {
 	const o = operatorFBC("quay-operator", "", [], {
 		conflicts: [fbcMember("4.14", ""), fbcMember("4.15", "")],
 	});
 	const c = fbcCandidate({ state: "unknown", operators: [o] });
-	assert.deepEqual(operatorSummary(c, null, false).rows[0].cells, [
-		"reading",
-		"reading",
-	]);
 	const noHead = item(
 		"blocker",
 		"quay-operator",
 		"no_head_bundle",
 		"quay-operator OCP 4.15: FBC heads no known bundle",
 	);
-	assert.deepEqual(operatorSummary(c, null, false, [noHead]).rows[0].cells, [
-		"reading",
-		"unknown",
-	]);
 	const failed = item(
 		"blocker",
 		"quay-operator",
 		"read_failed",
 		"quay-operator OCP 4.14: can't read FBC: no channel stable-5.0",
-	);
-	assert.deepEqual(
-		operatorSummary(c, null, false, [failed, noHead]).rows[0].cells,
-		["failed", "unknown"],
 	);
 	assert.equal(unreadText([], "quay-operator"), null);
 	assert.equal(
@@ -600,7 +582,7 @@ test("checking: reading cells, nothing warns or fails", () => {
 	);
 });
 
-test("shipped (3.18.1): record mode, OCP versions not shipped are not part of it", () => {
+test("shipped (3.18.1): record mode", () => {
 	const head = bundle("202610061637");
 	const ok = release({ name: "ok", released_status: "True" });
 	const image = (nvr: string, prod: boolean) => ({
@@ -609,6 +591,7 @@ test("shipped (3.18.1): record mode, OCP versions not shipped are not part of it
 		digest: "",
 		nvr,
 		commit: "",
+		build_url: "",
 		stage: true,
 		prod,
 	});
@@ -622,25 +605,6 @@ test("shipped (3.18.1): record mode, OCP versions not shipped are not part of it
 			head_csv: "quay-operator.v3.18.1",
 			images: [image("quay", true), image("", false)],
 		},
-	);
-	const cso = operatorFBC("container-security-operator", head, [
-		fbcMember("4.14", head, { snapshot: "s", release: ok }),
-	]);
-	const c = fbcCandidate({ operators: [qo, cso] });
-	assert.deepEqual(
-		operatorSummary(c, null, true).rows.map((r) => r.cells),
-		[
-			["staged", "staged"],
-			["absent", "staged"],
-		],
-	);
-	// Unshipped, RR may not have seen every FBC yet.
-	assert.deepEqual(
-		operatorSummary(c, null, false).rows.map((r) => r.cells),
-		[
-			["staged", "staged"],
-			["blank", "staged"],
-		],
 	);
 	assert.equal(shipsVersion(qo), "v3.18.1");
 	assert.equal(bundleBuilt(head), "Oct 6 16:37");
@@ -705,6 +669,24 @@ const item = (
 	code: string,
 	text = "",
 ): VerdictItem => ({ level, operator, owner: "", code, text });
+
+test("stageText: no count while FBCs are on their way, a failed one says so", () => {
+	const head = bundle("202610060936");
+	const qo = operatorFBC("quay-operator", head, [fbcMember("4.14", head)], {
+		stage: { staged: 0, total: 11 },
+	});
+	assert.equal(stageText(qo, []), "");
+	assert.equal(
+		stageText(qo, [item("blocker", "quay-operator", "stage_release_failed")]),
+		"FBCs not on stage",
+	);
+	assert.equal(
+		stageText(qo, [
+			item("blocker", "container-security-operator", "stage_release_failed"),
+		]),
+		"",
+	);
+});
 
 test("blockOpen: open with a blocker or warning, or left out of the shipment", () => {
 	const head = bundle("202610060936");

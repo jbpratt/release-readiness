@@ -252,35 +252,6 @@ export function streamAhead(
 	return ahead && ahead !== head ? ahead : null;
 }
 
-/** The OCP strip's cells: a glyph and what it means. */
-export const stripCells = {
-	staged: { glyph: "●", text: "staged" },
-	built: { glyph: "○", text: "built, not in shipment" },
-	other: { glyph: "◐", text: "other build" },
-	missing: { glyph: "✗", text: "no FBC" },
-	reading: { glyph: "·", text: "reading" },
-	failed: { glyph: "!", text: "can't read FBC" },
-	unknown: { glyph: "?", text: "no known bundle" },
-	absent: { glyph: "–", text: "not part of release" },
-	// Outside the record of a shipped release, RR may not know of an FBC yet.
-	blank: { glyph: "\u00a0", text: "no FBC known" },
-} as const;
-
-export type StripCell = keyof typeof stripCells;
-
-/** An operator whose FBCs a summary row shows, and its OCP strip. */
-export interface SummaryRow {
-	operator: OperatorFBC;
-	cells: StripCell[];
-}
-
-const slotCells: Record<SlotRow["kind"], StripCell> = {
-	member: "staged",
-	other: "other",
-	unresolved: "reading",
-	missing: "missing",
-};
-
 /** An operator as the page shows it, and whether it is the stream's. */
 export interface ShownOperator {
 	operator: OperatorFBC;
@@ -307,41 +278,6 @@ export const shownOperators = (
 			? { operator: s, leftOut: true }
 			: { operator: o, leftOut: false };
 	});
-
-/**
- * The operator summary: each OCP version an operator has a slot for, and a
- * row per shown operator with its cell for each.
- */
-export function operatorSummary(
-	c: FBCCandidate,
-	stream: FBCCandidate | null,
-	shipped: boolean,
-	items: VerdictItem[] = [],
-): { ocps: string[]; rows: SummaryRow[] } {
-	const picks = shownOperators(c, stream, shipped);
-	const ocps = [
-		...new Set(
-			picks.flatMap(({ operator }) => slotRows(operator).map((r) => r.ocp)),
-		),
-	].sort(compareVersions);
-	const rows = picks.map(({ operator, leftOut }) => {
-		const built = leftOut || c.source === "stream";
-		const kinds = new Map(slotRows(operator).map((r) => [r.ocp, r.kind]));
-		const cells = ocps.map((ocp): StripCell => {
-			const kind = kinds.get(ocp);
-			if (!kind) return shipped ? "absent" : "blank";
-			if (kind === "unresolved") {
-				if (slotItem(items, "read_failed", operator.operator, ocp))
-					return "failed";
-				if (slotItem(items, "no_head_bundle", operator.operator, ocp))
-					return "unknown";
-			}
-			return kind === "member" && built ? "built" : slotCells[kind];
-		});
-		return { operator, cells };
-	});
-	return { ocps, rows };
-}
 
 /**
  * Whether an operator's block opens: when the verdict has a blocker or
@@ -482,6 +418,36 @@ const MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
 export function bundleBuilt(nvr: string): string {
 	const t = nvr.match(/[.-](\d{4})(\d{2})(\d{2})(\d{2})(\d{2})\./);
 	return t ? `${MONTHS[Number(t[2]) - 1]} ${Number(t[3])} ${t[4]}:${t[5]}` : "";
+}
+
+/** A date without its time: "Oct 7". */
+const day = (iso: string) =>
+	new Date(iso).toLocaleDateString(undefined, {
+		month: "short",
+		day: "numeric",
+	});
+
+/**
+ * Since when an operator's staged FBCs are all on stage, by their newest
+ * Releases; else "FBCs not on stage" when a stage Release of one failed, and
+ * "" while they are on their way: a count of them reads as the images'.
+ */
+export function stageText(o: OperatorFBC, items: VerdictItem[]): string {
+	const { staged, total } = o.stage;
+	if (total === 0) return "";
+	if (staged < total)
+		return items.some(
+			(i) => i.operator === o.operator && i.code === "stage_release_failed",
+		)
+			? "FBCs not on stage"
+			: "";
+	const done = o.members
+		.map((m) => m.release?.completion_time ?? "")
+		.filter(Boolean)
+		.sort();
+	return done.length > 0
+		? `On stage since ${day(done[done.length - 1])} (${staged} of ${total})`
+		: `${staged} of ${total} on stage`;
 }
 
 /**
