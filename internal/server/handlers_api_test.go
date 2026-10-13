@@ -237,6 +237,41 @@ func TestReleasesOverviewReadiness(t *testing.T) {
 	}
 }
 
+// A quay version ART staged with no JIRA fixVersion still has a page.
+func TestReleasesOverviewNoJira(t *testing.T) {
+	srv := setupTestServer(t)
+	ctx := t.Context()
+	if err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range []string{"3.18.1", "5.0.0"} {
+		if err := srv.db.UpsertStagedSnapshot(ctx, "quay-stage-"+a, a, "image", "stage"); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var overviews []model.ReleaseOverview
+	getJSON(t, srv, "/api/v1/releases/overview", http.StatusOK, &overviews)
+	var got []model.ReleaseVersion
+	for _, ov := range overviews {
+		got = append(got, ov.Release)
+	}
+	want := []model.ReleaseVersion{
+		{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"},
+		{Name: "quay-v5.0.0", KonfluxApplication: "quay-5-0", NoJira: true},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("overview releases = %+v, want %+v", got, want)
+	}
+
+	var rel model.ReleaseVersion
+	getJSON(t, srv, "/api/v1/releases/quay-v5.0.0", http.StatusOK, &rel)
+	if rel != want[1] {
+		t.Errorf("quay-v5.0.0 = %+v, want %+v", rel, want[1])
+	}
+	getJSON(t, srv, "/api/v1/releases/quay-v5.0.1", http.StatusNotFound, nil)
+}
+
 // omr-v2.0.13 is not a version ART builds, so it has no build to wait on.
 func TestReleasesOverviewReadinessUntracked(t *testing.T) {
 	srv := setupTestServer(t)

@@ -50,6 +50,14 @@ func TestSetVerdict(t *testing.T) {
 			o.HeadBundleNVR, o.HeadCSV, o.Members, o.MissingOCP = "", "", nil, []string{"4.20"}
 			o.ImageCheck.State = "absent"
 		}, items: []string{"blocker quay-bridge-operator ART missing_operator: quay-bridge-operator is not in the stage shipment"}},
+		// A stream candidate is not up for release, whatever its operators.
+		{name: "not_staged", state: "not_ready", edit: func(r *model.ReleaseCandidate) {
+			r.FBCCandidate.Source = "stream"
+			r.FBCCandidate.Operators[0].ImageCheck = model.ImageCheck{State: "differs", BundleNVR: "image-bundle"}
+		}, items: []string{
+			"blocker  ART not_staged: Not in a stage shipment",
+			"blocker quay-operator ART image_mismatch: Image shipment has bundle image-bundle, the FBCs ship quay-operator-bundle",
+		}},
 		{name: "csv_mismatch", state: "not_ready", edit: func(r *model.ReleaseCandidate) {
 			r.FBCCandidate.Operators[0].HeadCSV = "quay-operator.v3.99.0-dev"
 		}, items: []string{"blocker quay-operator Quay/ART csv_mismatch: quay-operator FBCs ship v3.99.0-dev, not v3.17.6"}},
