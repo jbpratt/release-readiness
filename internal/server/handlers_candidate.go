@@ -31,7 +31,7 @@ var nvrXYZ = regexp.MustCompile(`^(\d+\.\d+\.\d+)(?:\.|$)`)
 // that build leaves out.
 func (s *Server) handleGetCandidate(w http.ResponseWriter, r *http.Request) {
 	version := r.PathValue("version")
-	release, err := s.releaseVersion(r.Context(), version)
+	release, err := s.db.GetReleaseVersion(r.Context(), version)
 	if err != nil {
 		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
 		return

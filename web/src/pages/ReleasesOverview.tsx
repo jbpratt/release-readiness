@@ -215,21 +215,7 @@ function ReleaseCard({
 					justifyContent={{ default: "justifyContentSpaceBetween" }}
 					alignItems={{ default: "alignItemsCenter" }}
 				>
-					<FlexItem>
-						{displayName}
-						{release.no_jira && (
-							<span
-								style={{
-									marginLeft: "0.5rem",
-									fontWeight: "normal",
-									fontSize: "0.85rem",
-									color: "var(--pf-t--global--text--color--subtle)",
-								}}
-							>
-								no Jira fixVersion
-							</span>
-						)}
-					</FlexItem>
+					<FlexItem>{displayName}</FlexItem>
 					{readinessSignal.signal && (
 						<FlexItem>
 							<Label

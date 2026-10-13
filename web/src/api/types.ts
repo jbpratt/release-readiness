@@ -318,8 +318,6 @@ export interface ReleaseVersion {
 	release_ticket_assignee?: string;
 	konflux_application?: string;
 	due_date?: string;
-	/** A version ART staged that has no Jira fixVersion. */
-	no_jira: boolean;
 }
 
 export interface ReadinessResponse {
