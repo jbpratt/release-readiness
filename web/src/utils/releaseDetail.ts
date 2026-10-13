@@ -486,6 +486,28 @@ export const withoutStage = (v: Verdict): Verdict => ({
 	items: v.items.filter((i) => !STAGE_CODES.includes(i.code)),
 });
 
+// The next action on a blocker on the whole release, by its code.
+const blockerActions: Record<string, string> = {
+	not_staged: "Stage the candidate",
+};
+
+/**
+ * A not-ready verdict's blockers on the whole release, each with its next
+ * action, "" for a code without one.
+ */
+export const decisions = (v: Verdict) =>
+	v.state === "not_ready"
+		? v.items
+				.filter((i) => i.level === "blocker" && !i.operator)
+				.map((i) => ({ ...i, action: blockerActions[i.code] ?? "" }))
+		: [];
+
+/** An operator row's text with nothing to act on: unstaged, it only waits. */
+export const readyText = (items: VerdictItem[]) =>
+	items.some((i) => i.code === "not_staged")
+		? "FBC built, awaiting stage"
+		: "Ready";
+
 /**
  * The verdict's headline; a shipped version's is the record of its prod
  * Release, which the page adds.

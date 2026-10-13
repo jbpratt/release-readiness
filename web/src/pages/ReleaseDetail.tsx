@@ -93,6 +93,7 @@ import {
 	ciList,
 	compareLine,
 	componentLabel,
+	decisions,
 	fbcBuildStep,
 	fbcCIStep,
 	fbcParams,
@@ -103,6 +104,7 @@ import {
 	nvrLabel,
 	otherBundle,
 	readingLine,
+	readyText,
 	releaseLine,
 	rowChips,
 	runsStatus,
@@ -422,6 +424,9 @@ function BuildsCard({
 }) {
 	const fbc = data?.fbc_candidate;
 	const reason = data?.reason || "no FBC built or staged yet";
+	// An unstaged candidate's decision block carries the inputs instead.
+	const unstaged =
+		data && decisions(data.verdict).some((d) => d.code === "not_staged");
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<LinkedCardTitle
@@ -437,7 +442,7 @@ function BuildsCard({
 							>
 								FBC CI history
 							</Button>
-							{inputs}
+							{!unstaged && inputs}
 						</>
 					)
 				}
@@ -461,6 +466,7 @@ function BuildsCard({
 						version={version}
 						app={app}
 						konflux={konflux}
+						inputs={inputs}
 					/>
 				) : data.shipped ? (
 					"Shipped; no FBC data."
@@ -489,6 +495,7 @@ function Candidate({
 	version,
 	app,
 	konflux,
+	inputs,
 }: {
 	fbc: FBCCandidate;
 	stream: FBCCandidate | null;
@@ -500,6 +507,7 @@ function Candidate({
 	version: string;
 	app: string;
 	konflux: KonfluxLink;
+	inputs?: ReactNode;
 }) {
 	const prod = prodRelease && {
 		name: prodRelease.name,
@@ -510,7 +518,12 @@ function Candidate({
 		fbcBuildStep(stream ?? fbc, reading.history_days),
 		checking,
 	);
-	const tested = whileChecking(fbcCIStep(fbc), checking);
+	const ci = fbcCIStep(fbc);
+	// CI never gates the verdict, so a failed run only warns.
+	const tested = whileChecking(
+		ci.variant === "danger" ? { ...ci, variant: "warning" } : ci,
+		checking,
+	);
 	const sippy = sippyRunsUrl(version, fbcsBuilt(fbc));
 	const staged = whileChecking(fbcStageStep(fbc), checking);
 	const gaps = verdict.items
@@ -538,6 +551,22 @@ function Candidate({
 	return (
 		<>
 			<VerdictHeader verdict={withoutStage(verdict)} prod={prodRelease} />
+			{decisions(verdict).map((d) => (
+				<Flex
+					key={`${d.code} ${d.text}`}
+					gap={{ default: "gapSm" }}
+					alignItems={{ default: "alignItemsCenter" }}
+					style={{ marginLeft: "1.5rem" }}
+				>
+					<FlexItem>{levelIcons.blocker}</FlexItem>
+					<FlexItem>
+						{d.text}
+						{d.owner && <span style={muted}> · {d.owner}</span>}
+						{d.action && <div>Next: {d.action}</div>}
+					</FlexItem>
+					{d.code === "not_staged" && inputs && <FlexItem>{inputs}</FlexItem>}
+				</Flex>
+			))}
 			{read && (
 				<div style={line}>
 					<Status status={read.status}>{read.text}</Status>
@@ -554,7 +583,7 @@ function Candidate({
 					variant={tested.variant}
 					description={
 						<>
-							{tested.text}
+							{`Advisory · ${tested.text}`}
 							{sippy && (
 								<>
 									{" · "}
@@ -673,7 +702,7 @@ function Candidate({
 											))}
 										</Flex>
 									) : (
-										"Ready"
+										readyText(verdict.items)
 									)}
 								</Td>
 							</Tr>
@@ -762,9 +791,9 @@ function StageCell({ stage }: { stage: StatusLine | null }) {
 }
 
 /**
- * Whether the version can ship, then a line per item on no one operator,
- * with who acts on it, as the operator table shows the rest; a shipped
- * version's is its prod Release.
+ * Whether the version can ship, then a line per warning or info on no one
+ * operator, with who acts on it, as the decision block shows such blockers
+ * and the operator table the rest; a shipped version's is its prod Release.
  */
 function VerdictHeader({
 	verdict,
@@ -784,7 +813,7 @@ function VerdictHeader({
 				<strong>{text}</strong>
 			</Status>
 			{verdict.items
-				.filter((i) => !i.operator)
+				.filter((i) => !i.operator && i.level !== "blocker")
 				.map((i) => (
 					<Flex
 						key={`${i.code} ${i.text}`}
@@ -1623,10 +1652,13 @@ function CICard({
 					)
 				}
 			>
-				CI
+				CI (advisory)
 			</LinkedCardTitle>
 			<CardBody>
 				<div style={muted}>CI runs that tested this candidate's FBC.</div>
+				<div style={muted}>
+					Failed or missing CI runs do not block the verdict.
+				</div>
 				<List isPlain>
 					{lines.map((l) => (
 						<ListItem key={`${l.operator} ${l.ocp}`}>
