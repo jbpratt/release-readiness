@@ -11,6 +11,7 @@ import type {
 	VerdictItem,
 } from "../api/types.ts";
 import {
+	actionLabels,
 	artGroup,
 	blockedReasons,
 	blockOpen,
@@ -29,8 +30,8 @@ import {
 	jobShortName,
 	nvrLabel,
 	readingLine,
-	releaseInput,
 	releaseLine,
+	releaseWord,
 	rowChips,
 	runsStatus,
 	scanCell,
@@ -190,6 +191,18 @@ test("releaseLine", () => {
 		),
 		{ status: "done", text: "Released" },
 	);
+	assert.equal(releaseWord(release({ released_status: "True" })), "Released");
+	assert.match(
+		releaseWord(
+			release({
+				released_status: "True",
+				completion_time: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+			}),
+		),
+		/2 days ago/,
+	);
+	assert.equal(releaseWord(release({ released_reason: "Failed" })), "Failed");
+	assert.equal(releaseWord(release({})), "In progress");
 });
 
 test("artGroup: the application's X.Y dotted", () => {
@@ -301,11 +314,11 @@ test("stream only, no stage (3.16): not staged, pullspecs from the stream", () =
 	});
 	assert.deepEqual(fbcStageStep(c), {
 		variant: "pending",
-		text: "Not in a stage shipment",
+		text: "Not staged",
 	});
 	assert.deepEqual(fbcCIStep(c), {
 		variant: "warning",
-		text: "No CI ran on these FBCs",
+		text: "No runs",
 	});
 	assert.equal(
 		fbcPullspecs(c),
@@ -382,19 +395,7 @@ test("missing operator (3.17.6): CSO and QBO not in stage show the stream's FBCs
 	);
 	assert.deepEqual(
 		shown.map((s) => stageText(c, s)),
-		["On stage", "Not in stage shipment", "Not in stage shipment"],
-	);
-	assert.deepEqual(
-		shown.map((s) => releaseInput(c, s)),
-		[
-			"3 FBCs (OCP 4.12, 4.13, 4.14) in the staged candidate",
-			"2 FBCs (OCP 4.12, 4.14) built in the stream, not in a stage shipment",
-			"1 FBC (OCP 4.12) built in the stream, not in a stage shipment",
-		],
-	);
-	assert.equal(
-		releaseInput(c, { operator: operatorFBC("x", "", []), leftOut: false }),
-		"No FBC built",
+		[{ status: "done", text: "On stage" }, null, null],
 	);
 });
 
@@ -440,7 +441,7 @@ test("restaged slots (3.18.1): a failed latest Release fails the Stage step", ()
 	const c = fbcCandidate({ operators: [staged] });
 	assert.deepEqual(fbcStageStep(c), {
 		variant: "danger",
-		text: "quay-operator release failed",
+		text: "quay-operator failed",
 	});
 	assert.deepEqual(
 		fbcStageStep(
@@ -453,7 +454,7 @@ test("restaged slots (3.18.1): a failed latest Release fails the Stage step", ()
 				],
 			}),
 		),
-		{ variant: "info", text: "Release in progress" },
+		{ variant: "info", text: "In progress" },
 	);
 	assert.deepEqual(
 		fbcStageStep(
@@ -539,13 +540,13 @@ test("fbcCIStep: exact runs decide; else runs on an equivalent FBC", () => {
 				equivalent: [job("success")],
 			}),
 		),
-		{ variant: "warning", text: "1 of 2 runs passed" },
+		{ variant: "warning", text: "1/2 passed" },
 	);
 	assert.deepEqual(
 		fbcCIStep(with_({ exact: [], equivalent: [job("success")] })),
 		{
 			variant: "warning",
-			text: "Passed on an equivalent FBC (same bundle)",
+			text: "Passed (same bundle)",
 		},
 	);
 	assert.deepEqual(
@@ -607,7 +608,7 @@ test("checking: nothing warns or fails", () => {
 	assert.equal(shipsVersion(o), "");
 	assert.deepEqual(whileChecking(fbcCIStep(c), true), {
 		variant: "info",
-		text: "No CI ran on these FBCs",
+		text: "No runs",
 	});
 	assert.deepEqual(whileChecking(fbcCIStep(c), false).variant, "warning");
 	assert.deepEqual(verdictLine({ state: "checking", items: [] }), {
@@ -618,12 +619,12 @@ test("checking: nothing warns or fails", () => {
 		readingLine({ read: 40, failed: 2, pending: 47, history_days: 0 }),
 		{
 			status: "running",
-			text: "Reading FBC contents: 40 of 89 · 2 can't be read",
+			text: "Reading FBCs 40/89 · 2 unreadable",
 		},
 	);
 	assert.deepEqual(
 		readingLine({ read: 87, failed: 2, pending: 0, history_days: 0 }),
-		{ status: "warning", text: "2 of 89 FBCs can't be read" },
+		{ status: "warning", text: "2/89 FBCs unreadable" },
 	);
 	assert.equal(
 		readingLine({ read: 89, failed: 0, pending: 0, history_days: 0 }),
@@ -633,7 +634,7 @@ test("checking: nothing warns or fails", () => {
 		readingLine({ read: 87, failed: 2, pending: 0, history_days: 12 }),
 		{
 			status: "running",
-			text: "Reading ART build history: 12 days left · 2 can't be read",
+			text: "Reading build history, 12 days left · 2 unreadable",
 		},
 	);
 });
@@ -696,7 +697,7 @@ test("history and stage failures (5.0.0): only reading from a partial history, f
 	});
 	assert.deepEqual(fbcStageStep(c), {
 		variant: "danger",
-		text: "CSO release failed",
+		text: "CSO failed",
 	});
 	const empty = fbcCandidate({
 		source: "stream",
@@ -704,7 +705,7 @@ test("history and stage failures (5.0.0): only reading from a partial history, f
 	});
 	assert.deepEqual(fbcBuildStep(empty, 30), {
 		variant: "info",
-		text: "Reading build history",
+		text: "Reading…",
 	});
 	assert.deepEqual(fbcBuildStep(empty), {
 		variant: "warning",
@@ -742,13 +743,16 @@ test("stageText: by the FBCs' newest stage Releases", () => {
 		leftOut: false,
 	});
 	const c = fbcCandidate({});
-	assert.equal(stageText(c, shown(ok, failed)), "Release failed");
-	assert.equal(stageText(c, shown(ok, null)), "Release in progress");
-	assert.match(stageText(c, shown(ok)), /^On stage since /);
-	assert.equal(
-		stageText(fbcCandidate({ source: "stream" }), shown(ok)),
-		"Not in stage shipment",
-	);
+	assert.deepEqual(stageText(c, shown(ok, failed)), {
+		status: "failed",
+		text: "Failed",
+	});
+	assert.deepEqual(stageText(c, shown(ok, null)), {
+		status: "running",
+		text: "In progress",
+	});
+	assert.deepEqual(stageText(c, shown(ok)), { status: "done", text: "Oct 7" });
+	assert.equal(stageText(fbcCandidate({ source: "stream" }), shown(ok)), null);
 });
 
 test("blockOpen: open with a blocker or warning, or left out of the shipment", () => {
@@ -784,6 +788,29 @@ test("blockOpen: open with a blocker or warning, or left out of the shipment", (
 	);
 });
 
+test("actionLabels: one per code, the operator's only, texts and owners as tip", () => {
+	const owned = (i: VerdictItem, owner: string) => ({ ...i, owner });
+	const items = [
+		owned(
+			item("blocker", "quay-operator", "read_failed", "OCP 4.14: can't read"),
+			"ART",
+		),
+		item("blocker", "quay-operator", "read_failed", "OCP 4.15: can't read"),
+		item("blocker", "quay-bridge-operator", "missing_operator", "x"),
+		item("info", "quay-operator", "stream_ahead", "newer build"),
+		item("warning", "quay-operator", "unknown_code", "Something new"),
+	];
+	assert.deepEqual(actionLabels(items, "quay-operator"), [
+		{
+			level: "blocker",
+			text: "Can't read",
+			tip: ["OCP 4.14: can't read · ART", "OCP 4.15: can't read"],
+		},
+		{ level: "info", text: "Newer build", tip: ["newer build"] },
+		{ level: "warning", text: "Something new", tip: ["Something new"] },
+	]);
+});
+
 test("rowChips: exceptions only, per row", () => {
 	const head = bundle("202610060936");
 	const other = bundle("202610121613");
@@ -803,7 +830,7 @@ test("rowChips: exceptions only, per row", () => {
 	});
 	assert.deepEqual(chips(member({ release: ok, staged: 1 })), []);
 	assert.deepEqual(chips(member({ release: ok, staged: 3 })), ["staged 3x"]);
-	assert.deepEqual(chips(member({ release: failed })), ["release failed"]);
+	assert.deepEqual(chips(member({ release: failed })), []);
 	assert.deepEqual(
 		chips({ ocp: "4.21", kind: "other", fbc: fbcMember("4.21", other) }),
 		["Different bundle"],
@@ -908,19 +935,19 @@ test("compareLine: rebuild-only is info, any new source a warning", () => {
 			row("builder-qemu", "rebuild"),
 			row("postgresql-15", "same"),
 		),
-		{ level: "warning", text: "quay new source, 4 images rebuilt" },
+		{ level: "warning", text: "quay new source, 4 rebuilt" },
 	);
 	assert.deepEqual(line(row("operator", "rebuild"), row("clair", "rebuild")), {
 		level: "info",
-		text: "2 images rebuilt",
+		text: "2 rebuilt",
 	});
 	assert.deepEqual(line(row("redis-6", "removed"), row("", "new build")), {
 		level: "warning",
-		text: "1 new build, 1 image removed",
+		text: "1 new build, 1 removed",
 	});
 	assert.deepEqual(line(row("operator", "renamed")), {
 		level: "warning",
-		text: "1 image renamed",
+		text: "1 renamed",
 	});
 	assert.deepEqual(line(row("quay", "same")), {
 		level: "info",
