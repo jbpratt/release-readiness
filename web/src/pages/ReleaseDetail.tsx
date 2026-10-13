@@ -28,6 +28,7 @@ import {
 	Tabs,
 	TabTitleText,
 	Title,
+	Tooltip,
 } from "@patternfly/react-core";
 import {
 	AngleDownIcon,
@@ -83,6 +84,7 @@ import {
 	ticketsJql,
 } from "../utils/links";
 import {
+	actionLabels,
 	BASES,
 	blockedReasons,
 	blockOpen,
@@ -99,8 +101,8 @@ import {
 	jobLabels,
 	nvrLabel,
 	readingLine,
-	releaseInput,
 	releaseLine,
+	releaseWord,
 	rowChips,
 	runsStatus,
 	SEVERITIES,
@@ -255,7 +257,6 @@ function ReleaseStatusCard({
 	const dueDate = target ? due(target, shipped) : undefined;
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<CardTitle>Release Status</CardTitle>
 			<CardBody>
 				<Flex justifyContent={{ default: "justifyContentSpaceEvenly" }}>
 					<FlexItem style={{ textAlign: "center" }}>
@@ -269,7 +270,7 @@ function ReleaseStatusCard({
 									isCompact
 									style={{ marginLeft: "0.5rem" }}
 								>
-									Past due date
+									Past due
 								</Label>
 							)}
 							{dueDate?.kind === "soon" && (
@@ -394,7 +395,7 @@ function BuildsCard({
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<LinkedCardTitle href={konflux()} link="Konflux">
-				{fbc ? `${version} release candidate` : "Release candidate"}
+				Release candidate
 			</LinkedCardTitle>
 			<CardBody>
 				{error ? (
@@ -538,9 +539,7 @@ function Candidate({
 							</ExtLink>
 						) : shipped ? (
 							"Shipped"
-						) : (
-							"Not started"
-						)
+						) : undefined
 					}
 					popoverRender={
 						prod?.status === "failed"
@@ -579,9 +578,8 @@ function Candidate({
 				{shown.map((s) => {
 					const op = s.operator.operator;
 					const open = opened[op] ?? blockOpen(s, verdict.items);
-					const actions = verdict.items.filter(
-						(i) => i.operator === op && i.level !== "info",
-					);
+					const actions = actionLabels(verdict.items, op);
+					const stage = stageText(fbc, s);
 					return (
 						<Tbody key={op} isExpanded={open}>
 							<Tr>
@@ -598,16 +596,29 @@ function Candidate({
 									</Button>
 								</Td>
 								<Td modifier="nowrap">{fbcsStaged(fbc, stream, s)}</Td>
-								<Td modifier="nowrap">{shipped ? "" : stageText(fbc, s)}</Td>
+								<Td modifier="nowrap">
+									{shipped ? "" : <StageCell stage={stage} />}
+								</Td>
 								<Td>
 									{checking ? (
 										<span style={muted}>Checking…</span>
 									) : actions.length > 0 ? (
-										actions.map((i) => (
-											<div key={`${i.code} ${i.text}`}>
-												{levelIcons[i.level]} {i.text}
-											</div>
-										))
+										<Flex gap={{ default: "gapXs" }}>
+											{actions.map((a) => (
+												<Tooltip
+													key={a.text}
+													content={a.tip.map((t) => <div key={t}>{t}</div>)}
+												>
+													<Label
+														isCompact
+														tabIndex={0}
+														status={levelStatus[a.level]}
+													>
+														{a.text}
+													</Label>
+												</Tooltip>
+											))}
+										</Flex>
 									) : (
 										"Ready"
 									)}
@@ -626,7 +637,6 @@ function Candidate({
 														? null
 														: streamAhead(fbc, stream, op)
 												}
-												input={shipped ? null : releaseInput(fbc, s)}
 												items={verdict.items}
 												shipped={shipped}
 												unshipped={unshippedOf(unshipped, operators, op)}
@@ -646,7 +656,7 @@ function Candidate({
 			</Table>
 			{release && (
 				<ExpandableSection
-					toggleText="Review release inputs"
+					toggleText="Release inputs"
 					style={{ marginTop: "1rem" }}
 				>
 					{release}
@@ -655,7 +665,7 @@ function Candidate({
 			{fbc.unknown.length > 0 && (
 				<div style={line}>
 					<Status status="warning">
-						{`${fbc.unknown.length} staged catalog${fbc.unknown.length === 1 ? "" : "s"} not identified: `}
+						{`${fbc.unknown.length} unidentified catalog${fbc.unknown.length === 1 ? "" : "s"}: `}
 						{fbc.unknown.map((m, i) => (
 							<span key={m.digest}>
 								{i > 0 && ", "}
@@ -692,9 +702,25 @@ const levelIcons: Record<VerdictItem["level"], ReactNode> = {
 	),
 };
 
+const levelStatus: Record<VerdictItem["level"], LabelProps["status"]> = {
+	blocker: "danger",
+	warning: "warning",
+	info: "info",
+};
+
+/** An operator's Stage cell: a status icon and a word or date, else a dash. */
+function StageCell({ stage }: { stage: StatusLine | null }) {
+	return stage ? (
+		<Status status={stage.status}>{stage.text}</Status>
+	) : (
+		<span style={muted}>–</span>
+	);
+}
+
 /**
- * Whether the version can ship, then a line per blocker, warning and info,
- * with who acts on it; a shipped version's is its prod Release.
+ * Whether the version can ship, then a line per item on no one operator,
+ * with who acts on it, as the operator table shows the rest; a shipped
+ * version's is its prod Release.
  */
 function VerdictHeader({
 	verdict,
@@ -706,27 +732,29 @@ function VerdictHeader({
 	const head = verdictLine(verdict);
 	const text =
 		verdict.state === "shipped" && prod?.completion_time
-			? `Shipped ${when(prod.completion_time, "UTC")} UTC (image shipment ${prod.name})`
+			? `Shipped ${when(prod.completion_time, "UTC")} UTC`
 			: head.text;
 	return (
 		<>
 			<Status status={head.status}>
 				<strong>{text}</strong>
 			</Status>
-			{verdict.items.map((i) => (
-				<Flex
-					key={`${i.code} ${i.text}`}
-					gap={{ default: "gapSm" }}
-					flexWrap={{ default: "nowrap" }}
-					style={{ marginLeft: "1.5rem" }}
-				>
-					<FlexItem>{levelIcons[i.level]}</FlexItem>
-					<FlexItem>{i.text}</FlexItem>
-					<FlexItem align={{ default: "alignRight" }} style={muted}>
-						{i.owner}
-					</FlexItem>
-				</Flex>
-			))}
+			{verdict.items
+				.filter((i) => !i.operator)
+				.map((i) => (
+					<Flex
+						key={`${i.code} ${i.text}`}
+						gap={{ default: "gapSm" }}
+						flexWrap={{ default: "nowrap" }}
+						style={{ marginLeft: "1.5rem" }}
+					>
+						<FlexItem>{levelIcons[i.level]}</FlexItem>
+						<FlexItem>{i.text}</FlexItem>
+						<FlexItem align={{ default: "alignRight" }} style={muted}>
+							{i.owner}
+						</FlexItem>
+					</Flex>
+				))}
 		</>
 	);
 }
@@ -737,18 +765,18 @@ const fbcLabel = (nvr: string) => nvr.replace(/^.*-fbc-/, "");
 type BlockTab = "fbcs" | "images";
 
 /**
- * An operator's detail: the CSV version, bundle and channel its FBCs ship, a
- * newer stream build not on stage, and its release input; then its FBCs by
- * OCP version, with exception chips, their Snapshot and Release, and CI where
- * runs exist, and its images, compared with the previous z or that newer
- * build. A left-out operator's are the stream's FBCs to add.
+ * An operator's detail: the bundle and channel its FBCs ship, their CSV
+ * version when not the release's, and a newer stream build not on stage;
+ * then its FBCs by OCP version, with exception chips, their Snapshot and
+ * Release, and CI where runs exist, and its images, compared with the
+ * previous z or that newer build. A left-out operator's are the stream's FBCs
+ * to add.
  */
 function OperatorDetail({
 	shown: { operator: o },
 	tab,
 	onTab,
 	ahead,
-	input,
 	items,
 	shipped,
 	unshipped,
@@ -763,8 +791,6 @@ function OperatorDetail({
 	onTab: (tab: BlockTab) => void;
 	/** The stream's newer head bundle, when the stage candidate is behind it. */
 	ahead: string | null;
-	/** What it puts into the release; null for a shipped version. */
-	input: string | null;
 	items: VerdictItem[];
 	shipped: boolean;
 	unshipped: UnshippedBuild[];
@@ -780,16 +806,16 @@ function OperatorDetail({
 	const nvr = o.head_bundle_nvr;
 	const unread = unreadText(items, o.operator);
 	const csv = shipsVersion(o);
-	const head = nvr
-		? [
-				csv && `CSV ${csv}`,
-				`bundle ${nvr}`,
-				o.channel,
-				o.fbc_ri_stage.state === "failed" && "image push to stage failed",
-			]
-				.filter(Boolean)
-				.join(" · ")
-		: (unread ?? "reading…");
+	const head = nvr ? (
+		<>
+			{csv && csv !== `v${version}` && `CSV ${csv} · `}
+			<span title={nvr}>bundle {bundleBuilt(nvr) || nvr}</span>
+			{o.channel && ` · ${o.channel}`}
+			{o.fbc_ri_stage.state === "failed" && " · image push to stage failed"}
+		</>
+	) : (
+		(unread ?? "reading…")
+	);
 	const newer = o.compare.find((c) => c.kind === "newer");
 	const change = newer && compareLine(newer);
 	const fbcApp = `fbc-${app}`;
@@ -802,14 +828,12 @@ function OperatorDetail({
 	return (
 		<>
 			<div style={muted}>{head}</div>
-			{input && <div>Release input: {input}</div>}
 			{ahead && (
 				<Flex gap={{ default: "gapSm" }} flexWrap={{ default: "nowrap" }}>
 					<FlexItem>{levelIcons[change?.level ?? "info"]}</FlexItem>
 					<FlexItem>
-						Newer build not on stage:{" "}
-						<span title={ahead}>bundle {bundleBuilt(ahead)}</span>
-						{change && ` (${change.text})`}{" "}
+						<span title={ahead}>Newer bundle {bundleBuilt(ahead)}</span>
+						{change && `: ${change.text}`}{" "}
 						{newer && (
 							<Button
 								variant="link"
@@ -839,7 +863,7 @@ function OperatorDetail({
 							<Tr>
 								<Th modifier="fitContent">OCP</Th>
 								<Th>FBC</Th>
-								<Th>Stage evidence</Th>
+								<Th>Stage</Th>
 								{ci && <Th screenReaderText="CI" />}
 							</Tr>
 						</Thead>
@@ -900,11 +924,12 @@ function OperatorDetail({
 										{r.fbc?.release && (
 											<>
 												{" · "}
+												{statusIcons[releaseLine(r.fbc.release).status]}{" "}
 												<ExtLink
 													href={konflux("releases", r.fbc.release.name, fbcApp)}
-													title={plan(r.fbc.snapshot) || r.fbc.release.name}
+													title={`${releaseLine(r.fbc.release).text}: ${plan(r.fbc.snapshot) || r.fbc.release.name}`}
 												>
-													{releaseLine(r.fbc.release).text}
+													{releaseWord(r.fbc.release)}
 												</ExtLink>
 											</>
 										)}
@@ -1313,8 +1338,8 @@ function ReleaseInputs({
 			</Button>
 			<div style={line}>
 				{fbc.source === "stream"
-					? "FBCs built in the stream, not in a stage shipment."
-					: "FBCs in the staged candidate."}
+					? "From the stream, not staged."
+					: "From the staged candidate."}
 			</div>
 			{operators.length > 0 && (
 				<Table variant="compact" aria-label="FBC pullspecs by operator">
@@ -1350,9 +1375,8 @@ function ReleaseInputs({
 						)}
 					</ClipboardCopy>
 					<div style={muted}>
-						Review jira-bugs
-						{bugs ? "" : " (tickets unavailable, left out)"} and
-						target-release-date before running.
+						Check jira-bugs{bugs ? "" : " (no tickets)"} and target-release-date
+						first.
 					</div>
 				</>
 			) : (
@@ -1649,9 +1673,9 @@ function TicketsCard({
 				) : !issues ? (
 					<Spinner size="md" />
 				) : config?.jira_enabled === false ? (
-					"JIRA sync is not configured on this server, so linked tickets are not shown."
+					"Jira sync off."
 				) : (
-					"No tickets have this Target Version."
+					"No tickets."
 				)}
 			</CardBody>
 		</Card>

@@ -181,7 +181,7 @@ function ReleaseCard({
 
 	const lastBuild = latestBuild
 		? new Date(latestBuild).toLocaleDateString()
-		: "None yet";
+		: "None";
 
 	const navigate = useNavigate();
 	const displayName = formatReleaseName(release.name);
@@ -255,7 +255,7 @@ function ReleaseCard({
 							</DescriptionListGroup>
 						)}
 						<DescriptionListGroup>
-							<DescriptionListTerm>Last build</DescriptionListTerm>
+							<DescriptionListTerm>Built</DescriptionListTerm>
 							<DescriptionListDescription>
 								{lastBuild}
 							</DescriptionListDescription>
@@ -273,7 +273,7 @@ function ReleaseCard({
 					<Flex justifyContent={{ default: "justifyContentSpaceBetween" }}>
 						{targetDate && (
 							<FlexItem>
-								<span className="rr-label">Target Date</span>
+								<span className="rr-label">Target</span>
 								<div>{targetDate}</div>
 							</FlexItem>
 						)}
@@ -284,7 +284,7 @@ function ReleaseCard({
 							</FlexItem>
 						)}
 						<FlexItem>
-							<span className="rr-label">Last build</span>
+							<span className="rr-label">Built</span>
 							<div>{lastBuild}</div>
 						</FlexItem>
 						{issueSummary && issueSummary.cves > 0 && (
