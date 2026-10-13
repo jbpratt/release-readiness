@@ -43,3 +43,46 @@
 	--pf-v6-c-table--cell--Overflow: hidden;
 	--pf-v6-c-table--cell--TextOverflow: ellipsis;
 }
+
+/* Below md a row per operator is one line, its operator, stage and
+   needs-action, the last cut to an ellipsis: the row opens to the detail. A
+   decision's text keeps beside its icon, its button wrapping under it. */
+@media (max-width: 767px) {
+	.rr-operators > thead {
+		display: none;
+	}
+
+	.rr-operators,
+	.rr-operators > tbody {
+		display: block;
+	}
+
+	.rr-operators > tbody > tr:first-child {
+		display: flex;
+		align-items: center;
+	}
+
+	.rr-operators > tbody > tr:first-child > td {
+		flex: none;
+	}
+
+	.rr-operators > tbody > tr:first-child .pf-v6-c-button {
+		white-space: nowrap;
+	}
+
+	.rr-operators > tbody > tr:first-child > td.rr-needs {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.rr-operators td.rr-needs .pf-v6-l-flex {
+		flex-wrap: nowrap;
+	}
+
+	.rr-decision-text {
+		flex: 1 1 calc(100% - 2rem);
+	}
+}

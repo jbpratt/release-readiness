@@ -565,7 +565,7 @@ function Candidate({
 					style={{ marginLeft: "1.5rem" }}
 				>
 					<FlexItem>{levelIcons.blocker}</FlexItem>
-					<FlexItem>
+					<FlexItem className="rr-decision-text">
 						{d.text}
 						{d.owner && <span style={muted}> · {d.owner}</span>}
 						{d.action && <div>Next: {d.action}</div>}
@@ -655,6 +655,8 @@ function Candidate({
 			<Table
 				variant="compact"
 				aria-label="Operators"
+				className="rr-operators"
+				gridBreakPoint=""
 				style={{ marginTop: "1rem" }}
 			>
 				<Thead>
@@ -687,7 +689,7 @@ function Candidate({
 								<Td modifier="nowrap">
 									{shipped ? "" : <StageCell stage={stage} />}
 								</Td>
-								<Td>
+								<Td className="rr-needs">
 									{checking ? (
 										<span style={muted}>Checking…</span>
 									) : actions.length > 0 ? (
@@ -1303,9 +1305,10 @@ function ReleaseInputsButton({ children }: { children: ReactNode }) {
 
 /**
  * release-from-fbc's inputs for its one release-wide run, to review and run
- * by hand: RR starts no run. The Pipeline's console page; the candidate's FBC
- * pullspecs by operator and OCP version, staged or only built in the stream;
- * then a dry-run tkn command, or why the candidate has none to run with.
+ * by hand: RR starts no run. The Pipeline's console page; whether the
+ * candidate's FBCs are staged or only built in the stream; a dry-run tkn
+ * command, or why the candidate has none to run with; then its FBC pullspecs
+ * by operator and OCP version.
  */
 function ReleaseInputs({
 	fbc,
@@ -1342,6 +1345,27 @@ function ReleaseInputs({
 					? "From the stream, not staged."
 					: "From the staged candidate."}
 			</div>
+			{pullspecs ? (
+				<>
+					<ClipboardCopy isReadOnly isCode style={line}>
+						{tknCommand(
+							fbcParams(app, version, pullspecs, bugs ?? [], dueDate),
+						)}
+					</ClipboardCopy>
+					<div style={muted}>
+						Check jira-bugs{bugs ? "" : " (no tickets)"} and target-release-date
+						first.
+					</div>
+				</>
+			) : (
+				<div style={line}>
+					{blockedReasons(fbc).map((r) => (
+						<Status key={r} status="failed">
+							{r}
+						</Status>
+					))}
+				</div>
+			)}
 			{operators.length > 0 && (
 				<Table variant="compact" aria-label="FBC pullspecs by operator">
 					<Thead>
@@ -1367,27 +1391,6 @@ function ReleaseInputs({
 						</Tbody>
 					))}
 				</Table>
-			)}
-			{pullspecs ? (
-				<>
-					<ClipboardCopy isReadOnly isCode style={line}>
-						{tknCommand(
-							fbcParams(app, version, pullspecs, bugs ?? [], dueDate),
-						)}
-					</ClipboardCopy>
-					<div style={muted}>
-						Check jira-bugs{bugs ? "" : " (no tickets)"} and target-release-date
-						first.
-					</div>
-				</>
-			) : (
-				<div style={line}>
-					{blockedReasons(fbc).map((r) => (
-						<Status key={r} status="failed">
-							{r}
-						</Status>
-					))}
-				</div>
 			)}
 		</>
 	);
@@ -1615,7 +1618,7 @@ function CICard({
 	fbc: FBCCandidate;
 	version: string;
 }) {
-	const { lines, untested } = ciList(slots);
+	const lines = ciList(slots);
 	const jobs = [...new Set(lines.flatMap((l) => l.runs.map((r) => r.job)))];
 	const labels = jobLabels(jobs);
 	const sippy = sippyRunsUrl(version, fbcsBuilt(fbc));
@@ -1623,19 +1626,28 @@ function CICard({
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<LinkedCardTitle
 				actions={
-					sippy && (
+					<>
 						<Button
-							component="a"
+							component={(p) => <Link {...p} to="ci" />}
 							variant="secondary"
 							size="sm"
-							href={sippy}
-							{...external}
-							icon={<ExternalLinkAltIcon />}
-							iconPosition="end"
 						>
-							Runs in Sippy
+							FBC CI history
 						</Button>
-					)
+						{sippy && (
+							<Button
+								component="a"
+								variant="secondary"
+								size="sm"
+								href={sippy}
+								{...external}
+								icon={<ExternalLinkAltIcon />}
+								iconPosition="end"
+							>
+								Runs in Sippy
+							</Button>
+						)}
+					</>
 				}
 			>
 				CI (advisory)
@@ -1666,11 +1678,6 @@ function CICard({
 							))}
 						</ListItem>
 					))}
-					{untested > 0 && (
-						<ListItem style={muted}>
-							{untested} other {untested > 1 ? "slots" : "slot"}: no CI recorded
-						</ListItem>
-					)}
 				</List>
 			</CardBody>
 		</Card>
