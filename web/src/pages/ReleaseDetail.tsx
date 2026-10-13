@@ -1073,15 +1073,18 @@ const uniqueImages = (o: OperatorFBC) =>
 			k,
 	);
 
-/** An image of a compared bundle: its build and commit, else its digest. */
+/**
+ * An image of a compared bundle: its build and commit, else its digest,
+ * linked to its ART build page.
+ */
 function ImageRefCell({ image }: { image: ImageRef | null }) {
 	if (!image) return <span style={muted}>–</span>;
 	return (
-		<span title={image.nvr || image.digest}>
+		<ExtLink href={image.build_url || null} title={image.nvr || image.digest}>
 			{image.nvr
 				? `${bundleBuilt(image.nvr) || nvrLabel(image.nvr)} ${image.commit.slice(0, 7)}`
 				: image.digest.slice(7, 19)}
-		</span>
+		</ExtLink>
 	);
 }
 

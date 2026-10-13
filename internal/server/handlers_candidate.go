@@ -522,7 +522,7 @@ func (s *Server) operatorImages(ctx context.Context, o *model.OperatorFBC, relea
 // as to names them, then those only from has.
 func compareImages(from, to []model.OperatorImage) []model.ImageCompareRow {
 	ref := func(img model.OperatorImage) *model.ImageRef {
-		return &model.ImageRef{Repository: repository(img.Image), NVR: img.NVR, Commit: img.Commit, Digest: img.Digest}
+		return &model.ImageRef{Repository: repository(img.Image), NVR: img.NVR, Commit: img.Commit, Digest: img.Digest, BuildURL: img.BuildURL}
 	}
 	count := func(imgs []model.OperatorImage, repo string) int {
 		n := 0
