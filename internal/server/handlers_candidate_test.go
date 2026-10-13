@@ -227,17 +227,20 @@ func seedRun(t *testing.T, srv *Server, job, id, state, started string, images [
 	}
 }
 
-// A build's version is the X.Y.Z the NVRs of its images ART resolved carry,
-// base image left out.
+// A build's version is the X.Y.Z the NVRs of its operator bundles ART
+// resolved carry, else of its images, base image left out.
 func TestBuildVersion(t *testing.T) {
 	const app = "quay-3-18"
 	image := func(c string) model.SnapshotImage { return model.SnapshotImage{Name: c, Image: testImage("b/" + c)} }
 	snap := &model.ReleaseSnapshot{Components: []model.SnapshotImage{
-		image("quay-3-18-base-rhel9"), image("quay-3-18-quay-clair"), image("quay-3-18-quay-operator-bundle"), image("quay-3-18-quay-quay"),
+		image("quay-3-18-base-rhel9"), image("quay-3-18-container-security-operator-bundle"), image("quay-3-18-quay-clair"),
+		image("quay-3-18-quay-operator-bundle"), image("quay-3-18-quay-quay"),
 	}}
 	const (
-		quay   = "quay-quay-container-3.18.1-202610060528.p2.g1148474.assembly.stream.el9"
-		bundle = "quay-operator-metadata-container-3.18.1.202610061637.p2.g35cf767.assembly.stream.el9-1"
+		quay       = "quay-quay-container-3.18.1-202610060528.p2.g1148474.assembly.stream.el9"
+		bundle     = "quay-operator-metadata-container-3.18.1.202610061637.p2.g35cf767.assembly.stream.el9-1"
+		bundle2    = "quay-operator-metadata-container-3.18.2.202610122226.p2.g35cf767.assembly.stream.el9-1"
+		csoBundle2 = "container-security-operator-metadata-container-3.18.2.202610122226.p2.g1a2b3c4.assembly.stream.el9-1"
 	)
 	for _, tc := range []struct {
 		desc string
@@ -251,6 +254,11 @@ func TestBuildVersion(t *testing.T) {
 		{"3.18.10 is not 3.18.1", map[string]string{"quay-3-18-quay-quay": testNVR("quay-quay", "3.18.10")}, "3.18.10"},
 		{"base image left out", map[string]string{"quay-3-18-quay-quay": quay, "quay-3-18-base-rhel9": testNVR("base-rhel9", "5.0.0")}, "3.18.1"},
 		{"no version field", map[string]string{"quay-3-18-quay-quay": "quay-quay-container"}, ""},
+		{"bundles over images", map[string]string{
+			"quay-3-18-quay-quay": quay, "quay-3-18-quay-operator-bundle": bundle2, "quay-3-18-container-security-operator-bundle": csoBundle2,
+		}, "3.18.2"},
+		{"no bundle resolved", map[string]string{"quay-3-18-quay-quay": quay, "quay-3-18-quay-clair": testNVR("quay-clair", "3.18.1")}, "3.18.1"},
+		{"two bundle versions", map[string]string{"quay-3-18-quay-operator-bundle": bundle, "quay-3-18-container-security-operator-bundle": csoBundle2}, ""},
 	} {
 		nvrs := map[string]string{}
 		for c, nvr := range tc.nvrs {
@@ -332,8 +340,10 @@ func TestGetCandidateCatalogs(t *testing.T) {
 	}
 	release := func(name, snapshot, reason, created string) {
 		t.Helper()
-		r := &model.KonfluxRelease{Name: name, Application: app, Snapshot: snapshot, ReleasePlan: "quay-fbc-stage-3-18",
-			ReleasedStatus: "False", ReleasedReason: reason, CreatedAt: mustTime(t, created)}
+		r := &model.KonfluxRelease{
+			Name: name, Application: app, Snapshot: snapshot, ReleasePlan: "quay-fbc-stage-3-18",
+			ReleasedStatus: "False", ReleasedReason: reason, CreatedAt: mustTime(t, created),
+		}
 		if reason == "Succeeded" {
 			r.ReleasedStatus = "True"
 		}
@@ -535,6 +545,42 @@ func TestGetCandidateNone(t *testing.T) {
 		}
 	}
 	getJSON(t, srv, "/api/v1/releases/quay-v9.9.9/candidate", http.StatusNotFound, nil)
+}
+
+// Like 3.18.2 on 12 Oct 2026: ART moved the stream to 3.18.2 and rebuilt its
+// bundles but not quay or the builder, still 3.18.1. The build is 3.18.2's,
+// and its operator bundle is checked against the 3.18.2 FBC's head.
+func TestGetCandidateBundleVersion(t *testing.T) {
+	srv := setupTestServer(t)
+	seedQuay318(t, srv)
+	const (
+		build = "quay-3-18-20261012-223000-000"
+		head  = "quay-operator-metadata-container-3.18.2.202610122226.p2.g35cf767.assembly.stream.el9-1"
+		fbc   = "quay-operator-fbc-3.18.2-20261012232700.ocp4.20"
+	)
+	seedImages(t, srv, build, "2026-10-12T22:30:00Z", testBuild("bumped", quay318...))
+	resolveNVR(t, srv, "bumped/quay-3-18-quay-operator-bundle", head)
+	resolveNVR(t, srv, "bumped/quay-3-18-container-security-operator-bundle", "container-security-operator-metadata-container-3.18.2.202610122226.p2.g1a2b3c4.assembly.stream.el9-1")
+	resolveNVR(t, srv, "bumped/quay-3-18-quay-quay", testNVR("quay-quay", "3.18.1"))
+	resolveNVR(t, srv, "bumped/quay-3-18-quay-builder", testNVR("quay-builder", "3.18.1"))
+	seedHistoryFBC(t, srv, fbc, head)
+	seedHistoryFBC(t, srv, "container-security-operator-fbc-3.18.2-20261012232700.ocp4.20", "cso-bundle")
+	seedHistoryFBC(t, srv, "quay-bridge-operator-fbc-3.18.2-20261012232700.ocp4.20", "qbo-bundle")
+
+	var got model.ReleaseCandidate
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.2/candidate", http.StatusOK, &got)
+	if got.Reason != "no release candidate yet" || got.FBCStream == nil {
+		t.Fatalf("3.18.2: reason %q, fbc_stream %v", got.Reason, got.FBCStream)
+	}
+	checkRows(t, "stream", fbcRows(got.FBCStream), []string{
+		"stream complete []",
+		`quay-operator "` + head + `" 1/1 4.20:` + fbc,
+		`container-security-operator "cso-bundle" 1/1 4.20:container-security-operator-fbc-3.18.2-20261012232700.ocp4.20`,
+		`quay-bridge-operator "qbo-bundle" 1/1 4.20:quay-bridge-operator-fbc-3.18.2-20261012232700.ocp4.20`,
+	})
+	if c, want := got.FBCStream.Operators[0].ImageCheck, (model.ImageCheck{State: "matches", Snapshot: build, BundleNVR: head}); c != want {
+		t.Errorf("image check %+v, want %+v", c, want)
+	}
 }
 
 // A shipped version, released in JIRA or published in the catalog, keeps its
