@@ -438,20 +438,7 @@ function BuildsCard({
 			<LinkedCardTitle
 				href={konflux()}
 				link="Konflux"
-				actions={
-					fbc && (
-						<>
-							<Button
-								component={(p) => <Link {...p} to="ci" />}
-								variant="secondary"
-								size="sm"
-							>
-								FBC CI history
-							</Button>
-							{!unstaged && inputs}
-						</>
-					)
-				}
+				actions={fbc && !unstaged && inputs}
 			>
 				Release candidate
 			</LinkedCardTitle>

@@ -287,12 +287,12 @@ function Lead({
 	status,
 	text,
 	reason,
-}: StatusLine & { reason?: string | null }) {
+}: StatusLine & { reason?: { text: string; full: string } | null }) {
 	return (
 		<Status status={status}>
-			<span style={{ overflowWrap: "anywhere" }}>
+			<span style={{ overflowWrap: "anywhere" }} title={reason?.full}>
 				<strong>{text}</strong>
-				{reason && ` · ${reason}`}
+				{reason && ` · ${reason.text}`}
 			</span>
 		</Status>
 	);
@@ -306,7 +306,7 @@ function CandidateLead({ version }: { version: string }) {
 	if (loading && !data) return <Spinner size="md" aria-label="Loading" />;
 	if (error) return <div>{error.message}</div>;
 	if (!data || (!data.fbc_candidate && data.verdict.state !== "shipped"))
-		return <div>No candidate data</div>;
+		return <div>No release candidate yet</div>;
 	const head = verdictLine(data.verdict);
 	const reason = topReason(data.verdict);
 	// The reason stands in for the blocker count the release page shows.
