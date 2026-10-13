@@ -377,7 +377,7 @@ function LinkedCardTitle({
 			>
 				<FlexItem>{children}</FlexItem>
 				<Flex spaceItems={{ default: "spaceItemsSm" }}>
-					{actions && <FlexItem>{actions}</FlexItem>}
+					{actions}
 					{href && (
 						<FlexItem>
 							<Button
@@ -424,7 +424,24 @@ function BuildsCard({
 	const reason = data?.reason || "no FBC built or staged yet";
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<LinkedCardTitle href={konflux()} link="Konflux" actions={inputs}>
+			<LinkedCardTitle
+				href={konflux()}
+				link="Konflux"
+				actions={
+					fbc && (
+						<>
+							<Button
+								component={(p) => <Link {...p} to="ci" />}
+								variant="secondary"
+								size="sm"
+							>
+								FBC CI history
+							</Button>
+							{inputs}
+						</>
+					)
+				}
+			>
 				Release candidate
 			</LinkedCardTitle>
 			<CardBody>
@@ -1591,29 +1608,19 @@ function CICard({
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<LinkedCardTitle
 				actions={
-					<>
+					sippy && (
 						<Button
-							component={(p) => <Link {...p} to="ci" />}
+							component="a"
 							variant="secondary"
 							size="sm"
-							style={{ marginRight: "0.5rem" }}
+							href={sippy}
+							{...external}
+							icon={<ExternalLinkAltIcon />}
+							iconPosition="end"
 						>
-							FBC CI history
+							Runs in Sippy
 						</Button>
-						{sippy && (
-							<Button
-								component="a"
-								variant="secondary"
-								size="sm"
-								href={sippy}
-								{...external}
-								icon={<ExternalLinkAltIcon />}
-								iconPosition="end"
-							>
-								Runs in Sippy
-							</Button>
-						)}
-					</>
+					)
 				}
 			>
 				CI
