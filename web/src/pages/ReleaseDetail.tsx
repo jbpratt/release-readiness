@@ -212,23 +212,6 @@ export default function ReleaseDetail() {
 						<BreadcrumbHeading>{displayName}</BreadcrumbHeading>
 					</Breadcrumb>
 				</FlexItem>
-				{fbc && !candidate.data?.shipped && (
-					<FlexItem>
-						<ReleaseInputsButton>
-							<ReleaseInputs
-								fbc={fbc}
-								app={app}
-								version={xyz}
-								bugs={
-									config?.jira_enabled === false
-										? undefined
-										: tickets?.map((t) => t.key)
-								}
-								dueDate={release.due_date}
-							/>
-						</ReleaseInputsButton>
-					</FlexItem>
-				)}
 			</Flex>
 
 			<ReleaseStatusCard
@@ -243,6 +226,24 @@ export default function ReleaseDetail() {
 				version={xyz}
 				app={app}
 				konflux={konflux}
+				inputs={
+					fbc &&
+					!candidate.data?.shipped && (
+						<ReleaseInputsButton>
+							<ReleaseInputs
+								fbc={fbc}
+								app={app}
+								version={xyz}
+								bugs={
+									config?.jira_enabled === false
+										? undefined
+										: tickets?.map((t) => t.key)
+								}
+								dueDate={release.due_date}
+							/>
+						</ReleaseInputsButton>
+					)
+				}
 			/>
 
 			<TicketsCard
@@ -343,14 +344,19 @@ function ExtLink({
 	);
 }
 
-/** A card title with a link out on the right, hidden without an href. */
+/**
+ * A card title with actions and a link out on the right, the link hidden
+ * without an href.
+ */
 function LinkedCardTitle({
 	href,
 	link,
+	actions,
 	children,
 }: {
 	href: string | null;
 	link: string;
+	actions?: ReactNode;
 	children: ReactNode;
 }) {
 	return (
@@ -360,21 +366,24 @@ function LinkedCardTitle({
 				alignItems={{ default: "alignItemsCenter" }}
 			>
 				<FlexItem>{children}</FlexItem>
-				{href && (
-					<FlexItem>
-						<Button
-							component="a"
-							variant="link"
-							isInline
-							href={href}
-							{...external}
-							icon={<ExternalLinkAltIcon />}
-							iconPosition="end"
-						>
-							{link}
-						</Button>
-					</FlexItem>
-				)}
+				<Flex spaceItems={{ default: "spaceItemsSm" }}>
+					{actions && <FlexItem>{actions}</FlexItem>}
+					{href && (
+						<FlexItem>
+							<Button
+								component="a"
+								variant="secondary"
+								size="sm"
+								href={href}
+								{...external}
+								icon={<ExternalLinkAltIcon />}
+								iconPosition="end"
+							>
+								Open in {link}
+							</Button>
+						</FlexItem>
+					)}
+				</Flex>
 			</Flex>
 		</CardTitle>
 	);
@@ -390,6 +399,7 @@ function BuildsCard({
 	version,
 	app,
 	konflux,
+	inputs,
 }: {
 	data?: ReleaseCandidate;
 	error?: Error;
@@ -397,12 +407,14 @@ function BuildsCard({
 	version: string;
 	app: string;
 	konflux: KonfluxLink;
+	/** The release inputs button, beside the Konflux link. */
+	inputs?: ReactNode;
 }) {
 	const fbc = data?.fbc_candidate;
 	const reason = data?.reason || "no FBC built or staged yet";
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<LinkedCardTitle href={konflux()} link="Konflux">
+			<LinkedCardTitle href={konflux()} link="Konflux" actions={inputs}>
 				Release candidate
 			</LinkedCardTitle>
 			<CardBody>
@@ -1226,7 +1238,7 @@ function ReleaseInputsButton({ children }: { children: ReactNode }) {
 	const [open, setOpen] = useState(false);
 	return (
 		<>
-			<Button variant="secondary" onClick={() => setOpen(true)}>
+			<Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
 				Release inputs
 			</Button>
 			<Modal
