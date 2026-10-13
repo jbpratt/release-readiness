@@ -398,7 +398,7 @@ function LinkedCardTitle({
 								icon={<ExternalLinkAltIcon />}
 								iconPosition="end"
 							>
-								Open in {link}
+								{link}
 							</Button>
 						</FlexItem>
 					)}
