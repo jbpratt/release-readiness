@@ -279,17 +279,6 @@ export const shownOperators = (
 			: { operator: o, leftOut: false };
 	});
 
-/**
- * Whether an operator's block opens: when the verdict has a blocker or
- * warning on it, or the stage shipment leaves it out.
- */
-export const blockOpen = (
-	{ operator, leftOut }: ShownOperator,
-	items: VerdictItem[],
-) =>
-	leftOut ||
-	items.some((i) => i.operator === operator.operator && i.level !== "info");
-
 /** The verdict item of code on an operator's FBC for an OCP version. */
 export const slotItem = (
 	items: VerdictItem[],

@@ -87,7 +87,6 @@ import {
 	actionLabels,
 	BASES,
 	blockedReasons,
-	blockOpen,
 	bundleBuilt,
 	compareLine,
 	componentLabel,
@@ -498,7 +497,7 @@ function Candidate({
 	const label = (job: string) => labels[jobs.indexOf(job)];
 	const shown = shownOperators(fbc, stream, shipped);
 	const operators = fbc.operators.map((o) => o.operator);
-	// Rows the reader opened or closed, and their tabs; else open on a problem.
+	// Rows the reader opened, and their tabs; rows start collapsed.
 	const [opened, setOpened] = useState<Record<string, boolean>>({});
 	const [tabs, setTabs] = useState<Record<string, BlockTab>>({});
 	return (
@@ -577,7 +576,7 @@ function Candidate({
 				</Thead>
 				{shown.map((s) => {
 					const op = s.operator.operator;
-					const open = opened[op] ?? blockOpen(s, verdict.items);
+					const open = opened[op] ?? false;
 					const actions = actionLabels(verdict.items, op);
 					const stage = stageText(fbc, s);
 					return (

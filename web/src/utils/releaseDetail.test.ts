@@ -14,7 +14,6 @@ import {
 	actionLabels,
 	artGroup,
 	blockedReasons,
-	blockOpen,
 	bundleBuilt,
 	compareLine,
 	compareVersions,
@@ -755,39 +754,6 @@ test("stageText: by the FBCs' newest stage Releases", () => {
 	assert.equal(stageText(fbcCandidate({ source: "stream" }), shown(ok)), null);
 });
 
-test("blockOpen: open with a blocker or warning, or left out of the shipment", () => {
-	const head = bundle("202610060936");
-	const qo = operatorFBC("quay-operator", head, [fbcMember("4.14", head)]);
-	const cso = operatorFBC("container-security-operator", "", []);
-	const streamCSO = operatorFBC(
-		"container-security-operator",
-		bundle("202610121613"),
-		[fbcMember("4.14", bundle("202610121613"))],
-	);
-	const c = fbcCandidate({ operators: [qo, cso] });
-	const stream = fbcCandidate({ source: "stream", operators: [qo, streamCSO] });
-	const [shownQO, shownCSO] = shownOperators(c, stream, false);
-	assert.deepEqual(shownCSO, { operator: streamCSO, leftOut: true });
-	assert.equal(blockOpen(shownQO, []), false);
-	assert.equal(blockOpen(shownCSO, []), true);
-	assert.equal(
-		blockOpen(shownQO, [item("info", "quay-operator", "stream_ahead")]),
-		false,
-	);
-	assert.equal(
-		blockOpen(shownQO, [item("warning", "quay-operator", "stream_ahead")]),
-		true,
-	);
-	assert.equal(
-		blockOpen(shownQO, [item("blocker", "quay-operator", "csv_mismatch")]),
-		true,
-	);
-	assert.equal(
-		blockOpen(shownQO, [item("blocker", "quay-bridge-operator", "x")]),
-		false,
-	);
-});
-
 test("actionLabels: one per code, the operator's only, texts and owners as tip", () => {
 	const owned = (i: VerdictItem, owner: string) => ({ ...i, owner });
 	const items = [
@@ -898,7 +864,7 @@ test("record mode: no prompts, only facts", () => {
 		[],
 	);
 	// A shipped candidate is the record: an operator it lacks is not offered
-	// from the stream, so its block neither opens nor says "add these".
+	// from the stream, so its block does not say "add these".
 	const cso = operatorFBC("container-security-operator", "", []);
 	const stream = fbcCandidate({
 		source: "stream",
@@ -914,7 +880,6 @@ test("record mode: no prompts, only facts", () => {
 		true,
 	);
 	assert.deepEqual(shown, { operator: cso, leftOut: false });
-	assert.equal(blockOpen(shown, []), false);
 });
 
 test("compareLine: rebuild-only is info, any new source a warning", () => {
