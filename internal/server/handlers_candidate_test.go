@@ -300,6 +300,8 @@ func TestGetCandidate(t *testing.T) {
 	want := map[string]any{
 		"shipped": false, "candidate": nil, "reason": "no release candidate yet", "catalogs": nil, "unshipped_builds": nil,
 		"fbc_candidate": nil, "fbc_stream": nil,
+		"verdict": map[string]any{"state": "not_ready", "items": []any{}},
+		"reading": map[string]any{"read": 0.0, "failed": 0.0, "pending": 0.0},
 	}
 	if !reflect.DeepEqual(raw, want) {
 		t.Errorf("3.14.10 = %v, want %v", raw, want)
@@ -503,7 +505,15 @@ func TestGetCandidateNone(t *testing.T) {
 	seedSnapshot(t, srv, "quay-3-16", "quay-3-16-20261010-000000-000", mustTime(t, "2026-10-10T00:00:00Z"), "quay-3-16-quay-quay")
 	resolveNVR(t, srv, "quay-3-16-20261010-000000-000/quay-3-16-quay-quay", testNVR("quay-quay", "3.16.8"))
 	none := func(shipped bool, reason string) map[string]any {
-		return map[string]any{"shipped": shipped, "candidate": nil, "reason": reason, "catalogs": nil, "unshipped_builds": nil, "fbc_candidate": nil, "fbc_stream": nil}
+		state := "not_ready"
+		if shipped {
+			state = "shipped"
+		}
+		return map[string]any{
+			"shipped": shipped, "candidate": nil, "reason": reason, "catalogs": nil, "unshipped_builds": nil, "fbc_candidate": nil, "fbc_stream": nil,
+			"verdict": map[string]any{"state": state, "items": []any{}},
+			"reading": map[string]any{"read": 0.0, "failed": 0.0, "pending": 0.0},
+		}
 	}
 	for version, want := range map[string]map[string]any{
 		"quay-v3.18.0": none(true, ""), // released in JIRA
@@ -775,6 +785,51 @@ func TestGetCandidateFBCRestage(t *testing.T) {
 		`quay-bridge-operator "qbo-bundle" 1/1 4.20:quay-bridge-operator-fbc-3.18.1-20261008000000.ocp4.20@` + old + `/Succeeded`,
 		"unknown " + unnamed + " :@" + restaged + "/Failed",
 	})
+}
+
+// Like 3.18.1's restaged slots: a slot counts each staged Snapshot holding a
+// catalog of it whose newest Release succeeded, never one that failed and was
+// superseded; an operator counts its slots' FBCs on stage. A staged FBC RR
+// failed to read blocks the release.
+func TestGetCandidateFBCStaged(t *testing.T) {
+	srv := setupTestServer(t)
+	const app, head = "fbc-quay-3-18", "quay-operator-metadata-container-3.18.1.202610090339"
+	op20old := seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261007000000.ocp4.20", head)
+	op20 := seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261009000000.ocp4.20", head)
+	op21 := seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261007000000.ocp4.21", head)
+	qbo := seedHistoryFBC(t, srv, "quay-bridge-operator-fbc-3.18.1-20261007000000.ocp4.20", "qbo-bundle")
+	const csoNVR = "container-security-operator-fbc-3.18.1-20261007000000.ocp4.20"
+	cso := testImage("fbc/" + csoNVR)
+	if err := srv.db.UpsertArtHistoryBuild(t.Context(), artbuild.HistoryBuild{
+		RecordID: "rec-cso", Group: "quay-3.18", Type: "fbc", NVR: csoNVR, Digest: imageDigest(cso), Pullspec: cso,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.db.UpsertFBCRender(t.Context(), fbc.Render{
+		Digest: imageDigest(cso), State: fbc.StateFailed, Error: "no channel stable-3.18", RenderedAt: time.Now(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	seedStagedFBC(t, srv, app, "3.18.1", "quay-stage-3-18-1-fbc-20261007000000", "2026-10-07T00:00:00Z", []string{op20old, op21, qbo}, "Failed")
+	seedStagedFBC(t, srv, app, "3.18.1", "quay-stage-3-18-1-fbc-20261008000000", "2026-10-08T00:00:00Z", []string{op20old, qbo}, "Succeeded")
+	seedStagedFBC(t, srv, app, "3.18.1", "quay-stage-3-18-1-fbc-20261009000000", "2026-10-09T00:00:00Z", []string{op20, cso}, "Succeeded")
+	if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var got model.ReleaseCandidate
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
+	o := got.FBCCandidate.Operators[0]
+	if len(o.Members) != 2 || o.Members[0].Staged != 2 || o.Members[1].Staged != 0 || o.Stage != (model.StageSummary{Staged: 1, Total: 2}) {
+		t.Errorf("quay-operator members %+v, stage %+v; want 4.20 staged 2, 4.21 staged 0, 1 of 2 on stage", o.Members, o.Stage)
+	}
+	want := model.Verdict{State: "not_ready", Items: []model.VerdictItem{{
+		Level: "blocker", Operator: "container-security-operator", Code: "read_failed",
+		Text: "container-security-operator OCP 4.20: can't read FBC: no channel stable-3.18",
+	}}}
+	if !reflect.DeepEqual(got.Verdict, want) || got.Reading != (model.ReadProgress{Read: 4, Failed: 1}) {
+		t.Errorf("verdict %+v, reading %+v; want %+v, 4 read, 1 failed", got.Verdict, got.Reading, want)
+	}
 }
 
 // Like CSO 3.17.6: 7 slots on bundle ...0313 and the 2 newest on ...1613. The

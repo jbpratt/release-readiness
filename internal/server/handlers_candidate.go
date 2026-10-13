@@ -43,18 +43,25 @@ func (s *Server) handleGetCandidate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// releaseCandidate is the version's candidate response. A shipped version
-// has no reason.
+// releaseCandidate is the version's candidate response, with its verdict. A
+// shipped version has no reason.
 func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVersion) (*model.ReleaseCandidate, error) {
 	c, err := s.selectCandidate(ctx, release)
 	if err != nil {
 		return nil, err
 	}
 	resp, err := s.candidateResponse(ctx, release, c)
-	if err != nil || !c.shipped {
-		return resp, err
+	if err != nil {
+		return nil, err
 	}
-	resp.Reason = ""
+	if c.shipped {
+		resp.Reason = ""
+	}
+	r := &resp.Reading
+	if r.Read, r.Failed, r.Pending, err = s.db.FBCReadProgress(ctx); err != nil {
+		return nil, err
+	}
+	setVerdict(resp, c.assembly)
 	return resp, nil
 }
 
@@ -244,6 +251,23 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 	cand = stream
 	if len(staged) > 0 {
 		cand = projectFBC("stage_snapshots", staged, slots)
+		// staged is one row per Snapshot and catalog, so a slot restaged in
+		// several Snapshots counts each, and a superseded failure none.
+		times := map[[2]string]int{}
+		for _, m := range staged {
+			if succeeded(m.Release) {
+				operator, _, ocp, _ := artbuild.ParseFBC(m.NVR)
+				times[[2]string{operator, ocp}]++
+			}
+		}
+		for i := range cand.Operators {
+			o := &cand.Operators[i]
+			for _, ms := range [][]model.FBCMember{o.Members, o.Conflicts} {
+				for j := range ms {
+					ms[j].Staged = times[[2]string{o.Operator, ms[j].OCP}]
+				}
+			}
+		}
 	}
 
 	var digests []string
@@ -307,6 +331,12 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 				}
 			}
 			f.Installable = f.Installable && o.FBCRIStage.State == "in"
+			o.Stage = model.StageSummary{Total: len(o.Members)}
+			for _, m := range o.Members {
+				if succeeded(m.Release) {
+					o.Stage.Staged++
+				}
+			}
 			o.ImageCheck = model.ImageCheck{State: "absent", Snapshot: image, BundleNVR: bundles[app+"-"+o.Operator+"-bundle"]}
 			if o.ImageCheck.BundleNVR != "" && o.HeadBundleNVR != "" {
 				o.ImageCheck.State = "differs"
@@ -521,6 +551,10 @@ func ciState(bundle string, releases []model.StageRelease) model.CIState {
 		}
 	}
 	return state
+}
+
+func succeeded(r *model.KonfluxRelease) bool {
+	return r != nil && r.ReleasedStatus == "True" && r.ReleasedReason == "Succeeded"
 }
 
 // candidate is a version's build up for release. A version that is not one

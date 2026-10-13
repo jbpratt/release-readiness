@@ -156,6 +156,7 @@ func (d *DB) StagedFBCMembers(ctx context.Context, assembly, application string)
 		members[i] = model.FBCMember{
 			Digest: digest, Pullspec: r.ImageUrl, NVR: r.Nvr, HeadBundleNVR: r.HeadBundleNvr, Snapshot: r.SnapshotName,
 			RecordID: r.RecordID, Channel: r.Channel, HeadCSV: r.HeadCsv, HeadVersion: r.HeadVersion, PreviousVersion: r.PreviousVersion,
+			ReadError: r.ReadError,
 		}
 		// releases is newest first.
 		if j := slices.IndexFunc(releases, func(kr dbsqlc.KonfluxRelease) bool { return kr.Snapshot == r.SnapshotName }); j >= 0 {
