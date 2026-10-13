@@ -12,6 +12,7 @@ import type {
 } from "../api/types.ts";
 import {
 	artGroup,
+	blockedReasons,
 	blockOpen,
 	bundleBuilt,
 	compareLine,
@@ -22,13 +23,13 @@ import {
 	fbcParams,
 	fbcPullspecs,
 	fbcStageStep,
+	fbcsStaged,
 	fixableLabels,
-	imagesState,
 	jobLabels,
 	jobShortName,
 	nvrLabel,
-	pullspecsBlocked,
 	readingLine,
+	releaseInput,
 	releaseLine,
 	rowChips,
 	runsStatus,
@@ -196,7 +197,7 @@ test("artGroup: the application's X.Y dotted", () => {
 	assert.equal(artGroup("quay-3-9"), "quay-3.9");
 });
 
-test("fbcParams and tknCommand: 3.17.6 with and without FBC pullspecs", () => {
+test("fbcParams and tknCommand: 3.17.6 with and without optional params", () => {
 	const fbc = "quay.io/a/art-fbc@sha256:1,quay.io/a/art-fbc@sha256:2";
 	assert.deepEqual(
 		fbcParams(
@@ -216,8 +217,8 @@ test("fbcParams and tknCommand: 3.17.6 with and without FBC pullspecs", () => {
 		},
 	);
 	assert.equal(
-		tknCommand(fbcParams("quay-3-17", "3.17.6", null, [])),
-		"tkn pipeline start release-from-fbc -n art-quay-tenant --use-param-defaults -p 'group=quay-3.17' -p 'assembly=3.17.6' -p 'fbc-pullspecs=<fbc-pullspecs>' -p 'dry-run=true'",
+		tknCommand(fbcParams("quay-3-17", "3.17.6", fbc, [])),
+		`tkn pipeline start release-from-fbc -n art-quay-tenant --use-param-defaults -p 'group=quay-3.17' -p 'assembly=3.17.6' -p 'fbc-pullspecs=${fbc}' -p 'dry-run=true'`,
 	);
 });
 
@@ -354,7 +355,7 @@ test("missing operator (3.17.6): CSO and QBO not in stage show the stream's FBCs
 		operators: [qo, streamCSO, streamQBO],
 	});
 	assert.equal(fbcPullspecs(c), null);
-	assert.equal(pullspecsBlocked(c), errors.join("; "));
+	assert.deepEqual(blockedReasons(c), errors);
 	assert.deepEqual(fbcBuildStep(stream), {
 		variant: "success",
 		text: "",
@@ -367,9 +368,63 @@ test("missing operator (3.17.6): CSO and QBO not in stage show the stream's FBCs
 		{ ocp: "4.12", kind: "missing", fbc: null },
 		{ ocp: "4.14", kind: "missing", fbc: null },
 	]);
+	const shown = shownOperators(c, stream, false);
 	assert.deepEqual(
-		shownOperators(c, stream, false).map((s) => s.operator),
+		shown.map((s) => s.operator),
 		[qo, streamCSO, streamQBO],
+	);
+	// CSO's stream has no FBC for one of its slots: 2 built of 3.
+	streamCSO.coverage.slots = 3;
+	qo.stage = { staged: 3, total: 3 };
+	assert.deepEqual(
+		shown.map((s) => fbcsStaged(c, stream, s)),
+		["3/3", "0/3", "0/1"],
+	);
+	assert.deepEqual(
+		shown.map((s) => stageText(c, s)),
+		["On stage", "Not in stage shipment", "Not in stage shipment"],
+	);
+	assert.deepEqual(
+		shown.map((s) => releaseInput(c, s)),
+		[
+			"3 FBCs (OCP 4.12, 4.13, 4.14) in the staged candidate",
+			"2 FBCs (OCP 4.12, 4.14) built in the stream, not in a stage shipment",
+			"1 FBC (OCP 4.12) built in the stream, not in a stage shipment",
+		],
+	);
+	assert.equal(
+		releaseInput(c, { operator: operatorFBC("x", "", []), leftOut: false }),
+		"No FBC built",
+	);
+});
+
+test("blockedReasons: names each operator's missing OCP versions", () => {
+	const head = bundle("202610060936");
+	const qo = operatorFBC("quay-operator", head, [fbcMember("4.14", head)], {
+		missing_ocp: ["4.22", "4.9"],
+	});
+	const cso = operatorFBC("container-security-operator", "", [], {
+		missing_ocp: ["4.14"],
+	});
+	const c = fbcCandidate({
+		state: "incomplete",
+		errors: ["container-security-operator is not in stage"],
+		operators: [qo, cso],
+	});
+	assert.deepEqual(blockedReasons(c), [
+		"container-security-operator is not in stage",
+		"quay-operator has no FBC for OCP 4.9, 4.22",
+	]);
+	assert.deepEqual(
+		blockedReasons(fbcCandidate({ state: "unknown", operators: [qo] })),
+		["quay-operator has no FBC for OCP 4.9, 4.22"],
+	);
+	assert.deepEqual(blockedReasons(fbcCandidate({ state: "unknown" })), [
+		"a head bundle or staged catalog is not resolved yet",
+	]);
+	assert.deepEqual(
+		blockedReasons(fbcCandidate({ operators: [qo], pullspecs: ["x"] })),
+		[],
 	);
 });
 
@@ -550,7 +605,6 @@ test("checking: nothing warns or fails", () => {
 	);
 	assert.equal(unreadText([failed], "quay-bridge-operator"), null);
 	assert.equal(shipsVersion(o), "");
-	assert.equal(imagesState(o, false), "");
 	assert.deepEqual(whileChecking(fbcCIStep(c), true), {
 		variant: "info",
 		text: "No CI ran on these FBCs",
@@ -610,8 +664,6 @@ test("shipped (3.18.1): record mode", () => {
 	);
 	assert.equal(shipsVersion(qo), "v3.18.1");
 	assert.equal(bundleBuilt(head), "Oct 6 16:37");
-	assert.equal(imagesState(qo, true), "in prod");
-	assert.equal(imagesState(qo, false), "on stage");
 	assert.deepEqual(verdictLine({ state: "shipped", items: [] }), {
 		status: "done",
 		text: "Shipped",
@@ -674,21 +726,28 @@ const item = (
 	text = "",
 ): VerdictItem => ({ level, operator, owner: "", code, text });
 
-test("stageText: no count while FBCs are on their way, a failed one says so", () => {
+test("stageText: by the FBCs' newest stage Releases", () => {
 	const head = bundle("202610060936");
-	const qo = operatorFBC("quay-operator", head, [fbcMember("4.14", head)], {
-		stage: { staged: 0, total: 11 },
+	const ok = release({
+		released_status: "True",
+		completion_time: "2026-10-07T12:00:00Z",
 	});
-	assert.equal(stageText(qo, []), "");
+	const failed = release({ released_reason: "Failed" });
+	const shown = (...releases: (KonfluxRelease | null)[]) => ({
+		operator: operatorFBC(
+			"quay-operator",
+			head,
+			releases.map((r, i) => fbcMember(`4.1${i}`, head, { release: r })),
+		),
+		leftOut: false,
+	});
+	const c = fbcCandidate({});
+	assert.equal(stageText(c, shown(ok, failed)), "Release failed");
+	assert.equal(stageText(c, shown(ok, null)), "Release in progress");
+	assert.match(stageText(c, shown(ok)), /^On stage since /);
 	assert.equal(
-		stageText(qo, [item("blocker", "quay-operator", "stage_release_failed")]),
-		"FBCs not on stage",
-	);
-	assert.equal(
-		stageText(qo, [
-			item("blocker", "container-security-operator", "stage_release_failed"),
-		]),
-		"",
+		stageText(fbcCandidate({ source: "stream" }), shown(ok)),
+		"Not in stage shipment",
 	);
 });
 
@@ -747,7 +806,7 @@ test("rowChips: exceptions only, per row", () => {
 	assert.deepEqual(chips(member({ release: failed })), ["release failed"]);
 	assert.deepEqual(
 		chips({ ocp: "4.21", kind: "other", fbc: fbcMember("4.21", other) }),
-		["other build Oct 12 16:13"],
+		["Different bundle"],
 	);
 	assert.deepEqual(chips({ ocp: "4.12", kind: "missing", fbc: null }), [
 		"no FBC",
@@ -799,7 +858,7 @@ test("record mode: no prompts, only facts", () => {
 			},
 			{ shipped: true, unreadable: "x" },
 		).map((c) => c.text),
-		["other build Oct 12 16:13", "staged 2x"],
+		["Different bundle", "staged 2x"],
 	);
 	assert.deepEqual(
 		rowChips(

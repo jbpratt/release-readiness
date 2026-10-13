@@ -123,6 +123,12 @@ const shortNames: Record<string, string> = {
 
 const shortName = (o: OperatorFBC) => shortNames[o.operator] ?? o.operator;
 
+/** Each of an operator's FBCs' newest stage Release status, running before one. */
+const releaseStates = (o: OperatorFBC) =>
+	[...o.members, ...o.conflicts].map((m) =>
+		m.release ? releaseLine(m.release).status : "running",
+	);
+
 /**
  * The candidate's Stage step: not staged for the stream; else any operator
  * whose FBC's newest Release failed fails it, one the shipment leaves out
@@ -131,19 +137,15 @@ const shortName = (o: OperatorFBC) => shortNames[o.operator] ?? o.operator;
 export function fbcStageStep(c: FBCCandidate): CIStep {
 	if (c.source === "stream")
 		return { variant: "pending", text: "Not in a stage shipment" };
-	const states = (o: OperatorFBC) =>
-		[...o.members, ...o.conflicts].map((m) =>
-			m.release ? releaseLine(m.release).status : "running",
-		);
 	const failed = c.operators
-		.filter((o) => states(o).includes("failed"))
+		.filter((o) => releaseStates(o).includes("failed"))
 		.map(shortName);
 	if (failed.length > 0)
 		return { variant: "danger", text: `${failed.join(", ")} release failed` };
 	const unstaged = c.operators.filter((o) => !hasFBC(o)).map(shortName);
 	if (unstaged.length > 0)
 		return { variant: "warning", text: `${unstaged.join(", ")} not staged` };
-	return c.operators.every((o) => states(o).every((s) => s === "done"))
+	return c.operators.every((o) => releaseStates(o).every((s) => s === "done"))
 		? { variant: "success", text: "" }
 		: { variant: "info", text: "Release in progress" };
 }
@@ -174,9 +176,23 @@ export const fbcPullspecs = (c: FBCCandidate): string | null =>
 		? c.pullspecs.join(",")
 		: null;
 
-/** Why a candidate has no fbc-pullspecs to copy. */
-export const pullspecsBlocked = (c: FBCCandidate) =>
-	c.errors.length > 0 ? c.errors.join("; ") : stateTexts[c.state];
+/**
+ * Why a candidate has no fbc-pullspecs to run with, naming each operator and
+ * the OCP versions it has no FBC for; [] with pullspecs.
+ */
+export function blockedReasons(c: FBCCandidate): string[] {
+	if (fbcPullspecs(c)) return [];
+	const reasons = [
+		...c.errors,
+		...c.operators
+			.filter((o) => hasFBC(o) && o.missing_ocp.length > 0)
+			.map(
+				(o) =>
+					`${o.operator} has no FBC for OCP ${[...o.missing_ocp].sort(compareVersions).join(", ")}`,
+			),
+	];
+	return reasons.length > 0 ? reasons : [stateTexts[c.state]];
+}
 
 /** Compares dot-separated versions numerically: OCP 4.9 is lower than 4.12. */
 export function compareVersions(a: string, b: string): number {
@@ -325,7 +341,7 @@ export function rowChips(
 	if (r.kind === "other")
 		chips.push({
 			color: "orange",
-			text: `other build ${bundleBuilt(r.fbc?.head_bundle_nvr ?? "")}`,
+			text: "Different bundle",
 			title: r.fbc?.head_bundle_nvr,
 		});
 	if ((r.fbc?.staged ?? 0) > 1)
@@ -412,41 +428,57 @@ const day = (iso: string) =>
 		day: "numeric",
 	});
 
+/** Whether the stage shipment holds an operator's FBCs, or only the stream. */
+const notStaged = (c: FBCCandidate, { operator, leftOut }: ShownOperator) =>
+	leftOut || c.source === "stream" || !hasFBC(operator);
+
 /**
- * Since when an operator's staged FBCs are all on stage, by their newest
- * Releases; else "FBCs not on stage" when a stage Release of one failed, and
- * "" while they are on their way: a count of them reads as the images'.
+ * Where an operator's FBCs are on stage, by their newest stage Releases: not
+ * in the stage shipment, a failed Release, one running, or on stage since the
+ * newest finished.
  */
-export function stageText(o: OperatorFBC, items: VerdictItem[]): string {
-	const { staged, total } = o.stage;
-	if (total === 0) return "";
-	if (staged < total)
-		return items.some(
-			(i) => i.operator === o.operator && i.code === "stage_release_failed",
-		)
-			? "FBCs not on stage"
-			: "";
-	const done = o.members
+export function stageText(c: FBCCandidate, s: ShownOperator): string {
+	if (notStaged(c, s)) return "Not in stage shipment";
+	const states = releaseStates(s.operator);
+	if (states.includes("failed")) return "Release failed";
+	if (states.some((st) => st !== "done")) return "Release in progress";
+	const done = [...s.operator.members, ...s.operator.conflicts]
 		.map((m) => m.release?.completion_time ?? "")
 		.filter(Boolean)
 		.sort();
 	return done.length > 0
-		? `On stage since ${day(done[done.length - 1])} (${staged} of ${total})`
-		: `${staged} of ${total} on stage`;
+		? `On stage since ${day(done[done.length - 1])}`
+		: "On stage";
 }
 
 /**
- * Where an operator's ART-built images are: in prod for a shipped version
- * once all are, else on stage, or why not; "" until its head bundle is read.
+ * An operator's FBCs staged: its candidate slots released to stage, of its
+ * slots in the stream, else in the candidate. A stream FBC is only built.
  */
-export function imagesState(o: OperatorFBC, shipped: boolean): string {
-	const art = o.images.filter((i) => i.nvr);
-	if (art.length === 0) return "";
-	if (shipped && art.every((i) => i.prod)) return "in prod";
-	if (art.every((i) => i.stage)) return "on stage";
-	return o.fbc_ri_stage.state === "failed"
-		? "push to stage failed"
-		: "not on stage";
+export function fbcsStaged(
+	c: FBCCandidate,
+	stream: FBCCandidate | null,
+	s: ShownOperator,
+): string {
+	const o = s.operator;
+	const slots = (stream?.operators.find((x) => x.operator === o.operator) ?? o)
+		.coverage.slots;
+	return `${notStaged(c, s) ? 0 : o.stage.staged}/${slots}`;
+}
+
+/**
+ * What an operator puts into the release: its FBCs by OCP version, in the
+ * staged candidate or only built in the stream.
+ */
+export function releaseInput(c: FBCCandidate, s: ShownOperator): string {
+	const ocp = slotRows(s.operator)
+		.filter((r) => r.fbc)
+		.map((r) => r.ocp);
+	if (ocp.length === 0) return "No FBC built";
+	const fbcs = `${ocp.length} FBC${ocp.length === 1 ? "" : "s"} (OCP ${ocp.join(", ")})`;
+	return notStaged(c, s)
+		? `${fbcs} built in the stream, not in a stage shipment`
+		: `${fbcs} in the staged candidate`;
 }
 
 /**
@@ -563,28 +595,25 @@ export function releaseLine(r: KonfluxRelease): StatusLine {
 	return { status: "running", text: "Release in progress" };
 }
 
-/** release-from-fbc's fbc-pullspecs while there are none to run with. */
-export const FBC_PLACEHOLDER = "<fbc-pullspecs>";
-
 /** A Konflux application's ART group: quay-3-17 is quay-3.17. */
 export const artGroup = (app: string) => app.replace(/-(\d+)$/, ".$1");
 
 /**
- * release-from-fbc's params for a version, in a dry run: fbc-pullspecs is a
- * placeholder without pullspecs, date's day is target-release-date, and empty
- * optional params are left out so the Pipeline's defaults apply.
+ * release-from-fbc's params for a version, in a dry run: date's day is
+ * target-release-date, and empty optional params are left out so the
+ * Pipeline's defaults apply.
  */
 export function fbcParams(
 	app: string,
 	version: string,
-	pullspecs: string | null,
+	pullspecs: string,
 	bugs: string[],
 	date?: string,
 ): Record<string, string> {
 	const params: Record<string, string> = {
 		group: artGroup(app),
 		assembly: version,
-		"fbc-pullspecs": pullspecs ?? FBC_PLACEHOLDER,
+		"fbc-pullspecs": pullspecs,
 	};
 	if (bugs.length > 0) params["jira-bugs"] = bugs.join(",");
 	if (date) params["target-release-date"] = date.slice(0, 10);

@@ -8,10 +8,6 @@ import {
 	CardTitle,
 	ClipboardCopy,
 	clipboardCopyFunc,
-	DescriptionList,
-	DescriptionListDescription,
-	DescriptionListGroup,
-	DescriptionListTerm,
 	EmptyState,
 	EmptyStateBody,
 	ExpandableSection,
@@ -34,6 +30,8 @@ import {
 	Title,
 } from "@patternfly/react-core";
 import {
+	AngleDownIcon,
+	AngleRightIcon,
 	CheckCircleIcon,
 	ExclamationCircleIcon,
 	ExclamationTriangleIcon,
@@ -41,7 +39,15 @@ import {
 	InfoCircleIcon,
 	InProgressIcon,
 } from "@patternfly/react-icons";
-import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
+import {
+	ExpandableRowContent,
+	Table,
+	Tbody,
+	Td,
+	Th,
+	Thead,
+	Tr,
+} from "@patternfly/react-table";
 import { type ReactNode, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
@@ -78,22 +84,22 @@ import {
 } from "../utils/links";
 import {
 	BASES,
+	blockedReasons,
 	blockOpen,
 	bundleBuilt,
 	compareLine,
 	componentLabel,
-	FBC_PLACEHOLDER,
 	fbcBuildStep,
 	fbcCIStep,
 	fbcParams,
 	fbcPullspecs,
 	fbcStageStep,
+	fbcsStaged,
 	fixableLabels,
-	imagesState,
 	jobLabels,
 	nvrLabel,
-	pullspecsBlocked,
 	readingLine,
+	releaseInput,
 	releaseLine,
 	rowChips,
 	runsStatus,
@@ -410,16 +416,12 @@ function BuildsCard({
 						konflux={konflux}
 						release={
 							!data.shipped && (
-								<ReleaseFromFBC
-									params={fbcParams(
-										app,
-										version,
-										fbcPullspecs(fbc),
-										bugs ?? [],
-										dueDate,
-									)}
-									blocked={pullspecsBlocked(fbc)}
-									bugsUnknown={!bugs}
+								<ReleaseInputs
+									fbc={fbc}
+									app={app}
+									version={version}
+									bugs={bugs}
+									dueDate={dueDate}
 								/>
 							)
 						}
@@ -436,9 +438,9 @@ function BuildsCard({
 
 /**
  * The FBC candidate: its verdict and how far FBC reads are; where it is, from
- * the stream's build through CI and stage to prod; a summary row per
- * operator; and each operator's block. Unshipped, a collapsed section has
- * release-from-fbc's params; the Prod step's popover, its Release.
+ * the stream's build through CI and stage to prod; and a row per operator,
+ * opening to its detail. Unshipped, a collapsed section reviews
+ * release-from-fbc's inputs; the Prod step's popover, its Release.
  * While FBC reads are pending no step warns or fails.
  */
 function Candidate({
@@ -495,7 +497,7 @@ function Candidate({
 	const label = (job: string) => labels[jobs.indexOf(job)];
 	const shown = shownOperators(fbc, stream, shipped);
 	const operators = fbc.operators.map((o) => o.operator);
-	// Blocks the reader opened or closed, and their tabs; else open on a problem.
+	// Rows the reader opened or closed, and their tabs; else open on a problem.
 	const [opened, setOpened] = useState<Record<string, boolean>>({});
 	const [tabs, setTabs] = useState<Record<string, BlockTab>>({});
 	return (
@@ -561,34 +563,95 @@ function Candidate({
 					}
 				/>
 			</ProgressStepper>
-			<OperatorSummary
-				fbc={fbc}
-				stream={stream}
-				shipped={shipped}
-				items={verdict.items}
-			/>
-			{shown.map((s) => {
-				const op = s.operator.operator;
-				return (
-					<OperatorBlock
-						key={op}
-						shown={s}
-						open={opened[op] ?? blockOpen(s, verdict.items)}
-						onToggle={(open) => setOpened((o) => ({ ...o, [op]: open }))}
-						tab={tabs[op] ?? "fbcs"}
-						onTab={(tab) => setTabs((t) => ({ ...t, [op]: tab }))}
-						ahead={shipped || s.leftOut ? null : streamAhead(fbc, stream, op)}
-						items={verdict.items}
-						shipped={shipped}
-						unshipped={unshippedOf(unshipped, operators, op)}
-						catalogs={catalogs}
-						label={label}
-						version={version}
-						app={app}
-						konflux={konflux}
-					/>
-				);
-			})}
+			<Table
+				variant="compact"
+				aria-label="Operators"
+				style={{ marginTop: "1rem" }}
+			>
+				<Thead>
+					<Tr>
+						<Th>Operator</Th>
+						<Th modifier="wrap">FBCs staged</Th>
+						<Th>Stage</Th>
+						<Th>Needs action</Th>
+					</Tr>
+				</Thead>
+				{shown.map((s) => {
+					const op = s.operator.operator;
+					const open = opened[op] ?? blockOpen(s, verdict.items);
+					const actions = verdict.items.filter(
+						(i) => i.operator === op && i.level !== "info",
+					);
+					return (
+						<Tbody key={op} isExpanded={open}>
+							<Tr>
+								<Td>
+									<Button
+										variant="link"
+										isInline
+										icon={open ? <AngleDownIcon /> : <AngleRightIcon />}
+										aria-label={`${op} details`}
+										aria-expanded={open}
+										onClick={() => setOpened((o) => ({ ...o, [op]: !open }))}
+									>
+										{op}
+									</Button>
+								</Td>
+								<Td modifier="nowrap">{fbcsStaged(fbc, stream, s)}</Td>
+								<Td modifier="nowrap">{shipped ? "" : stageText(fbc, s)}</Td>
+								<Td>
+									{checking ? (
+										<span style={muted}>Checking…</span>
+									) : actions.length > 0 ? (
+										actions.map((i) => (
+											<div key={`${i.code} ${i.text}`}>
+												{levelIcons[i.level]} {i.text}
+											</div>
+										))
+									) : (
+										"Ready"
+									)}
+								</Td>
+							</Tr>
+							{open && (
+								<Tr isExpanded>
+									<Td colSpan={4}>
+										<ExpandableRowContent>
+											<OperatorDetail
+												shown={s}
+												tab={tabs[op] ?? "fbcs"}
+												onTab={(tab) => setTabs((t) => ({ ...t, [op]: tab }))}
+												ahead={
+													shipped || s.leftOut
+														? null
+														: streamAhead(fbc, stream, op)
+												}
+												input={shipped ? null : releaseInput(fbc, s)}
+												items={verdict.items}
+												shipped={shipped}
+												unshipped={unshippedOf(unshipped, operators, op)}
+												catalogs={catalogs}
+												label={label}
+												version={version}
+												app={app}
+												konflux={konflux}
+											/>
+										</ExpandableRowContent>
+									</Td>
+								</Tr>
+							)}
+						</Tbody>
+					);
+				})}
+			</Table>
+			{release && (
+				<ExpandableSection
+					toggleText="Review release inputs"
+					style={{ marginTop: "1rem" }}
+				>
+					{release}
+				</ExpandableSection>
+			)}
 			{fbc.unknown.length > 0 && (
 				<div style={line}>
 					<Status status="warning">
@@ -606,14 +669,6 @@ function Candidate({
 						))}
 					</Status>
 				</div>
-			)}
-			{release && (
-				<ExpandableSection
-					toggleText="Release from FBC"
-					style={{ marginTop: "1rem" }}
-				>
-					{release}
-				</ExpandableSection>
 			)}
 		</>
 	);
@@ -676,102 +731,24 @@ function VerdictHeader({
 	);
 }
 
-/**
- * A row per operator: the version and bundle its FBCs ship and where its
- * images are.
- */
-function OperatorSummary({
-	fbc,
-	stream,
-	shipped,
-	items,
-}: {
-	fbc: FBCCandidate;
-	stream: FBCCandidate | null;
-	shipped: boolean;
-	items: VerdictItem[];
-}) {
-	const flagged = (operator: string, code: string) =>
-		items.some((i) => i.operator === operator && i.code === code);
-	return (
-		<Table
-			variant="compact"
-			aria-label="Operators"
-			style={{ marginTop: "1rem" }}
-		>
-			<Thead>
-				<Tr>
-					<Th>Operator</Th>
-					<Th>Ships</Th>
-					<Th>Bundle</Th>
-					<Th>Images</Th>
-				</Tr>
-			</Thead>
-			<Tbody>
-				{shownOperators(fbc, stream, shipped).map(({ operator: o }) => {
-					const ships = shipsVersion(o);
-					const images = imagesState(o, shipped);
-					const unread = unreadText(items, o.operator) ?? "reading…";
-					return (
-						<Tr key={o.operator}>
-							<Td>{o.operator}</Td>
-							<Td modifier="nowrap">
-								{ships ? (
-									<>
-										{ships}{" "}
-										{flagged(o.operator, "csv_mismatch") && levelIcons.blocker}
-									</>
-								) : (
-									<span style={muted}>{unread}</span>
-								)}
-							</Td>
-							<Td modifier="nowrap">
-								<span title={o.head_bundle_nvr}>
-									{bundleBuilt(o.head_bundle_nvr)}
-								</span>
-							</Td>
-							<Td modifier="nowrap">
-								{images || <span style={muted}>{unread}</span>}
-							</Td>
-						</Tr>
-					);
-				})}
-			</Tbody>
-		</Table>
-	);
-}
-
 /** An FBC NVR without its operator: quay-operator-fbc-3.17.6-1.ocp4.14 is 3.17.6-1.ocp4.14. */
 const fbcLabel = (nvr: string) => nvr.replace(/^.*-fbc-/, "");
 
 type BlockTab = "fbcs" | "images";
 
-// An operator's images, by where they are.
-const imagesTexts: Record<string, string> = {
-	"on stage": "images on stage",
-	"in prod": "images in prod",
-	"not on stage": "images not on stage: CI can't install",
-	"push to stage failed": "image push to stage failed",
-};
-
-/** The commit an ART NVR's ".g<sha>" names. */
-const nvrCommit = (nvr: string) => nvr.match(/\.g([0-9a-f]{7,})\./)?.[1] ?? "";
-
 /**
- * An operator's block, open on a problem until the reader toggles it: the
- * version, bundle and channel its FBCs ship, where they are, a newer stream
- * build not on stage; then its FBCs by OCP version, with exception chips,
- * their Snapshot and Release, and CI where runs exist, and its images,
- * compared with the previous z or that newer build. A left-out operator's
- * are the stream's FBCs to add.
+ * An operator's detail: the CSV version, bundle and channel its FBCs ship, a
+ * newer stream build not on stage, and its release input; then its FBCs by
+ * OCP version, with exception chips, their Snapshot and Release, and CI where
+ * runs exist, and its images, compared with the previous z or that newer
+ * build. A left-out operator's are the stream's FBCs to add.
  */
-function OperatorBlock({
-	shown: { operator: o, leftOut },
-	open,
-	onToggle,
+function OperatorDetail({
+	shown: { operator: o },
 	tab,
 	onTab,
 	ahead,
+	input,
 	items,
 	shipped,
 	unshipped,
@@ -782,12 +759,12 @@ function OperatorBlock({
 	konflux,
 }: {
 	shown: ShownOperator;
-	open: boolean;
-	onToggle: (open: boolean) => void;
 	tab: BlockTab;
 	onTab: (tab: BlockTab) => void;
 	/** The stream's newer head bundle, when the stage candidate is behind it. */
 	ahead: string | null;
+	/** What it puts into the release; null for a shipped version. */
+	input: string | null;
 	items: VerdictItem[];
 	shipped: boolean;
 	unshipped: UnshippedBuild[];
@@ -802,15 +779,17 @@ function OperatorBlock({
 	const fbcs = rows.filter((r) => r.fbc).length;
 	const nvr = o.head_bundle_nvr;
 	const unread = unreadText(items, o.operator);
+	const csv = shipsVersion(o);
 	const head = nvr
-		? [shipsVersion(o), `bundle ${bundleBuilt(nvr)}`, nvrCommit(nvr), o.channel]
+		? [
+				csv && `CSV ${csv}`,
+				`bundle ${nvr}`,
+				o.channel,
+				o.fbc_ri_stage.state === "failed" && "image push to stage failed",
+			]
 				.filter(Boolean)
 				.join(" · ")
 		: (unread ?? "reading…");
-	const images = imagesTexts[imagesState(o, shipped)];
-	const status = leftOut
-		? `Not in the stage shipment: add these ${fbcs} FBCs`
-		: [shipped ? "" : stageText(o, items), images].filter(Boolean).join(" · ");
 	const newer = o.compare.find((c) => c.kind === "newer");
 	const change = newer && compareLine(newer);
 	const fbcApp = `fbc-${app}`;
@@ -821,25 +800,9 @@ function OperatorBlock({
 			(r.fbc?.ci?.exact.length ?? 0) + (r.fbc?.ci?.equivalent.length ?? 0) > 0,
 	);
 	return (
-		<ExpandableSection
-			isExpanded={open}
-			onToggle={(_e, v) => onToggle(v)}
-			toggleContent={
-				<span>
-					<strong>{o.operator}</strong>{" "}
-					<span style={muted} title={nvr || undefined}>
-						{head}
-					</span>
-				</span>
-			}
-			style={{ marginTop: "1rem" }}
-		>
-			{status && (
-				<div>
-					{status.charAt(0).toUpperCase()}
-					{status.slice(1)}
-				</div>
-			)}
+		<>
+			<div style={muted}>{head}</div>
+			{input && <div>Release input: {input}</div>}
 			{ahead && (
 				<Flex gap={{ default: "gapSm" }} flexWrap={{ default: "nowrap" }}>
 					<FlexItem>{levelIcons[change?.level ?? "info"]}</FlexItem>
@@ -876,8 +839,7 @@ function OperatorBlock({
 							<Tr>
 								<Th modifier="fitContent">OCP</Th>
 								<Th>FBC</Th>
-								<Th>Digest</Th>
-								<Th>Konflux</Th>
+								<Th>Stage evidence</Th>
 								{ci && <Th screenReaderText="CI" />}
 							</Tr>
 						</Thead>
@@ -887,24 +849,25 @@ function OperatorBlock({
 									<Td modifier="nowrap">{r.ocp}</Td>
 									<Td>
 										{r.fbc && (
-											<ExtLink href={r.fbc.build_url || null} title={r.fbc.nvr}>
-												{r.fbc.nvr
-													? fbcLabel(r.fbc.nvr)
-													: shortDigest(r.fbc.pullspec)}
-											</ExtLink>
-										)}
-									</Td>
-									<Td modifier="nowrap">
-										{r.fbc && (
-											<ClipboardCopy
-												variant="inline-compact"
-												isCode
-												onCopy={(e) =>
-													clipboardCopyFunc(e, r.fbc?.pullspec ?? "")
-												}
-											>
-												{shortDigest(r.fbc.pullspec)}
-											</ClipboardCopy>
+											<>
+												<ExtLink
+													href={r.fbc.build_url || null}
+													title={r.fbc.nvr}
+												>
+													{r.fbc.nvr
+														? fbcLabel(r.fbc.nvr)
+														: shortDigest(r.fbc.pullspec)}
+												</ExtLink>{" "}
+												<ClipboardCopy
+													variant="inline-compact"
+													isCode
+													onCopy={(e) =>
+														clipboardCopyFunc(e, r.fbc?.pullspec ?? "")
+													}
+												>
+													{shortDigest(r.fbc.pullspec)}
+												</ClipboardCopy>
+											</>
 										)}
 										{rowChips(r, {
 											shipped,
@@ -989,7 +952,7 @@ function OperatorBlock({
 					)}
 				</Tab>
 			</Tabs>
-		</ExpandableSection>
+		</>
 	);
 }
 
@@ -1030,10 +993,10 @@ const changeColors: Record<string, LabelProps["color"]> = {
 
 /**
  * An operator's images, the relatedImages of its head bundle, each once with
- * its build, commit, digest and whether stage and prod hold it; or, compared,
- * each image's change against the previous z or a newer build. Under them,
- * the OCP versions shipping another build and an image shipment's other
- * bundle.
+ * its ART build, fixable CVEs and whether stage and prod hold it; or,
+ * compared, each image's change against the previous z or a newer build.
+ * Under them, the OCP versions shipping another bundle and an image
+ * shipment's other bundle.
  */
 function OperatorImages({
 	operator: o,
@@ -1121,10 +1084,8 @@ function OperatorImages({
 					<Thead>
 						<Tr>
 							<Th>Image</Th>
-							<Th>Build</Th>
-							{hasScans && <Th>CVEs</Th>}
-							<Th>Commit</Th>
-							<Th>Digest</Th>
+							<Th>ART build</Th>
+							{hasScans && <Th>Fixable CVEs</Th>}
 							<Th>Stage</Th>
 							<Th>Prod</Th>
 						</Tr>
@@ -1147,16 +1108,6 @@ function OperatorImages({
 										<ScanCell scan={i.scan} label={i.name || "bundle"} />
 									</Td>
 								)}
-								<Td>{i.commit.slice(0, 7)}</Td>
-								<Td modifier="nowrap">
-									<ClipboardCopy
-										variant="inline-compact"
-										isCode
-										onCopy={(e) => clipboardCopyFunc(e, i.image)}
-									>
-										{shortDigest(i.image)}
-									</ClipboardCopy>
-								</Td>
 								<Td>{yes(i.stage, !i.nvr)}</Td>
 								<Td>{yes(i.prod, !i.nvr)}</Td>
 							</Tr>
@@ -1166,7 +1117,7 @@ function OperatorImages({
 			)}
 			<div style={muted}>
 				{other.length > 0 &&
-					`OCP ${other.join(", ")} ${other.length === 1 ? "ships" : "ship"} a different build. `}
+					`OCP ${other.join(", ")} ${other.length === 1 ? "ships" : "ship"} a different bundle. `}
 				{check.state === "differs" &&
 					`Image shipment has bundle ${bundleBuilt(check.bundle_nvr)}.`}
 			</div>
@@ -1325,29 +1276,28 @@ function UnshippedTable({
 }
 
 /**
- * release-from-fbc's params, a dry-run tkn command and the Pipeline's console
- * page, to review and run by hand: RR starts no run.
+ * release-from-fbc's inputs for its one release-wide run, to review and run
+ * by hand: RR starts no run. The Pipeline's console page; the candidate's FBC
+ * pullspecs by operator and OCP version, staged or only built in the stream;
+ * then a dry-run tkn command, or why the candidate has none to run with.
  */
-function ReleaseFromFBC({
-	params,
-	blocked,
-	bugsUnknown,
+function ReleaseInputs({
+	fbc,
+	app,
+	version,
+	bugs,
+	dueDate,
 }: {
-	params: Record<string, string>;
-	/** Why there are no fbc-pullspecs to copy. */
-	blocked: string;
-	/** The tickets did not load, so jira-bugs is unknown, not empty. */
-	bugsUnknown: boolean;
+	fbc: FBCCandidate;
+	app: string;
+	/** The version's X.Y.Z. */
+	version: string;
+	/** The version's ticket keys; undefined while unknown. */
+	bugs?: string[];
+	dueDate?: string;
 }) {
-	const pullspecs = params["fbc-pullspecs"];
-	const row = (term: string, value: ReactNode, hint?: string) => (
-		<DescriptionListGroup>
-			<DescriptionListTerm>{term}</DescriptionListTerm>
-			<DescriptionListDescription>
-				{value} {hint && <span style={muted}>({hint})</span>}
-			</DescriptionListDescription>
-		</DescriptionListGroup>
-	);
+	const pullspecs = fbcPullspecs(fbc);
+	const operators = fbc.operators.filter((o) => o.members.length > 0);
 	return (
 		<>
 			<Button
@@ -1361,38 +1311,59 @@ function ReleaseFromFBC({
 			>
 				Pipeline
 			</Button>
-			<DescriptionList
-				isHorizontal
-				isCompact
-				horizontalTermWidthModifier={{ default: "12rem" }}
-				style={line}
-			>
-				{row("group", params.group)}
-				{row("assembly", params.assembly)}
-				{row(
-					"fbc-pullspecs",
-					pullspecs === FBC_PLACEHOLDER ? (
-						<span style={muted}>not available: {blocked}</span>
-					) : (
-						<ClipboardCopy variant="inline-compact" truncation>
-							{pullspecs}
-						</ClipboardCopy>
-					),
-				)}
-				{row(
-					"jira-bugs",
-					params["jira-bugs"] ?? (bugsUnknown ? "unavailable" : "none"),
-					"review before running",
-				)}
-				{row(
-					"target-release-date",
-					params["target-release-date"] ?? "none",
-					"hint",
-				)}
-			</DescriptionList>
-			<ClipboardCopy variant="inline-compact" isCode isBlock style={line}>
-				{tknCommand(params)}
-			</ClipboardCopy>
+			<div style={line}>
+				{fbc.source === "stream"
+					? "FBCs built in the stream, not in a stage shipment."
+					: "FBCs in the staged candidate."}
+			</div>
+			{operators.length > 0 && (
+				<Table variant="compact" aria-label="FBC pullspecs by operator">
+					<Thead>
+						<Tr>
+							<Th>Operator</Th>
+							<Th modifier="fitContent">OCP</Th>
+							<Th>Pullspec</Th>
+						</Tr>
+					</Thead>
+					{operators.map((o) => (
+						<Tbody key={o.operator}>
+							{o.members.map((m, i) => (
+								<Tr key={m.digest}>
+									<Td>{i === 0 && o.operator}</Td>
+									<Td>{m.ocp}</Td>
+									<Td>
+										<ClipboardCopy variant="inline-compact" isCode>
+											{m.pullspec}
+										</ClipboardCopy>
+									</Td>
+								</Tr>
+							))}
+						</Tbody>
+					))}
+				</Table>
+			)}
+			{pullspecs ? (
+				<>
+					<ClipboardCopy isReadOnly isCode style={line}>
+						{tknCommand(
+							fbcParams(app, version, pullspecs, bugs ?? [], dueDate),
+						)}
+					</ClipboardCopy>
+					<div style={muted}>
+						Review jira-bugs
+						{bugs ? "" : " (tickets unavailable, left out)"} and
+						target-release-date before running.
+					</div>
+				</>
+			) : (
+				<div style={line}>
+					{blockedReasons(fbc).map((r) => (
+						<Status key={r} status="failed">
+							{r}
+						</Status>
+					))}
+				</div>
+			)}
 		</>
 	);
 }
