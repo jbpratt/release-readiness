@@ -76,27 +76,21 @@ test("jobLabels", () => {
 	const job = (name: string) => `periodic-ci-quay-quay-redhat-3.18-${name}`;
 	assert.deepEqual(
 		jobLabels([
-			job("aws-ocp422-e2e-install-aws-odf-nightly"),
-			job("aws-ocp422-e2e-install-aws-s3-nightly"),
+			job("libvirt-s390x-ocp422-e2e-install-libvirt-s3-nightly"),
+			job("aws-arm64-ocp422-e2e-install-aws-s3-nightly"),
 			job("aws-ocp422-e2e-install-aws-s3-nightly-fips"),
-		]),
-		["aws-odf", "aws-s3", "aws-s3-fips"],
-	);
-	assert.deepEqual(
-		jobLabels([
-			job("aws-ocp414-e2e-install-aws-s3-nightly"),
-			job("aws-ocp422-e2e-install-aws-s3-nightly"),
-			job("aws-ocp422-e2e-install-aws-s3-nightly-fips"),
-			job("gcp-ocp422-e2e-install-gcp-gcs-nightly"),
-		]),
-		["aws-ocp414-aws-s3", "aws-ocp422-aws-s3", "aws-s3-fips", "gcp-gcs"],
-	);
-	assert.deepEqual(
-		jobLabels([
+			job("gcp-ocp422-e2e-install-gcp-gcs"),
 			"periodic-ci-quay-quay-master-e2e-install-aws-s3",
-			job("aws-ocp422-e2e-install-aws-s3-nightly"),
+			"periodic-ci-quay-quay-tests-master-e2e",
 		]),
-		["periodic-ci-quay-quay-master-e2e-install-aws-s3", "aws-ocp422-aws-s3"],
+		[
+			"libvirt-s390x-ocp422-libvirt-s3",
+			"aws-arm64-ocp422-aws-s3",
+			"aws-ocp422-aws-s3-fips",
+			"gcp-ocp422-gcp-gcs",
+			"aws-s3",
+			"periodic-ci-quay-quay-tests-master-e2e",
+		],
 	);
 });
 
