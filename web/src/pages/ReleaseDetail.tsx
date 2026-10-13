@@ -121,14 +121,15 @@ type KonfluxLink = (
 const external = { target: "_blank", rel: "noopener noreferrer" };
 const muted = { color: "var(--pf-t--global--text--color--subtle)" };
 
-/** A local date and time to the minute: "Oct 9, 21:48". */
-const when = (iso: string) =>
+/** A date and time to the minute, local unless timeZone: "Oct 9, 21:48". */
+const when = (iso: string, timeZone?: string) =>
 	new Date(iso).toLocaleString(undefined, {
 		month: "short",
 		day: "numeric",
 		hour: "2-digit",
 		minute: "2-digit",
 		hourCycle: "h23",
+		timeZone,
 	});
 
 export default function ReleaseDetail() {
@@ -672,7 +673,7 @@ function VerdictHeader({
 	const head = verdictLine(verdict);
 	const text =
 		verdict.state === "shipped" && prod?.completion_time
-			? `Shipped ${when(prod.completion_time)} (${prod.name})`
+			? `Shipped ${when(prod.completion_time, "UTC")} UTC (image shipment ${prod.name})`
 			: head.text;
 	return (
 		<>
@@ -1016,7 +1017,6 @@ function OperatorBlock({
 										)}
 										{rowChips(r, {
 											shipped,
-											leftOut,
 											unreadable: slotItem(
 												items,
 												"read_failed",
@@ -1062,7 +1062,9 @@ function OperatorBlock({
 				</Tab>
 				<Tab
 					eventKey="images"
-					title={<TabTitleText>Images {uniqueImages(o).length}</TabTitleText>}
+					title={
+						<TabTitleText>Images {uniqueImages(o).length || null}</TabTitleText>
+					}
 				>
 					<OperatorImages
 						operator={o}
@@ -1105,12 +1107,17 @@ function ImageRefCell({ image }: { image: ImageRef | null }) {
 	);
 }
 
+/** A compared image's repository without its registry. */
+const repoName = (image: ImageRef | null) =>
+	image?.repository.split("/").slice(1).join("/") ?? "";
+
 // How a compared image changed: a rebuild from the same source is info,
 // anything else may change behaviour.
 const changeColors: Record<string, LabelProps["color"]> = {
 	rebuild: "blue",
 	"new source": "orange",
 	"new build": "orange",
+	renamed: "orange",
 	added: "orange",
 	removed: "orange",
 };
@@ -1138,7 +1145,9 @@ function OperatorImages({
 	const images = uniqueImages(o);
 	const other = o.conflicts.filter((m) => m.head_bundle_nvr).map((m) => m.ocp);
 	const check = o.image_check;
-	const yes = (on: boolean) => (on ? "yes" : "–");
+	// An external's unset stage or prod is untracked, not "not shipped".
+	const yes = (on: boolean, external: boolean) =>
+		on ? "yes" : external ? "" : "–";
 	return (
 		<>
 			{o.compare.length > 0 && (
@@ -1173,7 +1182,7 @@ function OperatorImages({
 					</Thead>
 					<Tbody>
 						{compare.rows.map((r) => (
-							<Tr key={r.name}>
+							<Tr key={`${r.name} ${r.from?.digest} ${r.to?.digest}`}>
 								<Td>{r.name || "bundle"}</Td>
 								<Td modifier="nowrap">
 									<ImageRefCell image={r.from} />
@@ -1188,6 +1197,11 @@ function OperatorImages({
 										</Label>
 									) : (
 										<span style={muted}>{r.change}</span>
+									)}
+									{r.change === "renamed" && (
+										<span style={{ ...muted, marginLeft: "0.5rem" }}>
+											{repoName(r.from)} → {repoName(r.to)}
+										</span>
 									)}
 								</Td>
 							</Tr>
@@ -1229,8 +1243,8 @@ function OperatorImages({
 										{shortDigest(i.image)}
 									</ClipboardCopy>
 								</Td>
-								<Td>{yes(i.stage)}</Td>
-								<Td>{yes(i.prod)}</Td>
+								<Td>{yes(i.stage, !i.nvr)}</Td>
+								<Td>{yes(i.prod, !i.nvr)}</Td>
 							</Tr>
 						))}
 					</Tbody>
@@ -1239,7 +1253,9 @@ function OperatorImages({
 			<div style={muted}>
 				{other.length > 0
 					? `OCP ${other.join(", ")} ${other.length === 1 ? "ships" : "ship"} a different build.`
-					: `All ${o.members.length} FBCs ship these images.`}
+					: o.members.length === 1
+						? "The FBC ships these images."
+						: `All ${o.members.length} FBCs ship these images.`}
 				{check.state === "matches" && " Image shipment: same bundle."}
 				{check.state === "differs" &&
 					` Image shipment has bundle ${bundleBuilt(check.bundle_nvr)}.`}

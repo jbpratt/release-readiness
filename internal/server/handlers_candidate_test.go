@@ -1099,6 +1099,61 @@ func TestGetCandidateFBCImageCheck(t *testing.T) {
 	}
 }
 
+// Like 5.0.0's image shipment: it holds the CSO bundle as component
+// container-security-operator-bundle, without the application prefix, so an
+// older bundle there differs.
+func TestGetCandidateFBCImageCheckByNVR(t *testing.T) {
+	const cso = "container-security-operator-metadata-container-3.18.1.202610090339.p2.g1.assembly.stream.el9-1"
+	const older = "container-security-operator-metadata-container-3.18.1.202610010000.p2.g1.assembly.stream.el9-1"
+	for _, tc := range []struct {
+		nvrs        map[string]string // component -> bundle NVR
+		state, want string
+	}{
+		{map[string]string{"container-security-operator-bundle": cso}, "matches", cso},
+		{map[string]string{"container-security-operator-bundle": older}, "differs", older},
+		// The head bundle wins over an older one of the same name.
+		{map[string]string{"container-security-operator-bundle": older, "quay-3-18-container-security-operator-bundle": cso}, "matches", cso},
+	} {
+		srv := setupTestServer(t)
+		seedHistoryFBC(t, srv, "container-security-operator-fbc-3.18.1-20261009044841.ocp4.20", cso)
+		const snap = "quay-3-18-20261009-042610-000"
+		var comps []string
+		for c := range tc.nvrs {
+			comps = append(comps, c)
+		}
+		seedImages(t, srv, snap, "2026-10-09T04:29:06Z", testBuild("img", comps...))
+		for c, nvr := range tc.nvrs {
+			resolveNVR(t, srv, "img/"+c, nvr)
+		}
+		cand, _ := getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
+		if c := cand.Operators[1].ImageCheck; c.State != tc.state || c.BundleNVR != tc.want {
+			t.Errorf("%s image check %+v, want %s %s", cand.Operators[1].Operator, c, tc.state, tc.want)
+		}
+	}
+}
+
+// Like 3.17.6 against 3.17.5: ART renamed every relatedImage, and moved the
+// operator to another repository under the same name.
+func TestCompareImagesByRepository(t *testing.T) {
+	pg := "registry.redhat.io/rhel8/postgresql-10@sha256:eec360a32519"
+	from := []model.OperatorImage{
+		{Name: "postgres_previous", Image: pg, Digest: "sha256:eec360a32519"},
+		{Name: "operator", Image: "registry.redhat.io/quay/quay-operator-rhel9@sha256:a1", Digest: "sha256:a1"},
+	}
+	to := []model.OperatorImage{
+		{Name: "postgresql-10", Image: pg, Digest: "sha256:eec360a32519"},
+		{Name: "operator", Image: "registry.redhat.io/quay/quay-rhel9-operator@sha256:b2", Digest: "sha256:b2"},
+	}
+	var got []string
+	for _, r := range compareImages(from, to) {
+		got = append(got, r.Name+" "+r.From.Repository+" "+r.To.Repository+" "+r.Change)
+	}
+	checkRows(t, "compare", got, []string{
+		"postgresql-10 registry.redhat.io/rhel8/postgresql-10 registry.redhat.io/rhel8/postgresql-10 same",
+		"operator registry.redhat.io/quay/quay-operator-rhel9 registry.redhat.io/quay/quay-rhel9-operator renamed",
+	})
+}
+
 // seedImagesFBC stores ART's successful build of the FBC image of nvr,
 // rendered with its channel headed by the bundle of NVR bundle, whose
 // relatedImages are head, above the entry of version previousVersion, whose
