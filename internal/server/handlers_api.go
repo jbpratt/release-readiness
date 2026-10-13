@@ -6,12 +6,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
@@ -45,40 +43,12 @@ func (s *Server) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {
 	version := r.PathValue("version")
-	release, err := s.releaseVersion(r.Context(), version)
+	release, err := s.db.GetReleaseVersion(r.Context(), version)
 	if err != nil {
 		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
 		return
 	}
 	writeJSON(w, http.StatusOK, release)
-}
-
-// releaseVersion returns the version's JIRA fixVersion, else, for a quay
-// version ART staged, one synthesized from its assembly.
-func (s *Server) releaseVersion(ctx context.Context, name string) (*model.ReleaseVersion, error) {
-	release, err := s.db.GetReleaseVersion(ctx, name)
-	if err == nil {
-		return release, nil
-	}
-	m := quayVersion.FindStringSubmatch(name)
-	if m == nil {
-		return nil, err
-	}
-	assemblies, aerr := s.db.StageAssemblies(ctx)
-	if aerr != nil {
-		return nil, aerr
-	}
-	if !slices.Contains(assemblies, m[1]) {
-		return nil, err
-	}
-	rel := noJiraVersion(m[1])
-	return &rel, nil
-}
-
-// noJiraVersion is the version of a staged assembly with no JIRA fixVersion.
-func noJiraVersion(assembly string) model.ReleaseVersion {
-	name := "quay-v" + assembly
-	return model.ReleaseVersion{Name: name, KonfluxApplication: jira.FixVersionToKonfluxApp(name), NoJira: true}
 }
 
 func (s *Server) handleListReleaseIssues(w http.ResponseWriter, r *http.Request) {
@@ -150,18 +120,6 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	assemblies, err := s.db.StageAssemblies(ctx)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-	for _, a := range assemblies {
-		name := "quay-v" + a
-		if quayVersion.MatchString(name) && !slices.ContainsFunc(releases, func(r model.ReleaseVersion) bool { return r.Name == name }) {
-			releases = append(releases, noJiraVersion(a))
-		}
-	}
-	slices.SortFunc(releases, func(a, b model.ReleaseVersion) int { return strings.Compare(a.Name, b.Name) })
 
 	fixVersions := make([]string, len(releases))
 	for i, rel := range releases {

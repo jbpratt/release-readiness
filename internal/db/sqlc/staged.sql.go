@@ -71,33 +71,6 @@ func (q *Queries) ListProdReleasedImages(ctx context.Context, application string
 	return items, nil
 }
 
-const listStageAssemblies = `-- name: ListStageAssemblies :many
-SELECT DISTINCT assembly FROM staged_snapshots WHERE env = 'stage' ORDER BY assembly
-`
-
-func (q *Queries) ListStageAssemblies(ctx context.Context) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, listStageAssemblies)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var assembly string
-		if err := rows.Scan(&assembly); err != nil {
-			return nil, err
-		}
-		items = append(items, assembly)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listStagedFBCCatalogs = `-- name: ListStagedFBCCatalogs :many
 SELECT s.name AS snapshot_name, sc.component, sc.image_url, CAST(COALESCE(a.nvr, '') AS TEXT) AS nvr
 FROM staged_snapshots ss

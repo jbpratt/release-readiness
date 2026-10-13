@@ -58,8 +58,6 @@ type ReleaseVersion struct {
 	ReleaseTicketAssignee string     `json:"release_ticket_assignee,omitempty"`
 	KonfluxApplication    string     `json:"konflux_application,omitempty"`
 	DueDate               *time.Time `json:"due_date,omitempty"`
-	// NoJira marks a version ART staged that has no JIRA fixVersion.
-	NoJira bool `json:"no_jira"`
 }
 
 // KonfluxRelease is a Konflux Release custom resource, distinct from the JIRA
