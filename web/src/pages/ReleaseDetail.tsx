@@ -81,6 +81,7 @@ import {
 	konfluxUrl,
 	RELEASE_FROM_FBC_URL,
 	sippyJobUrl,
+	sippyRunsUrl,
 	ticketsJql,
 } from "../utils/links";
 import {
@@ -94,6 +95,7 @@ import {
 	fbcParams,
 	fbcPullspecs,
 	fbcStageStep,
+	fbcsBuilt,
 	jobLabels,
 	nvrLabel,
 	otherBundle,
@@ -472,6 +474,7 @@ function Candidate({
 		checking,
 	);
 	const tested = whileChecking(fbcCIStep(fbc), checking);
+	const sippy = sippyRunsUrl(version, fbcsBuilt(fbc));
 	const staged = whileChecking(fbcStageStep(fbc), checking);
 	const read = readingLine(reading);
 	const jobs = [
@@ -506,7 +509,21 @@ function Candidate({
 				style={{ marginTop: "1rem" }}
 			>
 				<Step title="Build" variant={built.variant} description={built.text} />
-				<Step title="CI" variant={tested.variant} description={tested.text} />
+				<Step
+					title="CI"
+					variant={tested.variant}
+					description={
+						<>
+							{tested.text}
+							{sippy && (
+								<>
+									{" · "}
+									<ExtLink href={sippy}>Sippy</ExtLink>
+								</>
+							)}
+						</>
+					}
+				/>
 				<Step
 					title="Stage"
 					variant={staged.variant}

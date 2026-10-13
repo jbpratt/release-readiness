@@ -96,6 +96,21 @@ export function fbcCIStep(c: FBCCandidate): CIStep {
 	};
 }
 
+/**
+ * When ART built the candidate's oldest FBC, by its NVR's UTC timestamp:
+ * quay-operator-fbc-3.17.6-20261012201007.ocp4.14 is 2026-10-12T20:10:07Z;
+ * "" without one.
+ */
+export function fbcsBuilt(c: FBCCandidate): string {
+	const [t] = slotFBCs(c)
+		.map((m) => m.nvr.match(/-(\d{14})\.ocp/)?.[1] ?? "")
+		.filter(Boolean)
+		.sort();
+	return t
+		? `${t.slice(0, 4)}-${t.slice(4, 6)}-${t.slice(6, 8)}T${t.slice(8, 10)}:${t.slice(10, 12)}:${t.slice(12)}Z`
+		: "";
+}
+
 /** Whether an operator has an FBC, on the head bundle or not. */
 const hasFBC = (o: OperatorFBC) => o.members.length + o.conflicts.length > 0;
 

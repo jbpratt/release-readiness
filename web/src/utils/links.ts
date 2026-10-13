@@ -43,6 +43,19 @@ export function sippyJobUrl(version: string, job: string): string | null {
 }
 
 /**
+ * Sippy's job runs of the quay-X.Y release of a version since an ISO time;
+ * null without an X.Y or a time.
+ */
+export function sippyRunsUrl(version: string, since: string): string | null {
+	const xy = version.match(/(\d+)\.(\d+)/);
+	if (!xy || !since) return null;
+	const filters = JSON.stringify({
+		items: [{ field: "timestamp", operator: ">", value: since }],
+	});
+	return `https://sippy.dptools.openshift.org/sippy-ng/jobs/quay-${xy[1]}.${xy[2]}/runs?filters=${encodeURIComponent(filters)}`;
+}
+
+/**
  * Format a release version name for display.
  *
  * `quay-v3.14.6` -> `Quay v3.14.6`
