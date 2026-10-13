@@ -103,6 +103,34 @@ type ReleaseCandidate struct {
 	// FBC built or staged.
 	FBCCandidate *FBCCandidate `json:"fbc_candidate"`
 	FBCStream    *FBCCandidate `json:"fbc_stream"`
+	Verdict      Verdict       `json:"verdict"`
+	Reading      ReadProgress  `json:"reading"`
+}
+
+// Verdict tells whether a version can ship, by its FBC candidate: State
+// "checking" while FBC reads are pending, "shipped", else "not_ready" with a
+// blocker or "ready". Items are its blockers, then warnings, then info.
+type Verdict struct {
+	State string        `json:"state"`
+	Items []VerdictItem `json:"items"`
+}
+
+// VerdictItem is a blocker, warning or info on Operator, "" for the whole
+// release, for Owner, "ART", "Quay", "Quay/ART" or "", to act on.
+type VerdictItem struct {
+	Level    string `json:"level"`
+	Operator string `json:"operator"`
+	Owner    string `json:"owner"`
+	Code     string `json:"code"`
+	Text     string `json:"text"`
+}
+
+// ReadProgress counts the FBC images the render sync reads by the state of
+// their read.
+type ReadProgress struct {
+	Read    int `json:"read"`
+	Failed  int `json:"failed"`
+	Pending int `json:"pending"`
 }
 
 // FBCCandidate is a version's operator FBCs, one per operator and OCP version
@@ -138,7 +166,8 @@ type FBCCandidate struct {
 // Snapshot's. Images is the head bundle's relatedImages, by name, as its
 // newest-OCP member FBC with a render lists them; Compare compares them with
 // that FBC's previous entry's and, for a candidate, with the stream's when
-// the stream heads another bundle.
+// the stream heads another bundle. Stage counts the Members whose newest stage
+// Release succeeded.
 type OperatorFBC struct {
 	Operator      string          `json:"operator"`
 	HeadBundleNVR string          `json:"head_bundle_nvr"`
@@ -152,6 +181,12 @@ type OperatorFBC struct {
 	ImageCheck    ImageCheck      `json:"image_check"`
 	Images        []OperatorImage `json:"images"`
 	Compare       []ImageCompare  `json:"compare"`
+	Stage         StageSummary    `json:"stage"`
+}
+
+type StageSummary struct {
+	Staged int `json:"staged"`
+	Total  int `json:"total"`
 }
 
 // OperatorImage is a bundle's relatedImage with its ART build, NVR and
@@ -223,7 +258,9 @@ type FBCCoverage struct {
 // neither names it, with its ART build page; the NVR of the bundle heading its
 // release channel, "" until joined to an ART bundle build; and, when staged,
 // the FBC Snapshot holding it and that Snapshot's newest Release, whatever its
-// status, nil before one; and, in a slot, its CI.
+// status, nil before one; and, in a slot, its CI. Staged counts, in a
+// candidate's slot, the staged FBC Snapshots holding a catalog of the slot
+// whose newest Release succeeded; ReadError is why reading it failed.
 type FBCMember struct {
 	OCP           string          `json:"ocp"`
 	Digest        string          `json:"digest"`
@@ -234,7 +271,9 @@ type FBCMember struct {
 	Snapshot      string          `json:"snapshot"`
 	Release       *KonfluxRelease `json:"release"`
 	CI            *FBCCI          `json:"ci"`
+	Staged        int             `json:"staged"`
 	RecordID      string          `json:"-"`
+	ReadError     string          `json:"-"`
 	Channel       string          `json:"-"`
 	HeadCSV       string          `json:"-"`
 	// HeadVersion is the head bundle's version, PreviousVersion the version
