@@ -1,0 +1,540 @@
+{
+  "pipelineRun": {
+    "metadata": {
+      "labels": {
+        "appstudio.openshift.io/application": "quay-3-18",
+        "appstudio.openshift.io/component": "quay-3-18-quay-operator",
+        "doozer-watch-id": "1791580783725370413",
+        "kueue.x-k8s.io/priority-class": "build-priority-1",
+        "kueue.x-k8s.io/queue-name": "pipelines-queue",
+        "pipelines.appstudio.openshift.io/type": "build",
+        "tekton.dev/pipeline": "quay-3-18-quay-operator"
+      },
+      "name": "quay-3-18-quay-operator-7mbwk"
+    },
+    "status": {
+      "childReferences": [
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-init",
+          "pipelineTaskName": "init"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-clone-repository",
+          "pipelineTaskName": "clone-repository"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-prefetch-dependencies",
+          "pipelineTaskName": "prefetch-dependencies"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-build-images-0",
+          "pipelineTaskName": "build-images"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-build-images-1",
+          "pipelineTaskName": "build-images"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-build-images-2",
+          "pipelineTaskName": "build-images"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-build-images-3",
+          "pipelineTaskName": "build-images"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-build-image-index",
+          "pipelineTaskName": "build-image-index"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-build-source-image",
+          "pipelineTaskName": "build-source-image",
+          "whenExpressions": [
+            {
+              "input": "true",
+              "operator": "in",
+              "values": [
+                "true"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-deprecated-base-image-check",
+          "pipelineTaskName": "deprecated-base-image-check",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-roxctl-scan-0",
+          "pipelineTaskName": "roxctl-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-roxctl-scan-1",
+          "pipelineTaskName": "roxctl-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-roxctl-scan-2",
+          "pipelineTaskName": "roxctl-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-roxctl-scan-3",
+          "pipelineTaskName": "roxctl-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-sast-snyk-check",
+          "pipelineTaskName": "sast-snyk-check",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-sast-shell-check",
+          "pipelineTaskName": "sast-shell-check",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-sast-unicode-check",
+          "pipelineTaskName": "sast-unicode-check",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-clamav-scan-0",
+          "pipelineTaskName": "clamav-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-clamav-scan-1",
+          "pipelineTaskName": "clamav-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-clamav-scan-2",
+          "pipelineTaskName": "clamav-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-clamav-scan-3",
+          "pipelineTaskName": "clamav-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-apply-tags",
+          "pipelineTaskName": "apply-tags"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-push-dockerfile",
+          "pipelineTaskName": "push-dockerfile"
+        },
+        {
+          "apiVersion": "tekton.dev/v1",
+          "kind": "TaskRun",
+          "name": "quay-3-18-quay-operator-7mbwk-rpms-signature-scan",
+          "pipelineTaskName": "rpms-signature-scan",
+          "whenExpressions": [
+            {
+              "input": "false",
+              "operator": "in",
+              "values": [
+                "false"
+              ]
+            }
+          ]
+        }
+      ],
+      "completionTime": "2026-10-09T22:52:22Z",
+      "conditions": [
+        {
+          "lastTransitionTime": "2026-10-09T22:52:22Z",
+          "message": "Tasks Completed: 15 (Failed: 0, Cancelled 0), Skipped: 0",
+          "reason": "Succeeded",
+          "status": "True",
+          "type": "Succeeded"
+        }
+      ],
+      "results": [
+        {
+          "name": "IMAGE_URL",
+          "value": "quay.io/redhat-user-workloads/ocp-art-tenant/art-images:quay-rhel9-operator-3.18.1-20261009.211243"
+        },
+        {
+          "name": "IMAGE_DIGEST",
+          "value": "sha256:8ee6f8cbca1a68a86f3b9bfbd250eea029ceebe340211a75b88f18b0d137e0b8"
+        },
+        {
+          "name": "CHAINS-GIT_URL",
+          "value": "https://github.com/openshift-priv/quay-quay-operator"
+        },
+        {
+          "name": "CHAINS-GIT_COMMIT",
+          "value": "550a4205ca58b8207e020236acdb90e5de3641aa"
+        }
+      ]
+    }
+  },
+  "taskRuns": [
+    {
+      "metadata": {
+        "labels": {
+          "app.kubernetes.io/managed-by": "tekton-pipelines",
+          "app.kubernetes.io/version": "0.1",
+          "appstudio.openshift.io/application": "quay-3-18",
+          "appstudio.openshift.io/component": "quay-3-18-quay-operator",
+          "doozer-watch-id": "1791580783725370413",
+          "kueue.x-k8s.io/priority-class": "build-priority-1",
+          "kueue.x-k8s.io/queue-name": "pipelines-queue",
+          "pipelines.appstudio.openshift.io/type": "build",
+          "tekton.dev/memberOf": "tasks",
+          "tekton.dev/pipeline": "quay-3-18-quay-operator",
+          "tekton.dev/pipelineRun": "quay-3-18-quay-operator-7mbwk",
+          "tekton.dev/pipelineRunUID": "ea8a0199-6a94-45bb-82cf-ac74299ca545",
+          "tekton.dev/pipelineTask": "roxctl-scan",
+          "tekton.dev/task": "roxctl-scan"
+        },
+        "name": "quay-3-18-quay-operator-7mbwk-roxctl-scan-1"
+      },
+      "status": {
+        "completionTime": "2026-10-09T22:52:20Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-10-09T22:52:20Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "results": [
+          {
+            "name": "IMAGES_PROCESSED",
+            "type": "string",
+            "value": "{\"image\": {\"pullspec\": \"quay.io/redhat-user-workloads/ocp-art-tenant/art-images:quay-rhel9-operator-3.18.1-20261009.211243\", \"digests\": [\"sha256:b2119a8d0b19c2e06beba17a7f5777346661286b33938dbabd05a3aec316d547\",\"sha256:3f426be9107d89f2184861cea50ea3a7fe1218e9fd9a3960b3c0db8be51ea81e\",\"sha256:683d74b72bfc065a2aa9659735d32ac1d615d206b4559a939fe4805b43c2af3e\",\"sha256:f629a098c5349743d3cfcdce238a484a9e3bf1a0aa870691b911caea898b85f5\",\"sha256:8ee6f8cbca1a68a86f3b9bfbd250eea029ceebe340211a75b88f18b0d137e0b8\"]}}\n"
+          },
+          {
+            "name": "REPORTS",
+            "type": "string",
+            "value": "{\"sha256:b2119a8d0b19c2e06beba17a7f5777346661286b33938dbabd05a3aec316d547\":\"sha256:7121f8f52d728235e75dc08caaf10ed5a7ded2b0cecd55402784280bbc7dd91d\",\"sha256:3f426be9107d89f2184861cea50ea3a7fe1218e9fd9a3960b3c0db8be51ea81e\":\"sha256:2c76419c9ead630bc22ce4c0cd377b3ce65e4cb7cce80d0ee23956eba0fa9190\",\"sha256:683d74b72bfc065a2aa9659735d32ac1d615d206b4559a939fe4805b43c2af3e\":\"sha256:9aececa21d50a7f2d103250c6e10a8bde122b7dac5d7fa3652fb25ae041a0aec\",\"sha256:f629a098c5349743d3cfcdce238a484a9e3bf1a0aa870691b911caea898b85f5\":\"sha256:106f3b0c72477a252969f7208696beae0dc3126905b678dfacf716147ca56bdb\"}\n"
+          },
+          {
+            "name": "SCAN_OUTPUT",
+            "type": "string",
+            "value": "{\"vulnerabilities\":{\"critical\":0,\"high\":0,\"medium\":0,\"low\":0},\"unpatched_vulnerabilities\":{\"critical\":0,\"high\":24,\"medium\":264,\"low\":232},\"discrepancies\":{\"count\":0}}\n"
+          },
+          {
+            "name": "TEST_OUTPUT",
+            "type": "string",
+            "value": "{\"result\":\"SUCCESS\",\"timestamp\":\"2026-10-09T22:52:19+00:00\",\"note\":\"Task roxctl-scan completed: Refer to Tekton task result SCAN_OUTPUT for vulnerabilities scanned by Rox.\",\"namespace\":\"default\",\"successes\":0,\"failures\":0,\"warnings\":0}\n"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "labels": {
+          "app.kubernetes.io/managed-by": "tekton-pipelines",
+          "app.kubernetes.io/version": "0.1",
+          "appstudio.openshift.io/application": "quay-3-18",
+          "appstudio.openshift.io/component": "quay-3-18-quay-operator",
+          "doozer-watch-id": "1791580783725370413",
+          "kueue.x-k8s.io/priority-class": "build-priority-1",
+          "kueue.x-k8s.io/queue-name": "pipelines-queue",
+          "pipelines.appstudio.openshift.io/type": "build",
+          "tekton.dev/memberOf": "tasks",
+          "tekton.dev/pipeline": "quay-3-18-quay-operator",
+          "tekton.dev/pipelineRun": "quay-3-18-quay-operator-7mbwk",
+          "tekton.dev/pipelineRunUID": "ea8a0199-6a94-45bb-82cf-ac74299ca545",
+          "tekton.dev/pipelineTask": "roxctl-scan",
+          "tekton.dev/task": "roxctl-scan"
+        },
+        "name": "quay-3-18-quay-operator-7mbwk-roxctl-scan-2"
+      },
+      "status": {
+        "completionTime": "2026-10-09T22:52:22Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-10-09T22:52:22Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "results": [
+          {
+            "name": "IMAGES_PROCESSED",
+            "type": "string",
+            "value": "{\"image\": {\"pullspec\": \"quay.io/redhat-user-workloads/ocp-art-tenant/art-images:quay-rhel9-operator-3.18.1-20261009.211243\", \"digests\": [\"sha256:b2119a8d0b19c2e06beba17a7f5777346661286b33938dbabd05a3aec316d547\",\"sha256:3f426be9107d89f2184861cea50ea3a7fe1218e9fd9a3960b3c0db8be51ea81e\",\"sha256:683d74b72bfc065a2aa9659735d32ac1d615d206b4559a939fe4805b43c2af3e\",\"sha256:f629a098c5349743d3cfcdce238a484a9e3bf1a0aa870691b911caea898b85f5\",\"sha256:8ee6f8cbca1a68a86f3b9bfbd250eea029ceebe340211a75b88f18b0d137e0b8\"]}}\n"
+          },
+          {
+            "name": "REPORTS",
+            "type": "string",
+            "value": "{\"sha256:b2119a8d0b19c2e06beba17a7f5777346661286b33938dbabd05a3aec316d547\":\"sha256:b2e2c13b1f43d7934bdc6c8138469ed751e4447430e8b0d67b23fcb150c377ae\",\"sha256:3f426be9107d89f2184861cea50ea3a7fe1218e9fd9a3960b3c0db8be51ea81e\":\"sha256:a8479a386e710fa829db7e1838d385d9f0d6becaeb19261799e82214a352a201\",\"sha256:683d74b72bfc065a2aa9659735d32ac1d615d206b4559a939fe4805b43c2af3e\":\"sha256:df8601395c7d8a5764ccbcd8d1de6b6463117d7037460d5031e3a0605f8e1b36\",\"sha256:f629a098c5349743d3cfcdce238a484a9e3bf1a0aa870691b911caea898b85f5\":\"sha256:f85c6e30807735a66eac3c7c045cacbc8df637e6db21247432a2df912f3910cb\"}\n"
+          },
+          {
+            "name": "SCAN_OUTPUT",
+            "type": "string",
+            "value": "{\"vulnerabilities\":{\"critical\":0,\"high\":0,\"medium\":0,\"low\":0},\"unpatched_vulnerabilities\":{\"critical\":0,\"high\":24,\"medium\":264,\"low\":232},\"discrepancies\":{\"count\":0}}\n"
+          },
+          {
+            "name": "TEST_OUTPUT",
+            "type": "string",
+            "value": "{\"result\":\"SUCCESS\",\"timestamp\":\"2026-10-09T22:52:21+00:00\",\"note\":\"Task roxctl-scan completed: Refer to Tekton task result SCAN_OUTPUT for vulnerabilities scanned by Rox.\",\"namespace\":\"default\",\"successes\":0,\"failures\":0,\"warnings\":0}\n"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "labels": {
+          "app.kubernetes.io/managed-by": "tekton-pipelines",
+          "app.kubernetes.io/version": "0.1",
+          "appstudio.openshift.io/application": "quay-3-18",
+          "appstudio.openshift.io/component": "quay-3-18-quay-operator",
+          "doozer-watch-id": "1791580783725370413",
+          "kueue.x-k8s.io/priority-class": "build-priority-1",
+          "kueue.x-k8s.io/queue-name": "pipelines-queue",
+          "pipelines.appstudio.openshift.io/type": "build",
+          "tekton.dev/memberOf": "tasks",
+          "tekton.dev/pipeline": "quay-3-18-quay-operator",
+          "tekton.dev/pipelineRun": "quay-3-18-quay-operator-7mbwk",
+          "tekton.dev/pipelineRunUID": "ea8a0199-6a94-45bb-82cf-ac74299ca545",
+          "tekton.dev/pipelineTask": "roxctl-scan",
+          "tekton.dev/task": "roxctl-scan"
+        },
+        "name": "quay-3-18-quay-operator-7mbwk-roxctl-scan-3"
+      },
+      "status": {
+        "completionTime": "2026-10-09T22:52:20Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-10-09T22:52:20Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "results": [
+          {
+            "name": "IMAGES_PROCESSED",
+            "type": "string",
+            "value": "{\"image\": {\"pullspec\": \"quay.io/redhat-user-workloads/ocp-art-tenant/art-images:quay-rhel9-operator-3.18.1-20261009.211243\", \"digests\": [\"sha256:b2119a8d0b19c2e06beba17a7f5777346661286b33938dbabd05a3aec316d547\",\"sha256:3f426be9107d89f2184861cea50ea3a7fe1218e9fd9a3960b3c0db8be51ea81e\",\"sha256:683d74b72bfc065a2aa9659735d32ac1d615d206b4559a939fe4805b43c2af3e\",\"sha256:f629a098c5349743d3cfcdce238a484a9e3bf1a0aa870691b911caea898b85f5\",\"sha256:8ee6f8cbca1a68a86f3b9bfbd250eea029ceebe340211a75b88f18b0d137e0b8\"]}}\n"
+          },
+          {
+            "name": "REPORTS",
+            "type": "string",
+            "value": "{\"sha256:b2119a8d0b19c2e06beba17a7f5777346661286b33938dbabd05a3aec316d547\":\"sha256:7121f8f52d728235e75dc08caaf10ed5a7ded2b0cecd55402784280bbc7dd91d\",\"sha256:3f426be9107d89f2184861cea50ea3a7fe1218e9fd9a3960b3c0db8be51ea81e\":\"sha256:2c76419c9ead630bc22ce4c0cd377b3ce65e4cb7cce80d0ee23956eba0fa9190\",\"sha256:683d74b72bfc065a2aa9659735d32ac1d615d206b4559a939fe4805b43c2af3e\":\"sha256:a69992a3e896b4de4ddf81b5532bbadf1dab663713a09a03260f5b41b62c930b\",\"sha256:f629a098c5349743d3cfcdce238a484a9e3bf1a0aa870691b911caea898b85f5\":\"sha256:be3f7580055b655f75e26e2a96f80642f1c2a5858de8f7781c96a2c6a9088e71\"}\n"
+          },
+          {
+            "name": "SCAN_OUTPUT",
+            "type": "string",
+            "value": "{\"vulnerabilities\":{\"critical\":0,\"high\":0,\"medium\":0,\"low\":0},\"unpatched_vulnerabilities\":{\"critical\":0,\"high\":24,\"medium\":264,\"low\":232},\"discrepancies\":{\"count\":0}}\n"
+          },
+          {
+            "name": "TEST_OUTPUT",
+            "type": "string",
+            "value": "{\"result\":\"SUCCESS\",\"timestamp\":\"2026-10-09T22:52:19+00:00\",\"note\":\"Task roxctl-scan completed: Refer to Tekton task result SCAN_OUTPUT for vulnerabilities scanned by Rox.\",\"namespace\":\"default\",\"successes\":0,\"failures\":0,\"warnings\":0}\n"
+          }
+        ]
+      }
+    },
+    {
+      "metadata": {
+        "labels": {
+          "app.kubernetes.io/managed-by": "tekton-pipelines",
+          "app.kubernetes.io/version": "0.1",
+          "appstudio.openshift.io/application": "quay-3-18",
+          "appstudio.openshift.io/component": "quay-3-18-quay-operator",
+          "doozer-watch-id": "1791580783725370413",
+          "kueue.x-k8s.io/priority-class": "build-priority-1",
+          "kueue.x-k8s.io/queue-name": "pipelines-queue",
+          "pipelines.appstudio.openshift.io/type": "build",
+          "tekton.dev/memberOf": "tasks",
+          "tekton.dev/pipeline": "quay-3-18-quay-operator",
+          "tekton.dev/pipelineRun": "quay-3-18-quay-operator-7mbwk",
+          "tekton.dev/pipelineRunUID": "ea8a0199-6a94-45bb-82cf-ac74299ca545",
+          "tekton.dev/pipelineTask": "roxctl-scan",
+          "tekton.dev/task": "roxctl-scan"
+        },
+        "name": "quay-3-18-quay-operator-7mbwk-roxctl-scan-0"
+      },
+      "status": {
+        "completionTime": "2026-10-09T22:52:20Z",
+        "conditions": [
+          {
+            "lastTransitionTime": "2026-10-09T22:52:20Z",
+            "message": "All Steps have completed executing",
+            "reason": "Succeeded",
+            "status": "True",
+            "type": "Succeeded"
+          }
+        ],
+        "results": [
+          {
+            "name": "IMAGES_PROCESSED",
+            "type": "string",
+            "value": "{\"image\": {\"pullspec\": \"quay.io/redhat-user-workloads/ocp-art-tenant/art-images:quay-rhel9-operator-3.18.1-20261009.211243\", \"digests\": [\"sha256:b2119a8d0b19c2e06beba17a7f5777346661286b33938dbabd05a3aec316d547\",\"sha256:3f426be9107d89f2184861cea50ea3a7fe1218e9fd9a3960b3c0db8be51ea81e\",\"sha256:683d74b72bfc065a2aa9659735d32ac1d615d206b4559a939fe4805b43c2af3e\",\"sha256:f629a098c5349743d3cfcdce238a484a9e3bf1a0aa870691b911caea898b85f5\",\"sha256:8ee6f8cbca1a68a86f3b9bfbd250eea029ceebe340211a75b88f18b0d137e0b8\"]}}\n"
+          },
+          {
+            "name": "REPORTS",
+            "type": "string",
+            "value": "{\"sha256:b2119a8d0b19c2e06beba17a7f5777346661286b33938dbabd05a3aec316d547\":\"sha256:7121f8f52d728235e75dc08caaf10ed5a7ded2b0cecd55402784280bbc7dd91d\",\"sha256:3f426be9107d89f2184861cea50ea3a7fe1218e9fd9a3960b3c0db8be51ea81e\":\"sha256:85f8211dac2aca0a792737cb5306923bbfe1ad72398237d6d3ca3c5b1a69565e\",\"sha256:683d74b72bfc065a2aa9659735d32ac1d615d206b4559a939fe4805b43c2af3e\":\"sha256:a69992a3e896b4de4ddf81b5532bbadf1dab663713a09a03260f5b41b62c930b\",\"sha256:f629a098c5349743d3cfcdce238a484a9e3bf1a0aa870691b911caea898b85f5\":\"sha256:106f3b0c72477a252969f7208696beae0dc3126905b678dfacf716147ca56bdb\"}\n"
+          },
+          {
+            "name": "SCAN_OUTPUT",
+            "type": "string",
+            "value": "{\"vulnerabilities\":{\"critical\":0,\"high\":0,\"medium\":0,\"low\":0},\"unpatched_vulnerabilities\":{\"critical\":0,\"high\":24,\"medium\":264,\"low\":232},\"discrepancies\":{\"count\":0}}\n"
+          },
+          {
+            "name": "TEST_OUTPUT",
+            "type": "string",
+            "value": "{\"result\":\"SUCCESS\",\"timestamp\":\"2026-10-09T22:52:19+00:00\",\"note\":\"Task roxctl-scan completed: Refer to Tekton task result SCAN_OUTPUT for vulnerabilities scanned by Rox.\",\"namespace\":\"default\",\"successes\":0,\"failures\":0,\"warnings\":0}\n"
+          }
+        ]
+      }
+    }
+  ]
+}

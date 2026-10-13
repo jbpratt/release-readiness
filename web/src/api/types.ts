@@ -131,6 +131,8 @@ export interface OperatorImage {
 	build_url: string;
 	stage: boolean;
 	prod: boolean;
+	/** null until the image scan sync has read it. */
+	scan: ImageScan | null;
 }
 
 /**
@@ -271,11 +273,41 @@ export interface CandidateComponent {
 	build_url: string;
 }
 
+/** The CVE scan of an image by its build PipelineRun, whose Konflux page is url. */
+export interface ImageScan {
+	state: "pending" | "scanned" | "scan_failed" | "not_scanned";
+	/** null unless scanned. */
+	counts: ScanCounts | null;
+	url: string;
+}
+
+/**
+ * A scan's CVEs by severity, with and without a fix. scanner_arch_findings
+ * counts a CVE once per architecture it is found in; unique_cves once.
+ */
+export interface ScanCounts {
+	basis: "scanner_arch_findings" | "unique_cves";
+	fixable: SeverityCounts;
+	no_fix: SeverityCounts;
+}
+
+export interface SeverityCounts {
+	critical: number;
+	high: number;
+	medium: number;
+	low: number;
+	unknown: number;
+}
+
 export interface JiraIssue {
 	key: string;
 	summary: string;
 	issue_type: string;
 	link: string;
+}
+
+export interface IssueSummary {
+	cves: number;
 }
 
 export interface ReleaseVersion {
@@ -298,6 +330,7 @@ export interface ReadinessResponse {
 
 export interface ReleaseOverview {
 	release: ReleaseVersion;
+	issue_summary?: IssueSummary;
 	readiness: ReadinessResponse;
 	latest_build?: string;
 	next_in_stream: boolean;

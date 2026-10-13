@@ -163,9 +163,20 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 	}
 	slices.SortFunc(releases, func(a, b model.ReleaseVersion) int { return strings.Compare(a.Name, b.Name) })
 
+	fixVersions := make([]string, len(releases))
+	for i, rel := range releases {
+		fixVersions[i] = rel.Name
+	}
+	issueSummaries, err := s.db.GetIssueSummariesBatch(ctx, fixVersions)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
 	streams := map[string]streamBuilds{}
 	overviews := make([]model.ReleaseOverview, len(releases))
 	for i, rel := range releases {
+		summary := issueSummaries[rel.Name]
 		latest, err := s.latestBuild(ctx, &rel, streams)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err)
@@ -173,10 +184,11 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 		}
 		catalogShipped := s.catalogShipped(rel.Name)
 		overviews[i] = model.ReleaseOverview{
-			Release:     rel,
-			Readiness:   computeReadiness(&rel, latest != nil, catalogShipped, time.Now()),
-			LatestBuild: latest,
-			Shipped:     catalogShipped || rel.Released,
+			Release:      rel,
+			IssueSummary: summary,
+			Readiness:    computeReadiness(&rel, latest != nil, catalogShipped, time.Now()),
+			LatestBuild:  latest,
+			Shipped:      catalogShipped || rel.Released,
 		}
 	}
 	markNextInStream(overviews)

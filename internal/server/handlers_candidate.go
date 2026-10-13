@@ -468,6 +468,10 @@ func (s *Server) operatorImages(ctx context.Context, o *model.OperatorFBC, relea
 	if err != nil {
 		return err
 	}
+	scans, err := s.db.ImageScans(ctx, digests)
+	if err != nil {
+		return err
+	}
 	images := func(related []fbc.RelatedImage) []model.OperatorImage {
 		out := []model.OperatorImage{}
 		for _, img := range related {
@@ -479,6 +483,9 @@ func (s *Server) operatorImages(ctx context.Context, o *model.OperatorFBC, relea
 			}
 			if r, ok := resolved[d]; ok {
 				oi.BuildURL = artbuild.PageURL(s.artBaseURL, r.NVR, r.RecordID)
+			}
+			if sc, ok := scans[d]; ok {
+				oi.Scan = &model.ImageScan{State: sc.State, Counts: sc.Counts, URL: sc.DetailURL}
 			}
 			out = append(out, oi)
 		}
@@ -798,6 +805,42 @@ func nvrName(nvr string) string {
 		return ""
 	}
 	return strings.Join(f[:len(f)-2], "-")
+}
+
+// CandidateDigests returns the digests of the images the Images rows of every
+// unshipped version that is not archived show, its FBC candidate's and
+// stream's: the page shows the CVEs of no other image.
+func (s *Server) CandidateDigests(ctx context.Context) ([]string, error) {
+	versions, err := s.db.ListAllReleaseVersions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var digests []string
+	for _, v := range versions {
+		if v.Archived {
+			continue
+		}
+		c, err := s.releaseCandidate(ctx, &v)
+		if err != nil {
+			return nil, err
+		}
+		if c.Shipped {
+			continue
+		}
+		for _, f := range []*model.FBCCandidate{c.FBCCandidate, c.FBCStream} {
+			if f == nil {
+				continue
+			}
+			for _, o := range f.Operators {
+				for _, img := range o.Images {
+					if img.Digest != "" && !slices.Contains(digests, img.Digest) {
+						digests = append(digests, img.Digest)
+					}
+				}
+			}
+		}
+	}
+	return digests, nil
 }
 
 // candidateBuild returns the version's selected STAGE build, or nil when it

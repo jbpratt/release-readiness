@@ -11,12 +11,18 @@ type JiraIssueRecord struct {
 	Link       string `json:"link"`
 }
 
-// ReleaseOverview is a combined view of a release with its readiness signal
-// and when its newest build, stream or STAGE, was created.
+// IssueSummary provides aggregate counts of JIRA issues for a release.
+type IssueSummary struct {
+	CVEs int `json:"cves"`
+}
+
+// ReleaseOverview is a combined view of a release with its issue summary,
+// readiness signal, and when its newest build, stream or STAGE, was created.
 type ReleaseOverview struct {
-	Release     ReleaseVersion    `json:"release"`
-	Readiness   ReadinessResponse `json:"readiness"`
-	LatestBuild *time.Time        `json:"latest_build,omitempty"`
+	Release      ReleaseVersion    `json:"release"`
+	IssueSummary *IssueSummary     `json:"issue_summary,omitempty"`
+	Readiness    ReadinessResponse `json:"readiness"`
+	LatestBuild  *time.Time        `json:"latest_build,omitempty"`
 	// Shipped is set when the catalog published the version's tag or JIRA
 	// marks it released.
 	Shipped bool `json:"-"`
@@ -196,16 +202,18 @@ type StageSummary struct {
 // OperatorImage is a bundle's relatedImage with its ART build, NVR and
 // Commit "" for an image ART did not build, and BuildURL its ART build page,
 // "" until ART resolves its digest. Stage is set when a succeeded stage
-// Release holds its digest, Prod when a succeeded prod Release does.
+// Release holds its digest, Prod when a succeeded prod Release does. Scan is
+// its CVE scan, null until the scan sync reads it.
 type OperatorImage struct {
-	Name     string `json:"name"`
-	Image    string `json:"image"`
-	Digest   string `json:"digest"`
-	NVR      string `json:"nvr"`
-	Commit   string `json:"commit"`
-	BuildURL string `json:"build_url"`
-	Stage    bool   `json:"stage"`
-	Prod     bool   `json:"prod"`
+	Name     string     `json:"name"`
+	Image    string     `json:"image"`
+	Digest   string     `json:"digest"`
+	NVR      string     `json:"nvr"`
+	Commit   string     `json:"commit"`
+	BuildURL string     `json:"build_url"`
+	Stage    bool       `json:"stage"`
+	Prod     bool       `json:"prod"`
+	Scan     *ImageScan `json:"scan"`
 }
 
 // ImageCompare compares two bundles' relatedImages: Kind "previous", from the
@@ -356,4 +364,30 @@ type CandidateComponent struct {
 	Image    string `json:"image"`
 	NVR      string `json:"nvr"`
 	BuildURL string `json:"build_url"`
+}
+
+// ImageScan is the CVE scan of an image by its build PipelineRun: State is
+// "pending", "scanned", "scan_failed" or "not_scanned", and Counts is null
+// unless scanned. URL is the PipelineRun's Konflux page.
+type ImageScan struct {
+	State  string      `json:"state"`
+	Counts *ScanCounts `json:"counts"`
+	URL    string      `json:"url"`
+}
+
+// ScanCounts is a scan's CVEs by severity, split by whether a fix exists.
+// Basis "scanner_arch_findings" counts a CVE once per architecture it is
+// found in; "unique_cves" counts it once.
+type ScanCounts struct {
+	Basis   string         `json:"basis"`
+	Fixable SeverityCounts `json:"fixable"`
+	NoFix   SeverityCounts `json:"no_fix"`
+}
+
+type SeverityCounts struct {
+	Critical int `json:"critical"`
+	High     int `json:"high"`
+	Medium   int `json:"medium"`
+	Low      int `json:"low"`
+	Unknown  int `json:"unknown"`
 }
