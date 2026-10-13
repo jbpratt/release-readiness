@@ -17,6 +17,8 @@ import {
 	Icon,
 	Label,
 	type LabelProps,
+	List,
+	ListItem,
 	Modal,
 	ModalBody,
 	ModalHeader,
@@ -51,12 +53,13 @@ import {
 	Thead,
 	Tr,
 } from "@patternfly/react-table";
-import { type ReactNode, useMemo, useState } from "react";
+import { Fragment, type ReactNode, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
 import type {
 	CandidateCatalog,
 	CIJob,
+	CISlot,
 	DashboardConfig,
 	FBCCandidate,
 	ImageCompare,
@@ -88,6 +91,7 @@ import {
 	actionLabels,
 	blockedReasons,
 	bundleBuilt,
+	ciList,
 	compareLine,
 	componentLabel,
 	fbcBuildStep,
@@ -246,6 +250,14 @@ export default function ReleaseDetail() {
 				}
 			/>
 
+			{fbc && (candidate.data?.ci_history?.length ?? 0) > 0 && (
+				<CICard
+					slots={candidate.data?.ci_history ?? []}
+					fbc={fbc}
+					version={xyz}
+				/>
+			)}
+
 			<TicketsCard
 				issues={tickets}
 				error={ticketsError}
@@ -354,8 +366,8 @@ function LinkedCardTitle({
 	actions,
 	children,
 }: {
-	href: string | null;
-	link: string;
+	href?: string | null;
+	link?: string;
 	actions?: ReactNode;
 	children: ReactNode;
 }) {
@@ -1591,6 +1603,78 @@ function Pill({
 				{label}
 			</Popover>
 		</span>
+	);
+}
+
+/**
+ * The CI of each slot's candidate FBC and the FBC built before it, a line per
+ * slot with a run: each job opens in Sippy and each run in Prow.
+ */
+function CICard({
+	slots,
+	fbc,
+	version,
+}: {
+	slots: CISlot[];
+	fbc: FBCCandidate;
+	version: string;
+}) {
+	const { lines, untested } = ciList(slots);
+	const jobs = [...new Set(lines.flatMap((l) => l.runs.map((r) => r.job)))];
+	const labels = jobLabels(jobs);
+	const sippy = sippyRunsUrl(version, fbcsBuilt(fbc));
+	return (
+		<Card isCompact style={{ marginBottom: "1rem" }}>
+			<LinkedCardTitle
+				actions={
+					sippy && (
+						<Button
+							component="a"
+							variant="link"
+							isInline
+							href={sippy}
+							{...external}
+							icon={<ExternalLinkAltIcon />}
+							iconPosition="end"
+						>
+							Runs in Sippy
+						</Button>
+					)
+				}
+			>
+				CI
+			</LinkedCardTitle>
+			<CardBody>
+				<List isPlain>
+					{lines.map((l) => (
+						<ListItem key={`${l.operator} ${l.ocp}`}>
+							<strong>
+								{l.operator} {l.ocp}
+							</strong>
+							<span style={muted}> — </span>
+							{l.runs.map((r, i) => (
+								<Fragment key={r.run.prow_url}>
+									{i > 0 && <span style={muted}> · </span>}
+									<ExtLink href={sippyJobUrl(version, r.job)} title={r.job}>
+										{labels[jobs.indexOf(r.job)]}
+									</ExtLink>{" "}
+									{runState(r.run.state).toLowerCase()}{" "}
+									<a href={r.run.prow_url} style={muted} {...external}>
+										{when(r.run.started_at)}
+									</a>
+									{r.note && <span style={muted}> ({r.note})</span>}
+								</Fragment>
+							))}
+						</ListItem>
+					))}
+					{untested > 0 && (
+						<ListItem style={muted}>
+							{untested} other {untested > 1 ? "slots" : "slot"}: no CI recorded
+						</ListItem>
+					)}
+				</List>
+			</CardBody>
+		</Card>
 	);
 }
 

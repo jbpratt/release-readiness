@@ -32,6 +32,11 @@ export interface ReleaseCandidate {
 	fbc_candidate: FBCCandidate | null;
 	/** The version's operator FBCs as its stream built them. */
 	fbc_stream: FBCCandidate | null;
+	/**
+	 * By operator and OCP version, the CI of the FBC candidate's FBC of each
+	 * slot and the one built before it. Advisory: the verdict never reads it.
+	 */
+	ci_history: CISlot[] | null;
 	verdict: Verdict;
 	reading: ReadProgress;
 }
@@ -178,6 +183,23 @@ export interface ImageCheck {
 	state: "matches" | "differs" | "absent";
 	snapshot: string;
 	bundle_nvr: string;
+}
+
+/**
+ * An operator's OCP slot with the FBC candidate's FBC of it and the FBC built
+ * before that, without one the slot's newest, each with its CI; current marks
+ * the FBC candidate's.
+ */
+export interface CISlot {
+	operator: string;
+	ocp: string;
+	fbcs: CIFBC[];
+}
+
+export interface CIFBC {
+	nvr: string;
+	current: boolean;
+	ci: FBCCI;
 }
 
 /**
