@@ -504,25 +504,6 @@ export const decisions = (v: Verdict) =>
 				.map((i) => ({ ...i, action: blockerActions[i.code] ?? "" }))
 		: [];
 
-// The blockers whose text names bundle NVRs, too long for one line.
-const shortReasons: Record<string, (i: VerdictItem) => string> = {
-	mixed_builds: (i) => `${i.operator} FBCs ship different bundles`,
-	image_mismatch: () => "Image shipment and FBCs ship different bundles",
-};
-
-/**
- * Why a not-ready verdict is not ready, in one short phrase, and the full
- * text: its first blocker on the whole release, else its first blocker; null
- * for any other verdict.
- */
-export function topReason(v: Verdict): { text: string; full: string } | null {
-	if (v.state !== "not_ready") return null;
-	const blockers = v.items.filter((i) => i.level === "blocker");
-	const i = blockers.find((i) => !i.operator) ?? blockers[0];
-	if (!i) return null;
-	return { text: shortReasons[i.code]?.(i) ?? i.text, full: i.text };
-}
-
 /** An operator row's text with nothing to act on: unstaged, it only waits. */
 export const readyText = (items: VerdictItem[]) =>
 	items.some((i) => i.code === "not_staged")
