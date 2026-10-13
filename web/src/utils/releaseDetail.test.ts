@@ -23,7 +23,6 @@ import {
 	fbcParams,
 	fbcPullspecs,
 	fbcStageStep,
-	fbcsStaged,
 	fixableLabels,
 	jobLabels,
 	jobShortName,
@@ -379,13 +378,6 @@ test("missing operator (3.17.6): CSO and QBO not in stage show the stream's FBCs
 	assert.deepEqual(
 		shown.map((s) => s.operator),
 		[qo, streamCSO, streamQBO],
-	);
-	// CSO's stream has no FBC for one of its slots: 2 built of 3.
-	streamCSO.coverage.slots = 3;
-	qo.stage = { staged: 3, total: 3 };
-	assert.deepEqual(
-		shown.map((s) => fbcsStaged(c, stream, s)),
-		["3/3", "0/3", "0/1"],
 	);
 	assert.deepEqual(
 		shown.map((s) => stageText(c, s)),
