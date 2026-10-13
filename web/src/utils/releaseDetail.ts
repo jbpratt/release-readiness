@@ -117,16 +117,15 @@ export function fbcsBuilt(c: FBCCandidate): string {
 
 /**
  * The CI list: a line per slot whose candidate FBC has a run, exact runs
- * first, and how many slots have none.
+ * first.
  */
 export function ciList(slots: CISlot[]) {
-	const lines = slots.flatMap((s) => {
+	return slots.flatMap((s) => {
 		const runs = [...(s.ci?.exact ?? []), ...(s.ci?.equivalent ?? [])].flatMap(
 			(j) => j.runs.map((run) => ({ job: j.job_name, run })),
 		);
 		return runs.length > 0 ? [{ operator: s.operator, ocp: s.ocp, runs }] : [];
 	});
-	return { lines, untested: slots.length - lines.length };
 }
 
 /** Whether an operator has an FBC, on the head bundle or not. */

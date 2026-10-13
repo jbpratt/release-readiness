@@ -1123,7 +1123,7 @@ test("scanCell", () => {
 	assert.deepEqual(scanCell(null), { text: "-", color: "grey" });
 });
 
-test("ciList: a line per slot the candidate FBC tested, the rest counted", () => {
+test("ciList: a line per slot the candidate FBC tested", () => {
 	const job = (name: string, id: string): CIJob => ({
 		job_name: name,
 		runs: [
@@ -1136,12 +1136,12 @@ test("ciList: a line per slot the candidate FBC tested, the rest counted", () =>
 		ci,
 	});
 	// 4.20's runs were all on a prior FBC, and the candidate has no FBC of
-	// 4.21: both count as untested.
+	// 4.21: neither gets a line.
 	const untested = [
 		slot("4.20", { exact: [], equivalent: [] }),
 		slot("4.21", null),
 	];
-	const { lines, untested: n } = ciList([
+	const lines = ciList([
 		slot("4.22", { exact: [job("s390x", "1")], equivalent: [job("aws", "2")] }),
 		...untested,
 	]);
@@ -1152,8 +1152,7 @@ test("ciList: a line per slot the candidate FBC tested, the rest counted", () =>
 		]),
 		[["quay-operator 4.22", ["s390x=1", "aws=2"]]],
 	);
-	assert.equal(n, 2);
-	assert.deepEqual(ciList(untested), { lines: [], untested: 2 });
+	assert.deepEqual(ciList(untested), []);
 });
 
 test("freshnessLine", () => {
