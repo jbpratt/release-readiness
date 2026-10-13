@@ -46,6 +46,7 @@ import {
 	unshippedOf,
 	verdictLine,
 	whileChecking,
+	withoutStage,
 } from "./releaseDetail.ts";
 
 test("jobShortName", () => {
@@ -733,6 +734,29 @@ const item = (
 	code: string,
 	text = "",
 ): VerdictItem => ({ level, operator, owner: "", code, text });
+
+test("withoutStage: the Stage step words stage blockers", () => {
+	const items = [
+		item("blocker", "", "not_staged"),
+		item("blocker", "quay-operator", "missing_ocp"),
+		item("blocker", "quay-bridge-operator", "missing_operator"),
+		item("blocker", "quay-operator", "csv_mismatch"),
+	];
+	const v = withoutStage({ state: "not_ready", items });
+	assert.deepEqual(
+		v.items.map((i) => i.code),
+		["csv_mismatch"],
+	);
+	assert.deepEqual(
+		verdictLine(withoutStage({ state: "not_ready", items: v.items.slice(1) })),
+		{ status: "failed", text: "Not ready" },
+	);
+	// Operator rows keep their stage labels, so none reads "Ready".
+	assert.deepEqual(
+		actionLabels(items, "quay-bridge-operator").map((l) => l.text),
+		["Not staged"],
+	);
+});
 
 test("stageText: by the FBCs' newest stage Releases", () => {
 	const head = bundle("202610060936");

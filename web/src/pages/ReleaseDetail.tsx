@@ -118,6 +118,7 @@ import {
 	unshippedOf,
 	verdictLine,
 	whileChecking,
+	withoutStage,
 } from "../utils/releaseDetail";
 
 /** A Konflux UI page of the version's application, or of application. */
@@ -476,6 +477,9 @@ function Candidate({
 	const tested = whileChecking(fbcCIStep(fbc), checking);
 	const sippy = sippyRunsUrl(version, fbcsBuilt(fbc));
 	const staged = whileChecking(fbcStageStep(fbc), checking);
+	const gaps = verdict.items
+		.filter((i) => i.code === "missing_ocp")
+		.map((i) => i.text);
 	const read = readingLine(reading);
 	const jobs = [
 		...new Set(
@@ -497,7 +501,7 @@ function Candidate({
 	const [tabs, setTabs] = useState<Record<string, BlockTab>>({});
 	return (
 		<>
-			<VerdictHeader verdict={verdict} prod={prodRelease} />
+			<VerdictHeader verdict={withoutStage(verdict)} prod={prodRelease} />
 			{read && (
 				<div style={line}>
 					<Status status={read.status}>{read.text}</Status>
@@ -528,7 +532,14 @@ function Candidate({
 					title="Stage"
 					variant={staged.variant}
 					isCurrent={!prod && !shipped}
-					description={staged.text}
+					description={
+						<>
+							{staged.text}
+							{gaps.length > 0 && (
+								<span title={gaps.join("\n")}>{staged.text ? " ?" : "?"}</span>
+							)}
+						</>
+					}
 				/>
 				<Step
 					title="Prod"

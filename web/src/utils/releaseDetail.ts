@@ -462,6 +462,15 @@ export function stageText(
 	};
 }
 
+// Stage blockers the Stage step already words, as "not staged" or "?".
+const STAGE_CODES = ["not_staged", "missing_operator", "missing_ocp"];
+
+/** A verdict without the stage blockers the Stage step shows. */
+export const withoutStage = (v: Verdict): Verdict => ({
+	...v,
+	items: v.items.filter((i) => !STAGE_CODES.includes(i.code)),
+});
+
 /**
  * The verdict's headline; a shipped version's is the record of its prod
  * Release, which the page adds.
