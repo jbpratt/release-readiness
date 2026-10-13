@@ -19,6 +19,7 @@ import (
 	"github.com/quay/release-readiness/internal/fbc"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/prow"
+	"github.com/quay/release-readiness/internal/scan"
 )
 
 // quay318 is a quay-3-18 build's components less its base image, by name.
@@ -1340,5 +1341,95 @@ func TestGetCandidateFBCImages(t *testing.T) {
 	// An operator without an FBC has no images.
 	if c := cand.Operators[1]; c.Images == nil || len(c.Images) != 0 || len(c.Compare) != 0 {
 		t.Errorf("%s images %+v, compare %+v, want none", c.Operator, c.Images, c.Compare)
+	}
+}
+
+// seedScanFBC stores 3.18.1's staged quay-operator FBC, whose head bundle's
+// relatedImages are operator, quay and clair, and returns their digests.
+func seedScanFBC(t *testing.T, srv *Server) []string {
+	t.Helper()
+	var head []fbc.RelatedImage
+	var digests []string
+	for _, name := range []string{"operator", "quay", "clair"} {
+		head = append(head, fbc.RelatedImage{Name: name, Image: testImage("a/" + name)})
+		digests = append(digests, testDigest("a/"+name))
+	}
+	img := seedImagesFBC(t, srv, "quay-operator-fbc-3.18.1-20261006151933.ocp4.21", "quay-operator-metadata-container-3.18.1.202610060936", "3.18.0", head, nil)
+	seedStagedFBC(t, srv, "fbc-quay-3-18", "3.18.1", "fbc-quay-3-18-a", "2026-10-07T00:00:00Z", []string{img}, "Succeeded")
+	return digests
+}
+
+// An Images row's scan is its image's stored scan, null without one.
+func TestGetCandidateScan(t *testing.T) {
+	srv := setupTestServer(t)
+	seedScanFBC(t, srv)
+	const page = "https://konflux-ui.example/ns/art-quay-tenant/applications/quay-3-18/pipelineruns/"
+	for _, sc := range []scan.Scan{
+		{
+			Digest: testDigest("a/operator"), State: scan.StateScanned,
+			PipelineRun: "quay-3-18-quay-operator-7mbwk", DetailURL: page + "quay-3-18-quay-operator-7mbwk",
+			Counts:  &model.ScanCounts{Basis: scan.BasisArchFindings, NoFix: model.SeverityCounts{High: 24, Medium: 264, Low: 232}},
+			Reports: map[string]string{"sha256:arch": "sha256:report"},
+		},
+		{
+			Digest: testDigest("a/quay"), State: scan.StateScanFailed,
+			PipelineRun: "quay-3-18-quay-quay-zwvxj", DetailURL: page + "quay-3-18-quay-quay-zwvxj",
+		},
+	} {
+		sc.CheckedAt = time.Now()
+		if err := srv.db.UpsertImageScan(t.Context(), sc); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	cand, _ := getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
+	want := map[string]*model.ImageScan{
+		"operator": {
+			State: "scanned", URL: page + "quay-3-18-quay-operator-7mbwk",
+			Counts: &model.ScanCounts{Basis: "scanner_arch_findings", NoFix: model.SeverityCounts{High: 24, Medium: 264, Low: 232}},
+		},
+		"quay":  {State: "scan_failed", URL: page + "quay-3-18-quay-quay-zwvxj"},
+		"clair": nil,
+	}
+	images := cand.Operators[0].Images
+	if len(images) != len(want) {
+		t.Fatalf("images %+v, want %d", images, len(want))
+	}
+	for _, img := range images {
+		if !reflect.DeepEqual(img.Scan, want[img.Name]) {
+			t.Errorf("%s scan = %+v, want %+v", img.Name, img.Scan, want[img.Name])
+		}
+	}
+}
+
+// The scan sync reads the images the Images rows of every unshipped version
+// not archived show, once each; a released or archived version reads none.
+func TestCandidateDigests(t *testing.T) {
+	srv := setupTestServer(t)
+	want := seedScanFBC(t, srv)
+	if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := srv.CandidateDigests(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.Sort(got)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Errorf("digests = %v, want %v", got, want)
+	}
+
+	for _, v := range []model.ReleaseVersion{
+		{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18", Released: true},
+		{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18", Archived: true},
+	} {
+		if err := srv.db.UpsertReleaseVersion(t.Context(), &v); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := srv.CandidateDigests(t.Context()); err != nil || len(got) != 0 {
+			t.Errorf("released %t, archived %t: digests = %v, %v; want none", v.Released, v.Archived, got, err)
+		}
 	}
 }

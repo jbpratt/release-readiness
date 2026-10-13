@@ -37,6 +37,8 @@ type record struct {
 	ImagePullspec string `json:"image_pullspec"`
 	// Commitish is the source commit ART built from.
 	Commitish string `json:"commitish"`
+	// BuildPipelineURL is the build PipelineRun's Konflux UI page.
+	BuildPipelineURL string `json:"build_pipeline_url"`
 	// BundleNVRs is, for an FBC image, the operator bundles its catalog holds.
 	BundleNVRs []string `json:"bundle_nvrs"`
 	Outcome    string   `json:"outcome"`
@@ -70,6 +72,16 @@ func (c *Client) record(ctx context.Context, nvr, recordID string) (*record, err
 		return nil, err
 	}
 	return &r, nil
+}
+
+// BuildPipelineURL returns the Konflux UI page of the PipelineRun that built
+// a record, "" when the record has none.
+func (c *Client) BuildPipelineURL(ctx context.Context, nvr, recordID string) (string, error) {
+	r, err := c.record(ctx, nvr, recordID)
+	if err != nil {
+		return "", err
+	}
+	return r.BuildPipelineURL, nil
 }
 
 func (c *Client) get(ctx context.Context, path string, v any) error {
