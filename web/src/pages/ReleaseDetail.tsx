@@ -61,14 +61,12 @@ import type {
 	FBCCandidate,
 	ImageCompare,
 	ImageRef,
-	ImageScan,
 	JiraIssue,
 	KonfluxRelease,
 	OperatorFBC,
 	ReadProgress,
 	ReleaseCandidate,
 	ReleaseVersion,
-	ScanCounts,
 	UnshippedBuild,
 	Verdict,
 	VerdictItem,
@@ -87,7 +85,6 @@ import {
 } from "../utils/links";
 import {
 	actionLabels,
-	BASES,
 	blockedReasons,
 	bundleBuilt,
 	compareLine,
@@ -98,7 +95,6 @@ import {
 	fbcPullspecs,
 	fbcStageStep,
 	fbcsStaged,
-	fixableLabels,
 	jobLabels,
 	nvrLabel,
 	readingLine,
@@ -106,11 +102,8 @@ import {
 	releaseWord,
 	rowChips,
 	runsStatus,
-	SEVERITIES,
-	SEVERITY_COLORS,
 	type ShownOperator,
 	type StatusLine,
-	scanCell,
 	shipsVersion,
 	shownOperators,
 	slotItem,
@@ -133,10 +126,6 @@ type KonfluxLink = (
 
 const external = { target: "_blank", rel: "noopener noreferrer" };
 const muted = { color: "var(--pf-t--global--text--color--subtle)" };
-const textColor = {
-	orange: "var(--pf-t--global--text--color--status--warning--default)",
-	grey: muted.color,
-};
 
 /** A date and time to the minute, local unless timeZone: "Oct 9, 21:48". */
 const when = (iso: string, timeZone?: string) =>
@@ -1035,7 +1024,7 @@ const changeColors: Record<string, LabelProps["color"]> = {
 
 /**
  * An operator's images, the relatedImages of its head bundle, each once with
- * its ART build, fixable CVEs and whether stage and prod hold it; or,
+ * its ART build and whether stage and prod hold it; or,
  * compared, each image's change against the previous z or a newer build.
  * Under them, the OCP versions shipping another bundle and an image
  * shipment's other bundle.
@@ -1055,7 +1044,6 @@ function OperatorImages({
 	if (o.images.length === 0)
 		return <div style={{ ...line, ...muted }}>{unread}</div>;
 	const images = uniqueImages(o);
-	const hasScans = images.some((i) => i.scan);
 	const other = o.conflicts.filter((m) => m.head_bundle_nvr).map((m) => m.ocp);
 	const check = o.image_check;
 	// An external's unset stage or prod is untracked, not "not shipped".
@@ -1127,7 +1115,6 @@ function OperatorImages({
 						<Tr>
 							<Th>Image</Th>
 							<Th>ART build</Th>
-							{hasScans && <Th>Fixable CVEs</Th>}
 							<Th
 								info={{
 									tooltip:
@@ -1158,11 +1145,6 @@ function OperatorImages({
 										<span style={muted}>external</span>
 									)}
 								</Td>
-								{hasScans && (
-									<Td>
-										<ScanCell scan={i.scan} label={i.name || "bundle"} />
-									</Td>
-								)}
 								<Td>{yes(i.stage, !i.nvr)}</Td>
 								<Td>{yes(i.prod, !i.nvr)}</Td>
 							</Tr>
@@ -1176,95 +1158,6 @@ function OperatorImages({
 				{check.state === "differs" &&
 					`Image shipment has bundle ${bundleBuilt(check.bundle_nvr)}.`}
 			</div>
-		</>
-	);
-}
-
-/** An image's fixable CVEs by severity, all its counts on click. */
-function ScanCell({ scan, label }: { scan: ImageScan | null; label: string }) {
-	if (scan?.state === "scanned" && scan.counts) {
-		const fixable = fixableLabels(scan.counts);
-		return (
-			<Popover
-				headerContent={label}
-				bodyContent={<ScanDetail counts={scan.counts} url={scan.url} />}
-				maxWidth="30rem"
-			>
-				<Button variant="plain" hasNoPadding>
-					{fixable.length > 0 ? (
-						<Flex component="span" gap={{ default: "gapXs" }}>
-							{fixable.map((l) => (
-								<Label key={l.text} isCompact color={l.color}>
-									{l.text}
-								</Label>
-							))}
-						</Flex>
-					) : (
-						<span style={muted}>0 fixable</span>
-					)}
-				</Button>
-			</Popover>
-		);
-	}
-	const cell = scanCell(scan);
-	return (
-		<ExtLink href={cell.url || null}>
-			<span style={{ color: textColor[cell.color] }}>{cell.text}</span>
-		</ExtLink>
-	);
-}
-
-/** A scan's CVEs by severity, with and without a fix, and its Konflux page. */
-function ScanDetail({ counts, url }: { counts: ScanCounts; url: string }) {
-	const rows = [
-		["Fixable", counts.fixable],
-		["No fix", counts.no_fix],
-	] as const;
-	return (
-		<>
-			<Table
-				variant="compact"
-				borders={false}
-				gridBreakPoint=""
-				aria-label="CVEs by severity"
-			>
-				<Thead>
-					<Tr>
-						<Td />
-						{SEVERITIES.map((s) => (
-							<Th key={s} modifier="fitContent">
-								{s.charAt(0).toUpperCase() + s.slice(1)}
-							</Th>
-						))}
-					</Tr>
-				</Thead>
-				<Tbody>
-					{rows.map(([row, n]) => (
-						<Tr key={row}>
-							<Th scope="row" modifier="fitContent">
-								{row}
-							</Th>
-							{SEVERITIES.map((s) => (
-								<Td key={s}>
-									{n[s] > 0 ? (
-										<Label isCompact color={SEVERITY_COLORS[s]}>
-											{n[s]}
-										</Label>
-									) : (
-										"—"
-									)}
-								</Td>
-							))}
-						</Tr>
-					))}
-				</Tbody>
-			</Table>
-			<div style={{ ...muted, marginTop: "0.5rem" }}>{BASES[counts.basis]}</div>
-			{url && (
-				<div style={{ marginTop: "0.5rem" }}>
-					<ExtLink href={url}>Scan in Konflux</ExtLink>
-				</div>
-			)}
 		</>
 	);
 }
