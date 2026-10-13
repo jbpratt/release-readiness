@@ -57,7 +57,6 @@ import { Fragment, type ReactNode, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
 import type {
-	CandidateCatalog,
 	CIJob,
 	CISlot,
 	DashboardConfig,
@@ -105,7 +104,6 @@ import {
 	otherBundle,
 	readingLine,
 	releaseLine,
-	releaseWord,
 	rowChips,
 	runsStatus,
 	type ShownOperator,
@@ -443,7 +441,6 @@ function BuildsCard({
 						verdict={data.verdict}
 						reading={data.reading}
 						unshipped={data.unshipped_builds ?? []}
-						catalogs={data.catalogs ?? []}
 						version={version}
 						app={app}
 						konflux={konflux}
@@ -472,7 +469,6 @@ function Candidate({
 	verdict,
 	reading,
 	unshipped,
-	catalogs,
 	version,
 	app,
 	konflux,
@@ -484,7 +480,6 @@ function Candidate({
 	verdict: Verdict;
 	reading: ReadProgress;
 	unshipped: UnshippedBuild[];
-	catalogs: CandidateCatalog[];
 	version: string;
 	app: string;
 	konflux: KonfluxLink;
@@ -681,7 +676,6 @@ function Candidate({
 												items={verdict.items}
 												shipped={shipped}
 												unshipped={unshippedOf(unshipped, operators, op)}
-												catalogs={catalogs}
 												label={label}
 												version={version}
 												app={app}
@@ -813,7 +807,6 @@ function OperatorDetail({
 	items,
 	shipped,
 	unshipped,
-	catalogs,
 	label,
 	version,
 	app,
@@ -827,7 +820,6 @@ function OperatorDetail({
 	items: VerdictItem[];
 	shipped: boolean;
 	unshipped: UnshippedBuild[];
-	catalogs: CandidateCatalog[];
 	label: (job: string) => string;
 	version: string;
 	app: string;
@@ -851,9 +843,6 @@ function OperatorDetail({
 	);
 	const newer = o.compare.find((c) => c.kind === "newer");
 	const change = newer && compareLine(newer);
-	const fbcApp = `fbc-${app}`;
-	const plan = (snapshot: string) =>
-		catalogs.find((c) => c.snapshot === snapshot)?.release_plan;
 	const ci = rows.some(
 		(r) =>
 			(r.fbc?.ci?.exact.length ?? 0) + (r.fbc?.ci?.equivalent.length ?? 0) > 0,
@@ -896,7 +885,6 @@ function OperatorDetail({
 							<Tr>
 								<Th modifier="fitContent">OCP</Th>
 								<Th>FBC</Th>
-								<Th>Stage</Th>
 								{ci && <Th screenReaderText="CI" />}
 							</Tr>
 						</Thead>
@@ -945,28 +933,6 @@ function OperatorDetail({
 											</Label>
 										))}
 										<OtherBundle row={r} />
-									</Td>
-									<Td>
-										{r.fbc?.snapshot && (
-											<ExtLink
-												href={konflux("snapshots", r.fbc.snapshot, fbcApp)}
-												title={r.fbc.snapshot}
-											>
-												Snapshot
-											</ExtLink>
-										)}
-										{r.fbc?.release && (
-											<>
-												{" · "}
-												{statusIcons[releaseLine(r.fbc.release).status]}{" "}
-												<ExtLink
-													href={konflux("releases", r.fbc.release.name, fbcApp)}
-													title={`${releaseLine(r.fbc.release).text}: ${plan(r.fbc.snapshot) || r.fbc.release.name}`}
-												>
-													{releaseWord(r.fbc.release)}
-												</ExtLink>
-											</>
-										)}
 									</Td>
 									{ci && (
 										<Td>
