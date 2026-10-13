@@ -77,10 +77,3 @@ export function formatReleaseName(name: string): string {
 /** ART pipeline health view for the Quay tenant (needs an artc2023 browser login). */
 export const ART_PIPELINES_HEALTH_URL =
 	"https://art-pipelines-ui-art-pipelines-ui.apps.artc2023.pc3z.p1.openshiftapps.com/#/health?namespace=art-quay-tenant";
-
-/** The artc2023 cluster's OpenShift console. */
-export const ART_CONSOLE_URL =
-	"https://console-openshift-console.apps.artc2023.pc3z.p1.openshiftapps.com";
-
-/** The Quay tenant's release-from-fbc Pipeline in the console. */
-export const RELEASE_FROM_FBC_URL = `${ART_CONSOLE_URL}/k8s/ns/art-quay-tenant/tekton.dev~v1~Pipeline/release-from-fbc`;

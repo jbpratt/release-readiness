@@ -83,7 +83,6 @@ import {
 	jiraIssueUrl,
 	jiraSearchUrl,
 	konfluxUrl,
-	RELEASE_FROM_FBC_URL,
 	sippyJobUrl,
 	sippyRunsUrl,
 	ticketsJql,
@@ -1305,11 +1304,9 @@ function ReleaseInputsButton({ children }: { children: ReactNode }) {
 }
 
 /**
- * release-from-fbc's inputs for its one release-wide run, to review and run
- * by hand: RR starts no run. The Pipeline's console page; whether the
- * candidate's FBCs are staged or only built in the stream; a dry-run tkn
- * command, or why the candidate has none to run with; then its FBC pullspecs
- * by operator and OCP version.
+ * release-from-fbc's dry-run tkn command for its one release-wide run, to
+ * review and run by hand: RR starts no run. Without one, why the candidate
+ * has none to run with.
  */
 function ReleaseInputs({
 	fbc,
@@ -1327,73 +1324,18 @@ function ReleaseInputs({
 	dueDate?: string;
 }) {
 	const pullspecs = fbcPullspecs(fbc);
-	const operators = fbc.operators.filter((o) => o.members.length > 0);
-	return (
-		<>
-			<Button
-				component="a"
-				variant="link"
-				isInline
-				href={RELEASE_FROM_FBC_URL}
-				{...external}
-				icon={<ExternalLinkAltIcon />}
-				iconPosition="end"
-			>
-				Pipeline
-			</Button>
-			<div style={line}>
-				{fbc.source === "stream"
-					? "From the stream, not staged."
-					: "From the staged candidate."}
-			</div>
-			{pullspecs ? (
-				<>
-					<ClipboardCopy isReadOnly isCode style={line}>
-						{tknCommand(
-							fbcParams(app, version, pullspecs, bugs ?? [], dueDate),
-						)}
-					</ClipboardCopy>
-					<div style={muted}>
-						Check jira-bugs{bugs ? "" : " (no tickets)"} and target-release-date
-						first.
-					</div>
-				</>
-			) : (
-				<div style={line}>
-					{blockedReasons(fbc).map((r) => (
-						<Status key={r} status="failed">
-							{r}
-						</Status>
-					))}
-				</div>
-			)}
-			{operators.length > 0 && (
-				<Table variant="compact" aria-label="FBC pullspecs by operator">
-					<Thead>
-						<Tr>
-							<Th>Operator</Th>
-							<Th modifier="fitContent">OCP</Th>
-							<Th>Pullspec</Th>
-						</Tr>
-					</Thead>
-					{operators.map((o) => (
-						<Tbody key={o.operator}>
-							{o.members.map((m, i) => (
-								<Tr key={m.digest}>
-									<Td>{i === 0 && o.operator}</Td>
-									<Td>{m.ocp}</Td>
-									<Td>
-										<ClipboardCopy isReadOnly isCode>
-											{m.pullspec}
-										</ClipboardCopy>
-									</Td>
-								</Tr>
-							))}
-						</Tbody>
-					))}
-				</Table>
-			)}
-		</>
+	return pullspecs ? (
+		<ClipboardCopy isReadOnly isCode>
+			{tknCommand(fbcParams(app, version, pullspecs, bugs ?? [], dueDate))}
+		</ClipboardCopy>
+	) : (
+		<div>
+			{blockedReasons(fbc).map((r) => (
+				<Status key={r} status="failed">
+					{r}
+				</Status>
+			))}
+		</div>
 	);
 }
 
