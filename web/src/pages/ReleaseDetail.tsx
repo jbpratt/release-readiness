@@ -106,6 +106,7 @@ import {
 	streamAhead,
 	stripCells,
 	tknCommand,
+	unreadText,
 	unshippedOf,
 	verdictLine,
 	whileChecking,
@@ -733,7 +734,7 @@ function OperatorSummary({
 	const legend = (Object.keys(stripCells) as StripCell[]).filter(
 		(k) =>
 			k !== "blank" &&
-			((k !== "absent" && k !== "unknown") ||
+			((k !== "absent" && k !== "unknown" && k !== "failed") ||
 				rows.some((r) => r.cells.includes(k))),
 	);
 	return (
@@ -760,11 +761,7 @@ function OperatorSummary({
 					{rows.map(({ operator: o, cells }) => {
 						const ships = shipsVersion(o);
 						const images = imagesState(o, shipped);
-						const unread = flagged(o.operator, "read_failed")
-							? "can't read"
-							: flagged(o.operator, "no_head_bundle")
-								? "no known bundle"
-								: "reading…";
+						const unread = unreadText(items, o.operator) ?? "reading…";
 						return (
 							<Tr key={o.operator}>
 								<Td>{o.operator}</Td>
@@ -904,19 +901,12 @@ function OperatorBlock({
 	const rows = slotRows(o);
 	const fbcs = rows.filter((r) => r.fbc).length;
 	const nvr = o.head_bundle_nvr;
-	const flagged = (code: string) =>
-		items.some((i) => i.operator === o.operator && i.code === code);
-	const failed = flagged("read_failed");
-	const noHead = flagged("no_head_bundle");
+	const unread = unreadText(items, o.operator);
 	const head = nvr
 		? [shipsVersion(o), `bundle ${bundleBuilt(nvr)}`, nvrCommit(nvr), o.channel]
 				.filter(Boolean)
 				.join(" · ")
-		: failed
-			? "can't read FBC"
-			: noHead
-				? "FBC heads no known bundle"
-				: "reading…";
+		: (unread ?? "reading…");
 	const images = imagesTexts[imagesState(o, shipped)];
 	const status = leftOut
 		? `Not in the stage shipment: add these ${fbcs} FBCs`
@@ -1070,13 +1060,7 @@ function OperatorBlock({
 						operator={o}
 						compare={o.compare.find((c) => c.kind === compare) ?? null}
 						onCompare={setCompare}
-						unread={
-							failed
-								? "Can't read FBC"
-								: noHead
-									? "FBC heads no known bundle"
-									: "Reading FBC contents…"
-						}
+						unread={unread ?? "Reading FBC contents…"}
 					/>
 					{!shipped && (
 						<UnshippedTable builds={unshipped} app={app} konflux={konflux} />

@@ -259,6 +259,7 @@ export const stripCells = {
 	other: { glyph: "◐", text: "other build" },
 	missing: { glyph: "✗", text: "no FBC" },
 	reading: { glyph: "·", text: "reading" },
+	failed: { glyph: "!", text: "can't read FBC" },
 	unknown: { glyph: "?", text: "no known bundle" },
 	absent: { glyph: "–", text: "not part of release" },
 	// Outside the record of a shipped release, RR may not know of an FBC yet.
@@ -329,11 +330,12 @@ export function operatorSummary(
 		const cells = ocps.map((ocp): StripCell => {
 			const kind = kinds.get(ocp);
 			if (!kind) return shipped ? "absent" : "blank";
-			if (
-				kind === "unresolved" &&
-				slotItem(items, "no_head_bundle", operator.operator, ocp)
-			)
-				return "unknown";
+			if (kind === "unresolved") {
+				if (slotItem(items, "read_failed", operator.operator, ocp))
+					return "failed";
+				if (slotItem(items, "no_head_bundle", operator.operator, ocp))
+					return "unknown";
+			}
 			return kind === "member" && built ? "built" : slotCells[kind];
 		});
 		return { operator, cells };
@@ -365,6 +367,22 @@ export const slotItem = (
 			i.operator === operator &&
 			i.text.startsWith(`${operator} OCP ${ocp}: `),
 	);
+
+/**
+ * Why an operator's FBC contents show nothing though read: its read failed,
+ * with the error, or its FBC heads no known bundle; else null, read pending.
+ */
+export function unreadText(
+	items: VerdictItem[],
+	operator: string,
+): string | null {
+	const on = (code: string) =>
+		items.find((i) => i.operator === operator && i.code === code);
+	const failed = on("read_failed");
+	if (failed)
+		return `Can't read FBC: ${failed.text.replace(/^.*?: can't read FBC: /, "")}`;
+	return on("no_head_bundle") ? "FBC heads no known bundle" : null;
+}
 
 /** A chip on an FBC row, flagging an exception. */
 export interface Chip {
