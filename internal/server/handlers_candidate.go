@@ -480,6 +480,7 @@ func (s *Server) operatorImages(ctx context.Context, o *model.OperatorFBC, relea
 			oi := model.OperatorImage{
 				Name: img.Name, Image: img.Image, Digest: d, NVR: b.NVR, Commit: b.Commitish,
 				Stage: ciState(d, releases).State == "in", Prod: prod[d],
+				HistoryURL: artbuild.HistoryURL(s.artBaseURL, b.NVR, time.Now()),
 			}
 			if r, ok := resolved[d]; ok {
 				oi.BuildURL = artbuild.PageURL(s.artBaseURL, r.NVR, r.RecordID)

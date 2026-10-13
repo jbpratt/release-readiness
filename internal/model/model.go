@@ -197,21 +197,23 @@ type StageSummary struct {
 	Total  int `json:"total"`
 }
 
-// OperatorImage is a bundle's relatedImage with its ART build, NVR and
-// Commit "" for an image ART did not build, and BuildURL its ART build page,
-// "" until ART resolves its digest. Stage is set when a succeeded stage
+// OperatorImage is a bundle's relatedImage with its ART build, NVR, Commit
+// and HistoryURL, its image's ART build listing, "" for an image ART did not
+// build or whose NVR has no X.Y or build date, and BuildURL its ART build
+// page, "" until ART resolves its digest. Stage is set when a succeeded stage
 // Release holds its digest, Prod when a succeeded prod Release does. Scan is
 // its CVE scan, null until the scan sync reads it.
 type OperatorImage struct {
-	Name     string     `json:"name"`
-	Image    string     `json:"image"`
-	Digest   string     `json:"digest"`
-	NVR      string     `json:"nvr"`
-	Commit   string     `json:"commit"`
-	BuildURL string     `json:"build_url"`
-	Stage    bool       `json:"stage"`
-	Prod     bool       `json:"prod"`
-	Scan     *ImageScan `json:"scan"`
+	Name       string     `json:"name"`
+	Image      string     `json:"image"`
+	Digest     string     `json:"digest"`
+	NVR        string     `json:"nvr"`
+	Commit     string     `json:"commit"`
+	BuildURL   string     `json:"build_url"`
+	HistoryURL string     `json:"history_url"`
+	Stage      bool       `json:"stage"`
+	Prod       bool       `json:"prod"`
+	Scan       *ImageScan `json:"scan"`
 }
 
 // ImageCompare compares two bundles' relatedImages: Kind "previous", from the
