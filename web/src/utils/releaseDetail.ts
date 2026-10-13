@@ -314,20 +314,14 @@ export interface Chip {
 }
 
 /**
- * An FBC row's exception chips. Shipped, only facts of the record: another
- * build and restages; else also a missing or unreadable FBC.
+ * An FBC row's exception chips. Shipped, only facts of the record: restages;
+ * else also a missing or unreadable FBC.
  */
 export function rowChips(
 	r: SlotRow,
 	{ shipped, unreadable }: { shipped: boolean; unreadable?: string },
 ): Chip[] {
 	const chips: Chip[] = [];
-	if (r.kind === "other")
-		chips.push({
-			color: "orange",
-			text: "Different bundle",
-			title: r.fbc?.head_bundle_nvr,
-		});
 	if ((r.fbc?.staged ?? 0) > 1)
 		chips.push({ color: "grey", text: `staged ${r.fbc?.staged}x` });
 	if (shipped) return chips;
@@ -335,6 +329,22 @@ export function rowChips(
 	if (unreadable)
 		chips.push({ color: "red", text: "can't read", title: unreadable });
 	return chips;
+}
+
+/**
+ * The bundle an FBC row's FBC heads when it is not its operator's head
+ * bundle, linking the FBC's build; else null.
+ */
+export function otherBundle(
+	r: SlotRow,
+): { text: string; title: string; href: string | null } | null {
+	const nvr = r.kind === "other" ? r.fbc?.head_bundle_nvr : "";
+	if (!nvr) return null;
+	return {
+		text: `holds bundle ${bundleBuilt(nvr) || nvrLabel(nvr)}`,
+		title: nvr,
+		href: r.fbc?.build_url || null,
+	};
 }
 
 /**
