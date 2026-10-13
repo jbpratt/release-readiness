@@ -104,42 +104,63 @@ const withFBC = (c: FBCCandidate) => c.operators.filter(hasFBC);
 
 /**
  * The Build step, of the stream's FBCs: how many operators have one, and how
- * many of their OCP version slots do.
+ * many of their OCP version slots do; while history, the days of ART build
+ * history left to read, is not 0, no count, as one may be missing.
  */
-export function fbcBuildStep(c: FBCCandidate): CIStep & { fbcs: string } {
+export function fbcBuildStep(
+	c: FBCCandidate,
+	history = 0,
+): CIStep & { fbcs: string } {
 	const built = withFBC(c).length;
 	const slots = c.operators.reduce((n, o) => n + o.coverage.slots, 0);
 	const missing = c.operators.reduce((n, o) => n + o.missing_ocp.length, 0);
+	const fbcs = `${slots - missing} of ${slots} FBCs`;
+	if (history > 0)
+		return { variant: "info", text: "Reading build history", fbcs };
 	return {
 		variant: built === c.operators.length ? "success" : "warning",
 		text: `${built} of ${c.operators.length} operators built`,
-		fbcs: `${slots - missing} of ${slots} FBCs`,
+		fbcs,
 	};
 }
 
+// Operators as the Stage step names them.
+const shortNames: Record<string, string> = {
+	"container-security-operator": "CSO",
+	"quay-bridge-operator": "QBO",
+};
+
 /**
- * The candidate's Stage step: not staged for the stream; how many operators
- * the stage shipment holds while it leaves one out; else how many of its
- * FBCs' newest Releases succeeded, any failed one failing it.
+ * The candidate's Stage step: not staged for the stream; else how many
+ * operators are staged, every FBC's newest Release succeeded, and which
+ * failed, any failed Release failing it and an operator the shipment leaves
+ * out warning.
  */
 export function fbcStageStep(c: FBCCandidate): CIStep {
 	if (c.source === "stream")
 		return { variant: "pending", text: "Not in a stage shipment" };
-	const staged = withFBC(c).length;
-	if (staged < c.operators.length)
+	const states = (o: OperatorFBC) =>
+		[...o.members, ...o.conflicts].map((m) =>
+			m.release ? releaseLine(m.release).status : "running",
+		);
+	const staged = withFBC(c).filter((o) =>
+		states(o).every((s) => s === "done"),
+	).length;
+	const failed = c.operators
+		.filter((o) => states(o).includes("failed"))
+		.map((o) => shortNames[o.operator] ?? o.operator);
+	const text = `${staged} of ${c.operators.length} operators staged`;
+	if (failed.length > 0)
 		return {
-			variant: "warning",
-			text: `${staged} of ${c.operators.length} operators staged`,
+			variant: "danger",
+			text: `${text} · ${failed.join(", ")} release failed`,
 		};
-	const states = slotFBCs(c).map((m) =>
-		m.release ? releaseLine(m.release).status : "running",
-	);
-	const done = states.filter((s) => s === "done").length;
-	const failed = states.filter((s) => s === "failed").length;
-	const text = `${done} of ${states.length} FBCs released`;
-	if (failed > 0)
-		return { variant: "danger", text: `${text} · ${failed} failed` };
-	return { variant: done === states.length ? "success" : "info", text };
+	if (withFBC(c).length < c.operators.length)
+		return { variant: "warning", text };
+	return {
+		variant: staged === c.operators.length ? "success" : "info",
+		text,
+	};
 }
 
 /**
@@ -240,6 +261,8 @@ export const stripCells = {
 	reading: { glyph: "·", text: "reading" },
 	unknown: { glyph: "?", text: "no known bundle" },
 	absent: { glyph: "–", text: "not part of release" },
+	// Outside the record of a shipped release, RR may not know of an FBC yet.
+	blank: { glyph: "\u00a0", text: "no FBC known" },
 } as const;
 
 export type StripCell = keyof typeof stripCells;
@@ -305,7 +328,7 @@ export function operatorSummary(
 		const kinds = new Map(slotRows(operator).map((r) => [r.ocp, r.kind]));
 		const cells = ocps.map((ocp): StripCell => {
 			const kind = kinds.get(ocp);
-			if (!kind) return "absent";
+			if (!kind) return shipped ? "absent" : "blank";
 			if (
 				kind === "unresolved" &&
 				slotItem(items, "no_head_bundle", operator.operator, ocp)
@@ -485,21 +508,27 @@ export function verdictLine(v: Verdict): StatusLine {
 }
 
 /**
- * How far the render sync has read FBC images, null with nothing pending or
- * failed: in progress while reads are pending, a warning for failed reads
- * only once none is.
+ * How far the render sync has read FBC images and the backfill ART build
+ * history, null with nothing pending or failed: in progress while either is,
+ * a warning for failed reads only once neither is.
  */
 export function readingLine(r: ReadProgress): StatusLine | null {
-	if (r.pending === 0 && r.failed === 0) return null;
 	const total = r.read + r.failed + r.pending;
-	if (r.pending === 0)
-		return {
-			status: "warning",
-			text: `${r.failed} of ${total} FBCs can't be read`,
-		};
+	const reading = [
+		r.pending > 0 && `FBC contents: ${r.read} of ${total}`,
+		r.history_days > 0 &&
+			`ART build history: ${r.history_days} day${r.history_days === 1 ? "" : "s"} left`,
+	].filter(Boolean);
+	if (reading.length === 0)
+		return r.failed
+			? {
+					status: "warning",
+					text: `${r.failed} of ${total} FBCs can't be read`,
+				}
+			: null;
 	return {
 		status: "running",
-		text: `Reading FBC contents: ${r.read} of ${total}${r.failed ? ` · ${r.failed} can't be read` : ""}`,
+		text: `Reading ${reading.join(" · ")}${r.failed ? ` · ${r.failed} can't be read` : ""}`,
 	};
 }
 

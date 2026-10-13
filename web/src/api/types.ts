@@ -63,6 +63,8 @@ export interface ReadProgress {
 	read: number;
 	failed: number;
 	pending: number;
+	/** Days of ART build history the backfill has yet to read. */
+	history_days: number;
 }
 
 /**

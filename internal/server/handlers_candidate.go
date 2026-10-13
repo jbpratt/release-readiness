@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/fbc"
@@ -54,14 +55,30 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 	if err != nil {
 		return nil, err
 	}
+	// A shipped version's record is its candidate alone.
+	shown := []*model.FBCCandidate{resp.FBCCandidate}
 	if c.shipped {
 		resp.Reason = ""
+	} else {
+		shown = append(shown, resp.FBCStream)
 	}
 	r := &resp.Reading
-	if r.Read, r.Failed, r.Pending, err = s.db.FBCReadProgress(ctx, fbcDigests(resp.FBCCandidate, resp.FBCStream)); err != nil {
+	if r.Read, r.Failed, r.Pending, err = s.db.FBCReadProgress(ctx, fbcDigests(shown...)); err != nil {
 		return nil, err
 	}
-	setVerdict(resp, c.assembly)
+	_, _, pending, err := s.db.FBCReadProgress(ctx, fbcDigests(resp.FBCCandidate))
+	if err != nil {
+		return nil, err
+	}
+	if !c.shipped && c.assembly != "" && s.artBaseURL != "" {
+		group := "quay-" + c.assembly[:strings.LastIndex(c.assembly, ".")]
+		scanned, err := s.db.ScannedArtHistoryDays(ctx, group, artbuild.TypeFBC)
+		if err != nil {
+			return nil, err
+		}
+		r.HistoryDays = artbuild.UnscannedDays(time.Now(), scanned)
+	}
+	setVerdict(resp, c.assembly, pending)
 	return resp, nil
 }
 
@@ -274,10 +291,23 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 		// staged is one row per Snapshot and catalog, so a slot restaged in
 		// several Snapshots counts each, and a superseded failure none.
 		times := map[[2]string]int{}
+		// A digest is on stage once any Release of a Snapshot holding it
+		// succeeded, else failed once any failed. Its member shows the newest
+		// such Snapshot and Release, so a failed restage of a digest already
+		// on stage reads as on stage.
+		ok, failed := map[string]model.FBCMember{}, map[string]model.FBCMember{}
 		for _, m := range staged {
-			if succeeded(m.Release) {
+			switch {
+			case succeeded(m.Release):
 				operator, _, ocp, _ := artbuild.ParseFBC(m.NVR)
 				times[[2]string{operator, ocp}]++
+				if _, seen := ok[m.Digest]; !seen {
+					ok[m.Digest] = m
+				}
+			case m.Release != nil && m.Release.ReleasedReason == "Failed":
+				if _, seen := failed[m.Digest]; !seen {
+					failed[m.Digest] = m
+				}
 			}
 		}
 		for i := range cand.Operators {
@@ -285,6 +315,11 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 			for _, ms := range [][]model.FBCMember{o.Members, o.Conflicts} {
 				for j := range ms {
 					ms[j].Staged = times[[2]string{o.Operator, ms[j].OCP}]
+					if r, seen := ok[ms[j].Digest]; seen {
+						ms[j].Snapshot, ms[j].Release = r.Snapshot, r.Release
+					} else if r, seen := failed[ms[j].Digest]; seen {
+						ms[j].Snapshot, ms[j].Release, ms[j].StageFailed = r.Snapshot, r.Release, r.Release
+					}
 				}
 			}
 		}

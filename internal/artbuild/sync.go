@@ -158,6 +158,19 @@ func (h *HistorySync) SyncOnce(ctx context.Context) {
 	}
 }
 
+// UnscannedDays counts the days before today that the history sync reads and
+// scanned, as YYYY-MM-DD, lacks: the backfill still to do. Today is read on
+// every pass.
+func UnscannedDays(today time.Time, scanned []string) int {
+	n := 0
+	for i := 1; i < historyDays; i++ {
+		if !slices.Contains(scanned, today.UTC().AddDate(0, 0, -i).Format(time.DateOnly)) {
+			n++
+		}
+	}
+	return n
+}
+
 // scanDay stores the successful FBC builds group started on day.
 func (h *HistorySync) scanDay(ctx context.Context, group, day string) error {
 	q := url.Values{"group": {group}, "buildtype": {TypeFBC}, "name": {"fbc$"}, "dateRange": {day + " to " + day}}

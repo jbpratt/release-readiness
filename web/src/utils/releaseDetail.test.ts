@@ -371,8 +371,8 @@ test("missing operator (3.17.6): CSO and QBO not in stage show the stream's FBCs
 		summary.rows.map((r) => [r.operator, r.cells]),
 		[
 			[qo, ["staged", "staged", "staged"]],
-			[streamCSO, ["built", "absent", "built"]],
-			[streamQBO, ["built", "absent", "absent"]],
+			[streamCSO, ["built", "blank", "built"]],
+			[streamQBO, ["built", "blank", "blank"]],
 		],
 	);
 });
@@ -389,7 +389,7 @@ test("restaged slots (3.18.1): a failed latest Release fails the Stage step", ()
 	const c = fbcCandidate({ operators: [staged] });
 	assert.deepEqual(fbcStageStep(c), {
 		variant: "danger",
-		text: "1 of 2 FBCs released · 1 failed",
+		text: "0 of 1 operators staged · quay-operator release failed",
 	});
 	assert.deepEqual(
 		fbcStageStep(
@@ -402,7 +402,7 @@ test("restaged slots (3.18.1): a failed latest Release fails the Stage step", ()
 				],
 			}),
 		),
-		{ variant: "info", text: "1 of 2 FBCs released" },
+		{ variant: "info", text: "0 of 1 operators staged" },
 	);
 	assert.deepEqual(
 		fbcStageStep(
@@ -414,7 +414,7 @@ test("restaged slots (3.18.1): a failed latest Release fails the Stage step", ()
 				],
 			}),
 		),
-		{ variant: "success", text: "1 of 1 FBCs released" },
+		{ variant: "success", text: "1 of 1 operators staged" },
 	);
 	const stream = fbcCandidate({
 		source: "stream",
@@ -522,7 +522,7 @@ test("restaged FBCs (3.18.1): the newest Release of each counts", () => {
 	});
 	assert.deepEqual(fbcStageStep(c), {
 		variant: "success",
-		text: "31 of 31 FBCs released",
+		text: "3 of 3 operators staged",
 	});
 });
 
@@ -556,15 +556,28 @@ test("checking: reading cells, nothing warns or fails", () => {
 		status: "running",
 		text: "Checking…",
 	});
-	assert.deepEqual(readingLine({ read: 40, failed: 2, pending: 47 }), {
-		status: "running",
-		text: "Reading FBC contents: 40 of 89 · 2 can't be read",
-	});
-	assert.deepEqual(readingLine({ read: 87, failed: 2, pending: 0 }), {
-		status: "warning",
-		text: "2 of 89 FBCs can't be read",
-	});
-	assert.equal(readingLine({ read: 89, failed: 0, pending: 0 }), null);
+	assert.deepEqual(
+		readingLine({ read: 40, failed: 2, pending: 47, history_days: 0 }),
+		{
+			status: "running",
+			text: "Reading FBC contents: 40 of 89 · 2 can't be read",
+		},
+	);
+	assert.deepEqual(
+		readingLine({ read: 87, failed: 2, pending: 0, history_days: 0 }),
+		{ status: "warning", text: "2 of 89 FBCs can't be read" },
+	);
+	assert.equal(
+		readingLine({ read: 89, failed: 0, pending: 0, history_days: 0 }),
+		null,
+	);
+	assert.deepEqual(
+		readingLine({ read: 87, failed: 2, pending: 0, history_days: 12 }),
+		{
+			status: "running",
+			text: "Reading ART build history: 12 days left · 2 can't be read",
+		},
+	);
 });
 
 test("shipped (3.18.1): record mode, OCP versions not shipped are not part of it", () => {
@@ -595,10 +608,18 @@ test("shipped (3.18.1): record mode, OCP versions not shipped are not part of it
 	]);
 	const c = fbcCandidate({ operators: [qo, cso] });
 	assert.deepEqual(
-		operatorSummary(c, null, false).rows.map((r) => r.cells),
+		operatorSummary(c, null, true).rows.map((r) => r.cells),
 		[
 			["staged", "staged"],
 			["absent", "staged"],
+		],
+	);
+	// Unshipped, RR may not have seen every FBC yet.
+	assert.deepEqual(
+		operatorSummary(c, null, false).rows.map((r) => r.cells),
+		[
+			["staged", "staged"],
+			["blank", "staged"],
 		],
 	);
 	assert.equal(shipsVersion(qo), "v3.18.1");
@@ -620,6 +641,35 @@ test("shipped (3.18.1): record mode, OCP versions not shipped are not part of it
 		status: "failed",
 		text: "Not ready: 1 blocker",
 	});
+});
+
+test("history and stage failures (5.0.0): no count from a partial history, failed operators named", () => {
+	const head = bundle("202610121052");
+	const ok = release({ name: "ok", released_status: "True" });
+	const failed = release({ name: "f", released_reason: "Failed" });
+	const member = (r: typeof ok) =>
+		fbcMember("5.0", head, { snapshot: "s", release: r });
+	const c = fbcCandidate({
+		operators: [
+			operatorFBC("quay-operator", head, [member(ok)]),
+			operatorFBC("container-security-operator", head, [member(failed)]),
+			operatorFBC("quay-bridge-operator", head, [member(ok)]),
+		],
+	});
+	assert.deepEqual(fbcStageStep(c), {
+		variant: "danger",
+		text: "2 of 3 operators staged · CSO release failed",
+	});
+	const empty = fbcCandidate({
+		source: "stream",
+		operators: [operatorFBC("quay-operator", "", [])],
+	});
+	assert.deepEqual(fbcBuildStep(empty, 30), {
+		variant: "info",
+		text: "Reading build history",
+		fbcs: "0 of 0 FBCs",
+	});
+	assert.equal(fbcBuildStep(empty).text, "0 of 1 operators built");
 });
 
 test("compareVersions: numeric by dot-separated part", () => {
