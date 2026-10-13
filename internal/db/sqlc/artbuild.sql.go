@@ -130,7 +130,7 @@ SELECT f.record_id, f.nvr, f.pullspec,
        CAST(COALESCE(r.head_csv, '') AS TEXT) AS head_csv,
        CAST(COALESCE(b.nvr, '') AS TEXT) AS head_bundle_nvr
 FROM art_history_builds f
-LEFT JOIN fbc_render_cache r ON r.state = 'rendered' AND r.digest = f.digest
+LEFT JOIN fbc_renders r ON r.state = 'rendered' AND r.digest = f.digest
 LEFT JOIN art_history_builds b ON b.build_type = 'bundle'
   AND b.digest = substr(r.head_bundle_pullspec, instr(r.head_bundle_pullspec, '@') + 1)
 WHERE f.group_name = ? AND f.build_type = 'fbc'
