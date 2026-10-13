@@ -1237,7 +1237,7 @@ func TestGetCandidateFBCImages(t *testing.T) {
 	ctx := t.Context()
 	art := func(label, commit string) fbc.RelatedImage {
 		if err := srv.db.UpsertArtHistoryBuild(ctx, artbuild.HistoryBuild{
-			RecordID: "rec-" + label, Group: "quay-3.18", Type: "image", NVR: label + "-3.18.1-202610060936",
+			RecordID: "rec-" + label, Group: "quay-3.18", Type: "image", NVR: label + "-nvr",
 			Digest: testDigest(label), Pullspec: testImage(label), Commitish: commit,
 		}); err != nil {
 			t.Fatal(err)
@@ -1292,14 +1292,14 @@ func TestGetCandidateFBCImages(t *testing.T) {
 	o := cand.Operators[0]
 	var images []string
 	for _, img := range o.Images {
-		images = append(images, fmt.Sprintf("%s %q %q page=%t history=%t stage=%t prod=%t", img.Name, img.NVR, img.Commit, img.BuildURL != "", img.HistoryURL != "", img.Stage, img.Prod))
+		images = append(images, fmt.Sprintf("%s %q %q page=%t stage=%t prod=%t", img.Name, img.NVR, img.Commit, img.BuildURL != "", img.Stage, img.Prod))
 	}
 	checkRows(t, "images", images, []string{
-		`builder "a/builder-3.18.1-202610060936" "b1" page=false history=true stage=false prod=false`,
-		`clair "a/clair-3.18.1-202610060936" "k1" page=false history=true stage=false prod=false`,
-		`operator "a/operator-3.18.1-202610060936" "c1" page=false history=true stage=false prod=false`,
-		`quay "a/quay-3.18.1-202610060936" "q2" page=true history=true stage=true prod=false`,
-		`redis "" "" page=false history=false stage=false prod=true`,
+		`builder "a/builder-nvr" "b1" page=false stage=false prod=false`,
+		`clair "a/clair-nvr" "k1" page=false stage=false prod=false`,
+		`operator "a/operator-nvr" "c1" page=false stage=false prod=false`,
+		`quay "a/quay-nvr" "q2" page=true stage=true prod=false`,
+		`redis "" "" page=false stage=false prod=true`,
 	})
 	compare := func(c model.ImageCompare) []string {
 		rows := []string{c.Kind + " " + c.Label}
@@ -1319,19 +1319,19 @@ func TestGetCandidateFBCImages(t *testing.T) {
 	}
 	checkRows(t, "previous", compare(o.Compare[0]), []string{
 		"previous 3.18.0",
-		"builder - a/builder-3.18.1-202610060936@b1 added",
-		"clair @ a/clair-3.18.1-202610060936@k1 new build",
-		"operator prev/operator-3.18.1-202610060936@c1 a/operator-3.18.1-202610060936@c1 rebuild",
-		"quay prev/quay-3.18.1-202610060936@q1 a/quay-3.18.1-202610060936@q2 new source",
+		"builder - a/builder-nvr@b1 added",
+		"clair @ a/clair-nvr@k1 new build",
+		"operator prev/operator-nvr@c1 a/operator-nvr@c1 rebuild",
+		"quay prev/quay-nvr@q1 a/quay-nvr@q2 new source",
 		"redis @ @ same",
 		"postgresql-10 @ - removed",
 	})
 	checkRows(t, "newer", compare(o.Compare[1]), []string{
 		"newer " + bundleB,
-		"builder a/builder-3.18.1-202610060936@b1 a/builder-3.18.1-202610060936@b1 same",
-		"clair a/clair-3.18.1-202610060936@k1 a/clair-3.18.1-202610060936@k1 same",
-		"operator a/operator-3.18.1-202610060936@c1 b/operator-3.18.1-202610060936@c1 rebuild",
-		"quay a/quay-3.18.1-202610060936@q2 b/quay-3.18.1-202610060936@q3 new source",
+		"builder a/builder-nvr@b1 a/builder-nvr@b1 same",
+		"clair a/clair-nvr@k1 a/clair-nvr@k1 same",
+		"operator a/operator-nvr@c1 b/operator-nvr@c1 rebuild",
+		"quay a/quay-nvr@q2 b/quay-nvr@q3 new source",
 		"redis @ @ same",
 	})
 	// The stream heads the newer bundle: it has only the previous compare.

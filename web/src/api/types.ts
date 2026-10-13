@@ -129,8 +129,6 @@ export interface OperatorImage {
 	nvr: string;
 	commit: string;
 	build_url: string;
-	/** The image's ART build listing, "" for an image ART did not build. */
-	history_url: string;
 	stage: boolean;
 	prod: boolean;
 	/** null until the image scan sync has read it. */

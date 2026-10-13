@@ -8,9 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"regexp"
 	"strings"
-	"time"
 )
 
 // Client reads the ART build history service.
@@ -107,31 +105,6 @@ func (c *Client) get(ctx context.Context, path string, v any) error {
 // PageURL is a record's human build page on the service.
 func PageURL(baseURL, nvr, recordID string) string {
 	return strings.TrimRight(baseURL, "/") + "/build?" + recordQuery(nvr, recordID)
-}
-
-// nvrStream is an image or bundle NVR's name and X.Y, as quay-clair-container
-// and 3.17 in quay-clair-container-3.17.6-202610081142.p2... and
-// quay-operator-metadata-container-3.17.6.202610081142.p2...-1.
-var nvrStream = regexp.MustCompile(`^(.+)-(\d+\.\d+)\.[^-]+-[^-]+$`)
-
-// HistoryURL is the service's listing of the builds of nvr's image in its
-// quay-X.Y group, from 30 days before nvr was built until now, or "" when nvr
-// has no X.Y or build date. The listing needs a date range.
-func HistoryURL(baseURL, nvr string, now time.Time) string {
-	m, d := nvrStream.FindStringSubmatch(nvr), nvrDate.FindStringSubmatch(nvr)
-	if m == nil || d == nil {
-		return ""
-	}
-	built, err := time.Parse("20060102", d[1])
-	if err != nil {
-		return ""
-	}
-	q := url.Values{
-		"group":     {"quay-" + m[2]},
-		"nvr":       {m[1] + "-*"},
-		"dateRange": {built.AddDate(0, 0, -30).Format(time.DateOnly) + " to " + now.Format(time.DateOnly)},
-	}
-	return strings.TrimRight(baseURL, "/") + "/?" + q.Encode()
 }
 
 func recordQuery(nvr, recordID string) string {
