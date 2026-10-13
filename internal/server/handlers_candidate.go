@@ -460,9 +460,9 @@ func ciHistory(slots map[string][]string, cand *model.FBCCandidate) []model.CISl
 
 // operatorImages sets o's Images, the head bundle's relatedImages of its
 // newest-OCP member FBC with a render, each with its ART build, its build page
-// once ART resolves its digest, and whether a stage Release of releases or a
-// prod Release, by prod digests, shipped it; and its Compare with that FBC's
-// previous entry.
+// (its resolved build's, else its ART history record's), and whether a stage
+// Release of releases or a prod Release, by prod digests, shipped it; and its
+// Compare with that FBC's previous entry.
 func (s *Server) operatorImages(ctx context.Context, o *model.OperatorFBC, releases []model.StageRelease, prod map[string]bool) error {
 	o.Images, o.Compare = []model.OperatorImage{}, []model.ImageCompare{}
 	var head, previous []fbc.RelatedImage
@@ -501,6 +501,8 @@ func (s *Server) operatorImages(ctx context.Context, o *model.OperatorFBC, relea
 			}
 			if r, ok := resolved[d]; ok {
 				oi.BuildURL = artbuild.PageURL(s.artBaseURL, r.NVR, r.RecordID)
+			} else if b.RecordID != "" {
+				oi.BuildURL = artbuild.PageURL(s.artBaseURL, b.NVR, b.RecordID)
 			}
 			if sc, ok := scans[d]; ok {
 				oi.Scan = &model.ImageScan{State: sc.State, Counts: sc.Counts, URL: sc.DetailURL}

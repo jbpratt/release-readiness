@@ -183,7 +183,7 @@ func (q *Queries) ListArtHistoryFBCs(ctx context.Context, groupName string) ([]L
 }
 
 const listArtHistoryImages = `-- name: ListArtHistoryImages :many
-SELECT digest, nvr, commitish
+SELECT digest, nvr, commitish, record_id
 FROM art_history_records
 WHERE build_type IN ('bundle', 'image') AND digest IN (/*SLICE:digests*/?)
 ORDER BY digest, nvr
@@ -193,6 +193,7 @@ type ListArtHistoryImagesRow struct {
 	Digest    string
 	Nvr       string
 	Commitish string
+	RecordID  string
 }
 
 // The bundle and image builds among digests, by digest, then NVR.
@@ -215,7 +216,12 @@ func (q *Queries) ListArtHistoryImages(ctx context.Context, digests []string) ([
 	var items []ListArtHistoryImagesRow
 	for rows.Next() {
 		var i ListArtHistoryImagesRow
-		if err := rows.Scan(&i.Digest, &i.Nvr, &i.Commitish); err != nil {
+		if err := rows.Scan(
+			&i.Digest,
+			&i.Nvr,
+			&i.Commitish,
+			&i.RecordID,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

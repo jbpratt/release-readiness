@@ -123,9 +123,9 @@ export interface StageSummary {
 }
 
 /**
- * A bundle's relatedImage; nvr and commit are "" for an image ART did not
- * build, build_url until ART resolves its digest. stage and prod are set when
- * a succeeded Release there holds its digest.
+ * A bundle's relatedImage; nvr, commit and build_url (its ART build page) are
+ * "" for an image ART did not build. stage and prod are set when a succeeded
+ * Release there holds its digest.
  */
 export interface OperatorImage {
 	name: string;
@@ -168,7 +168,7 @@ export interface ImageCompareRow {
 		| "removed";
 }
 
-/** A compared image; build_url is "" until ART resolves its digest. */
+/** A compared image; build_url is its ART build page, "" for an image ART did not build. */
 export interface ImageRef {
 	repository: string;
 	nvr: string;

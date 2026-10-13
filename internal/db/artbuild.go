@@ -105,7 +105,7 @@ func (d *DB) UpsertArtHistoryBuild(ctx context.Context, b artbuild.HistoryBuild)
 }
 
 // ArtHistoryImages returns the stored ART bundle and image builds among
-// digests, by digest; NVR, Digest and Commitish are set.
+// digests, by digest; RecordID, NVR, Digest and Commitish are set.
 func (d *DB) ArtHistoryImages(ctx context.Context, digests []string) (map[string]artbuild.HistoryBuild, error) {
 	if len(digests) == 0 {
 		return nil, nil
@@ -117,7 +117,7 @@ func (d *DB) ArtHistoryImages(ctx context.Context, digests []string) (map[string
 	builds := make(map[string]artbuild.HistoryBuild, len(rows))
 	for _, r := range rows {
 		if _, ok := builds[r.Digest]; !ok {
-			builds[r.Digest] = artbuild.HistoryBuild{NVR: r.Nvr, Digest: r.Digest, Commitish: r.Commitish}
+			builds[r.Digest] = artbuild.HistoryBuild{RecordID: r.RecordID, NVR: r.Nvr, Digest: r.Digest, Commitish: r.Commitish}
 		}
 	}
 	return builds, nil

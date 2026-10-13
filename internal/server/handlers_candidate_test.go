@@ -1285,7 +1285,8 @@ func TestGetCandidateFBCImages(t *testing.T) {
 	}
 	seedKonfluxRelease(t, srv, "prod-r", "quay-prod-3-18-0", "quay-advisory-prod-3-18", "Succeeded", "2026-09-07T00:00:00Z", "2026-09-07T00:10:00Z")
 
-	// Only quay's digest has a resolved ART build, so only it has a build page.
+	// Only quay's digest has a resolved ART build; the other ART images link
+	// their history record.
 	resolveNVR(t, srv, "a/quay", "a/quay-nvr")
 
 	cand, stream := getFBC(t, srv, "quay-v3.18.1", "quay-3-18")
@@ -1295,12 +1296,15 @@ func TestGetCandidateFBCImages(t *testing.T) {
 		images = append(images, fmt.Sprintf("%s %q %q page=%t stage=%t prod=%t", img.Name, img.NVR, img.Commit, img.BuildURL != "", img.Stage, img.Prod))
 	}
 	checkRows(t, "images", images, []string{
-		`builder "a/builder-nvr" "b1" page=false stage=false prod=false`,
-		`clair "a/clair-nvr" "k1" page=false stage=false prod=false`,
-		`operator "a/operator-nvr" "c1" page=false stage=false prod=false`,
+		`builder "a/builder-nvr" "b1" page=true stage=false prod=false`,
+		`clair "a/clair-nvr" "k1" page=true stage=false prod=false`,
+		`operator "a/operator-nvr" "c1" page=true stage=false prod=false`,
 		`quay "a/quay-nvr" "q2" page=true stage=true prod=false`,
 		`redis "" "" page=false stage=false prod=true`,
 	})
+	if got, want := o.Images[1].BuildURL, artbuild.PageURL(srv.artBaseURL, "a/clair-nvr", "rec-a/clair"); got != want {
+		t.Errorf("clair build_url %q, want %q", got, want)
+	}
 	compare := func(c model.ImageCompare) []string {
 		rows := []string{c.Kind + " " + c.Label}
 		ref := func(r *model.ImageRef) string {
@@ -1322,19 +1326,19 @@ func TestGetCandidateFBCImages(t *testing.T) {
 	}
 	checkRows(t, "previous", compare(o.Compare[0]), []string{
 		"previous 3.18.0",
-		"builder - a/builder-nvr@b1 added",
-		"clair @ a/clair-nvr@k1 new build",
-		"operator prev/operator-nvr@c1 a/operator-nvr@c1 rebuild",
-		"quay prev/quay-nvr@q1 a/quay-nvr@q2+page new source",
+		"builder - a/builder-nvr@b1+page added",
+		"clair @ a/clair-nvr@k1+page new build",
+		"operator prev/operator-nvr@c1+page a/operator-nvr@c1+page rebuild",
+		"quay prev/quay-nvr@q1+page a/quay-nvr@q2+page new source",
 		"redis @ @ same",
 		"postgresql-10 @ - removed",
 	})
 	checkRows(t, "newer", compare(o.Compare[1]), []string{
 		"newer " + bundleB,
-		"builder a/builder-nvr@b1 a/builder-nvr@b1 same",
-		"clair a/clair-nvr@k1 a/clair-nvr@k1 same",
-		"operator a/operator-nvr@c1 b/operator-nvr@c1 rebuild",
-		"quay a/quay-nvr@q2+page b/quay-nvr@q3 new source",
+		"builder a/builder-nvr@b1+page a/builder-nvr@b1+page same",
+		"clair a/clair-nvr@k1+page a/clair-nvr@k1+page same",
+		"operator a/operator-nvr@c1+page b/operator-nvr@c1+page rebuild",
+		"quay a/quay-nvr@q2+page b/quay-nvr@q3+page new source",
 		"redis @ @ same",
 	})
 	// The stream heads the newer bundle: it has only the previous compare.

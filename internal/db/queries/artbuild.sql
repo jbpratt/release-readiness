@@ -53,7 +53,7 @@ ON CONFLICT(record_id) DO UPDATE SET
 
 -- name: ListArtHistoryImages :many
 -- The bundle and image builds among digests, by digest, then NVR.
-SELECT digest, nvr, commitish
+SELECT digest, nvr, commitish, record_id
 FROM art_history_records
 WHERE build_type IN ('bundle', 'image') AND digest IN (sqlc.slice('digests'))
 ORDER BY digest, nvr;

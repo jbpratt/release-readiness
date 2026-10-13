@@ -196,7 +196,7 @@ func TestArtHistory(t *testing.T) {
 		t.Errorf("has the bundle NVR as an image = %v, %v; want false", ok, err)
 	}
 	images, err := d.ArtHistoryImages(ctx, []string{b.Digest, "sha256:none"})
-	if want := (artbuild.HistoryBuild{NVR: b.NVR, Digest: b.Digest, Commitish: "3c4984a"}); err != nil || len(images) != 1 || !reflect.DeepEqual(images[b.Digest], want) {
+	if want := (artbuild.HistoryBuild{RecordID: "r1", NVR: b.NVR, Digest: b.Digest, Commitish: "3c4984a"}); err != nil || len(images) != 1 || !reflect.DeepEqual(images[b.Digest], want) {
 		t.Errorf("images %+v, %v; want only %+v", images, err, want)
 	}
 
