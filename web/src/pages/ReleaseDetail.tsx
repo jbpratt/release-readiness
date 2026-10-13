@@ -8,6 +8,10 @@ import {
 	CardTitle,
 	ClipboardCopy,
 	clipboardCopyFunc,
+	DescriptionList,
+	DescriptionListDescription,
+	DescriptionListGroup,
+	DescriptionListTerm,
 	EmptyState,
 	EmptyStateBody,
 	ExpandableSection,
@@ -15,6 +19,7 @@ import {
 	FlexItem,
 	FormSelect,
 	FormSelectOption,
+	Gallery,
 	Icon,
 	Label,
 	type LabelProps,
@@ -943,90 +948,98 @@ function OperatorDetail({
 				aria-label={`${o.operator} FBCs and images`}
 			>
 				<Tab eventKey="fbcs" title={<TabTitleText>FBCs {fbcs}</TabTitleText>}>
-					<Table
-						variant="compact"
-						className="rr-fbcs"
+					<Gallery
+						hasGutter
+						minWidths={{ default: "18rem" }}
 						aria-label={`${o.operator} FBCs by OCP version`}
 					>
-						<Thead>
-							<Tr>
-								<Th modifier="fitContent">OCP</Th>
-								<Th modifier="fitContent">FBC</Th>
-								<Th modifier="fitContent">Digest</Th>
-								<Th modifier="fitContent" screenReaderText="Status" />
-								<Th screenReaderText="CI" />
-							</Tr>
-						</Thead>
-						<Tbody>
-							{rows.map((r) => (
-								<Tr key={`${r.ocp} ${r.fbc?.digest ?? ""}`}>
-									<Td modifier="nowrap">{r.ocp}</Td>
-									<Td modifier="fitContent" className="rr-nvr">
+						{rows.map((r) => (
+							<Card isCompact key={`${r.ocp} ${r.fbc?.digest ?? ""}`}>
+								<CardTitle>OCP {r.ocp}</CardTitle>
+								<CardBody>
+									<DescriptionList isCompact>
 										{r.fbc && (
-											<ExtLink href={r.fbc.build_url || null} title={r.fbc.nvr}>
-												{r.fbc.nvr
-													? fbcLabel(r.fbc.nvr)
-													: shortDigest(r.fbc.pullspec)}
-											</ExtLink>
+											<>
+												<DescriptionListGroup>
+													<DescriptionListTerm>FBC build</DescriptionListTerm>
+													<DescriptionListDescription>
+														<ExtLink
+															href={r.fbc.build_url || null}
+															title={r.fbc.nvr}
+														>
+															{r.fbc.nvr
+																? fbcLabel(r.fbc.nvr)
+																: shortDigest(r.fbc.pullspec)}
+														</ExtLink>
+													</DescriptionListDescription>
+												</DescriptionListGroup>
+												<DescriptionListGroup>
+													<DescriptionListTerm>Pullspec</DescriptionListTerm>
+													<DescriptionListDescription>
+														<ClipboardCopy
+															variant="inline-compact"
+															isCode
+															onCopy={(e) =>
+																clipboardCopyFunc(e, r.fbc?.pullspec ?? "")
+															}
+														>
+															{shortDigest(r.fbc.pullspec)}
+														</ClipboardCopy>
+													</DescriptionListDescription>
+												</DescriptionListGroup>
+											</>
 										)}
-									</Td>
-									<Td modifier="fitContent">
-										{r.fbc && (
-											<ClipboardCopy
-												variant="inline-compact"
-												isCode
-												onCopy={(e) =>
-													clipboardCopyFunc(e, r.fbc?.pullspec ?? "")
-												}
-											>
-												{shortDigest(r.fbc.pullspec)}
-											</ClipboardCopy>
+										<DescriptionListGroup>
+											<DescriptionListTerm>Stage</DescriptionListTerm>
+											<DescriptionListDescription>
+												<Flex gap={{ default: "gapXs" }}>
+													{rowChips(r, {
+														shipped,
+														unreadable: slotItem(
+															items,
+															"read_failed",
+															o.operator,
+															r.ocp,
+														)?.text,
+													}).map((c) => (
+														<Label key={c.text} isCompact color={c.color}>
+															<span title={c.title}>{c.text}</span>
+														</Label>
+													))}
+													<OtherBundle row={r} />
+												</Flex>
+											</DescriptionListDescription>
+										</DescriptionListGroup>
+										{((r.fbc?.ci?.exact.length ?? 0) > 0 ||
+											(r.fbc?.ci?.equivalent.length ?? 0) > 0) && (
+											<DescriptionListGroup>
+												<DescriptionListTerm>CI</DescriptionListTerm>
+												<DescriptionListDescription>
+													<Flex gap={{ default: "gapXs" }}>
+														{(r.fbc?.ci?.exact.length ?? 0) > 0 && (
+															<JobPills
+																jobs={r.fbc?.ci?.exact ?? []}
+																label={label}
+																version={version}
+															/>
+														)}
+														{(r.fbc?.ci?.equivalent.length ?? 0) > 0 && (
+															<JobPills
+																jobs={r.fbc?.ci?.equivalent ?? []}
+																label={label}
+																version={version}
+																equivalent
+															/>
+														)}
+													</Flex>
+												</DescriptionListDescription>
+											</DescriptionListGroup>
 										)}
-									</Td>
-									<Td modifier="fitContent">
-										<Flex
-											gap={{ default: "gapXs" }}
-											flexWrap={{ default: "nowrap" }}
-										>
-											{rowChips(r, {
-												shipped,
-												unreadable: slotItem(
-													items,
-													"read_failed",
-													o.operator,
-													r.ocp,
-												)?.text,
-											}).map((c) => (
-												<Label key={c.text} isCompact color={c.color}>
-													<span title={c.title}>{c.text}</span>
-												</Label>
-											))}
-											<OtherBundle row={r} />
-										</Flex>
-									</Td>
-									<Td>
-										<Flex gap={{ default: "gapXs" }}>
-											{(r.fbc?.ci?.exact.length ?? 0) > 0 && (
-												<JobPills
-													jobs={r.fbc?.ci?.exact ?? []}
-													label={label}
-													version={version}
-												/>
-											)}
-											{(r.fbc?.ci?.equivalent.length ?? 0) > 0 && (
-												<JobPills
-													jobs={r.fbc?.ci?.equivalent ?? []}
-													label={label}
-													version={version}
-													equivalent
-												/>
-											)}
-										</Flex>
-									</Td>
-								</Tr>
-							))}
-						</Tbody>
-					</Table>
+									</DescriptionList>
+								</CardBody>
+							</Card>
+						))}
+					</Gallery>
 				</Tab>
 				<Tab
 					eventKey="images"
