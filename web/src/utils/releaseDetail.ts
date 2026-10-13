@@ -24,20 +24,17 @@ export const jobShortName = (job: string) =>
 	job.match(/e2e-install-(.+)$/)?.[1].replace(NIGHTLY, "") ?? job;
 
 /**
- * Each job's short name, or for jobs that share one, its name after
- * "redhat-X.Y-" less "e2e-install-" and "-nightly": aws-ocp414-aws-s3.
+ * Each job's name after "redhat-X.Y-" less "e2e-install-" and "-nightly":
+ * aws-ocp422-aws-s3. Other jobs get their short name.
  */
-export function jobLabels(jobs: string[]): string[] {
-	const short = jobs.map(jobShortName);
-	return jobs.map((job, i) =>
-		short.indexOf(short[i]) === short.lastIndexOf(short[i])
-			? short[i]
-			: (job
-					.match(/redhat-\d+\.\d+-(.+)$/)?.[1]
-					.replace("e2e-install-", "")
-					.replace(NIGHTLY, "") ?? job),
+export const jobLabels = (jobs: string[]) =>
+	jobs.map(
+		(job) =>
+			job
+				.match(/redhat-\d+\.\d+-(.+)$/)?.[1]
+				.replace("e2e-install-", "")
+				.replace(NIGHTLY, "") ?? jobShortName(job),
 	);
-}
 
 const failedState = (s: string) => s === "failure" || s === "error";
 
