@@ -40,8 +40,8 @@ FROM art_builds
 WHERE state = 'resolved' AND digest IN (sqlc.slice('digests'));
 
 -- name: UpsertArtHistoryBuild :exec
-INSERT INTO art_history_records (record_id, group_name, build_type, nvr, digest, pullspec, commitish, start_time, end_time, art_job_url, bundle_nvrs_json, operator_nvr, operand_nvrs_json, bundle_csv_name)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO art_history_records (record_id, group_name, build_type, nvr, digest, pullspec, commitish, start_time)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(record_id) DO UPDATE SET
     group_name = excluded.group_name,
     build_type = excluded.build_type,
@@ -49,13 +49,7 @@ ON CONFLICT(record_id) DO UPDATE SET
     digest = excluded.digest,
     pullspec = excluded.pullspec,
     commitish = excluded.commitish,
-    start_time = excluded.start_time,
-    end_time = excluded.end_time,
-    art_job_url = excluded.art_job_url,
-    bundle_nvrs_json = excluded.bundle_nvrs_json,
-    operator_nvr = excluded.operator_nvr,
-    operand_nvrs_json = excluded.operand_nvrs_json,
-    bundle_csv_name = excluded.bundle_csv_name;
+    start_time = excluded.start_time;
 
 -- name: ListArtHistoryImages :many
 -- The bundle and image builds among digests, by digest, then NVR.
@@ -86,12 +80,11 @@ SELECT DISTINCT application FROM snapshots ORDER BY application;
 
 -- name: ListArtHistoryFBCs :many
 -- group's successful FBC builds, newest NVR first, each with the channel,
--- head CSV and version and previous entry's version its render found and the NVR of its
+-- head CSV and previous entry's version its render found and the NVR of its
 -- head bundle's ART build, '' for none.
 SELECT f.record_id, f.nvr, f.pullspec,
        CAST(COALESCE(r.channel, '') AS TEXT) AS channel,
        CAST(COALESCE(r.head_csv, '') AS TEXT) AS head_csv,
-       CAST(COALESCE(r.head_version, '') AS TEXT) AS head_version,
        CAST(COALESCE(r.previous_version, '') AS TEXT) AS previous_version,
        CAST(COALESCE(b.nvr, '') AS TEXT) AS head_bundle_nvr
 FROM art_history_records f

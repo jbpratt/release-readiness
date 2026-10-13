@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"time"
 
@@ -94,20 +93,14 @@ func (d *DB) HasArtHistoryDigest(ctx context.Context, buildType, digest string) 
 // UpsertArtHistoryBuild stores a successful ART build record.
 func (d *DB) UpsertArtHistoryBuild(ctx context.Context, b artbuild.HistoryBuild) error {
 	return d.queries().UpsertArtHistoryBuild(ctx, dbsqlc.UpsertArtHistoryBuildParams{
-		RecordID:        b.RecordID,
-		GroupName:       b.Group,
-		BuildType:       b.Type,
-		Nvr:             b.NVR,
-		Digest:          b.Digest,
-		Pullspec:        b.Pullspec,
-		Commitish:       b.Commitish,
-		StartTime:       b.StartTime,
-		EndTime:         b.EndTime,
-		ArtJobUrl:       b.JobURL,
-		BundleNvrsJson:  jsonList(b.BundleNVRs),
-		OperatorNvr:     b.OperatorNVR,
-		OperandNvrsJson: jsonList(b.OperandNVRs),
-		BundleCsvName:   b.BundleCSVName,
+		RecordID:  b.RecordID,
+		GroupName: b.Group,
+		BuildType: b.Type,
+		Nvr:       b.NVR,
+		Digest:    b.Digest,
+		Pullspec:  b.Pullspec,
+		Commitish: b.Commitish,
+		StartTime: b.StartTime,
 	})
 }
 
@@ -128,14 +121,4 @@ func (d *DB) ArtHistoryImages(ctx context.Context, digests []string) (map[string
 		}
 	}
 	return builds, nil
-}
-
-// jsonList is s as a JSON array, [] when empty.
-func jsonList(s []string) string {
-	if len(s) == 0 {
-		return "[]"
-	}
-	// A string slice cannot fail to marshal.
-	data, _ := json.Marshal(s)
-	return string(data)
 }

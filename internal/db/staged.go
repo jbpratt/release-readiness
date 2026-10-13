@@ -160,7 +160,7 @@ func (d *DB) StagedFBCMembers(ctx context.Context, assembly, application string)
 		_, digest, _ := strings.Cut(r.ImageUrl, "@")
 		members[i] = model.FBCMember{
 			Digest: digest, Pullspec: r.ImageUrl, NVR: r.Nvr, HeadBundleNVR: r.HeadBundleNvr, Snapshot: r.SnapshotName,
-			RecordID: r.RecordID, Channel: r.Channel, HeadCSV: r.HeadCsv, HeadVersion: r.HeadVersion, PreviousVersion: r.PreviousVersion,
+			RecordID: r.RecordID, Channel: r.Channel, HeadCSV: r.HeadCsv, PreviousVersion: r.PreviousVersion,
 			ReadError: r.ReadError,
 		}
 		// releases is newest first.
@@ -183,7 +183,7 @@ func (d *DB) ArtHistoryFBCs(ctx context.Context, group string) ([]model.FBCMembe
 		_, digest, _ := strings.Cut(r.Pullspec, "@")
 		members[i] = model.FBCMember{
 			Digest: digest, Pullspec: r.Pullspec, NVR: r.Nvr, HeadBundleNVR: r.HeadBundleNvr,
-			RecordID: r.RecordID, Channel: r.Channel, HeadCSV: r.HeadCsv, HeadVersion: r.HeadVersion, PreviousVersion: r.PreviousVersion,
+			RecordID: r.RecordID, Channel: r.Channel, HeadCSV: r.HeadCsv, PreviousVersion: r.PreviousVersion,
 		}
 	}
 	return members, nil

@@ -23,10 +23,10 @@ const (
 // Render is the render of an FBC image, by digest. A rendered one is final;
 // a failed one, with its Error, is retried after RetryAfter.
 type Render struct {
-	Digest, LabelNVR, Package string
-	Channel                   Channel
-	State, Error              string
-	RenderedAt, RetryAfter    time.Time
+	Digest, LabelNVR       string
+	Channel                Channel
+	State, Error           string
+	RenderedAt, RetryAfter time.Time
 }
 
 // Store is the subset of the database layer the render sync needs.
@@ -95,7 +95,7 @@ func (s *Sync) SyncOnce(ctx context.Context) {
 			return
 		}
 		now := s.now()
-		r := Render{Digest: ps[strings.Index(ps, "@")+1:], LabelNVR: img.LabelNVR, Package: img.Package, Channel: img.Channel, State: StateRendered, RenderedAt: now}
+		r := Render{Digest: ps[strings.Index(ps, "@")+1:], LabelNVR: img.LabelNVR, Channel: img.Channel, State: StateRendered, RenderedAt: now}
 		if err != nil {
 			r.State, r.Error, r.RetryAfter = StateFailed, err.Error(), now.Add(retryAfter)
 			s.logger.Warn("render", "pullspec", ps, "error", err)

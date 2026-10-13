@@ -106,9 +106,6 @@ var wantHead = Channel{
 	Name:               "stable-3.16",
 	HeadCSV:            "quay-operator.v3.99.0-dev",
 	HeadBundlePullspec: "registry.redhat.io/quay/quay-operator-bundle@sha256:1699",
-	Replaces:           "quay-operator.v3.16.6",
-	SkipRange:          ">=3.13.0 <3.99.0-dev",
-	HeadVersion:        "3.99.0-dev",
 	HeadRelatedImages:  []RelatedImage{{Name: "quay-operator", Image: "registry.redhat.io/quay/quay-rhel9-operator@sha256:o1699"}},
 	Previous: Bundle{
 		CSV:            "quay-operator.v3.16.6",
@@ -134,8 +131,8 @@ func TestParseChannel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.HeadVersion != "3.18.1" || !reflect.DeepEqual(got.Previous, Bundle{}) {
-		t.Errorf("stable-3.18: version %q, previous %+v", got.HeadVersion, got.Previous)
+	if got.HeadCSV != "quay-operator.v3.18.1" || !reflect.DeepEqual(got.Previous, Bundle{}) {
+		t.Errorf("stable-3.18: head %q, previous %+v", got.HeadCSV, got.Previous)
 	}
 }
 
@@ -321,7 +318,7 @@ func TestSyncCachesByDigest(t *testing.T) {
 
 	digest := f.pullspec[strings.Index(f.pullspec, "@")+1:]
 	r := store.renders[digest]
-	if r.State != StateRendered || !reflect.DeepEqual(r.Channel, wantHead) || r.Package != "quay-operator" || r.LabelNVR != "quay-operator-fbc-3.16.7-20261012191500.ocp4.21" {
+	if r.State != StateRendered || !reflect.DeepEqual(r.Channel, wantHead) || r.LabelNVR != "quay-operator-fbc-3.16.7-20261012191500.ocp4.21" {
 		t.Errorf("render: %+v", r)
 	}
 	if n := f.count(f.layer); n != 1 {

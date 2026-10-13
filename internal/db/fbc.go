@@ -114,22 +114,16 @@ func (d *DB) UpsertFBCRender(ctx context.Context, r fbc.Render) error {
 	return d.InTx(ctx, func(tx *DB) error {
 		q := tx.queries()
 		if err := q.UpsertFBCRender(ctx, dbsqlc.UpsertFBCRenderParams{
-			Digest:                 r.Digest,
-			State:                  r.State,
-			LabelNvr:               r.LabelNVR,
-			PackageName:            r.Package,
-			Channel:                ch.Name,
-			HeadCsv:                ch.HeadCSV,
-			HeadVersion:            ch.HeadVersion,
-			HeadBundlePullspec:     ch.HeadBundlePullspec,
-			Replaces:               ch.Replaces,
-			SkipRange:              ch.SkipRange,
-			PreviousCsv:            ch.Previous.CSV,
-			PreviousVersion:        ch.Previous.Version,
-			PreviousBundlePullspec: ch.Previous.BundlePullspec,
-			Error:                  r.Error,
-			RenderedAt:             r.RenderedAt.UTC().Format(time.RFC3339),
-			RetryAfter:             retry,
+			Digest:             r.Digest,
+			State:              r.State,
+			LabelNvr:           r.LabelNVR,
+			Channel:            ch.Name,
+			HeadCsv:            ch.HeadCSV,
+			HeadBundlePullspec: ch.HeadBundlePullspec,
+			PreviousVersion:    ch.Previous.Version,
+			Error:              r.Error,
+			RenderedAt:         r.RenderedAt.UTC().Format(time.RFC3339),
+			RetryAfter:         retry,
 		}); err != nil {
 			return err
 		}

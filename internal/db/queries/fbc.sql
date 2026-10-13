@@ -1,20 +1,14 @@
 -- name: UpsertFBCRender :exec
 -- A rendered row is final, so only a failed one is replaced.
-INSERT INTO fbc_renders (digest, state, label_nvr, package_name, channel, head_csv, head_version, head_bundle_pullspec, replaces, skip_range, previous_csv, previous_version, previous_bundle_pullspec, error, rendered_at, retry_after)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO fbc_renders (digest, state, label_nvr, channel, head_csv, head_bundle_pullspec, previous_version, error, rendered_at, retry_after)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(digest) DO UPDATE SET
     state = excluded.state,
     label_nvr = excluded.label_nvr,
-    package_name = excluded.package_name,
     channel = excluded.channel,
     head_csv = excluded.head_csv,
-    head_version = excluded.head_version,
     head_bundle_pullspec = excluded.head_bundle_pullspec,
-    replaces = excluded.replaces,
-    skip_range = excluded.skip_range,
-    previous_csv = excluded.previous_csv,
     previous_version = excluded.previous_version,
-    previous_bundle_pullspec = excluded.previous_bundle_pullspec,
     error = excluded.error,
     rendered_at = excluded.rendered_at,
     retry_after = excluded.retry_after

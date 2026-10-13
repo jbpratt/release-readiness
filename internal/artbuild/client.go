@@ -41,13 +41,10 @@ type record struct {
 	BundleNVRs []string `json:"bundle_nvrs"`
 	Outcome    string   `json:"outcome"`
 	StartTime  string   `json:"start_time"`
-	EndTime    string   `json:"end_time"`
-	ArtJobURL  string   `json:"art_job_url"`
 	// OperatorNVR and OperandNVRs are, for a bundle image, the images its
 	// CSV deploys.
-	OperatorNVR   string   `json:"operator_nvr"`
-	OperandNVRs   []string `json:"operand_nvrs"`
-	BundleCSVName string   `json:"bundle_csv_name"`
+	OperatorNVR string   `json:"operator_nvr"`
+	OperandNVRs []string `json:"operand_nvrs"`
 }
 
 // search returns the rows of a /search listing and the warnings the service

@@ -158,7 +158,6 @@ SELECT s.name AS snapshot_name, sc.image_url,
        CAST(COALESCE(h.record_id, a.record_id, '') AS TEXT) AS record_id,
        CAST(COALESCE(r.channel, '') AS TEXT) AS channel,
        CAST(COALESCE(r.head_csv, '') AS TEXT) AS head_csv,
-       CAST(COALESCE(r.head_version, '') AS TEXT) AS head_version,
        CAST(COALESCE(r.previous_version, '') AS TEXT) AS previous_version,
        CAST(COALESCE(b.nvr, '') AS TEXT) AS head_bundle_nvr,
        CAST(COALESCE(f.error, '') AS TEXT) AS read_error
@@ -192,7 +191,6 @@ type ListStagedFBCMembersRow struct {
 	RecordID        string
 	Channel         string
 	HeadCsv         string
-	HeadVersion     string
 	PreviousVersion string
 	HeadBundleNvr   string
 	ReadError       string
@@ -202,7 +200,7 @@ type ListStagedFBCMembersRow struct {
 // for assembly, newest Snapshot first, each with its NVR: that of its ART
 // build in build history, else of its resolved ART build, else its rendered
 // label, ” for none, and that build's record ID; the channel, head CSV and
-// version and previous entry's version its render found; the NVR of its head bundle's
+// previous entry's version its render found; the NVR of its head bundle's
 // ART build, ” for none; and the error of a failed read, ” for none.
 func (q *Queries) ListStagedFBCMembers(ctx context.Context, arg ListStagedFBCMembersParams) ([]ListStagedFBCMembersRow, error) {
 	rows, err := q.db.QueryContext(ctx, listStagedFBCMembers, arg.Assembly, arg.Application)
@@ -220,7 +218,6 @@ func (q *Queries) ListStagedFBCMembers(ctx context.Context, arg ListStagedFBCMem
 			&i.RecordID,
 			&i.Channel,
 			&i.HeadCsv,
-			&i.HeadVersion,
 			&i.PreviousVersion,
 			&i.HeadBundleNvr,
 			&i.ReadError,
