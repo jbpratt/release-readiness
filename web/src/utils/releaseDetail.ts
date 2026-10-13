@@ -502,6 +502,16 @@ export const decisions = (v: Verdict) =>
 				.map((i) => ({ ...i, action: blockerActions[i.code] ?? "" }))
 		: [];
 
+/**
+ * Why a not-ready verdict is not ready, in one line: its first blocker on the
+ * whole release, else its first blocker; null for any other verdict.
+ */
+export function topReason(v: Verdict): string | null {
+	if (v.state !== "not_ready") return null;
+	const blockers = v.items.filter((i) => i.level === "blocker");
+	return (blockers.find((i) => !i.operator) ?? blockers[0])?.text ?? null;
+}
+
 /** An operator row's text with nothing to act on: unstaged, it only waits. */
 export const readyText = (items: VerdictItem[]) =>
 	items.some((i) => i.code === "not_staged")

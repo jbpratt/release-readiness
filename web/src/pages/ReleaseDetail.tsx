@@ -37,12 +37,10 @@ import {
 import {
 	AngleDownIcon,
 	AngleRightIcon,
-	CheckCircleIcon,
 	ExclamationCircleIcon,
 	ExclamationTriangleIcon,
 	ExternalLinkAltIcon,
 	InfoCircleIcon,
-	InProgressIcon,
 } from "@patternfly/react-icons";
 import {
 	ExpandableRowContent,
@@ -73,6 +71,7 @@ import type {
 	Verdict,
 	VerdictItem,
 } from "../api/types";
+import { Status } from "../components/Status";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
 import { days, due } from "../utils/format";
@@ -1410,45 +1409,6 @@ function Step({
 		>
 			{title}
 		</ProgressStep>
-	);
-}
-
-const statusIcons: Record<StatusLine["status"], ReactNode> = {
-	done: (
-		<Icon status="success" isInline>
-			<CheckCircleIcon />
-		</Icon>
-	),
-	failed: (
-		<Icon status="danger" isInline>
-			<ExclamationCircleIcon />
-		</Icon>
-	),
-	running: (
-		<Icon status="info" isInline>
-			<InProgressIcon />
-		</Icon>
-	),
-	warning: (
-		<Icon status="warning" isInline>
-			<ExclamationTriangleIcon />
-		</Icon>
-	),
-};
-
-/** A status icon, then its text, which wraps clear of it. */
-function Status({
-	status,
-	children,
-}: {
-	status: StatusLine["status"];
-	children: ReactNode;
-}) {
-	return (
-		<Flex gap={{ default: "gapSm" }} flexWrap={{ default: "nowrap" }}>
-			<FlexItem>{statusIcons[status]}</FlexItem>
-			<FlexItem>{children}</FlexItem>
-		</Flex>
 	);
 }
 
