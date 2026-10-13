@@ -70,10 +70,8 @@ CREATE TABLE IF NOT EXISTS art_builds (
 );
 
 -- Successful ART build history records of FBC, bundle and image builds;
--- pending and failed records are never stored. bundle_nvrs_json is set for
--- an FBC image; operator_nvr, operand_nvrs_json and bundle_csv_name for a
--- bundle image. commitish is the source commit ART built from. Times are as
--- ART gives them.
+-- pending and failed records are never stored. commitish is the source
+-- commit ART built from. start_time is as ART gives it.
 CREATE TABLE IF NOT EXISTS art_history_records (
     record_id          TEXT PRIMARY KEY,
     group_name         TEXT NOT NULL,
@@ -82,13 +80,7 @@ CREATE TABLE IF NOT EXISTS art_history_records (
     digest             TEXT NOT NULL,
     pullspec           TEXT NOT NULL,
     commitish          TEXT NOT NULL DEFAULT '',
-    start_time         TEXT NOT NULL DEFAULT '',
-    end_time           TEXT NOT NULL DEFAULT '',
-    art_job_url        TEXT NOT NULL DEFAULT '',
-    bundle_nvrs_json   TEXT NOT NULL DEFAULT '[]',
-    operator_nvr       TEXT NOT NULL DEFAULT '',
-    operand_nvrs_json  TEXT NOT NULL DEFAULT '[]',
-    bundle_csv_name    TEXT NOT NULL DEFAULT ''
+    start_time         TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_art_history_records_nvr ON art_history_records(group_name, build_type, nvr);
@@ -160,16 +152,10 @@ CREATE TABLE IF NOT EXISTS fbc_renders (
     digest                   TEXT PRIMARY KEY,
     state                    TEXT NOT NULL CHECK (state IN ('rendered', 'failed')),
     label_nvr                TEXT NOT NULL DEFAULT '',
-    package_name             TEXT NOT NULL DEFAULT '',
     channel                  TEXT NOT NULL DEFAULT '',
     head_csv                 TEXT NOT NULL DEFAULT '',
-    head_version             TEXT NOT NULL DEFAULT '',
     head_bundle_pullspec     TEXT NOT NULL DEFAULT '',
-    replaces                 TEXT NOT NULL DEFAULT '',
-    skip_range               TEXT NOT NULL DEFAULT '',
-    previous_csv             TEXT NOT NULL DEFAULT '',
     previous_version         TEXT NOT NULL DEFAULT '',
-    previous_bundle_pullspec TEXT NOT NULL DEFAULT '',
     error                    TEXT NOT NULL DEFAULT '',
     rendered_at              TEXT NOT NULL,
     retry_after              TEXT NOT NULL DEFAULT ''

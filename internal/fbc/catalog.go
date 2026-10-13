@@ -17,10 +17,9 @@ import (
 // Channel is a channel's head entry, the bundle a subscription to it installs,
 // and Previous, the entry below it by version.
 type Channel struct {
-	Name, HeadCSV, HeadBundlePullspec, Replaces, SkipRange string
-	HeadVersion                                            string
-	HeadRelatedImages                                      []RelatedImage
-	Previous                                               Bundle
+	Name, HeadCSV, HeadBundlePullspec string
+	HeadRelatedImages                 []RelatedImage
+	Previous                          Bundle
 }
 
 // Bundle is a channel entry's bundle; zero for none.
@@ -36,10 +35,9 @@ type RelatedImage struct {
 }
 
 type entry struct {
-	Name      string   `json:"name"`
-	Replaces  string   `json:"replaces"`
-	Skips     []string `json:"skips"`
-	SkipRange string   `json:"skipRange"`
+	Name     string   `json:"name"`
+	Replaces string   `json:"replaces"`
+	Skips    []string `json:"skips"`
 }
 
 type property struct {
@@ -117,8 +115,7 @@ func ParseChannel(r io.Reader, channel string) (Channel, error) {
 		return Channel{}, fmt.Errorf("channel %s head %s has no bundle image", channel, h.Name)
 	}
 	ch := Channel{
-		Name: channel, HeadCSV: h.Name, HeadBundlePullspec: hb.BundlePullspec, Replaces: h.Replaces, SkipRange: h.SkipRange,
-		HeadVersion: hb.Version, HeadRelatedImages: hb.RelatedImages,
+		Name: channel, HeadCSV: h.Name, HeadBundlePullspec: hb.BundlePullspec, HeadRelatedImages: hb.RelatedImages,
 	}
 	if hv, ok := parseVersion(hb.Version); ok {
 		var prev version

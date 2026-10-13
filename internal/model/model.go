@@ -288,9 +288,8 @@ type FBCMember struct {
 	ReadError     string          `json:"-"`
 	Channel       string          `json:"-"`
 	HeadCSV       string          `json:"-"`
-	// HeadVersion is the head bundle's version, PreviousVersion the version
-	// of the entry below the head in its release channel.
-	HeadVersion     string `json:"-"`
+	// PreviousVersion is the version of the entry below the head in its
+	// release channel.
 	PreviousVersion string `json:"-"`
 }
 

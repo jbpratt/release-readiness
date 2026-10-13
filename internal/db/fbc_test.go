@@ -67,10 +67,11 @@ func TestFBCRenderCache(t *testing.T) {
 		{Name: "postgres", Image: "registry.redhat.io/rhel9/postgresql-15@sha256:p15"},
 		{Name: "quay-operator", Image: "registry.redhat.io/quay/quay-operator-rhel9@sha256:o1606"},
 	}
-	head := fbc.Channel{Name: "stable-3.16", HeadCSV: "quay-operator.v3.99.0-dev", HeadBundlePullspec: bundle, Replaces: "quay-operator.v3.16.6", SkipRange: ">=3.13.0 <3.99.0-dev",
-		HeadVersion: "3.99.0-dev", HeadRelatedImages: headImages,
-		Previous: fbc.Bundle{CSV: "quay-operator.v3.16.6", Version: "3.16.6", BundlePullspec: "registry.redhat.io/quay/quay-operator-bundle@sha256:1606", RelatedImages: previousImages}}
-	rendered := fbc.Render{Digest: "sha256:0004", LabelNVR: "quay-operator-fbc-3.16.7-20261012110000.ocp4.21", Package: "quay-operator", Channel: head, State: fbc.StateRendered, RenderedAt: now}
+	head := fbc.Channel{
+		Name: "stable-3.16", HeadCSV: "quay-operator.v3.99.0-dev", HeadBundlePullspec: bundle, HeadRelatedImages: headImages,
+		Previous: fbc.Bundle{CSV: "quay-operator.v3.16.6", Version: "3.16.6", BundlePullspec: "registry.redhat.io/quay/quay-operator-bundle@sha256:1606", RelatedImages: previousImages},
+	}
+	rendered := fbc.Render{Digest: "sha256:0004", LabelNVR: "quay-operator-fbc-3.16.7-20261012110000.ocp4.21", Channel: head, State: fbc.StateRendered, RenderedAt: now}
 	failed := fbc.Render{Digest: "sha256:0002", State: fbc.StateFailed, Error: "GET: 503", RenderedAt: now, RetryAfter: now.Add(time.Hour)}
 	for _, r := range []fbc.Render{rendered, failed} {
 		if err := d.UpsertFBCRender(ctx, r); err != nil {
@@ -104,7 +105,7 @@ func TestFBCRenderCache(t *testing.T) {
 		t.Errorf("related images: head %+v, previous %+v", gotHead, gotPrevious)
 	}
 	members, err := d.StagedFBCMembers(ctx, "3.16.7", "fbc-quay-3-16")
-	if err != nil || len(members) != 1 || members[0].HeadVersion != "3.99.0-dev" || members[0].PreviousVersion != "3.16.6" {
+	if err != nil || len(members) != 1 || members[0].PreviousVersion != "3.16.6" {
 		t.Errorf("staged members: %+v, %v", members, err)
 	}
 	unjoined, err := d.UnjoinedFBCRenders(ctx)

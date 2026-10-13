@@ -128,7 +128,6 @@ const listArtHistoryFBCs = `-- name: ListArtHistoryFBCs :many
 SELECT f.record_id, f.nvr, f.pullspec,
        CAST(COALESCE(r.channel, '') AS TEXT) AS channel,
        CAST(COALESCE(r.head_csv, '') AS TEXT) AS head_csv,
-       CAST(COALESCE(r.head_version, '') AS TEXT) AS head_version,
        CAST(COALESCE(r.previous_version, '') AS TEXT) AS previous_version,
        CAST(COALESCE(b.nvr, '') AS TEXT) AS head_bundle_nvr
 FROM art_history_records f
@@ -145,13 +144,12 @@ type ListArtHistoryFBCsRow struct {
 	Pullspec        string
 	Channel         string
 	HeadCsv         string
-	HeadVersion     string
 	PreviousVersion string
 	HeadBundleNvr   string
 }
 
 // group's successful FBC builds, newest NVR first, each with the channel,
-// head CSV and version and previous entry's version its render found and the NVR of its
+// head CSV and previous entry's version its render found and the NVR of its
 // head bundle's ART build, ” for none.
 func (q *Queries) ListArtHistoryFBCs(ctx context.Context, groupName string) ([]ListArtHistoryFBCsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listArtHistoryFBCs, groupName)
@@ -168,7 +166,6 @@ func (q *Queries) ListArtHistoryFBCs(ctx context.Context, groupName string) ([]L
 			&i.Pullspec,
 			&i.Channel,
 			&i.HeadCsv,
-			&i.HeadVersion,
 			&i.PreviousVersion,
 			&i.HeadBundleNvr,
 		); err != nil {
@@ -366,8 +363,8 @@ func (q *Queries) UpsertArtBuild(ctx context.Context, arg UpsertArtBuildParams) 
 }
 
 const upsertArtHistoryBuild = `-- name: UpsertArtHistoryBuild :exec
-INSERT INTO art_history_records (record_id, group_name, build_type, nvr, digest, pullspec, commitish, start_time, end_time, art_job_url, bundle_nvrs_json, operator_nvr, operand_nvrs_json, bundle_csv_name)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO art_history_records (record_id, group_name, build_type, nvr, digest, pullspec, commitish, start_time)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(record_id) DO UPDATE SET
     group_name = excluded.group_name,
     build_type = excluded.build_type,
@@ -375,30 +372,18 @@ ON CONFLICT(record_id) DO UPDATE SET
     digest = excluded.digest,
     pullspec = excluded.pullspec,
     commitish = excluded.commitish,
-    start_time = excluded.start_time,
-    end_time = excluded.end_time,
-    art_job_url = excluded.art_job_url,
-    bundle_nvrs_json = excluded.bundle_nvrs_json,
-    operator_nvr = excluded.operator_nvr,
-    operand_nvrs_json = excluded.operand_nvrs_json,
-    bundle_csv_name = excluded.bundle_csv_name
+    start_time = excluded.start_time
 `
 
 type UpsertArtHistoryBuildParams struct {
-	RecordID        string
-	GroupName       string
-	BuildType       string
-	Nvr             string
-	Digest          string
-	Pullspec        string
-	Commitish       string
-	StartTime       string
-	EndTime         string
-	ArtJobUrl       string
-	BundleNvrsJson  string
-	OperatorNvr     string
-	OperandNvrsJson string
-	BundleCsvName   string
+	RecordID  string
+	GroupName string
+	BuildType string
+	Nvr       string
+	Digest    string
+	Pullspec  string
+	Commitish string
+	StartTime string
 }
 
 func (q *Queries) UpsertArtHistoryBuild(ctx context.Context, arg UpsertArtHistoryBuildParams) error {
@@ -411,12 +396,6 @@ func (q *Queries) UpsertArtHistoryBuild(ctx context.Context, arg UpsertArtHistor
 		arg.Pullspec,
 		arg.Commitish,
 		arg.StartTime,
-		arg.EndTime,
-		arg.ArtJobUrl,
-		arg.BundleNvrsJson,
-		arg.OperatorNvr,
-		arg.OperandNvrsJson,
-		arg.BundleCsvName,
 	)
 	return err
 }

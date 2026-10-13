@@ -13,20 +13,14 @@ type ArtBuild struct {
 }
 
 type ArtHistoryRecord struct {
-	RecordID        string
-	GroupName       string
-	BuildType       string
-	Nvr             string
-	Digest          string
-	Pullspec        string
-	Commitish       string
-	StartTime       string
-	EndTime         string
-	ArtJobUrl       string
-	BundleNvrsJson  string
-	OperatorNvr     string
-	OperandNvrsJson string
-	BundleCsvName   string
+	RecordID  string
+	GroupName string
+	BuildType string
+	Nvr       string
+	Digest    string
+	Pullspec  string
+	Commitish string
+	StartTime string
 }
 
 type ArtHistoryRecordDay struct {
@@ -44,22 +38,16 @@ type FbcRelatedImage struct {
 }
 
 type FbcRender struct {
-	Digest                 string
-	State                  string
-	LabelNvr               string
-	PackageName            string
-	Channel                string
-	HeadCsv                string
-	HeadVersion            string
-	HeadBundlePullspec     string
-	Replaces               string
-	SkipRange              string
-	PreviousCsv            string
-	PreviousVersion        string
-	PreviousBundlePullspec string
-	Error                  string
-	RenderedAt             string
-	RetryAfter             string
+	Digest             string
+	State              string
+	LabelNvr           string
+	Channel            string
+	HeadCsv            string
+	HeadBundlePullspec string
+	PreviousVersion    string
+	Error              string
+	RenderedAt         string
+	RetryAfter         string
 }
 
 type JiraIssue struct {

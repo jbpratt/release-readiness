@@ -40,16 +40,10 @@ const (
 var nvrDate = regexp.MustCompile(`[.-](\d{8})\d{4}`)
 
 // HistoryBuild is a successful ART build record, with the source commit ART
-// built from. BundleNVRs is set for an FBC image; OperatorNVR, OperandNVRs and
-// BundleCSVName for a bundle image. Times are as ART gives them.
+// built from. StartTime is as ART gives it.
 type HistoryBuild struct {
 	RecordID, Group, Type, NVR, Digest, Pullspec string
-	Commitish                                    string
-	StartTime, EndTime, JobURL                   string
-	BundleNVRs                                   []string
-	OperatorNVR                                  string
-	OperandNVRs                                  []string
-	BundleCSVName                                string
+	Commitish, StartTime                         string
 }
 
 // HistoryStore is the subset of the database layer the history sync needs.
@@ -384,19 +378,13 @@ func nvrQuery(group, nvr string) (url.Values, error) {
 
 func historyBuild(group, buildType string, rec *record) HistoryBuild {
 	return HistoryBuild{
-		RecordID:      rec.RecordID,
-		Group:         group,
-		Type:          buildType,
-		NVR:           rec.NVR,
-		Digest:        rec.ImagePullspec[strings.Index(rec.ImagePullspec, "@")+1:],
-		Pullspec:      rec.ImagePullspec,
-		Commitish:     rec.Commitish,
-		StartTime:     rec.StartTime,
-		EndTime:       rec.EndTime,
-		JobURL:        rec.ArtJobURL,
-		BundleNVRs:    rec.BundleNVRs,
-		OperatorNVR:   rec.OperatorNVR,
-		OperandNVRs:   rec.OperandNVRs,
-		BundleCSVName: rec.BundleCSVName,
+		RecordID:  rec.RecordID,
+		Group:     group,
+		Type:      buildType,
+		NVR:       rec.NVR,
+		Digest:    rec.ImagePullspec[strings.Index(rec.ImagePullspec, "@")+1:],
+		Pullspec:  rec.ImagePullspec,
+		Commitish: rec.Commitish,
+		StartTime: rec.StartTime,
 	}
 }

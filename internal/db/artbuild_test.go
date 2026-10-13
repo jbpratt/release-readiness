@@ -177,7 +177,6 @@ func TestArtHistory(t *testing.T) {
 		RecordID: "r1", Group: "quay-3.17", Type: artbuild.TypeBundle,
 		NVR:    "quay-operator-metadata-container-3.17.6.202610081142.p2.g3c4984a.assembly.stream.el9-1",
 		Digest: "sha256:aaaa", Pullspec: "quay.io/x/art-images@sha256:aaaa", Commitish: "3c4984a",
-		OperatorNVR: "quay-operator-container-3.17.6", OperandNVRs: []string{"external"},
 	}
 	for range 2 {
 		if err := d.UpsertArtHistoryBuild(ctx, b); err != nil {
@@ -195,13 +194,6 @@ func TestArtHistory(t *testing.T) {
 	}
 	if ok, err := d.HasArtHistoryNVR(ctx, b.Group, artbuild.TypeImage, b.NVR); err != nil || ok {
 		t.Errorf("has the bundle NVR as an image = %v, %v; want false", ok, err)
-	}
-	var bundles, operands string
-	if err := d.conn.QueryRow(`SELECT bundle_nvrs_json, operand_nvrs_json FROM art_history_records WHERE record_id = 'r1'`).Scan(&bundles, &operands); err != nil {
-		t.Fatal(err)
-	}
-	if bundles != "[]" || operands != `["external"]` {
-		t.Errorf("bundle_nvrs_json %s, operand_nvrs_json %s", bundles, operands)
 	}
 	images, err := d.ArtHistoryImages(ctx, []string{b.Digest, "sha256:none"})
 	if want := (artbuild.HistoryBuild{NVR: b.NVR, Digest: b.Digest, Commitish: "3c4984a"}); err != nil || len(images) != 1 || !reflect.DeepEqual(images[b.Digest], want) {

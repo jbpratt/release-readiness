@@ -38,11 +38,10 @@ func NewRegistry(hc *http.Client) *Registry {
 }
 
 // Image is what an FBC image says of itself: the ART build its label names,
-// and the package of its /configs and that package's channel for the
-// label's X.Y stream.
+// and the channel for the label's X.Y stream of the package of its /configs.
 type Image struct {
-	LabelNVR, Package string
-	Channel           Channel
+	LabelNVR string
+	Channel  Channel
 }
 
 type descriptor struct {
@@ -101,7 +100,6 @@ func (r *Registry) Read(ctx context.Context, pullspec string) (Image, error) {
 	// The catalog is added last, so the newest layer holds it.
 	for i := len(m.Layers) - 1; i >= 0; i-- {
 		pkg, ch, err := r.readLayer(ctx, base, m.Layers[i], channel)
-		img.Package = pkg
 		if err != nil || pkg != "" {
 			img.Channel = ch
 			return img, err
