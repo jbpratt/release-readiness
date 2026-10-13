@@ -29,3 +29,17 @@
 	--pf-v6-c-masthead--m-display-inline--breakpoint--xl--GridTemplateColumns: max-content
 		1fr;
 }
+
+/* A candidate's FBC table: an inline ClipboardCopy breaks its text anywhere,
+   which a fit-content cell squeezes to a few characters a line, and an
+   unusually long FBC NVR ends in an ellipsis, the whole on hover. */
+.rr-fbcs .pf-v6-c-clipboard-copy__text {
+	white-space: nowrap;
+}
+
+.rr-fbcs td.rr-nvr {
+	--pf-v6-c-table--cell--MinWidth: 8ch;
+	--pf-v6-c-table--cell--MaxWidth: 20rem;
+	--pf-v6-c-table--cell--Overflow: hidden;
+	--pf-v6-c-table--cell--TextOverflow: ellipsis;
+}
