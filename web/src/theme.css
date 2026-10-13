@@ -30,23 +30,8 @@
 		1fr;
 }
 
-/* A candidate's FBC table: an inline ClipboardCopy breaks its text anywhere,
-   which a fit-content cell squeezes to a few characters a line, and an
-   unusually long FBC NVR ends in an ellipsis, the whole on hover. */
-.rr-fbcs .pf-v6-c-clipboard-copy__text {
-	white-space: nowrap;
-}
-
-.rr-fbcs td.rr-nvr {
-	--pf-v6-c-table--cell--MinWidth: 8ch;
-	--pf-v6-c-table--cell--MaxWidth: 20rem;
-	--pf-v6-c-table--cell--Overflow: hidden;
-	--pf-v6-c-table--cell--TextOverflow: ellipsis;
-}
-
 /* Below md a row per operator is one line, its operator, stage and
-   needs-action, the last cut to an ellipsis: the row opens to the detail. A
-   decision's text keeps beside its icon, its button wrapping under it. */
+   needs-action, the last cut to an ellipsis: the row opens to the detail. */
 @media (max-width: 767px) {
 	.rr-operators > thead {
 		display: none;
@@ -80,9 +65,5 @@
 
 	.rr-operators td.rr-needs .pf-v6-l-flex {
 		flex-wrap: nowrap;
-	}
-
-	.rr-decision-text {
-		flex: 1 1 calc(100% - 2rem);
 	}
 }
