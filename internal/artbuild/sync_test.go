@@ -287,3 +287,27 @@ func TestCloseBundleByDigest(t *testing.T) {
 		t.Errorf("searched %v for a stored bundle", f.searches[n:])
 	}
 }
+
+func TestUnscannedDays(t *testing.T) {
+	today := time.Date(2026, 10, 12, 15, 0, 0, 0, time.UTC)
+	days := func(from, to int) []string {
+		var out []string
+		for i := from; i <= to; i++ {
+			out = append(out, today.AddDate(0, 0, -i).Format(time.DateOnly))
+		}
+		return out
+	}
+	for _, tc := range []struct {
+		name    string
+		scanned []string
+		want    int
+	}{
+		{"all scanned, today not", days(1, 119), 0},
+		{"none scanned", nil, 119},
+		{"oldest missing", days(0, 118), 1},
+	} {
+		if got := UnscannedDays(today, tc.scanned); got != tc.want {
+			t.Errorf("%s: %d unscanned, want %d", tc.name, got, tc.want)
+		}
+	}
+}

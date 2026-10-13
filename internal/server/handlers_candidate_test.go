@@ -295,13 +295,14 @@ func TestGetCandidate(t *testing.T) {
 	seedSnapshot(t, srv, "quay-3-14", "quay-3-14-20261009-185801-000", mustTime(t, "2026-10-09T19:27:56Z"),
 		"quay-3-14-base-rhel8", "quay-3-14-quay-builder", "quay-3-14-quay-builder-qemu", "quay-3-14-quay-clair")
 	resolveNVR(t, srv, "quay-3-14-20261009-185801-000/quay-3-14-quay-clair", testNVR("quay-clair", "3.14.10"))
+	scanHistory(t, srv, "quay-3.14")
 	raw = nil
 	getJSON(t, srv, "/api/v1/releases/quay-v3.14.10/candidate", http.StatusOK, &raw)
 	want := map[string]any{
 		"shipped": false, "candidate": nil, "reason": "no release candidate yet", "catalogs": nil, "unshipped_builds": nil,
 		"fbc_candidate": nil, "fbc_stream": nil,
 		"verdict": map[string]any{"state": "not_ready", "items": []any{}},
-		"reading": map[string]any{"read": 0.0, "failed": 0.0, "pending": 0.0},
+		"reading": map[string]any{"read": 0.0, "failed": 0.0, "pending": 0.0, "history_days": 0.0},
 	}
 	if !reflect.DeepEqual(raw, want) {
 		t.Errorf("3.14.10 = %v, want %v", raw, want)
@@ -504,6 +505,7 @@ func TestGetCandidateNone(t *testing.T) {
 	seedSnapshot(t, srv, "quay-3-20", "quay-3-20-20261010-000000-000", mustTime(t, "2026-10-10T00:00:00Z"), "quay-3-20-quay-quay")
 	seedSnapshot(t, srv, "quay-3-16", "quay-3-16-20261010-000000-000", mustTime(t, "2026-10-10T00:00:00Z"), "quay-3-16-quay-quay")
 	resolveNVR(t, srv, "quay-3-16-20261010-000000-000/quay-3-16-quay-quay", testNVR("quay-quay", "3.16.8"))
+	scanHistory(t, srv, "quay-3.16", "quay-3.18", "quay-3.20")
 	none := func(shipped bool, reason string) map[string]any {
 		state := "not_ready"
 		if shipped {
@@ -512,7 +514,7 @@ func TestGetCandidateNone(t *testing.T) {
 		return map[string]any{
 			"shipped": shipped, "candidate": nil, "reason": reason, "catalogs": nil, "unshipped_builds": nil, "fbc_candidate": nil, "fbc_stream": nil,
 			"verdict": map[string]any{"state": state, "items": []any{}},
-			"reading": map[string]any{"read": 0.0, "failed": 0.0, "pending": 0.0},
+			"reading": map[string]any{"read": 0.0, "failed": 0.0, "pending": 0.0, "history_days": 0.0},
 		}
 	}
 	for version, want := range map[string]map[string]any{
@@ -554,13 +556,40 @@ func TestGetCandidateShipped(t *testing.T) {
 				srv.shipped = catalog.NewShipped(catalog.NewClient(cat.URL, cat.Client()), slog.Default())
 				srv.shipped.Refresh(t.Context())
 			}
+			// Reading counts the shipped FBCs, not a newer one only the stream
+			// built, which RR has yet to read.
+			op := seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261008000000.ocp4.20", "quay-operator-bundle")
+			seedStagedFBC(t, srv, "fbc-quay-3-18", "3.18.1", "quay-stage-3-18-1-fbc-20261008000000", "2026-10-08T00:00:00Z", []string{op}, "Succeeded")
+			const newer = "quay-operator-fbc-3.18.1-20261010000000.ocp4.20"
+			if err := srv.db.UpsertArtHistoryBuild(t.Context(), artbuild.HistoryBuild{
+				RecordID: "rec-" + newer, Group: "quay-3.18", Type: "fbc", NVR: newer, Digest: testDigest("fbc/" + newer), Pullspec: testImage("fbc/" + newer),
+			}); err != nil {
+				t.Fatal(err)
+			}
 
 			var got model.ReleaseCandidate
 			getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
 			if c := got.Candidate; !got.Shipped || got.Reason != "" || c == nil || c.Prod == nil {
 				t.Fatalf("shipped 3.18.1: shipped %v, reason %q, candidate %+v", got.Shipped, got.Reason, c)
 			}
+			if got.Reading != (model.ReadProgress{Read: 1}) {
+				t.Errorf("shipped 3.18.1: reading %+v, want 1 read, none pending", got.Reading)
+			}
 		})
+	}
+}
+
+// scanHistory marks every day the ART history sync reads of each group
+// scanned.
+func scanHistory(t *testing.T, srv *Server, groups ...string) {
+	t.Helper()
+	for i := range 120 {
+		day := time.Now().UTC().AddDate(0, 0, -i).Format(time.DateOnly)
+		for _, g := range groups {
+			if err := srv.db.MarkArtHistoryDayScanned(t.Context(), g, artbuild.TypeFBC, day, time.Now()); err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }
 
@@ -787,11 +816,38 @@ func TestGetCandidateFBCRestage(t *testing.T) {
 	})
 }
 
+// A digest on stage stays on stage when a newer Snapshot restages it and that
+// Release fails: its member shows the Release that succeeded, and nothing
+// blocks on the failure.
+func TestGetCandidateFBCRestageFailed(t *testing.T) {
+	srv := setupTestServer(t)
+	const app, head = "fbc-quay-3-18", "quay-operator-metadata-container-3.18.1.202610090339"
+	const first, restaged = "quay-stage-3-18-1-fbc-20261008000000", "quay-stage-3-18-1-fbc-20261009000000"
+	op20 := seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261008000000.ocp4.20", head)
+	seedStagedFBC(t, srv, app, "3.18.1", first, "2026-10-08T00:00:00Z", []string{op20}, "Succeeded")
+	seedStagedFBC(t, srv, app, "3.18.1", restaged, "2026-10-09T00:00:00Z", []string{op20}, "Failed")
+	if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}); err != nil {
+		t.Fatal(err)
+	}
+	var got model.ReleaseCandidate
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
+	o := got.FBCCandidate.Operators[0]
+	if m := o.Members[0]; m.Snapshot != first || !succeeded(m.Release) || o.Stage != (model.StageSummary{Staged: 1, Total: 1}) {
+		t.Errorf("quay-operator member %s %+v, stage %+v; want %s Succeeded, 1 of 1 on stage", m.Snapshot, m.Release, o.Stage, first)
+	}
+	for _, item := range got.Verdict.Items {
+		if item.Code == "stage_release_failed" {
+			t.Errorf("verdict item %+v: the digest is on stage", item)
+		}
+	}
+}
+
 // Like 3.18.1's restaged slots: a slot counts each staged Snapshot holding a
 // catalog of it whose newest Release succeeded, never one that failed and was
 // superseded; an operator counts its slots' FBCs on stage. A staged FBC RR
-// failed to read blocks the release. Reading counts only the version's FBCs
-// on the page, not a superseded one or another version's.
+// failed to read blocks the release, as does one no stage Release of it
+// succeeded, whatever RR read and scanned. Reading counts only the version's
+// FBCs on the page, not a superseded one or another version's.
 func TestGetCandidateFBCStaged(t *testing.T) {
 	srv := setupTestServer(t)
 	const app, head = "fbc-quay-3-18", "quay-operator-metadata-container-3.18.1.202610090339"
@@ -819,16 +875,24 @@ func TestGetCandidateFBCStaged(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	want := model.Verdict{State: "not_ready", Items: []model.VerdictItem{{
+		Level: "blocker", Operator: "quay-operator", Owner: "ART/Konflux", Code: "stage_release_failed",
+		Text: "quay-operator OCP 4.21: stage release failed",
+	}, {
+		Level: "blocker", Operator: "container-security-operator", Owner: "Quay/ART", Code: "read_failed",
+		Text: "container-security-operator OCP 4.20: can't read FBC: no channel stable-3.18",
+	}}}
 	var got model.ReleaseCandidate
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
+	if !reflect.DeepEqual(got.Verdict, want) || got.Reading.HistoryDays == 0 {
+		t.Errorf("unscanned history: verdict %+v, reading %+v; want %+v, history days left", got.Verdict, got.Reading, want)
+	}
+	scanHistory(t, srv, "quay-3.18")
 	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
 	o := got.FBCCandidate.Operators[0]
 	if len(o.Members) != 2 || o.Members[0].Staged != 2 || o.Members[1].Staged != 0 || o.Stage != (model.StageSummary{Staged: 1, Total: 2}) {
 		t.Errorf("quay-operator members %+v, stage %+v; want 4.20 staged 2, 4.21 staged 0, 1 of 2 on stage", o.Members, o.Stage)
 	}
-	want := model.Verdict{State: "not_ready", Items: []model.VerdictItem{{
-		Level: "blocker", Operator: "container-security-operator", Code: "read_failed",
-		Text: "container-security-operator OCP 4.20: can't read FBC: no channel stable-3.18",
-	}}}
 	if !reflect.DeepEqual(got.Verdict, want) || got.Reading != (model.ReadProgress{Read: 3, Failed: 1}) {
 		t.Errorf("verdict %+v, reading %+v; want %+v, 3 read, 1 failed", got.Verdict, got.Reading, want)
 	}

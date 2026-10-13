@@ -479,7 +479,10 @@ function Candidate({
 		...releaseLine(prodRelease),
 	};
 	const checking = verdict.state === "checking";
-	const built = whileChecking(fbcBuildStep(stream ?? fbc), checking);
+	const built = whileChecking(
+		fbcBuildStep(stream ?? fbc, reading.history_days),
+		checking,
+	);
 	const tested = whileChecking(fbcCIStep(fbc), checking);
 	const staged = whileChecking(fbcStageStep(fbc), checking);
 	const read = readingLine(reading);
@@ -728,8 +731,9 @@ function OperatorSummary({
 		items.some((i) => i.operator === operator && i.code === code);
 	const legend = (Object.keys(stripCells) as StripCell[]).filter(
 		(k) =>
-			(k !== "absent" && k !== "unknown") ||
-			rows.some((r) => r.cells.includes(k)),
+			k !== "blank" &&
+			((k !== "absent" && k !== "unknown") ||
+				rows.some((r) => r.cells.includes(k))),
 	);
 	return (
 		<>
@@ -782,7 +786,7 @@ function OperatorSummary({
 								<Td modifier="nowrap">
 									{cells.map((k, i) => {
 										const title = `OCP ${ocps[i]}: ${stripCells[k].text}`;
-										return k === "absent" ? (
+										return k === "absent" || k === "blank" ? (
 											<span key={ocps[i]} title={title} style={glyph}>
 												{stripCells[k].glyph}
 											</span>

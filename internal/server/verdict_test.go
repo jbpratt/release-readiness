@@ -30,15 +30,39 @@ func TestSetVerdict(t *testing.T) {
 		return []model.ImageCompare{c}
 	}
 	for _, tc := range []struct {
-		name  string
-		edit  func(r *model.ReleaseCandidate)
-		state string
-		items []string
+		name string
+		edit func(r *model.ReleaseCandidate)
+		// pending counts the candidate's unread FBCs.
+		pending int
+		state   string
+		items   []string
 	}{
 		{name: "ready", edit: func(*model.ReleaseCandidate) {}, state: "ready"},
-		{name: "checking", state: "checking", edit: func(r *model.ReleaseCandidate) {
+		{name: "checking", pending: 1, state: "checking", edit: func(r *model.ReleaseCandidate) {
 			r.Reading.Pending = 1
 			r.FBCCandidate.Operators[0].ImageCheck.State = "differs"
+		}},
+		// Staging needs no read: it blocks while the candidate's are pending.
+		{name: "checking, missing_operator", pending: 1, state: "not_ready", edit: func(r *model.ReleaseCandidate) {
+			r.Reading.Pending = 1
+			r.FBCCandidate.Operators[0].ImageCheck.State = "differs"
+			o := &r.FBCCandidate.Operators[2]
+			o.HeadBundleNVR, o.Members = "", nil
+		}, items: []string{"blocker quay-bridge-operator Quay (release-from-fbc) missing_operator: quay-bridge-operator is not in the stage shipment"}},
+		// Like 3.17.6: the stage shipment is read and the stream is not, so
+		// only the stream's newer build waits.
+		{name: "stream pending", state: "not_ready", edit: func(r *model.ReleaseCandidate) {
+			r.Reading.Pending = 3
+			r.FBCCandidate.Operators[0].Compare = newer("new source")
+			o := &r.FBCCandidate.Operators[1]
+			o.HeadBundleNVR, o.Members = "", nil
+		}, items: []string{"blocker container-security-operator Quay (release-from-fbc) missing_operator: container-security-operator is not in the stage shipment"}},
+		// Until the backfill has read every day, a slot's newest FBC may be
+		// unseen.
+		{name: "history incomplete", state: "checking", edit: func(r *model.ReleaseCandidate) {
+			r.Reading.HistoryDays = 5
+			r.FBCCandidate.Operators[0].ImageCheck.State = "differs"
+			r.FBCCandidate.Operators[0].Compare = newer("new source")
 		}},
 		{name: "shipped", state: "shipped", edit: func(r *model.ReleaseCandidate) {
 			r.Shipped, r.Reading.Pending = true, 1
@@ -49,13 +73,13 @@ func TestSetVerdict(t *testing.T) {
 			o := &r.FBCCandidate.Operators[2]
 			o.HeadBundleNVR, o.HeadCSV, o.Members, o.MissingOCP = "", "", nil, []string{"4.20"}
 			o.ImageCheck.State = "absent"
-		}, items: []string{"blocker quay-bridge-operator ART missing_operator: quay-bridge-operator is not in the stage shipment"}},
+		}, items: []string{"blocker quay-bridge-operator Quay (release-from-fbc) missing_operator: quay-bridge-operator is not in the stage shipment"}},
 		// A stream candidate is not up for release, whatever its operators.
 		{name: "not_staged", state: "not_ready", edit: func(r *model.ReleaseCandidate) {
 			r.FBCCandidate.Source = "stream"
 			r.FBCCandidate.Operators[0].ImageCheck = model.ImageCheck{State: "differs", BundleNVR: "image-bundle"}
 		}, items: []string{
-			"blocker  ART not_staged: Not in a stage shipment",
+			"blocker  Quay (release-from-fbc) not_staged: Not in a stage shipment",
 			"blocker quay-operator ART image_mismatch: Image shipment has bundle image-bundle, the FBCs ship quay-operator-bundle",
 		}},
 		{name: "csv_mismatch", state: "not_ready", edit: func(r *model.ReleaseCandidate) {
@@ -71,7 +95,11 @@ func TestSetVerdict(t *testing.T) {
 		{name: "read_failed", state: "not_ready", edit: func(r *model.ReleaseCandidate) {
 			o := &r.FBCCandidate.Operators[2]
 			o.Conflicts = []model.FBCMember{{OCP: "5.0", ReadError: "no channel stable-5.0"}}
-		}, items: []string{"blocker quay-bridge-operator  read_failed: quay-bridge-operator OCP 5.0: can't read FBC: no channel stable-5.0"}},
+		}, items: []string{"blocker quay-bridge-operator Quay/ART read_failed: quay-bridge-operator OCP 5.0: can't read FBC: no channel stable-5.0"}},
+		// Like CSO 5.0: its FBC never reached stage.
+		{name: "stage_release_failed", state: "not_ready", edit: func(r *model.ReleaseCandidate) {
+			r.FBCCandidate.Operators[1].Members[0].StageFailed = &model.KonfluxRelease{ReleasedReason: "Failed", FailedTask: "verify-conforma"}
+		}, items: []string{"blocker container-security-operator ART/Konflux stage_release_failed: container-security-operator OCP 4.20: stage release failed (verify-conforma)"}},
 		// Built for an OCP version and staged without it, nothing releases.
 		{name: "missing_ocp", state: "not_ready", edit: func(r *model.ReleaseCandidate) {
 			r.FBCCandidate.Pullspecs = []string{}
@@ -100,7 +128,7 @@ func TestSetVerdict(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := clean()
 			tc.edit(r)
-			setVerdict(r, "3.17.6")
+			setVerdict(r, "3.17.6", tc.pending)
 			var items []string
 			for _, it := range r.Verdict.Items {
 				items = append(items, it.Level+" "+it.Operator+" "+it.Owner+" "+it.Code+": "+it.Text)

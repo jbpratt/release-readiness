@@ -110,15 +110,17 @@ type ReleaseCandidate struct {
 }
 
 // Verdict tells whether a version can ship, by its FBC candidate: State
-// "checking" while FBC reads are pending, "shipped", else "not_ready" with a
-// blocker or "ready". Items are its blockers, then warnings, then info.
+// "shipped", "not_ready" with a blocker, "checking" while the candidate's FBC
+// reads or the ART history backfill are pending, else "ready". Items are its
+// blockers, then warnings, then info.
 type Verdict struct {
 	State string        `json:"state"`
 	Items []VerdictItem `json:"items"`
 }
 
 // VerdictItem is a blocker, warning or info on Operator, "" for the whole
-// release, for Owner, "ART", "Quay", "Quay/ART" or "", to act on.
+// release, for Owner, "ART", "ART/Konflux", "Quay (release-from-fbc)",
+// "Quay/ART" or "", to act on.
 type VerdictItem struct {
 	Level    string `json:"level"`
 	Operator string `json:"operator"`
@@ -128,11 +130,13 @@ type VerdictItem struct {
 }
 
 // ReadProgress counts the FBC images the render sync reads by the state of
-// their read.
+// their read, and HistoryDays the days of ART build history of the version's
+// stream its backfill has yet to read.
 type ReadProgress struct {
-	Read    int `json:"read"`
-	Failed  int `json:"failed"`
-	Pending int `json:"pending"`
+	Read        int `json:"read"`
+	Failed      int `json:"failed"`
+	Pending     int `json:"pending"`
+	HistoryDays int `json:"history_days"`
 }
 
 // FBCCandidate is a version's operator FBCs, one per operator and OCP version
@@ -260,9 +264,11 @@ type FBCCoverage struct {
 // neither names it, with its ART build page; the NVR of the bundle heading its
 // release channel, "" until joined to an ART bundle build; and, when staged,
 // the FBC Snapshot holding it and that Snapshot's newest Release, whatever its
-// status, nil before one; and, in a slot, its CI. Staged counts, in a
+// status, nil before one, in a candidate's slot the newest Snapshot whose
+// Release succeeded, else failed; and, in a slot, its CI. Staged counts, in a
 // candidate's slot, the staged FBC Snapshots holding a catalog of the slot
-// whose newest Release succeeded; ReadError is why reading it failed.
+// whose newest Release succeeded; StageFailed, when no Snapshot holding its
+// digest has, the newest failed one; ReadError is why reading it failed.
 type FBCMember struct {
 	OCP           string          `json:"ocp"`
 	Digest        string          `json:"digest"`
@@ -274,6 +280,7 @@ type FBCMember struct {
 	Release       *KonfluxRelease `json:"release"`
 	CI            *FBCCI          `json:"ci"`
 	Staged        int             `json:"staged"`
+	StageFailed   *KonfluxRelease `json:"-"`
 	RecordID      string          `json:"-"`
 	ReadError     string          `json:"-"`
 	Channel       string          `json:"-"`
