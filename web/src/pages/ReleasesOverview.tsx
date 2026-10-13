@@ -241,7 +241,7 @@ function ReleaseCard({
 							</DescriptionListGroup>
 						)}
 						<DescriptionListGroup>
-							<DescriptionListTerm>Built</DescriptionListTerm>
+							<DescriptionListTerm>Image snapshot</DescriptionListTerm>
 							<DescriptionListDescription>
 								{lastBuild}
 							</DescriptionListDescription>
@@ -270,7 +270,7 @@ function ReleaseCard({
 							</FlexItem>
 						)}
 						<FlexItem>
-							<span className="rr-label">Built</span>
+							<span className="rr-label">Image snapshot</span>
 							<div>{lastBuild}</div>
 						</FlexItem>
 						{issueSummary && issueSummary.cves > 0 && (

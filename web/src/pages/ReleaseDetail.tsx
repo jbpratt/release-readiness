@@ -105,6 +105,7 @@ import {
 	freshnessLine,
 	issueSummary,
 	jobLabels,
+	noFbcText,
 	nvrLabel,
 	otherBundle,
 	readingLine,
@@ -430,7 +431,6 @@ function BuildsCard({
 	inputs?: ReactNode;
 }) {
 	const fbc = data?.fbc_candidate;
-	const reason = data?.reason || "no FBC built or staged yet";
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<LinkedCardTitle href={konflux()} link="Konflux" actions={fbc && inputs}>
@@ -457,7 +457,7 @@ function BuildsCard({
 				) : data.shipped ? (
 					"Shipped; no FBC data."
 				) : (
-					`${reason.charAt(0).toUpperCase()}${reason.slice(1)}.`
+					noFbcText(data.reason)
 				)}
 			</CardBody>
 		</Card>
