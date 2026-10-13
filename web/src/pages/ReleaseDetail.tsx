@@ -1374,7 +1374,7 @@ function ReleaseInputs({
 									<Td>{i === 0 && o.operator}</Td>
 									<Td>{m.ocp}</Td>
 									<Td>
-										<ClipboardCopy variant="inline-compact" isCode>
+										<ClipboardCopy isReadOnly isCode>
 											{m.pullspec}
 										</ClipboardCopy>
 									</Td>
