@@ -448,21 +448,6 @@ export function stageText(
 }
 
 /**
- * An operator's FBCs staged: its candidate slots released to stage, of its
- * slots in the stream, else in the candidate. A stream FBC is only built.
- */
-export function fbcsStaged(
-	c: FBCCandidate,
-	stream: FBCCandidate | null,
-	s: ShownOperator,
-): string {
-	const o = s.operator;
-	const slots = (stream?.operators.find((x) => x.operator === o.operator) ?? o)
-		.coverage.slots;
-	return `${notStaged(c, s) ? 0 : o.stage.staged}/${slots}`;
-}
-
-/**
  * The verdict's headline; a shipped version's is the record of its prod
  * Release, which the page adds.
  */

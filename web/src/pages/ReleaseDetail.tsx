@@ -94,7 +94,6 @@ import {
 	fbcParams,
 	fbcPullspecs,
 	fbcStageStep,
-	fbcsStaged,
 	jobLabels,
 	nvrLabel,
 	otherBundle,
@@ -562,7 +561,6 @@ function Candidate({
 				<Thead>
 					<Tr>
 						<Th>Operator</Th>
-						<Th modifier="wrap">FBCs staged</Th>
 						<Th>Stage</Th>
 						<Th>Needs action</Th>
 					</Tr>
@@ -587,7 +585,6 @@ function Candidate({
 										{op}
 									</Button>
 								</Td>
-								<Td modifier="nowrap">{fbcsStaged(fbc, stream, s)}</Td>
 								<Td modifier="nowrap">
 									{shipped ? "" : <StageCell stage={stage} />}
 								</Td>
@@ -618,7 +615,7 @@ function Candidate({
 							</Tr>
 							{open && (
 								<Tr isExpanded>
-									<Td colSpan={4}>
+									<Td colSpan={3}>
 										<ExpandableRowContent>
 											<OperatorDetail
 												shown={s}
@@ -1018,9 +1015,8 @@ const changeColors: Record<string, LabelProps["color"]> = {
 
 /**
  * An operator's images, the relatedImages of its head bundle, each once with
- * its ART build and whether stage and prod hold it; or,
- * compared, each image's change against the previous z or a newer build.
- * Under them, the OCP versions shipping another bundle and an image
+ * its ART build; or, compared, each image's change against the previous z or
+ * a newer build. Under them, the OCP versions shipping another bundle and an image
  * shipment's other bundle.
  */
 function OperatorImages({
@@ -1040,9 +1036,6 @@ function OperatorImages({
 	const images = uniqueImages(o);
 	const other = o.conflicts.filter((m) => m.head_bundle_nvr).map((m) => m.ocp);
 	const check = o.image_check;
-	// An external's unset stage or prod is untracked, not "not shipped".
-	const yes = (on: boolean, external: boolean) =>
-		on ? "yes" : external ? "" : "no";
 	return (
 		<>
 			{o.compare.length > 0 && (
@@ -1109,21 +1102,6 @@ function OperatorImages({
 						<Tr>
 							<Th>Image</Th>
 							<Th>ART build</Th>
-							<Th
-								info={{
-									tooltip:
-										"A succeeded stage Release holds this image's digest",
-								}}
-							>
-								In stage
-							</Th>
-							<Th
-								info={{
-									tooltip: "A succeeded prod Release holds this image's digest",
-								}}
-							>
-								In prod
-							</Th>
 						</Tr>
 					</Thead>
 					<Tbody>
@@ -1139,8 +1117,6 @@ function OperatorImages({
 										<span style={muted}>external</span>
 									)}
 								</Td>
-								<Td>{yes(i.stage, !i.nvr)}</Td>
-								<Td>{yes(i.prod, !i.nvr)}</Td>
 							</Tr>
 						))}
 					</Tbody>
