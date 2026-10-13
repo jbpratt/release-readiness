@@ -309,7 +309,7 @@ func TestGetCandidate(t *testing.T) {
 	getJSON(t, srv, "/api/v1/releases/quay-v3.14.10/candidate", http.StatusOK, &raw)
 	want := map[string]any{
 		"shipped": false, "candidate": nil, "reason": "no release candidate yet", "catalogs": nil, "unshipped_builds": nil,
-		"fbc_candidate": nil, "fbc_stream": nil,
+		"fbc_candidate": nil, "fbc_stream": nil, "ci_history": nil,
 		"verdict": map[string]any{"state": "not_ready", "items": []any{}},
 		"reading": map[string]any{"read": 0.0, "failed": 0.0, "pending": 0.0, "history_days": 0.0},
 	}
@@ -523,7 +523,7 @@ func TestGetCandidateNone(t *testing.T) {
 			state = "shipped"
 		}
 		return map[string]any{
-			"shipped": shipped, "candidate": nil, "reason": reason, "catalogs": nil, "unshipped_builds": nil, "fbc_candidate": nil, "fbc_stream": nil,
+			"shipped": shipped, "candidate": nil, "reason": reason, "catalogs": nil, "unshipped_builds": nil, "fbc_candidate": nil, "fbc_stream": nil, "ci_history": nil,
 			"verdict": map[string]any{"state": state, "items": []any{}},
 			"reading": map[string]any{"read": 0.0, "failed": 0.0, "pending": 0.0, "history_days": 0.0},
 		}
@@ -1431,5 +1431,93 @@ func TestCandidateDigests(t *testing.T) {
 		if got, err := srv.CandidateDigests(t.Context()); err != nil || len(got) != 0 {
 			t.Errorf("released %t, archived %t: digests = %v, %v; want none", v.Released, v.Archived, got, err)
 		}
+	}
+}
+
+// A slot's CI history is the candidate's FBC of it and the FBC built before
+// that, never a newer one, each with runs from its digest and from another
+// FBC of the slot on its head bundle; a slot with no run still has its FBCs,
+// one without an FBC in the candidate has its newest, and one whose candidate
+// FBC was never built has only that.
+func TestGetCandidateCIHistory(t *testing.T) {
+	srv := setupTestServer(t)
+	const a = "quay-operator-metadata-container-3.18.1.a"
+	fbcs := map[int]string{}
+	for day := 1; day <= 4; day++ {
+		fbcs[day] = seedHistoryFBC(t, srv, fmt.Sprintf("quay-operator-fbc-3.18.1-2026100%d000000.ocp4.20", day), a)
+	}
+	op21 := seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261001000000.ocp4.21", a)
+	seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261002000000.ocp4.21", a)
+	for day := 1; day <= 2; day++ {
+		seedHistoryFBC(t, srv, fmt.Sprintf("quay-operator-fbc-3.18.1-2026100%d000000.ocp4.22", day), a)
+	}
+	seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261001000000.ocp4.23", a)
+	op23 := testImage("fbc/unbuilt")
+	seedRender(t, srv, op23, "quay-operator-fbc-3.18.1-20261002000000.ocp4.23", a)
+	seedStagedFBC(t, srv, "fbc-quay-3-18", "3.18.1", "quay-stage-3-18-1-fbc-20261002000000", "2026-10-02T00:00:00Z", []string{fbcs[2], op21, op23}, "Succeeded")
+	seedCatalogRun(t, srv, "aws", "1", "2026-10-02T06:00:00Z", fbcs[2])
+	seedCatalogRun(t, srv, "gcp", "2", "2026-10-03T06:00:00Z", fbcs[3])
+	if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var got model.ReleaseCandidate
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
+	tier := func(jobs []model.CIJob) string {
+		var ids []string
+		for _, j := range jobs {
+			for _, r := range j.Runs {
+				ids = append(ids, strings.TrimPrefix(j.JobName, jobPrefix)+"="+strings.TrimPrefix(r.ProwURL, "https://prow.example/"))
+			}
+		}
+		return strings.Join(ids, ",")
+	}
+	var rows []string
+	for _, s := range got.CIHistory {
+		row := s.Operator + " " + s.OCP
+		for _, f := range s.FBCs {
+			mark := ""
+			if f.Current {
+				mark = "*"
+			}
+			row += fmt.Sprintf(" %s%s[%s|%s]", mark, f.NVR[len("quay-operator-fbc-3.18.1-20261"):len("quay-operator-fbc-3.18.1-2026100x")], tier(f.CI.Exact), tier(f.CI.Equivalent))
+		}
+		rows = append(rows, row)
+	}
+	checkRows(t, "ci history", rows, []string{
+		"quay-operator 4.20 *002[aws=1|gcp=2] 001[|aws=1,gcp=2]",
+		"quay-operator 4.21 *001[|]",
+		"quay-operator 4.22 002[|]",
+		"quay-operator 4.23 *002[|]",
+	})
+}
+
+// CI is advisory: a failed run on the candidate's FBC leaves the verdict as
+// it was.
+func TestGetCandidateCIAdvisory(t *testing.T) {
+	srv := setupTestServer(t)
+	scanHistory(t, srv, "quay-3.18")
+	op := seedHistoryFBC(t, srv, "quay-operator-fbc-3.18.1-20261009000000.ocp4.20", "qo-bundle")
+	seedHistoryFBC(t, srv, "container-security-operator-fbc-3.18.1-20261009000000.ocp4.20", "cso-bundle")
+	seedHistoryFBC(t, srv, "quay-bridge-operator-fbc-3.18.1-20261009000000.ocp4.20", "qbo-bundle")
+	if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}); err != nil {
+		t.Fatal(err)
+	}
+	var before, after model.ReleaseCandidate
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &before)
+
+	at := mustTime(t, "2026-10-09T06:00:00Z")
+	if err := srv.db.UpsertProwRun(t.Context(), &prow.Run{
+		JobName: jobPrefix + "aws", BuildID: "1", Application: "quay-3-18", State: "failure", StartedAt: &at,
+		ProwURL: "https://prow.example/1", ArtifactState: prow.ArtifactPresent, CatalogRef: op, FetchedAt: at,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &after)
+	if s := after.CIHistory[0].FBCs[0]; !s.Current || len(s.CI.Exact) != 1 || s.CI.Exact[0].Runs[0].State != "failure" {
+		t.Fatalf("quay-operator 4.20 CI %+v, want the failed run", s)
+	}
+	if !reflect.DeepEqual(after.Verdict, before.Verdict) || after.Reason != before.Reason {
+		t.Errorf("verdict %+v, reason %q after a failed run; want %+v, %q", after.Verdict, after.Reason, before.Verdict, before.Reason)
 	}
 }

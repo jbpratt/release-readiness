@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type {
+	CIFBC,
 	CIJob,
 	FBCCandidate,
 	FBCMember,
@@ -15,6 +16,7 @@ import {
 	artGroup,
 	blockedReasons,
 	bundleBuilt,
+	ciList,
 	compareLine,
 	compareVersions,
 	componentLabel,
@@ -1057,4 +1059,52 @@ test("scanCell", () => {
 		color: "grey",
 	});
 	assert.deepEqual(scanCell(null), { text: "-", color: "grey" });
+});
+
+test("ciList: a line per tested slot, other-FBC runs noted, the rest counted", () => {
+	const job = (name: string, id: string): CIJob => ({
+		job_name: name,
+		runs: [
+			{ state: "failure", started_at: "2026-10-12T00:00:00Z", prow_url: id },
+		],
+	});
+	const fbc = (
+		current: boolean,
+		exact: CIJob[] = [],
+		equivalent: CIJob[] = [],
+	): CIFBC => ({
+		nvr: "",
+		current,
+		ci: { exact, equivalent },
+	});
+	const slot = (ocp: string, fbcs: CIFBC[]) => ({
+		operator: "quay-operator",
+		ocp,
+		fbcs,
+	});
+	const untested = [slot("4.20", [fbc(true), fbc(false)]), slot("4.21", [])];
+	const { lines, untested: n } = ciList([
+		slot("4.22", [
+			// The prior FBC's same-bundle run 1 is the current's exact run.
+			fbc(true, [job("s390x", "1")], [job("aws", "2")]),
+			fbc(false, [job("aws", "2")], [job("s390x", "1")]),
+		]),
+		// The candidate has no FBC of 4.23: its newest is not the prior one.
+		slot("4.23", [fbc(false, [job("aws", "3")])]),
+		...untested,
+	]);
+	assert.deepEqual(
+		lines.map((l) => [
+			`${l.operator} ${l.ocp}`,
+			l.runs.map(
+				(r) => `${r.job}=${r.run.prow_url}${r.note ? ` (${r.note})` : ""}`,
+			),
+		]),
+		[
+			["quay-operator 4.22", ["s390x=1", "aws=2 (prior FBC)"]],
+			["quay-operator 4.23", ["aws=3 (not in candidate)"]],
+		],
+	);
+	assert.equal(n, 2);
+	assert.deepEqual(ciList(untested), { lines: [], untested: 2 });
 });

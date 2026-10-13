@@ -117,7 +117,7 @@ func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVe
 	if err != nil {
 		return nil, err
 	}
-	if resp.FBCCandidate, resp.FBCStream, err = s.fbcCandidates(ctx, app, c, releases, runs); err != nil {
+	if resp.FBCCandidate, resp.FBCStream, resp.CIHistory, err = s.fbcCandidates(ctx, app, c, releases, runs); err != nil {
 		return nil, err
 	}
 	if resp.Catalogs, err = s.candidateCatalogs(ctx, app, c.assembly); err != nil {
@@ -246,11 +246,11 @@ func (s *Server) candidateCatalogs(ctx context.Context, app, assembly string) ([
 // carries the runs that installed from it or from equivalent content, and
 // each operator whether releases, the stage Releases, staged its head
 // bundle, how that bundle compares with the image Snapshot's, and its images.
-func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, releases []model.StageRelease, runs []prow.Run) (cand, stream *model.FBCCandidate, err error) {
+func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, releases []model.StageRelease, runs []prow.Run) (cand, stream *model.FBCCandidate, history []model.CISlot, err error) {
 	assembly := c.assembly
 	built, err := s.db.ArtHistoryFBCs(ctx, "quay-"+assembly[:strings.LastIndex(assembly, ".")])
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// The group holds every z of the stream.
 	built = slices.DeleteFunc(built, func(m model.FBCMember) bool {
@@ -259,7 +259,7 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 	})
 	staged, err := s.db.StagedFBCMembers(ctx, assembly, "fbc-"+app)
 	if err != nil || len(built) == 0 && len(staged) == 0 {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// An operator's slots are the OCP versions any of its FBCs of the version
 	// was built or staged for: no other can be inferred.
@@ -333,7 +333,7 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 	}
 	resolved, err := s.db.ResolvedArtBuilds(ctx, digests)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	// The digest of each bundle releases staged, by NVR.
 	staging := map[string]string{}
@@ -369,6 +369,7 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 		}
 		return &model.FBCCI{Exact: jobRuns(exact), Equivalent: jobRuns(equivalent)}
 	}
+	history = ciHistory(slots, built, cand, ci)
 	for _, f := range []*model.FBCCandidate{cand, stream} {
 		for i := range f.Operators {
 			o := &f.Operators[i]
@@ -412,7 +413,7 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 
 	shipped, err := s.db.ProdReleasedImages(ctx, app)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	prod := map[string]bool{}
 	for _, img := range shipped {
@@ -425,7 +426,7 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 	for _, f := range fs {
 		for i := range f.Operators {
 			if err := s.operatorImages(ctx, &f.Operators[i], releases, prod); err != nil {
-				return nil, nil, err
+				return nil, nil, nil, err
 			}
 		}
 	}
@@ -437,7 +438,45 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 			}
 		}
 	}
-	return cand, stream, nil
+	return cand, stream, history, nil
+}
+
+// ciHistory returns, by cand's operators and their slots, cand's FBC of the
+// slot and the FBC of built before it, else, without one in cand, the slot's
+// newest FBC of built, each with its CI by ci.
+func ciHistory(slots map[string][]string, built []model.FBCMember, cand *model.FBCCandidate, ci func(string, model.FBCMember) *model.FBCCI) []model.CISlot {
+	out := []model.CISlot{}
+	for _, o := range cand.Operators {
+		for _, ocp := range slots[o.Operator] {
+			var fbcs []model.FBCMember
+			for _, m := range built {
+				operator, _, v, _ := artbuild.ParseFBC(m.NVR)
+				if operator == o.Operator && v == ocp && !slices.ContainsFunc(fbcs, func(f model.FBCMember) bool { return f.Digest == m.Digest }) {
+					fbcs = append(fbcs, m)
+				}
+			}
+			var shown []model.FBCMember
+			ms := slices.Concat(o.Members, o.Conflicts)
+			k := -1
+			if i := slices.IndexFunc(ms, func(m model.FBCMember) bool { return m.OCP == ocp }); i >= 0 {
+				shown = append(shown, ms[i])
+				// Unbuilt, it has no FBC built before it.
+				if k = slices.IndexFunc(fbcs, func(f model.FBCMember) bool { return f.Digest == ms[i].Digest }); k < 0 {
+					k = len(fbcs)
+				}
+			}
+			if k+1 < len(fbcs) {
+				shown = append(shown, fbcs[k+1])
+			}
+			slot := model.CISlot{Operator: o.Operator, OCP: ocp, FBCs: []model.CIFBC{}}
+			for j, m := range shown {
+				m.OCP = ocp
+				slot.FBCs = append(slot.FBCs, model.CIFBC{NVR: m.NVR, Current: j == 0 && k >= 0, CI: ci(o.Operator, m)})
+			}
+			out = append(out, slot)
+		}
+	}
+	return out
 }
 
 // operatorImages sets o's Images, the head bundle's relatedImages of its
