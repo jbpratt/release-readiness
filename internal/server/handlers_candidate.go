@@ -369,7 +369,6 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 		}
 		return &model.FBCCI{Exact: jobRuns(exact), Equivalent: jobRuns(equivalent)}
 	}
-	history = ciHistory(slots, built, cand, ci)
 	for _, f := range []*model.FBCCandidate{cand, stream} {
 		for i := range f.Operators {
 			o := &f.Operators[i]
@@ -410,6 +409,7 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 			}
 		}
 	}
+	history = ciHistory(slots, cand)
 
 	shipped, err := s.db.ProdReleasedImages(ctx, app)
 	if err != nil {
@@ -441,37 +441,16 @@ func (s *Server) fbcCandidates(ctx context.Context, app string, c *candidate, re
 	return cand, stream, history, nil
 }
 
-// ciHistory returns, by cand's operators and their slots, cand's FBC of the
-// slot and the FBC of built before it, else, without one in cand, the slot's
-// newest FBC of built, each with its CI by ci.
-func ciHistory(slots map[string][]string, built []model.FBCMember, cand *model.FBCCandidate, ci func(string, model.FBCMember) *model.FBCCI) []model.CISlot {
+// ciHistory returns, by cand's operators and their slots, the CI of cand's
+// FBC of the slot, nil without one.
+func ciHistory(slots map[string][]string, cand *model.FBCCandidate) []model.CISlot {
 	out := []model.CISlot{}
 	for _, o := range cand.Operators {
+		ms := slices.Concat(o.Members, o.Conflicts)
 		for _, ocp := range slots[o.Operator] {
-			var fbcs []model.FBCMember
-			for _, m := range built {
-				operator, _, v, _ := artbuild.ParseFBC(m.NVR)
-				if operator == o.Operator && v == ocp && !slices.ContainsFunc(fbcs, func(f model.FBCMember) bool { return f.Digest == m.Digest }) {
-					fbcs = append(fbcs, m)
-				}
-			}
-			var shown []model.FBCMember
-			ms := slices.Concat(o.Members, o.Conflicts)
-			k := -1
+			slot := model.CISlot{Operator: o.Operator, OCP: ocp}
 			if i := slices.IndexFunc(ms, func(m model.FBCMember) bool { return m.OCP == ocp }); i >= 0 {
-				shown = append(shown, ms[i])
-				// Unbuilt, it has no FBC built before it.
-				if k = slices.IndexFunc(fbcs, func(f model.FBCMember) bool { return f.Digest == ms[i].Digest }); k < 0 {
-					k = len(fbcs)
-				}
-			}
-			if k+1 < len(fbcs) {
-				shown = append(shown, fbcs[k+1])
-			}
-			slot := model.CISlot{Operator: o.Operator, OCP: ocp, FBCs: []model.CIFBC{}}
-			for j, m := range shown {
-				m.OCP = ocp
-				slot.FBCs = append(slot.FBCs, model.CIFBC{NVR: m.NVR, Current: j == 0 && k >= 0, CI: ci(o.Operator, m)})
+				slot.CI = ms[i].CI
 			}
 			out = append(out, slot)
 		}

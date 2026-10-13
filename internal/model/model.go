@@ -110,8 +110,7 @@ type ReleaseCandidate struct {
 	FBCCandidate *FBCCandidate `json:"fbc_candidate"`
 	FBCStream    *FBCCandidate `json:"fbc_stream"`
 	// CIHistory is, by operator and OCP version, the CI of the FBC candidate's
-	// FBC of each slot and the one built before it. It is advisory: the
-	// verdict never reads it.
+	// FBC of each slot. It is advisory: the verdict never reads it.
 	CIHistory []CISlot     `json:"ci_history"`
 	Verdict   Verdict      `json:"verdict"`
 	Reading   ReadProgress `json:"reading"`
@@ -268,19 +267,12 @@ type FBCCI struct {
 	Equivalent []CIJob `json:"equivalent"`
 }
 
-// CISlot is an operator's OCP slot with the FBC candidate's FBC of it and
-// the FBC of the version built before that, without one the slot's newest,
-// each with its CI; Current marks the FBC candidate's.
+// CISlot is an operator's OCP slot with the CI of the FBC candidate's FBC of
+// it, nil without one.
 type CISlot struct {
-	Operator string  `json:"operator"`
-	OCP      string  `json:"ocp"`
-	FBCs     []CIFBC `json:"fbcs"`
-}
-
-type CIFBC struct {
-	NVR     string `json:"nvr"`
-	Current bool   `json:"current"`
-	CI      *FBCCI `json:"ci"`
+	Operator string `json:"operator"`
+	OCP      string `json:"ocp"`
+	CI       *FBCCI `json:"ci"`
 }
 
 type FBCCoverage struct {

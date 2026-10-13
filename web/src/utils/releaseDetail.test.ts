@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type {
-	CIFBC,
 	CIJob,
 	FBCCandidate,
+	FBCCI,
 	FBCMember,
 	ImageCompareRow,
 	ImageScan,
@@ -1061,49 +1061,34 @@ test("scanCell", () => {
 	assert.deepEqual(scanCell(null), { text: "-", color: "grey" });
 });
 
-test("ciList: a line per tested slot, other-FBC runs noted, the rest counted", () => {
+test("ciList: a line per slot the candidate FBC tested, the rest counted", () => {
 	const job = (name: string, id: string): CIJob => ({
 		job_name: name,
 		runs: [
 			{ state: "failure", started_at: "2026-10-12T00:00:00Z", prow_url: id },
 		],
 	});
-	const fbc = (
-		current: boolean,
-		exact: CIJob[] = [],
-		equivalent: CIJob[] = [],
-	): CIFBC => ({
-		nvr: "",
-		current,
-		ci: { exact, equivalent },
-	});
-	const slot = (ocp: string, fbcs: CIFBC[]) => ({
+	const slot = (ocp: string, ci: FBCCI | null) => ({
 		operator: "quay-operator",
 		ocp,
-		fbcs,
+		ci,
 	});
-	const untested = [slot("4.20", [fbc(true), fbc(false)]), slot("4.21", [])];
+	// 4.20's runs were all on a prior FBC, and the candidate has no FBC of
+	// 4.21: both count as untested.
+	const untested = [
+		slot("4.20", { exact: [], equivalent: [] }),
+		slot("4.21", null),
+	];
 	const { lines, untested: n } = ciList([
-		slot("4.22", [
-			// The prior FBC's same-bundle run 1 is the current's exact run.
-			fbc(true, [job("s390x", "1")], [job("aws", "2")]),
-			fbc(false, [job("aws", "2")], [job("s390x", "1")]),
-		]),
-		// The candidate has no FBC of 4.23: its newest is not the prior one.
-		slot("4.23", [fbc(false, [job("aws", "3")])]),
+		slot("4.22", { exact: [job("s390x", "1")], equivalent: [job("aws", "2")] }),
 		...untested,
 	]);
 	assert.deepEqual(
 		lines.map((l) => [
 			`${l.operator} ${l.ocp}`,
-			l.runs.map(
-				(r) => `${r.job}=${r.run.prow_url}${r.note ? ` (${r.note})` : ""}`,
-			),
+			l.runs.map((r) => `${r.job}=${r.run.prow_url}`),
 		]),
-		[
-			["quay-operator 4.22", ["s390x=1", "aws=2 (prior FBC)"]],
-			["quay-operator 4.23", ["aws=3 (not in candidate)"]],
-		],
+		[["quay-operator 4.22", ["s390x=1", "aws=2"]]],
 	);
 	assert.equal(n, 2);
 	assert.deepEqual(ciList(untested), { lines: [], untested: 2 });
