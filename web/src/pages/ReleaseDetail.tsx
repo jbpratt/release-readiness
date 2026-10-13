@@ -97,12 +97,14 @@ import {
 	fbcsStaged,
 	jobLabels,
 	nvrLabel,
+	otherBundle,
 	readingLine,
 	releaseLine,
 	releaseWord,
 	rowChips,
 	runsStatus,
 	type ShownOperator,
+	type SlotRow,
 	type StatusLine,
 	shipsVersion,
 	shownOperators,
@@ -917,6 +919,7 @@ function OperatorDetail({
 												<span title={c.title}>{c.text}</span>
 											</Label>
 										))}
+										<OtherBundle row={r} />
 									</Td>
 									<Td>
 										{r.fbc?.snapshot && (
@@ -984,6 +987,21 @@ function OperatorDetail({
 				</Tab>
 			</Tabs>
 		</>
+	);
+}
+
+/** A warning naming the other bundle an FBC row's FBC heads, if it does. */
+function OtherBundle({ row }: { row: SlotRow }) {
+	const held = otherBundle(row);
+	return (
+		held && (
+			<span style={{ marginLeft: "0.5rem", whiteSpace: "nowrap" }}>
+				{levelIcons.warning}{" "}
+				<ExtLink href={held.href} title={held.title}>
+					{held.text}
+				</ExtLink>
+			</span>
+		)
 	);
 }
 

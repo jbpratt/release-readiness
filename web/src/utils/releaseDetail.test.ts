@@ -28,6 +28,7 @@ import {
 	jobLabels,
 	jobShortName,
 	nvrLabel,
+	otherBundle,
 	readingLine,
 	releaseLine,
 	releaseWord,
@@ -791,10 +792,18 @@ test("rowChips: exceptions only, per row", () => {
 	assert.deepEqual(chips(member({ release: ok, staged: 1 })), []);
 	assert.deepEqual(chips(member({ release: ok, staged: 3 })), ["staged 3x"]);
 	assert.deepEqual(chips(member({ release: failed })), []);
-	assert.deepEqual(
-		chips({ ocp: "4.21", kind: "other", fbc: fbcMember("4.21", other) }),
-		["Different bundle"],
-	);
+	const held = {
+		ocp: "4.21",
+		kind: "other" as const,
+		fbc: fbcMember("4.21", other, { build_url: "https://art/builds/1" }),
+	};
+	assert.deepEqual(chips(held), []);
+	assert.deepEqual(otherBundle(held), {
+		text: "holds bundle Oct 12 16:13",
+		title: other,
+		href: "https://art/builds/1",
+	});
+	assert.equal(otherBundle(member({})), null);
 	assert.deepEqual(chips({ ocp: "4.12", kind: "missing", fbc: null }), [
 		"no FBC",
 	]);
@@ -845,7 +854,7 @@ test("record mode: no prompts, only facts", () => {
 			},
 			{ shipped: true, unreadable: "x" },
 		).map((c) => c.text),
-		["Different bundle", "staged 2x"],
+		["staged 2x"],
 	);
 	assert.deepEqual(
 		rowChips(
