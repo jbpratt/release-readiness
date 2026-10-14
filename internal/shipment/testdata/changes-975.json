@@ -1,0 +1,33 @@
+{
+  "changes": [
+    {
+      "new_path": "shipment/quay/quay-5.0/fbc-quay-5-0/prod/5.0.0.fbc.ocp5.0.2026100918162301.yaml",
+      "old_path": "shipment/quay/quay-5.0/fbc-quay-5-0/prod/5.0.0.fbc.ocp5.0.2026100918162301.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-5.0/fbc-quay-5-0/prod/5.0.0.fbc.ocp5.0.2026100918162302.yaml",
+      "old_path": "shipment/quay/quay-5.0/fbc-quay-5-0/prod/5.0.0.fbc.ocp5.0.2026100918162302.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-5.0/fbc-quay-5-0/prod/5.0.0.fbc.ocp5.0.2026100918162303.yaml",
+      "old_path": "shipment/quay/quay-5.0/fbc-quay-5-0/prod/5.0.0.fbc.ocp5.0.2026100918162303.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-5.0/quay-5-0/prod/5.0.0.image.20261009181623.yaml",
+      "old_path": "shipment/quay/quay-5.0/quay-5-0/prod/5.0.0.image.20261009181623.yaml"
+    }
+  ],
+  "detailed_merge_status": "not_approved",
+  "draft": false,
+  "head_pipeline": {
+    "status": "failed"
+  },
+  "iid": 975,
+  "labels": [],
+  "merged_at": null,
+  "source_branch": "prepare-shipment-5.0.0-20261009181623",
+  "state": "opened",
+  "title": "Shipment for quay 5.0.0",
+  "updated_at": "2026-10-12T10:59:56.055Z",
+  "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/975"
+}

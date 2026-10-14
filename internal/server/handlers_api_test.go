@@ -515,4 +515,45 @@ func TestReleasesOverviewShipped(t *testing.T) {
 	if len(overviews) != len(want) {
 		t.Errorf("overviews: got %d, want %d", len(overviews), len(want))
 	}
+
+	// Released before ART merged its MR: still polled until the MR leaves
+	// opened. Shipped with a merged MR: not polled.
+	for _, mr := range []model.ShipmentMR{
+		{Version: "quay-v3.18.0", IID: 1, State: "opened", Source: "pointer"},
+		{Version: "quay-v3.17.5", IID: 2, State: "merged", Source: "pointer"},
+	} {
+		if err := srv.db.UpsertShipmentMR(ctx, &mr); err != nil {
+			t.Fatalf("upsert shipment MR: %v", err)
+		}
+	}
+	polled, err := srv.ShipmentVersions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"quay-v3.17.6", "quay-v3.18.0", "quay-v3.18.1"}; !slices.Equal(polled, want) {
+		t.Errorf("polled %v, want %v", polled, want)
+	}
+
+	getJSON(t, srv, "/api/v1/releases/overview", http.StatusOK, &overviews)
+	for _, ov := range overviews {
+		switch mr := ov.ShipmentMR; ov.Release.Name {
+		case "quay-v3.18.0":
+			if mr == nil || mr.IID != 1 || mr.Stage != "open" {
+				t.Errorf("%s: shipment_mr %+v, want !1 open", ov.Release.Name, mr)
+			}
+		case "quay-v3.17.6":
+			if mr != nil {
+				t.Errorf("%s: shipment_mr %+v, want null", ov.Release.Name, mr)
+			}
+		}
+	}
+	for version, iid := range map[string]int{"quay-v3.17.5": 2, "quay-v3.17.6": 0} {
+		var rel struct {
+			ShipmentMR *model.ShipmentMR `json:"shipment_mr"`
+		}
+		getJSON(t, srv, "/api/v1/releases/"+version, http.StatusOK, &rel)
+		if (rel.ShipmentMR == nil) != (iid == 0) || iid != 0 && rel.ShipmentMR.IID != iid {
+			t.Errorf("%s: shipment_mr %+v, want iid %d", version, rel.ShipmentMR, iid)
+		}
+	}
 }

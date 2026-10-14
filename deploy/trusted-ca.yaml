@@ -1,0 +1,9 @@
+# OpenShift fills ca-bundle.crt with the cluster's trusted CA bundle, which
+# includes the Red Hat IT root the image does not trust.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: release-readiness-trusted-ca
+  labels:
+    app: release-readiness
+    config.openshift.io/inject-trusted-cabundle: "true"

@@ -1,0 +1,15 @@
+{
+  "detailed_merge_status": "not_open",
+  "draft": false,
+  "head_pipeline": {
+    "status": "failed"
+  },
+  "iid": 956,
+  "labels": [],
+  "merged_at": null,
+  "source_branch": "prepare-shipment-3.17.6-20261008075942",
+  "state": "closed",
+  "title": "Shipment for quay 3.17.6",
+  "updated_at": "2026-10-08T08:17:42.912Z",
+  "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/956"
+}

@@ -27,6 +27,7 @@ import (
 	"github.com/quay/release-readiness/internal/prow"
 	"github.com/quay/release-readiness/internal/scan"
 	"github.com/quay/release-readiness/internal/server"
+	"github.com/quay/release-readiness/internal/shipment"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
@@ -60,6 +61,13 @@ func main() {
 	// Prow flags
 	prowJobs := flag.String("prow-jobs", os.Getenv("PROW_JOBS"), "periodic Prow jobs to ingest, as job_name=konflux_application[,...] (e.g. ...-aws-s3-nightly=quay-3-18)")
 	prowInterval := flag.Duration("prow-interval", 15*time.Minute, "Prow sync poll interval")
+
+	// GitLab shipment MR flags
+	gitlabURL := flag.String("gitlab-url", "https://gitlab.cee.redhat.com", "GitLab URL to read ART shipment MRs from (empty disables)")
+	gitlabToken := flag.String("gitlab-token", os.Getenv("GITLAB_TOKEN"), "GitLab read_api token (empty reads anonymously, throttled)")
+	shipmentProject := flag.Int("shipment-project", 116177, "GitLab project ID of ART's shipment MRs (ocp-shipment-data)")
+	buildDataURL := flag.String("ocp-build-data-url", "https://raw.githubusercontent.com/openshift-eng/ocp-build-data", "raw ocp-build-data URL, whose quay-X.Y releases.yml names each assembly's shipment MR")
+	gitlabPollInterval := flag.Duration("gitlab-poll-interval", 5*time.Minute, "GitLab shipment MR poll interval")
 
 	// Selected STAGE build flags
 	stagePlanPattern := flag.String("stage-release-plan-pattern", cmp.Or(os.Getenv("STAGE_RELEASE_PLAN_PATTERN"), `^quay-advisory-stage-\d+-\d+$`), "regexp matching the Konflux ReleasePlan names whose Releases are image STAGE (empty selects no staged build)")
@@ -205,6 +213,14 @@ func main() {
 	srv.StageReleasePlanPattern = stagePlans
 	srv.KonfluxUIURL = *konfluxUIURL
 	srv.KonfluxNamespace = *namespace
+
+	if *gitlabURL != "" {
+		logger.Info("shipment MR sync enabled", "url", *gitlabURL, "project", *shipmentProject, "token", *gitlabToken != "", "interval", *gitlabPollInterval)
+		client := shipment.NewClient(*gitlabURL, *buildDataURL, *shipmentProject, *gitlabToken, &http.Client{Timeout: time.Minute})
+		syncer := shipment.NewSyncer(client, database, srv.ShipmentVersions, logger.With("component", "shipment-mrs"))
+		syncer.Status = status.Track("shipment-mrs", *gitlabPollInterval)
+		wg.Go(func() { syncer.Run(ctx, *gitlabPollInterval) })
+	}
 
 	if *resultsURL != "" {
 		var rt http.RoundTripper

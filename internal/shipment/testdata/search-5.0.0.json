@@ -1,0 +1,416 @@
+[
+  {
+    "detailed_merge_status": "not_approved",
+    "draft": false,
+    "iid": 977,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": null,
+    "source_branch": "prepare-microshift-bootc-shipment-rc.6-20261012151813",
+    "state": "opened",
+    "title": "Microshift-bootc shipment for 5.0.0-rc.6",
+    "updated_at": "2026-10-13T16:27:24.357Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/977"
+  },
+  {
+    "detailed_merge_status": "not_approved",
+    "draft": false,
+    "iid": 975,
+    "labels": [],
+    "merged_at": null,
+    "source_branch": "prepare-shipment-5.0.0-20261009181623",
+    "state": "opened",
+    "title": "Shipment for quay 5.0.0",
+    "updated_at": "2026-10-12T10:59:56.055Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/975"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 974,
+    "labels": [],
+    "merged_at": null,
+    "source_branch": "prepare-shipment-5.0.0-20261009175931",
+    "state": "closed",
+    "title": "Shipment for It appears you may be using Doozer for the first time.\nBe sure to setup Doozer using the user config file:\n/root/.config/doozer/settings.yaml\n\nquay 5.0.0",
+    "updated_at": "2026-10-09T18:04:07.983Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/974"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 924,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": "2026-10-09T07:51:40.027Z",
+    "source_branch": "prepare-microshift-bootc-shipment-rc.5-20261006103500",
+    "state": "merged",
+    "title": "Microshift-bootc shipment for 5.0.0-rc.5",
+    "updated_at": "2026-10-09T07:51:40.454Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/924"
+  },
+  {
+    "detailed_merge_status": "not_approved",
+    "draft": false,
+    "iid": 949,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": null,
+    "source_branch": "prepare-shipment-rc.6-20261007200652",
+    "state": "opened",
+    "title": "Shipment for 5.0.0-rc.6 (ship date: 2026-Oct-13)",
+    "updated_at": "2026-10-08T17:19:03.906Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/949"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 909,
+    "labels": [],
+    "merged_at": null,
+    "source_branch": "prepare-shipment-rc.5-20260930210112",
+    "state": "closed",
+    "title": "Shipment for 5.0.0-rc.5 (ship date: 2026-Oct-08)",
+    "updated_at": "2026-10-08T16:39:14.878Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/909"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 879,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": "2026-09-30T14:53:07.262Z",
+    "source_branch": "prepare-shipment-rc.4-20260923182855",
+    "state": "merged",
+    "title": "Shipment for 5.0.0-rc.4 (ship date: 2026-Oct-01)",
+    "updated_at": "2026-09-30T14:53:07.242Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/879"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 903,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": "2026-09-30T13:08:02.363Z",
+    "source_branch": "prepare-microshift-bootc-shipment-rc.4-20260929090525",
+    "state": "merged",
+    "title": "Microshift-bootc shipment for 5.0.0-rc.4",
+    "updated_at": "2026-09-30T13:08:02.310Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/903"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 892,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": "2026-09-25T09:01:51.598Z",
+    "source_branch": "prepare-microshift-bootc-shipment-rc.4-20260925082725",
+    "state": "merged",
+    "title": "Microshift-bootc shipment for 5.0.0-rc.4",
+    "updated_at": "2026-09-25T09:01:51.544Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/892"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 871,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": "2026-09-22T08:07:56.377Z",
+    "source_branch": "prepare-microshift-bootc-shipment-rc.3-20260921082832",
+    "state": "merged",
+    "title": "Microshift-bootc shipment for 5.0.0-rc.3",
+    "updated_at": "2026-09-22T08:07:56.354Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/871"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 865,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": "2026-09-22T08:07:41.405Z",
+    "source_branch": "prepare-shipment-rc.3-20260917194312",
+    "state": "merged",
+    "title": "Shipment for 5.0.0-rc.3 (ship date: 2026-Oct-01)",
+    "updated_at": "2026-09-22T08:07:41.378Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/865"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 832,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": "2026-09-15T10:07:41.462Z",
+    "source_branch": "prepare-shipment-rc.2-20260911080107",
+    "state": "merged",
+    "title": "Shipment for 5.0.0-rc.2 (ship date: 2026-Oct-01)",
+    "updated_at": "2026-09-15T10:07:41.439Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/832"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 833,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": "2026-09-15T09:58:49.635Z",
+    "source_branch": "prepare-microshift-bootc-shipment-rc.2-20260911155646",
+    "state": "merged",
+    "title": "Microshift-bootc shipment for 5.0.0-rc.2",
+    "updated_at": "2026-09-15T09:58:49.609Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/833"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 806,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": "2026-09-11T13:07:04.883Z",
+    "source_branch": "prepare-microshift-bootc-shipment-rc.1-20260904133832",
+    "state": "merged",
+    "title": "Microshift-bootc shipment for 5.0.0-rc.1",
+    "updated_at": "2026-09-11T13:07:04.856Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/806"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 799,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": "2026-09-09T06:58:01.580Z",
+    "source_branch": "prepare-shipment-rc.1-20260904082026",
+    "state": "merged",
+    "title": "Shipment for 5.0.0-rc.1 (ship date: 2026-Oct-01)",
+    "updated_at": "2026-09-09T06:58:01.522Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/799"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 787,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": "2026-09-04T06:39:54.489Z",
+    "source_branch": "prepare-shipment-rc.0-20260831143307",
+    "state": "merged",
+    "title": "Shipment for 5.0.0-rc.0 (ship date: 2026-Oct-01)",
+    "updated_at": "2026-09-04T06:39:54.463Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/787"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 788,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": "2026-09-04T06:39:28.907Z",
+    "source_branch": "prepare-microshift-bootc-shipment-rc.0-20260901032208",
+    "state": "merged",
+    "title": "Microshift-bootc shipment for 5.0.0-rc.0",
+    "updated_at": "2026-09-04T06:39:28.884Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/788"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 739,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": "2026-09-01T07:23:32.574Z",
+    "source_branch": "prepare-microshift-bootc-shipment-ec.6-20260814204220",
+    "state": "merged",
+    "title": "Microshift-bootc shipment for 5.0.0-ec.6",
+    "updated_at": "2026-09-01T07:23:32.547Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/739"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 725,
+    "labels": [],
+    "merged_at": null,
+    "source_branch": "prepare-shipment-ec.6-20260813075346",
+    "state": "closed",
+    "title": "Shipment for 5.0.0-ec.6 (ship date: 2026-Oct-01)",
+    "updated_at": "2026-08-19T13:36:05.468Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/725"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 672,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": "2026-08-11T13:09:03.494Z",
+    "source_branch": "prepare-shipment-ec.5-20260724101928",
+    "state": "merged",
+    "title": "Shipment for 5.0.0-ec.5 (ship date: 2026-Oct-01)",
+    "updated_at": "2026-08-11T13:09:04.102Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/672"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 685,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": null,
+    "source_branch": "prepare-microshift-bootc-shipment-ec.5-20260730173120",
+    "state": "closed",
+    "title": "Microshift-bootc shipment for 5.0.0-ec.5",
+    "updated_at": "2026-08-06T08:09:03.873Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/685"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 630,
+    "labels": [],
+    "merged_at": null,
+    "source_branch": "prepare-shipment-ec.4-20260702203503",
+    "state": "closed",
+    "title": "Shipment for 5.0.0-ec.4 (ship date: 2026-Oct-01)",
+    "updated_at": "2026-07-31T17:42:38.102Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/630"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 641,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": null,
+    "source_branch": "prepare-microshift-bootc-shipment-ec.4-20260710151607",
+    "state": "closed",
+    "title": "Microshift-bootc shipment for 5.0.0-ec.4",
+    "updated_at": "2026-07-17T06:48:11.593Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/641"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": true,
+    "iid": 640,
+    "labels": [],
+    "merged_at": null,
+    "source_branch": "prepare-microshift-bootc-shipment-ec.4-20260710141150",
+    "state": "closed",
+    "title": "Draft: Microshift-bootc shipment for 5.0.0-ec.4",
+    "updated_at": "2026-07-10T15:20:46.808Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/640"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 583,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": null,
+    "source_branch": "prepare-microshift-bootc-shipment-ec.3-20260612142239",
+    "state": "closed",
+    "title": "Microshift-bootc shipment for 5.0.0-ec.3",
+    "updated_at": "2026-07-07T07:14:38.797Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/583"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 580,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": null,
+    "source_branch": "prepare-shipment-ec.3-20260611180037",
+    "state": "closed",
+    "title": "Shipment for 5.0.0-ec.3 (ship date: 2026-Oct-01)",
+    "updated_at": "2026-07-07T07:14:30.176Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/580"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 556,
+    "labels": [
+      "stage-release-success"
+    ],
+    "merged_at": null,
+    "source_branch": "prepare-microshift-bootc-shipment-ec.2-20260528094321",
+    "state": "closed",
+    "title": "Microshift-bootc shipment for 5.0.0-ec.2",
+    "updated_at": "2026-06-15T06:56:58.608Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/556"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 543,
+    "labels": [],
+    "merged_at": null,
+    "source_branch": "prepare-shipment-ec.2-20260520022257",
+    "state": "closed",
+    "title": "Shipment for 5.0.0-ec.2 (ship date: 2026-Oct-01)",
+    "updated_at": "2026-06-11T18:30:50.746Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/543"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 493,
+    "labels": [],
+    "merged_at": null,
+    "source_branch": "prepare-shipment-ec.1-20260430172814",
+    "state": "closed",
+    "title": "Shipment for 5.0.0-ec.1 (ship date: 2026-Oct-01)",
+    "updated_at": "2026-05-08T12:22:39.105Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/493"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 422,
+    "labels": [],
+    "merged_at": null,
+    "source_branch": "prepare-shipment-ec.0-20260318080109",
+    "state": "closed",
+    "title": "Shipment for 5.0.0-ec.0 (ship date: 2026-Apr-01)",
+    "updated_at": "2026-05-04T14:07:49.380Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/422"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 448,
+    "labels": [],
+    "merged_at": "2026-03-27T12:08:53.358Z",
+    "source_branch": "add-5-0-4-23-release-plans",
+    "state": "merged",
+    "title": "Add release plan config for openshift 5.0 and 4.23",
+    "updated_at": "2026-03-27T12:08:53.310Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/448"
+  }
+]

@@ -59,6 +59,24 @@ CREATE TABLE IF NOT EXISTS konflux_releases (
 
 CREATE INDEX IF NOT EXISTS idx_konflux_releases_application_created ON konflux_releases(application, created_at);
 
+-- The ART shipment MR of a Quay version in GitLab, found by its ocp-build-data
+-- pointer or by searching the shipment project. labels is a JSON array.
+CREATE TABLE IF NOT EXISTS shipment_mrs (
+    version               TEXT PRIMARY KEY,
+    assembly              TEXT NOT NULL,
+    iid                   INTEGER NOT NULL,
+    web_url               TEXT NOT NULL,
+    state                 TEXT NOT NULL,
+    draft                 INTEGER NOT NULL DEFAULT 0,
+    labels                TEXT NOT NULL DEFAULT '[]',
+    head_pipeline_status  TEXT NOT NULL DEFAULT '',
+    detailed_merge_status TEXT NOT NULL DEFAULT '',
+    merged_at             TEXT NOT NULL DEFAULT '',
+    updated_at            TEXT NOT NULL DEFAULT '',
+    source                TEXT NOT NULL CHECK (source IN ('pointer', 'search')),
+    checked_at            TEXT NOT NULL
+);
+
 -- ART build history record behind a component image, keyed by its
 -- sha256:... digest. A resolved row is immutable; an unresolved one is retried.
 CREATE TABLE IF NOT EXISTS art_builds (

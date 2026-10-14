@@ -49,7 +49,15 @@ func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
 		return
 	}
-	writeJSON(w, http.StatusOK, release)
+	mr, err := s.db.ShipmentMR(r.Context(), version)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		*model.ReleaseVersion
+		ShipmentMR *model.ShipmentMR `json:"shipment_mr"`
+	}{release, mr})
 }
 
 func (s *Server) handleListReleaseIssues(w http.ResponseWriter, r *http.Request) {
@@ -132,6 +140,12 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	mrs, err := s.db.ShipmentMRs(ctx)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+
 	streams := map[string]streamBuilds{}
 	overviews := make([]model.ReleaseOverview, len(releases))
 	for i, rel := range releases {
@@ -148,11 +162,34 @@ func (s *Server) handleReleasesOverview(w http.ResponseWriter, r *http.Request) 
 			Readiness:    computeReadiness(&rel, latest != nil, catalogShipped, time.Now()),
 			LatestBuild:  latest,
 			Shipped:      catalogShipped || rel.Released,
+			ShipmentMR:   mrs[rel.Name],
 		}
 	}
 	markNextInStream(overviews)
 
 	writeJSON(w, http.StatusOK, overviews)
+}
+
+// ShipmentVersions returns the quay-vX.Y.Z versions whose shipment MRs are
+// polled: those the overview shows as not shipped, and those whose stored MR
+// is still open, since a version can ship before ART merges its MR.
+func (s *Server) ShipmentVersions(ctx context.Context) ([]string, error) {
+	releases, err := s.db.ListAllReleaseVersions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	mrs, err := s.db.ShipmentMRs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var versions []string
+	for _, rel := range releases {
+		open := mrs[rel.Name] != nil && mrs[rel.Name].State == "opened"
+		if (open || (!rel.Released && !s.catalogShipped(rel.Name))) && quayVersion.MatchString(rel.Name) {
+			versions = append(versions, rel.Name)
+		}
+	}
+	return versions, nil
 }
 
 // markNextInStream flags the lowest unshipped z of each product and

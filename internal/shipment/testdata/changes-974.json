@@ -1,0 +1,33 @@
+{
+  "changes": [
+    {
+      "new_path": "shipment/It appears you may be using Doozer for the first time.\nBe sure to setup Doozer using the user config file:\n/root/.config/doozer/settings.yaml\n\nquay/quay-5.0/fbc-quay-5-0/prod/5.0.0.fbc.ocp5.0.2026100917593101.yaml",
+      "old_path": "shipment/It appears you may be using Doozer for the first time.\nBe sure to setup Doozer using the user config file:\n/root/.config/doozer/settings.yaml\n\nquay/quay-5.0/fbc-quay-5-0/prod/5.0.0.fbc.ocp5.0.2026100917593101.yaml"
+    },
+    {
+      "new_path": "shipment/It appears you may be using Doozer for the first time.\nBe sure to setup Doozer using the user config file:\n/root/.config/doozer/settings.yaml\n\nquay/quay-5.0/fbc-quay-5-0/prod/5.0.0.fbc.ocp5.0.2026100917593102.yaml",
+      "old_path": "shipment/It appears you may be using Doozer for the first time.\nBe sure to setup Doozer using the user config file:\n/root/.config/doozer/settings.yaml\n\nquay/quay-5.0/fbc-quay-5-0/prod/5.0.0.fbc.ocp5.0.2026100917593102.yaml"
+    },
+    {
+      "new_path": "shipment/It appears you may be using Doozer for the first time.\nBe sure to setup Doozer using the user config file:\n/root/.config/doozer/settings.yaml\n\nquay/quay-5.0/fbc-quay-5-0/prod/5.0.0.fbc.ocp5.0.2026100917593103.yaml",
+      "old_path": "shipment/It appears you may be using Doozer for the first time.\nBe sure to setup Doozer using the user config file:\n/root/.config/doozer/settings.yaml\n\nquay/quay-5.0/fbc-quay-5-0/prod/5.0.0.fbc.ocp5.0.2026100917593103.yaml"
+    },
+    {
+      "new_path": "shipment/It appears you may be using Doozer for the first time.\nBe sure to setup Doozer using the user config file:\n/root/.config/doozer/settings.yaml\n\nquay/quay-5.0/quay-5-0/prod/5.0.0.image.20261009175931.yaml",
+      "old_path": "shipment/It appears you may be using Doozer for the first time.\nBe sure to setup Doozer using the user config file:\n/root/.config/doozer/settings.yaml\n\nquay/quay-5.0/quay-5-0/prod/5.0.0.image.20261009175931.yaml"
+    }
+  ],
+  "detailed_merge_status": "not_open",
+  "draft": false,
+  "head_pipeline": {
+    "status": "failed"
+  },
+  "iid": 974,
+  "labels": [],
+  "merged_at": null,
+  "source_branch": "prepare-shipment-5.0.0-20261009175931",
+  "state": "closed",
+  "title": "Shipment for It appears you may be using Doozer for the first time.\nBe sure to setup Doozer using the user config file:\n/root/.config/doozer/settings.yaml\n\nquay 5.0.0",
+  "updated_at": "2026-10-09T18:04:07.983Z",
+  "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/974"
+}

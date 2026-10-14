@@ -126,6 +126,22 @@ type ReleaseVersion struct {
 	DueDate               string
 }
 
+type ShipmentMr struct {
+	Version             string
+	Assembly            string
+	Iid                 int64
+	WebUrl              string
+	State               string
+	Draft               int64
+	Labels              string
+	HeadPipelineStatus  string
+	DetailedMergeStatus string
+	MergedAt            string
+	UpdatedAt           string
+	Source              string
+	CheckedAt           string
+}
+
 type Snapshot struct {
 	ID          int64
 	Application string

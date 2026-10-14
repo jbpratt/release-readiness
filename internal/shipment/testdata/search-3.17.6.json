@@ -1,0 +1,50 @@
+[
+  {
+    "detailed_merge_status": "ci_must_pass",
+    "draft": false,
+    "iid": 957,
+    "labels": [],
+    "merged_at": null,
+    "source_branch": "prepare-shipment-3.17.6-20261008081746",
+    "state": "opened",
+    "title": "Shipment for quay 3.17.6",
+    "updated_at": "2026-10-13T20:31:09.060Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/957"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 956,
+    "labels": [],
+    "merged_at": null,
+    "source_branch": "prepare-shipment-3.17.6-20261008075942",
+    "state": "closed",
+    "title": "Shipment for quay 3.17.6",
+    "updated_at": "2026-10-08T08:17:42.912Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/956"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": false,
+    "iid": 938,
+    "labels": [],
+    "merged_at": null,
+    "source_branch": "prepare-shipment-3.17.6-20261007094707",
+    "state": "closed",
+    "title": "Shipment for quay 3.17.6",
+    "updated_at": "2026-10-08T07:59:39.410Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/938"
+  },
+  {
+    "detailed_merge_status": "not_open",
+    "draft": true,
+    "iid": 937,
+    "labels": [],
+    "merged_at": null,
+    "source_branch": "prepare-shipment-3.17.6-20261007093828",
+    "state": "closed",
+    "title": "Draft: Test: Shipment for quay 3.17.6",
+    "updated_at": "2026-10-07T09:47:05.268Z",
+    "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/937"
+  }
+]

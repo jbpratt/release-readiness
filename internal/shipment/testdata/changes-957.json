@@ -1,0 +1,129 @@
+{
+  "changes": [
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.14.2026100808174601.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.14.2026100808174601.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.14.2026100808174610.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.14.2026100808174610.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.14.2026100808174619.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.14.2026100808174619.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.15.2026100808174602.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.15.2026100808174602.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.15.2026100808174611.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.15.2026100808174611.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.15.2026100808174620.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.15.2026100808174620.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.16.2026100808174603.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.16.2026100808174603.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.16.2026100808174612.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.16.2026100808174612.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.16.2026100808174621.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.16.2026100808174621.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.17.2026100808174604.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.17.2026100808174604.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.17.2026100808174613.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.17.2026100808174613.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.17.2026100808174622.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.17.2026100808174622.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.18.2026100808174605.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.18.2026100808174605.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.18.2026100808174614.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.18.2026100808174614.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.18.2026100808174623.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.18.2026100808174623.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.19.2026100808174606.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.19.2026100808174606.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.19.2026100808174615.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.19.2026100808174615.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.19.2026100808174624.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.19.2026100808174624.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.20.2026100808174607.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.20.2026100808174607.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.20.2026100808174616.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.20.2026100808174616.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.20.2026100808174625.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.20.2026100808174625.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.21.2026100808174608.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.21.2026100808174608.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.21.2026100808174617.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.21.2026100808174617.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.21.2026100808174626.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.21.2026100808174626.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.22.2026100808174609.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.22.2026100808174609.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.22.2026100808174618.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.22.2026100808174618.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.22.2026100808174627.yaml",
+      "old_path": "shipment/quay/quay-3.17/fbc-quay-3-17/prod/3.17.6.fbc.ocp4.22.2026100808174627.yaml"
+    },
+    {
+      "new_path": "shipment/quay/quay-3.17/quay-3-17/prod/3.17.6.image.20261008081746.yaml",
+      "old_path": "shipment/quay/quay-3.17/quay-3-17/prod/3.17.6.image.20261008081746.yaml"
+    }
+  ],
+  "detailed_merge_status": "ci_must_pass",
+  "draft": false,
+  "head_pipeline": {
+    "status": "failed"
+  },
+  "iid": 957,
+  "labels": [],
+  "merged_at": null,
+  "source_branch": "prepare-shipment-3.17.6-20261008081746",
+  "state": "opened",
+  "title": "Shipment for quay 3.17.6",
+  "updated_at": "2026-10-13T20:31:09.060Z",
+  "web_url": "https://gitlab.cee.redhat.com/hybrid-platforms/art/ocp-shipment-data/-/merge_requests/957"
+}

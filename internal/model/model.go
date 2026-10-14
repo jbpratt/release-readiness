@@ -28,6 +28,8 @@ type ReleaseOverview struct {
 	Shipped bool `json:"-"`
 	// NextInStream marks the lowest unshipped z of its product and major.minor.
 	NextInStream bool `json:"next_in_stream"`
+	// ShipmentMR is nil until the version's shipment MR is found.
+	ShipmentMR *ShipmentMR `json:"shipment_mr"`
 }
 
 // ReleaseSnapshot is one Konflux Snapshot of a release's applications.
@@ -73,6 +75,29 @@ type KonfluxRelease struct {
 	FailedStep     string     `json:"failed_step,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	CompletionTime *time.Time `json:"completion_time,omitempty"`
+}
+
+// ShipmentMR is the ART shipment merge request of a Quay version in GitLab.
+// Stage, PipelineFailed and NeedsApproval derive from the other fields.
+// Source is "pointer" when ocp-build-data names the MR, "search" when it was
+// found by branch.
+type ShipmentMR struct {
+	Version             string     `json:"-"`
+	Assembly            string     `json:"-"`
+	IID                 int        `json:"iid"`
+	WebURL              string     `json:"web_url"`
+	State               string     `json:"state"`
+	Draft               bool       `json:"draft"`
+	Labels              []string   `json:"-"`
+	Stage               string     `json:"stage"`
+	PipelineFailed      bool       `json:"pipeline_failed"`
+	NeedsApproval       bool       `json:"needs_approval"`
+	HeadPipelineStatus  string     `json:"head_pipeline_status"`
+	DetailedMergeStatus string     `json:"-"`
+	MergedAt            *time.Time `json:"merged_at,omitempty"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+	Source              string     `json:"source"`
+	CheckedAt           time.Time  `json:"-"`
 }
 
 // SelectedBuild is a staged image Snapshot of a concrete version whose

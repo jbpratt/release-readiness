@@ -40,7 +40,7 @@ Reads up to 20 FBC images a pass anonymously from their registry (Registry v2 AP
 
 ### Sync status
 
-`/api/v1/sync-status` lists as `problems` each enabled sync (`konflux`, `jira`, `art-builds`, `art-history`, `fbc-render`, `catalog`, `prow`, `image-scans`) whose last pass failed or that has had no success within 3 poll intervals (at least 10 minutes), and as `sources` every enabled sync with its `last_success`, null before its first success; the header shows a warning icon while any problems exist.
+`/api/v1/sync-status` lists as `problems` each enabled sync (`konflux`, `jira`, `art-builds`, `art-history`, `fbc-render`, `catalog`, `prow`, `image-scans`, `shipment-mrs`) whose last pass failed or that has had no success within 3 poll intervals (at least 10 minutes), and as `sources` every enabled sync with its `last_success`, null before its first success; the header shows a warning icon while any problems exist.
 
 ## Release view
 
@@ -89,6 +89,11 @@ cd web && npm install && npm run build
 | `-prow-interval` | — | `15m` | Prow sync poll interval |
 | `-retention` | — | `720h` | Age past which data no release needs is pruned daily and not ingested: Snapshots not ART staged, shipped or the newest of their application, Failed Releases not of an ART staged Snapshot, Prow runs and unreferenced image caches (0 disables) |
 | `-catalog-url` | — | `https://catalog.redhat.com/api/containers/v1` | Red Hat container catalog API, checked hourly in the background to mark versions shipped (empty leaves JIRA's released flag as the only shipped signal) |
+| `-gitlab-url` | — | `https://gitlab.cee.redhat.com` | GitLab holding ART's shipment MRs, polled for each unshipped version and each still-open MR (empty disables) |
+| `-gitlab-token` | `GITLAB_TOKEN` | — | GitLab `read_api` token (empty reads anonymously, throttled) |
+| `-shipment-project` | — | `116177` | GitLab project ID of ART's shipment MRs (ocp-shipment-data) |
+| `-ocp-build-data-url` | — | `https://raw.githubusercontent.com/openshift-eng/ocp-build-data` | Raw ocp-build-data URL, whose `quay-X.Y` `releases.yml` names each assembly's shipment MR |
+| `-gitlab-poll-interval` | — | `5m` | Shipment MR sync poll interval |
 
 ### Local development
 

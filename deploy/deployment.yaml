@@ -23,12 +23,25 @@ spec:
           env:
             - name: PROW_JOBS
               value: "periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-odf-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-azure-ocp422-e2e-install-azure-blob-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-gcp-ocp422-e2e-install-gcp-gcs-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly=quay-3-17,periodic-ci-quay-quay-redhat-3.18-aws-arm64-ocp422-e2e-install-aws-s3-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-aws-ocp414-e2e-install-aws-s3-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly-fips=quay-3-18,periodic-ci-quay-quay-redhat-3.18-aws-ocp50-e2e-install-aws-s3-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-libvirt-s390x-ocp422-e2e-install-libvirt-s3-nightly=quay-3-18"
+            # The cluster-injected bundle holds the public roots and the Red
+            # Hat IT root that gitlab.cee.redhat.com chains to.
+            - name: SSL_CERT_FILE
+              value: /etc/pki/ca-trust-injected/ca-bundle.crt
+            - name: GITLAB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: release-readiness-gitlab
+                  key: token
+                  optional: true
           ports:
             - containerPort: 8080
               protocol: TCP
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: trusted-ca
+              mountPath: /etc/pki/ca-trust-injected
+              readOnly: true
           livenessProbe:
             httpGet:
               path: /api/v1/health
@@ -52,3 +65,6 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: release-readiness-data
+        - name: trusted-ca
+          configMap:
+            name: release-readiness-trusted-ca

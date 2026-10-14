@@ -57,6 +57,9 @@ Flags (env fallback in parentheses; defaults point at production services):
   disables that source.
 - Prow: `-prow-jobs` (`PROW_JOBS`, `job_name=konflux_application[,...]`),
   `-prow-interval`.
+- Shipment MRs: `-gitlab-url` (empty disables), `-gitlab-token`
+  (`GITLAB_TOKEN`; empty reads anonymously), `-shipment-project`,
+  `-ocp-build-data-url`, `-gitlab-poll-interval`.
 - `-stage-release-plan-pattern` (`STAGE_RELEASE_PLAN_PATTERN`): ReleasePlan
   names whose Releases are image STAGE.
 - `-retention` (default `720h`, 0 disables): daily prune of data no release
@@ -101,6 +104,7 @@ Each loop is started in `main.go` only when its inputs are set:
 | ART build resolve and history, FBC render (`art-builds`, `art-history`, `fbc-render`) | `-art-build-history-url` is set |
 | Catalog (`catalog`) | `-catalog-url` is set |
 | Prow (`prow`) | `-prow-jobs` names a job |
+| GitLab shipment MRs (`shipment-mrs`) | `-gitlab-url` is set |
 | Retention prune (`retention`) | `-retention` is above 0 |
 | Image scans (`image-scans`) | `-tekton-results-url` is set, the kube client exists, ART is enabled, and the credential has a bearer token |
 
