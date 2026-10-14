@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"maps"
 	"reflect"
@@ -22,7 +21,7 @@ type fakeStore struct {
 	unchecked map[string]bool
 	baselines map[slot]Baseline
 	actions   map[ActionKey]Action
-	runs      map[[2]string]string
+	runs      map[[2]string]bool
 }
 
 func newFakeStore() *fakeStore {
@@ -32,13 +31,8 @@ func newFakeStore() *fakeStore {
 		unchecked: map[string]bool{},
 		baselines: map[slot]Baseline{},
 		actions:   map[ActionKey]Action{},
-		runs:      map[[2]string]string{},
+		runs:      map[[2]string]bool{},
 	}
-}
-
-func (f *fakeStore) UpsertSource(context.Context, Source) error { return nil }
-func (f *fakeStore) SourceByRecord(context.Context, string) (Source, bool, error) {
-	return Source{}, false, nil
 }
 
 func (f *fakeStore) SourcesByDigest(_ context.Context, digest string) ([]Source, error) {
@@ -49,9 +43,9 @@ func (f *fakeStore) SourceState(_ context.Context, digest string) (bool, bool, e
 	return len(f.sources[digest]) > 0 || f.unchecked[digest], f.unchecked[digest], nil
 }
 
-func (f *fakeStore) GetBaseline(_ context.Context, stream, operator, ocp string) (Baseline, bool, error) {
+func (f *fakeStore) GetBaseline(_ context.Context, stream, operator, ocp string) (string, bool, error) {
 	b, ok := f.baselines[slot{stream, operator, ocp}]
-	return b, ok, nil
+	return b.FBCDigest, ok, nil
 }
 
 func (f *fakeStore) InsertBaseline(_ context.Context, b Baseline) error {
@@ -74,7 +68,7 @@ func (f *fakeStore) UpsertAction(_ context.Context, a Action) error {
 func (f *fakeStore) PendingActions(_ context.Context, maxAttempts int) ([]Action, error) {
 	var pending []Action
 	for _, a := range f.actions {
-		if a.Key.IssueKey != "" && (a.Status == StatusProposed || a.Status == StatusError && a.Attempts < maxAttempts) {
+		if a.Status == StatusProposed || a.Status == StatusError && a.Attempts < maxAttempts {
 			pending = append(pending, a)
 		}
 	}
@@ -102,12 +96,11 @@ func (f *fakeStore) FBCMemberDigests(_ context.Context, digest string) ([]string
 }
 
 func (f *fakeStore) RunDone(_ context.Context, release, digest string) (bool, error) {
-	errText, ok := f.runs[[2]string{release, digest}]
-	return ok && errText == "", nil
+	return f.runs[[2]string{release, digest}], nil
 }
 
-func (f *fakeStore) MarkRun(_ context.Context, release, digest, errText string) error {
-	f.runs[[2]string{release, digest}] = errText
+func (f *fakeStore) MarkRun(_ context.Context, release, digest string) error {
+	f.runs[[2]string{release, digest}] = true
 	return nil
 }
 
@@ -138,12 +131,13 @@ type fixture struct {
 	commits *fakeCommits
 	sync    *Sync
 	clock   time.Time
+	logs    bytes.Buffer
 }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	fx := &fixture{store: newFakeStore(), commits: &fakeCommits{ranges: map[string][]Commit{}, errs: map[string]error{}}, clock: time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC)}
-	fx.sync = NewSync(fx.store, fx.commits, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	fx.sync = NewSync(fx.store, fx.commits, slog.New(slog.NewTextHandler(&fx.logs, nil)))
 	fx.sync.now = func() time.Time { fx.clock = fx.clock.Add(time.Second); return fx.clock }
 	return fx
 }
@@ -161,8 +155,8 @@ func (fx *fixture) stage(release, assembly, digest string, quayCommit, opCommit 
 	}
 	fx.store.fbcs = append(fx.store.fbcs, f)
 	quay := "sha256:quay-" + quayCommit
-	fx.store.sources[digest] = []Source{{Name: "quay-operator-fbc", Digest: digest, SourceRepo: opRepo, Commitish: opCommit}}
-	fx.store.sources[quay] = []Source{{Name: "quay-quay", Digest: quay, SourceRepo: quayRepo, Commitish: quayCommit}}
+	fx.store.sources[digest] = []Source{{Name: "quay-operator-fbc", SourceRepo: opRepo, Commitish: opCommit}}
+	fx.store.sources[quay] = []Source{{Name: "quay-quay", SourceRepo: quayRepo, Commitish: quayCommit}}
 	fx.store.members[digest] = []string{quay, digest}
 	return f
 }
@@ -174,22 +168,33 @@ func (fx *fixture) run(t *testing.T) {
 	}
 }
 
+// uncertain returns the reasons logged for release's FBC, "" for none.
+func (fx *fixture) uncertain(release string) string {
+	for line := range strings.Lines(fx.logs.String()) {
+		if _, reasons, ok := strings.Cut(line, "msg=uncertain release="+release+" "); ok {
+			_, reasons, _ = strings.Cut(reasons, "reasons=")
+			return strings.Trim(strings.TrimSpace(reasons), `"`)
+		}
+	}
+	return ""
+}
+
 func TestRunOnce(t *testing.T) {
 	fx := newFixture(t)
 	op := sha(100)
 	fx.stage("r1", "3.18.1", "sha256:f1", sha(1), op)
-	f2 := fx.stage("r2", "3.18.1", "sha256:f2", sha(2), op)
+	fx.stage("r2", "3.18.1", "sha256:f2", sha(2), op)
 	fx.run(t)
 
 	// The latest FBC is the baseline, reported for nothing.
-	want := Baseline{Stream: "3.18", Operator: "quay-operator-fbc", OCP: "4.16", FBCDigest: "sha256:f2", FBCNVR: f2.FBCNVR}
+	want := Baseline{Stream: "3.18", Operator: "quay-operator-fbc", OCP: "4.16", FBCDigest: "sha256:f2"}
 	if got := fx.store.baselines[slot{"3.18", "quay-operator-fbc", "4.16"}]; got != want {
 		t.Errorf("baseline = %+v; want %+v", got, want)
 	}
 	if len(fx.store.actions) != 0 || len(fx.commits.calls) != 0 {
 		t.Errorf("first pass: actions %+v, fetches %v; want none", fx.store.actions, fx.commits.calls)
 	}
-	if want := map[[2]string]string{{"r2", "sha256:f2"}: ""}; !reflect.DeepEqual(fx.store.runs, want) {
+	if want := map[[2]string]bool{{"r2", "sha256:f2"}: true}; !reflect.DeepEqual(fx.store.runs, want) {
 		t.Errorf("runs = %v; want only the baseline's", fx.store.runs)
 	}
 
@@ -201,7 +206,7 @@ func TestRunOnce(t *testing.T) {
 	fx.run(t)
 	for _, key := range []string{"PROJQUAY-1", "PROJQUAY-2"} {
 		a, ok := fx.store.actions[ActionKey{FBCDigest: "sha256:f3", IssueKey: key, Release: "r3"}]
-		if !ok || a.Status != StatusProposed || a.DesiredTargetVersion != "quay-v3.18.2" || a.BaselineDigest != "sha256:f2" || a.FBCNVR != f3.FBCNVR {
+		if !ok || a.Status != StatusProposed || a.DesiredTargetVersion != "quay-v3.18.2" || a.FBCNVR != f3.FBCNVR {
 			t.Errorf("%s: %+v, %v; want proposed for quay-v3.18.2", key, a, ok)
 		}
 	}
@@ -252,12 +257,11 @@ func TestRunOnceUncertain(t *testing.T) {
 	if a := fx.store.actions[ActionKey{FBCDigest: "sha256:f2", IssueKey: "PROJQUAY-7", Release: "r2"}]; a.Status != StatusProposed {
 		t.Errorf("verified key = %+v; want proposed", a)
 	}
-	u := fx.store.actions[ActionKey{FBCDigest: "sha256:f2", Release: "r2"}]
-	if want := "PROJQUAY-8: reverted by " + sha(103) + "; component quay-quay: head is not on redhat-3.18; component sha256:unknown: no ART source"; u.Status != StatusUncertain || u.SkipReason != want {
-		t.Errorf("uncertain = %+v; want reason %q", u, want)
+	if got, want := fx.uncertain("r2"), "PROJQUAY-8: reverted by "+sha(103)+"; component quay-quay: head is not on redhat-3.18; component sha256:unknown: no ART source"; got != want {
+		t.Errorf("uncertain = %q; want %q", got, want)
 	}
-	if len(fx.store.actions) != 2 {
-		t.Errorf("actions = %+v; want two", fx.store.actions)
+	if len(fx.store.actions) != 1 {
+		t.Errorf("actions = %+v; want one", fx.store.actions)
 	}
 }
 
@@ -269,12 +273,14 @@ func TestRunOnceUnslotted(t *testing.T) {
 	fx.store.fbcs[1] = f
 	fx.run(t)
 
-	if len(fx.store.baselines) != 0 || len(fx.store.actions) != 1 {
-		t.Fatalf("baselines %+v, actions %+v; want only the NVR's uncertainty", fx.store.baselines, fx.store.actions)
+	if len(fx.store.baselines) != 0 || len(fx.store.actions) != 0 {
+		t.Fatalf("baselines %+v, actions %+v; want none", fx.store.baselines, fx.store.actions)
 	}
-	u := fx.store.actions[ActionKey{FBCDigest: "sha256:noocp", Release: "r2"}]
-	if u.Status != StatusUncertain || !strings.Contains(u.SkipReason, "no ocpX.Y") {
-		t.Errorf("uncertain = %+v; want no ocpX.Y", u)
+	if u := fx.uncertain("r2"); !strings.Contains(u, "no ocpX.Y") {
+		t.Errorf("uncertain = %q; want no ocpX.Y", u)
+	}
+	if !fx.store.runs[[2]string{"r2", "sha256:noocp"}] {
+		t.Error("unslotted FBC not marked run")
 	}
 	if _, ok := fx.store.runs[[2]string{"r1", "sha256:old"}]; ok {
 		t.Error("3.15 FBC marked run")
@@ -298,9 +304,11 @@ func TestRunOnceUnchangedMember(t *testing.T) {
 	fx.stage("r3", "3.18.3", "sha256:f3", sha(3), sha(100))
 	fx.store.members["sha256:f3"] = append(fx.store.members["sha256:f3"], "sha256:ext2")
 	fx.run(t)
-	u := fx.store.actions[ActionKey{FBCDigest: "sha256:f3", Release: "r3"}]
-	if want := "component sha256:ext2: no ART source"; u.Status != StatusUncertain || u.SkipReason != want {
-		t.Errorf("uncertain = %+v; want reason %q", u, want)
+	if u := fx.uncertain("r2"); u != "" {
+		t.Errorf("r2 uncertain: %q; want none", u)
+	}
+	if got, want := fx.uncertain("r3"), "component sha256:ext2: no ART source"; got != want {
+		t.Errorf("uncertain = %q; want %q", got, want)
 	}
 }
 
@@ -356,21 +364,18 @@ func TestRunOnceAwaitsProvenance(t *testing.T) {
 	fx.store.fbcs[len(fx.store.fbcs)-1] = f4
 	fx.store.members["sha256:f4"] = append(fx.store.members["sha256:f4"], "sha256:ext")
 	fx.run(t)
-	u := ActionKey{FBCDigest: "sha256:f4", Release: "r4"}
-	if a, ok := fx.store.actions[u]; ok {
-		t.Fatalf("within the wait: %+v; want none", a)
+	if u := fx.uncertain("r4"); u != "" || fx.store.runs[[2]string{"r4", "sha256:f4"}] {
+		t.Fatalf("within the wait: uncertain %q, done %v; want neither", u, fx.store.runs[[2]string{"r4", "sha256:f4"}])
 	}
 	fx.clock = fx.clock.Add(provenanceWait)
 	fx.run(t)
-	if a := fx.store.actions[u]; a.Status != StatusUncertain || a.SkipReason != "component sha256:ext: no ART source" {
-		t.Errorf("after the wait: %+v; want uncertain", a)
+	if got, want := fx.uncertain("r4"), "component sha256:ext: no ART source"; got != want {
+		t.Errorf("after the wait: uncertain %q; want %q", got, want)
 	}
 }
 
 func TestRunOnceHeldStream(t *testing.T) {
 	fx := newFixture(t)
-	var logs bytes.Buffer
-	fx.sync.logger = slog.New(slog.NewTextHandler(&logs, nil))
 	fx.stage("r1", "3.18.1", "sha256:f1", sha(1), sha(100))
 	fx.run(t)
 	// f2 has no slot until its record is checked; f3, in the same stream, waits behind it.
@@ -385,8 +390,8 @@ func TestRunOnceHeldStream(t *testing.T) {
 	if len(fx.store.actions) != 0 || len(fx.commits.calls) != 0 {
 		t.Fatalf("held: actions %+v, fetches %v; want none", fx.store.actions, fx.commits.calls)
 	}
-	if n := strings.Count(logs.String(), "msg=waiting"); n != 1 {
-		t.Errorf("logged the wait %d times; want once:\n%s", n, logs.String())
+	if n := strings.Count(fx.logs.String(), "msg=waiting"); n != 1 {
+		t.Errorf("logged the wait %d times; want once:\n%s", n, fx.logs.String())
 	}
 	fx.store.sources["sha256:f2"], fx.store.unchecked["sha256:f2"] = fbcSrc, false
 	fx.run(t)
@@ -428,9 +433,8 @@ func TestRunOnceLateFBC(t *testing.T) {
 	fx.run(t)
 	fx.store.fbcs = slices.Insert(fx.store.fbcs, 1, StageFBC{Release: "r2", Assembly: "3.18.2", CompletionTime: "2026-10-14T01:00:00Z", FBCDigest: "sha256:f2", FBCNVR: "quay-operator-fbc-3.18.2-r2.el9.ocp4.16", RenderState: "rendered"})
 	fx.run(t)
-	a := fx.store.actions[ActionKey{FBCDigest: "sha256:f2", Release: "r2"}]
-	if want := "staged before " + f3.FBCNVR + ", which was reconciled first"; a.Status != StatusUncertain || a.SkipReason != want {
-		t.Errorf("late FBC: %+v; want uncertain %q", a, want)
+	if got, want := fx.uncertain("r2"), "staged before "+f3.FBCNVR+", which was reconciled first"; got != want {
+		t.Errorf("late FBC: uncertain %q; want %q", got, want)
 	}
 }
 
@@ -451,15 +455,14 @@ func TestRunOnceGap(t *testing.T) {
 			fx.stage("r3", "3.18.3", "sha256:f3", sha(3), op)
 			fx.commits.ranges[quayRepo+" redhat-3.18 "+sha(1)+" "+sha(3)] = []Commit{{SHA: sha(2), Message: "PROJQUAY-2 fix"}}
 			fx.run(t)
-			if u := fx.store.actions[ActionKey{FBCDigest: "sha256:f2", Release: "r2"}]; u.Status != StatusUncertain {
-				t.Errorf("f2 = %+v; want uncertain", u)
+			if u := fx.uncertain("r2"); u == "" {
+				t.Error("f2 not uncertain")
 			}
-			want := "follows " + f2.FBCNVR + " (r2), which has no slot"
-			if u := fx.store.actions[ActionKey{FBCDigest: "sha256:f3", Release: "r3"}]; u.Status != StatusUncertain || u.SkipReason != want {
-				t.Errorf("f3 = %+v; want uncertain %q", u, want)
+			if got, want := fx.uncertain("r3"), "follows "+f2.FBCNVR+" (r2), which has no slot"; got != want {
+				t.Errorf("f3 uncertain %q; want %q", got, want)
 			}
-			if len(fx.store.actions) != 2 || len(fx.commits.calls) != 0 {
-				t.Errorf("actions %+v, fetches %v; want only the two uncertainties", fx.store.actions, fx.commits.calls)
+			if len(fx.store.actions) != 0 || len(fx.commits.calls) != 0 {
+				t.Errorf("actions %+v, fetches %v; want none", fx.store.actions, fx.commits.calls)
 			}
 
 			// The FBC after f3 is diffed against it.
@@ -503,9 +506,8 @@ func TestRunOnceGapSlots(t *testing.T) {
 		fx.commits.ranges[quayRepo+" redhat-3.18 "+sha(1)+" "+sha(3)] = []Commit{{SHA: sha(2), Message: "PROJQUAY-2 fix"}}
 		fx.commits.ranges[quayRepo+" redhat-3.18 "+sha(2)+" "+sha(3)] = []Commit{{SHA: sha(3), Message: "PROJQUAY-3 fix"}}
 		fx.run(t)
-		want := "follows " + a2.FBCNVR + " (r2), which has no slot"
-		if u := fx.store.actions[ActionKey{FBCDigest: "sha256:a3", Release: "r3"}]; u.Status != StatusUncertain || u.SkipReason != want {
-			t.Errorf("failedFirst=%v: a3 = %+v; want uncertain %q", failedFirst, u, want)
+		if got, want := fx.uncertain("r3"), "follows "+a2.FBCNVR+" (r2), which has no slot"; got != want {
+			t.Errorf("failedFirst=%v: a3 uncertain %q; want %q", failedFirst, got, want)
 		}
 		for k, want := range map[ActionKey]string{
 			{FBCDigest: "sha256:b2", IssueKey: "PROJQUAY-2", Release: "r2"}: "quay-v3.18.2",
@@ -515,8 +517,8 @@ func TestRunOnceGapSlots(t *testing.T) {
 				t.Errorf("failedFirst=%v: %v: %+v; want proposed for %s", failedFirst, k, a, want)
 			}
 		}
-		if len(fx.store.actions) != 4 {
-			t.Errorf("failedFirst=%v: actions = %+v; want a2 and a3 uncertain, b2 and b3 proposed", failedFirst, fx.store.actions)
+		if len(fx.store.actions) != 2 {
+			t.Errorf("failedFirst=%v: actions = %+v; want b2 and b3 proposed", failedFirst, fx.store.actions)
 		}
 	}
 }

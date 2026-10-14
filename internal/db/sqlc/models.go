@@ -132,22 +132,15 @@ type ReconcileAction struct {
 	ReleaseName          string
 	Assembly             string
 	FbcNvr               string
-	BaselineDigest       string
 	EvidenceJson         string
 	DesiredTargetVersion string
-	ActualTargetVersion  string
-	StatusBefore         string
-	StatusAfter          string
 	Status               string
 	SkipReason           string
 	Error                string
 	VersionStep          string
 	TransitionStep       string
 	CommentStep          string
-	CommentMarker        string
-	CommentID            string
 	Attempts             int64
-	LastAttemptAt        string
 	UpdatedAt            string
 }
 
@@ -156,15 +149,11 @@ type ReconcileBaseline struct {
 	Operator  string
 	Ocp       string
 	FbcDigest string
-	FbcNvr    string
-	CreatedAt string
 }
 
 type ReconcileRun struct {
 	ReleaseName string
 	FbcDigest   string
-	Error       string
-	DoneAt      string
 }
 
 type ReleaseVersion struct {

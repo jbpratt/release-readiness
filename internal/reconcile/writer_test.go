@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/quay/release-readiness/internal/jira"
 )
@@ -91,9 +90,7 @@ func newWriter(j *fakeJira) (*Writer, *fakeStore) {
 		DesiredTargetVersion: "quay-v3.18.2",
 		Status:               StatusProposed,
 	}
-	w := NewWriter(j, store, "PROJQUAY", slog.New(slog.NewTextHandler(io.Discard, nil)))
-	w.now = func() time.Time { return time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC) }
-	return w, store
+	return NewWriter(j, store, "PROJQUAY", slog.New(slog.NewTextHandler(io.Discard, nil))), store
 }
 
 func applyPending(t *testing.T, w *Writer) {
@@ -130,12 +127,11 @@ func TestWriterAlreadyReleasePending(t *testing.T) {
 		t.Errorf("writes %v; want %v", j.writes, want)
 	}
 	a := store.actions[writeKey]
-	if a.Status != StatusApplied || a.VersionStep != "edited" || a.TransitionStep != "already" || a.CommentStep != "added" ||
-		a.ActualTargetVersion != "quay-v3.18.2" || a.StatusBefore != releasePending || a.Attempts != 1 {
+	if a.Status != StatusApplied || a.VersionStep != "edited" || a.TransitionStep != "already" || a.CommentStep != "added" || a.Attempts != 1 {
 		t.Errorf("action %+v; want applied without a transition", a)
 	}
 	body := j.comments[0].Body
-	for _, s := range []string{a.FBCNVR, "sha256:f3", "https://github.com/quay/quay/commit/" + sha(3), a.CommentMarker} {
+	for _, s := range []string{a.FBCNVR, "sha256:f3", "https://github.com/quay/quay/commit/" + sha(3), "release-readiness FBC stamp sha256:f3 PROJQUAY-1"} {
 		if !strings.Contains(body, s) {
 			t.Errorf("comment %q lacks %q", body, s)
 		}
@@ -157,8 +153,8 @@ func TestWriterMarkerPresent(t *testing.T) {
 	j.comments = []jira.Comment{{ID: "c9", Body: "Included.\n\nrelease-readiness FBC stamp sha256:f3 PROJQUAY-1\n"}}
 	w, store := newWriter(j)
 	applyPending(t, w)
-	if a := store.actions[writeKey]; len(j.writes) != 0 || a.Status != StatusApplied || a.CommentID != "c9" || a.CommentStep != "already" || a.VersionStep != "already" {
-		t.Errorf("writes %v, action %+v; want none and comment c9", j.writes, a)
+	if a := store.actions[writeKey]; len(j.writes) != 0 || a.Status != StatusApplied || a.CommentStep != "already" || a.VersionStep != "already" {
+		t.Errorf("writes %v, action %+v; want none", j.writes, a)
 	}
 }
 
@@ -179,7 +175,7 @@ func TestWriterRetry(t *testing.T) {
 		t.Errorf("writes %v; want %v", j.writes, want)
 	}
 	a = store.actions[writeKey]
-	if a.Status != StatusApplied || a.Error != "" || a.TransitionStep != "transitioned" || a.StatusBefore != "Verified" || a.StatusAfter != releasePending || a.Attempts != 2 {
+	if a.Status != StatusApplied || a.Error != "" || a.TransitionStep != "transitioned" || a.Attempts != 2 {
 		t.Errorf("retry: action %+v; want applied on attempt 2", a)
 	}
 }

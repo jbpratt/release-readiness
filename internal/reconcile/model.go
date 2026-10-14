@@ -7,15 +7,13 @@ import (
 
 // Action statuses.
 const (
-	StatusProposed  = "proposed"
-	StatusSkipped   = "skipped"
-	StatusUncertain = "uncertain"
-	StatusApplied   = "applied"
-	StatusError     = "error"
+	StatusProposed = "proposed"
+	StatusSkipped  = "skipped"
+	StatusApplied  = "applied"
+	StatusError    = "error"
 )
 
-// ActionKey identifies an action: an issue an FBC's Release fixes. IssueKey
-// is "" for the row listing the FBC's uncertainties.
+// ActionKey identifies an action: an issue an FBC's Release fixes.
 type ActionKey struct {
 	FBCDigest, IssueKey string
 	// Release is the Konflux Release name.
@@ -25,16 +23,13 @@ type ActionKey struct {
 // Action is what the reconciler decided for an issue in an FBC, with the
 // commits behind it.
 type Action struct {
-	Key                                       ActionKey
-	Assembly, FBCNVR, BaselineDigest          string
-	EvidenceJSON                              string
-	DesiredTargetVersion, ActualTargetVersion string
-	StatusBefore, StatusAfter, Status         string
-	SkipReason, Error                         string
-	VersionStep, TransitionStep, CommentStep  string
-	CommentMarker, CommentID                  string
-	Attempts                                  int
-	LastAttemptAt, UpdatedAt                  time.Time
+	Key                                      ActionKey
+	Assembly, FBCNVR, EvidenceJSON           string
+	DesiredTargetVersion, Status             string
+	SkipReason, Error                        string
+	VersionStep, TransitionStep, CommentStep string
+	Attempts                                 int
+	UpdatedAt                                time.Time
 }
 
 // ActionStore stores actions.
@@ -65,10 +60,9 @@ type FBCStore interface {
 	// FBCMemberDigests returns the digests of the FBC's head bundle, its
 	// related images and the FBC itself.
 	FBCMemberDigests(ctx context.Context, fbcDigest string) ([]string, error)
-	// RunDone reports whether the FBC of release was reconciled without
-	// error.
+	// RunDone reports whether the FBC of release was reconciled.
 	RunDone(ctx context.Context, release, fbcDigest string) (bool, error)
-	MarkRun(ctx context.Context, release, fbcDigest, errText string) error
+	MarkRun(ctx context.Context, release, fbcDigest string) error
 }
 
 // Store is the database layer the reconciler needs.

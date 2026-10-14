@@ -69,7 +69,7 @@ type slot struct{ stream, operator, ocp string }
 
 // RunOnce reconciles every StageFBC not yet done, then writes the pending
 // actions to Jira when a Writer is set. Only store errors fail it;
-// anything that keeps an FBC's issues from being known is recorded as its
+// anything that keeps an FBC's issues from being known is logged as its
 // uncertainty.
 func (s *Sync) RunOnce(ctx context.Context) error {
 	fbcs, err := s.store.ListStageFBCs(ctx)
@@ -98,9 +98,7 @@ func (s *Sync) RunOnce(ctx context.Context) error {
 		if f.RenderState == "" {
 			// f's slot and members are not known yet, so its whole stream waits with it.
 			held[stream] = true
-			if err := s.wait(ctx, f, "waiting for the FBC render"); err != nil {
-				return err
-			}
+			s.wait(f, "waiting for the FBC render")
 			continue
 		}
 		var sl slot
@@ -139,9 +137,7 @@ func (s *Sync) RunOnce(ctx context.Context) error {
 			if wait {
 				// f's slot is not known yet, so its whole stream waits with it.
 				held[stream] = true
-				if err := s.wait(ctx, f, "waiting for ART source: "+reason); err != nil {
-					return err
-				}
+				s.wait(f, "waiting for ART source: "+reason)
 				continue
 			}
 		}
@@ -149,7 +145,8 @@ func (s *Sync) RunOnce(ctx context.Context) error {
 		if done {
 			continue
 		}
-		if err := s.record(ctx, f, []Action{s.uncertain(f, "", []string{reason})}); err != nil {
+		s.uncertain(f, reason)
+		if err := s.record(ctx, f, nil); err != nil {
 			return err
 		}
 	}
@@ -191,7 +188,7 @@ func (s *Sync) slotOf(ctx context.Context, stream string, f StageFBC) (slot, str
 
 // reconcileSlot freezes the slot's baseline on first sight, then reconciles
 // each FBC after it against the one before, oldest first. An FBC in gaps
-// is recorded uncertain for its reason instead.
+// is uncertain for its reason instead.
 func (s *Sync) reconcileSlot(ctx context.Context, sl slot, fbcs []StageFBC, gaps map[[2]string]string) error {
 	base, ok, err := s.store.GetBaseline(ctx, sl.stream, sl.operator, sl.ocp)
 	if err != nil {
@@ -199,19 +196,18 @@ func (s *Sync) reconcileSlot(ctx context.Context, sl slot, fbcs []StageFBC, gaps
 	}
 	if !ok {
 		latest := fbcs[len(fbcs)-1]
-		base = Baseline{Stream: sl.stream, Operator: sl.operator, OCP: sl.ocp, FBCDigest: latest.FBCDigest, FBCNVR: latest.FBCNVR}
 		s.logger.Info("baseline", "stream", sl.stream, "operator", sl.operator, "ocp", sl.ocp, "fbc", latest.FBCNVR, "release", latest.Release)
 		return s.tx(ctx, func(st Store) error {
-			if err := st.InsertBaseline(ctx, base); err != nil {
+			if err := st.InsertBaseline(ctx, Baseline{Stream: sl.stream, Operator: sl.operator, OCP: sl.ocp, FBCDigest: latest.FBCDigest}); err != nil {
 				return err
 			}
-			return st.MarkRun(ctx, latest.Release, latest.FBCDigest, "")
+			return st.MarkRun(ctx, latest.Release, latest.FBCDigest)
 		})
 	}
 	// A baseline no longer listed was older than every FBC listed.
 	start := 0
 	for i, f := range fbcs {
-		if f.FBCDigest == base.FBCDigest {
+		if f.FBCDigest == base {
 			start = i + 1
 		}
 	}
@@ -232,29 +228,31 @@ func (s *Sync) reconcileSlot(ctx context.Context, sl slot, fbcs []StageFBC, gaps
 		}
 		if i < last {
 			// f came after a later FBC was reconciled, which may hold its fixes.
-			reason := fmt.Sprintf("staged before %s, which was reconciled first", fbcs[last].FBCNVR)
-			if err := s.record(ctx, f, []Action{s.uncertain(f, base.FBCDigest, []string{reason})}); err != nil {
+			s.uncertain(f, fmt.Sprintf("staged before %s, which was reconciled first", fbcs[last].FBCNVR))
+			if err := s.record(ctx, f, nil); err != nil {
 				return err
 			}
 			continue
 		}
 		if gap := gaps[[2]string{f.Release, f.FBCDigest}]; gap != "" {
-			if err := s.record(ctx, f, []Action{s.uncertain(f, base.FBCDigest, []string{gap})}); err != nil {
+			s.uncertain(f, gap)
+			if err := s.record(ctx, f, nil); err != nil {
 				return err
 			}
 			continue
 		}
-		prev := base.FBCDigest
+		prev := base
 		if i > 0 {
 			prev = fbcs[i-1].FBCDigest
 		}
-		actions, wait, err := s.actions(ctx, sl.stream, base, f, prev)
+		actions, wait, err := s.actions(ctx, sl.stream, f, prev)
 		if err != nil {
 			return err
 		}
 		if wait != "" {
 			// The FBCs after f are diffed against it, so they wait with it.
-			return s.wait(ctx, f, wait)
+			s.wait(f, wait)
+			return nil
 		}
 		if err := s.record(ctx, f, actions); err != nil {
 			return err
@@ -272,9 +270,10 @@ type evidence struct {
 
 // actions returns the actions for the issues in the commits between the
 // members of prev and of f. A member already in prev changed nothing, so
-// only new member digests are checked. While the ART source of a changed
-// member may still arrive, it returns why f waits instead.
-func (s *Sync) actions(ctx context.Context, stream string, base Baseline, f StageFBC, prev string) ([]Action, string, error) {
+// only new member digests are checked, and what keeps f's issues from being
+// known is logged. While the ART source of a changed member may still
+// arrive, it returns why f waits instead.
+func (s *Sync) actions(ctx context.Context, stream string, f StageFBC, prev string) ([]Action, string, error) {
 	var uncertain []string
 	prevSources, err := s.memberSources(ctx, prev)
 	if err != nil {
@@ -387,12 +386,11 @@ func (s *Sync) actions(ctx context.Context, stream string, base Baseline, f Stag
 			return nil, "", err
 		}
 		a := Action{
-			Key:            ActionKey{FBCDigest: f.FBCDigest, IssueKey: key, Release: f.Release},
-			Assembly:       f.Assembly,
-			FBCNVR:         f.FBCNVR,
-			BaselineDigest: base.FBCDigest,
-			EvidenceJSON:   string(evJSON),
-			UpdatedAt:      now,
+			Key:          ActionKey{FBCDigest: f.FBCDigest, IssueKey: key, Release: f.Release},
+			Assembly:     f.Assembly,
+			FBCNVR:       f.FBCNVR,
+			EvidenceJSON: string(evJSON),
+			UpdatedAt:    now,
 		}
 		first, ok, err := s.store.FirstIncludedAction(ctx, stream, key)
 		if err != nil {
@@ -408,7 +406,7 @@ func (s *Sync) actions(ctx context.Context, stream string, base Baseline, f Stag
 		actions = append(actions, a)
 	}
 	if len(uncertain) > 0 {
-		actions = append(actions, s.uncertain(f, base.FBCDigest, uncertain))
+		s.uncertain(f, uncertain...)
 	}
 	return actions, "", nil
 }
@@ -427,13 +425,12 @@ func (s *Sync) awaiting(ctx context.Context, f StageFBC, digest string) (bool, e
 
 // wait leaves f not done because of why, logging each new why once: a
 // wait on an unchecked record has no bound.
-func (s *Sync) wait(ctx context.Context, f StageFBC, why string) error {
+func (s *Sync) wait(f StageFBC, why string) {
 	k := [2]string{f.Release, f.FBCDigest}
 	if s.waiting[k] != why {
 		s.waiting[k] = why
 		s.logger.Info("waiting", "release", f.Release, "fbc", f.FBCNVR, "reason", why)
 	}
-	return s.store.MarkRun(ctx, f.Release, f.FBCDigest, why)
 }
 
 // memberSources returns the ART sources of each member digest of an FBC.
@@ -472,17 +469,10 @@ func allowlisted(src Source, stream string) (repo, branch, reason string) {
 	return c.repo, b, ""
 }
 
-func (s *Sync) uncertain(f StageFBC, baseline string, reasons []string) Action {
+// uncertain logs why some of f's issues may not be known.
+func (s *Sync) uncertain(f StageFBC, reasons ...string) {
 	slices.Sort(reasons)
-	return Action{
-		Key:            ActionKey{FBCDigest: f.FBCDigest, Release: f.Release},
-		Assembly:       f.Assembly,
-		FBCNVR:         f.FBCNVR,
-		BaselineDigest: baseline,
-		Status:         StatusUncertain,
-		SkipReason:     strings.Join(slices.Compact(reasons), "; "),
-		UpdatedAt:      s.now().UTC(),
-	}
+	s.logger.Warn("uncertain", "release", f.Release, "fbc", cmp.Or(f.FBCNVR, f.FBCDigest), "reasons", strings.Join(slices.Compact(reasons), "; "))
 }
 
 // record stores f's actions and marks it done in one transaction, so a
@@ -494,7 +484,7 @@ func (s *Sync) record(ctx context.Context, f StageFBC, actions []Action) error {
 				return err
 			}
 		}
-		return st.MarkRun(ctx, f.Release, f.FBCDigest, "")
+		return st.MarkRun(ctx, f.Release, f.FBCDigest)
 	})
 }
 

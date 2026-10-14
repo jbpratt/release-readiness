@@ -49,29 +49,27 @@ func branchOf(name, stream string) (string, bool) {
 	return b, ok
 }
 
-// Source is an ART build record with the public repository and commit it
-// was built from.
+// Source is an ART build, by its ART name, with the public repository and
+// commit it was built from.
 type Source struct {
-	RecordID, Name, NVR, Digest, SourceRepo, Commitish string
+	Name, SourceRepo, Commitish string
 }
 
 // Baseline is the first FBC a stream/operator/OCP slot was reconciled from.
 type Baseline struct {
-	Stream, Operator, OCP, FBCDigest, FBCNVR string
+	Stream, Operator, OCP, FBCDigest string
 }
 
-// ProvenanceStore stores ART source provenance and slot baselines.
+// ProvenanceStore reads ART source provenance and stores slot baselines.
 type ProvenanceStore interface {
-	UpsertSource(context.Context, Source) error
-	// SourceByRecord returns false for a record with no known source repo.
-	SourceByRecord(context.Context, string) (Source, bool, error)
 	// SourcesByDigest returns the records of an image digest that have a
 	// source repo.
 	SourcesByDigest(context.Context, string) ([]Source, error)
 	// SourceState reports whether an image digest has stored ART records,
 	// and whether one of them is not checked for a source repo yet.
 	SourceState(ctx context.Context, digest string) (stored, unchecked bool, err error)
-	GetBaseline(ctx context.Context, stream, operator, ocp string) (Baseline, bool, error)
+	// GetBaseline returns the FBC digest of a slot's baseline.
+	GetBaseline(ctx context.Context, stream, operator, ocp string) (string, bool, error)
 	// InsertBaseline stores b unless its slot has a baseline already.
 	InsertBaseline(context.Context, Baseline) error
 }

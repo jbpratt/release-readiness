@@ -10,7 +10,7 @@ import (
 )
 
 const firstIncludedReconcileAction = `-- name: FirstIncludedReconcileAction :one
-SELECT fbc_digest, issue_key, release_name, assembly, fbc_nvr, baseline_digest, evidence_json, desired_target_version, actual_target_version, status_before, status_after, status, skip_reason, error, version_step, transition_step, comment_step, comment_marker, comment_id, attempts, last_attempt_at, updated_at FROM reconcile_actions
+SELECT fbc_digest, issue_key, release_name, assembly, fbc_nvr, evidence_json, desired_target_version, status, skip_reason, error, version_step, transition_step, comment_step, attempts, updated_at FROM reconcile_actions
 WHERE issue_key = ?1
   AND substr(assembly, 1, length(CAST(?2 AS TEXT))) = CAST(?2 AS TEXT)
   AND status IN ('proposed', 'applied', 'error')
@@ -33,22 +33,15 @@ func (q *Queries) FirstIncludedReconcileAction(ctx context.Context, arg FirstInc
 		&i.ReleaseName,
 		&i.Assembly,
 		&i.FbcNvr,
-		&i.BaselineDigest,
 		&i.EvidenceJson,
 		&i.DesiredTargetVersion,
-		&i.ActualTargetVersion,
-		&i.StatusBefore,
-		&i.StatusAfter,
 		&i.Status,
 		&i.SkipReason,
 		&i.Error,
 		&i.VersionStep,
 		&i.TransitionStep,
 		&i.CommentStep,
-		&i.CommentMarker,
-		&i.CommentID,
 		&i.Attempts,
-		&i.LastAttemptAt,
 		&i.UpdatedAt,
 	)
 	return i, err
@@ -75,7 +68,7 @@ func (q *Queries) GetDigestSourceState(ctx context.Context, digest string) (GetD
 }
 
 const getReconcileBaseline = `-- name: GetReconcileBaseline :one
-SELECT stream, operator, ocp, fbc_digest, fbc_nvr
+SELECT fbc_digest
 FROM reconcile_baselines
 WHERE stream = ? AND operator = ? AND ocp = ?
 `
@@ -86,60 +79,16 @@ type GetReconcileBaselineParams struct {
 	Ocp      string
 }
 
-type GetReconcileBaselineRow struct {
-	Stream    string
-	Operator  string
-	Ocp       string
-	FbcDigest string
-	FbcNvr    string
-}
-
-func (q *Queries) GetReconcileBaseline(ctx context.Context, arg GetReconcileBaselineParams) (GetReconcileBaselineRow, error) {
+func (q *Queries) GetReconcileBaseline(ctx context.Context, arg GetReconcileBaselineParams) (string, error) {
 	row := q.db.QueryRowContext(ctx, getReconcileBaseline, arg.Stream, arg.Operator, arg.Ocp)
-	var i GetReconcileBaselineRow
-	err := row.Scan(
-		&i.Stream,
-		&i.Operator,
-		&i.Ocp,
-		&i.FbcDigest,
-		&i.FbcNvr,
-	)
-	return i, err
-}
-
-const getSourceByRecord = `-- name: GetSourceByRecord :one
-SELECT h.record_id, s.name, h.nvr, h.digest, s.source_repo, h.commitish
-FROM art_history_records h
-JOIN art_source_repos s ON s.record_id = h.record_id
-WHERE h.record_id = ? AND s.source_repo != ''
-`
-
-type GetSourceByRecordRow struct {
-	RecordID   string
-	Name       string
-	Nvr        string
-	Digest     string
-	SourceRepo string
-	Commitish  string
-}
-
-func (q *Queries) GetSourceByRecord(ctx context.Context, recordID string) (GetSourceByRecordRow, error) {
-	row := q.db.QueryRowContext(ctx, getSourceByRecord, recordID)
-	var i GetSourceByRecordRow
-	err := row.Scan(
-		&i.RecordID,
-		&i.Name,
-		&i.Nvr,
-		&i.Digest,
-		&i.SourceRepo,
-		&i.Commitish,
-	)
-	return i, err
+	var fbc_digest string
+	err := row.Scan(&fbc_digest)
+	return fbc_digest, err
 }
 
 const insertReconcileBaseline = `-- name: InsertReconcileBaseline :exec
-INSERT INTO reconcile_baselines (stream, operator, ocp, fbc_digest, fbc_nvr, created_at)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO reconcile_baselines (stream, operator, ocp, fbc_digest)
+VALUES (?, ?, ?, ?)
 ON CONFLICT(stream, operator, ocp) DO NOTHING
 `
 
@@ -148,8 +97,6 @@ type InsertReconcileBaselineParams struct {
 	Operator  string
 	Ocp       string
 	FbcDigest string
-	FbcNvr    string
-	CreatedAt string
 }
 
 func (q *Queries) InsertReconcileBaseline(ctx context.Context, arg InsertReconcileBaselineParams) error {
@@ -158,9 +105,23 @@ func (q *Queries) InsertReconcileBaseline(ctx context.Context, arg InsertReconci
 		arg.Operator,
 		arg.Ocp,
 		arg.FbcDigest,
-		arg.FbcNvr,
-		arg.CreatedAt,
 	)
+	return err
+}
+
+const insertReconcileRun = `-- name: InsertReconcileRun :exec
+INSERT INTO reconcile_runs (release_name, fbc_digest)
+VALUES (?, ?)
+ON CONFLICT(release_name, fbc_digest) DO NOTHING
+`
+
+type InsertReconcileRunParams struct {
+	ReleaseName string
+	FbcDigest   string
+}
+
+func (q *Queries) InsertReconcileRun(ctx context.Context, arg InsertReconcileRunParams) error {
+	_, err := q.db.ExecContext(ctx, insertReconcileRun, arg.ReleaseName, arg.FbcDigest)
 	return err
 }
 
@@ -201,8 +162,8 @@ func (q *Queries) ListFBCMemberDigests(ctx context.Context, fbcDigest string) ([
 }
 
 const listPendingReconcileActions = `-- name: ListPendingReconcileActions :many
-SELECT fbc_digest, issue_key, release_name, assembly, fbc_nvr, baseline_digest, evidence_json, desired_target_version, actual_target_version, status_before, status_after, status, skip_reason, error, version_step, transition_step, comment_step, comment_marker, comment_id, attempts, last_attempt_at, updated_at FROM reconcile_actions
-WHERE issue_key != '' AND (status = 'proposed' OR (status = 'error' AND attempts < ?))
+SELECT fbc_digest, issue_key, release_name, assembly, fbc_nvr, evidence_json, desired_target_version, status, skip_reason, error, version_step, transition_step, comment_step, attempts, updated_at FROM reconcile_actions
+WHERE status = 'proposed' OR (status = 'error' AND attempts < ?)
 ORDER BY updated_at, release_name, fbc_digest, issue_key
 `
 
@@ -221,22 +182,15 @@ func (q *Queries) ListPendingReconcileActions(ctx context.Context, attempts int6
 			&i.ReleaseName,
 			&i.Assembly,
 			&i.FbcNvr,
-			&i.BaselineDigest,
 			&i.EvidenceJson,
 			&i.DesiredTargetVersion,
-			&i.ActualTargetVersion,
-			&i.StatusBefore,
-			&i.StatusAfter,
 			&i.Status,
 			&i.SkipReason,
 			&i.Error,
 			&i.VersionStep,
 			&i.TransitionStep,
 			&i.CommentStep,
-			&i.CommentMarker,
-			&i.CommentID,
 			&i.Attempts,
-			&i.LastAttemptAt,
 			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -253,7 +207,7 @@ func (q *Queries) ListPendingReconcileActions(ctx context.Context, attempts int6
 }
 
 const listSourcesByDigest = `-- name: ListSourcesByDigest :many
-SELECT h.record_id, s.name, h.nvr, h.digest, s.source_repo, h.commitish
+SELECT s.name, s.source_repo, h.commitish
 FROM art_history_records h
 JOIN art_source_repos s ON s.record_id = h.record_id
 WHERE h.digest = ? AND s.source_repo != ''
@@ -261,10 +215,7 @@ ORDER BY h.nvr, h.record_id
 `
 
 type ListSourcesByDigestRow struct {
-	RecordID   string
 	Name       string
-	Nvr        string
-	Digest     string
 	SourceRepo string
 	Commitish  string
 }
@@ -278,14 +229,7 @@ func (q *Queries) ListSourcesByDigest(ctx context.Context, digest string) ([]Lis
 	var items []ListSourcesByDigestRow
 	for rows.Next() {
 		var i ListSourcesByDigestRow
-		if err := rows.Scan(
-			&i.RecordID,
-			&i.Name,
-			&i.Nvr,
-			&i.Digest,
-			&i.SourceRepo,
-			&i.Commitish,
-		); err != nil {
+		if err := rows.Scan(&i.Name, &i.SourceRepo, &i.Commitish); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -360,7 +304,7 @@ func (q *Queries) ListStageFBCs(ctx context.Context) ([]ListStageFBCsRow, error)
 }
 
 const reconcileRunDone = `-- name: ReconcileRunDone :one
-SELECT CAST(EXISTS (SELECT 1 FROM reconcile_runs WHERE release_name = ? AND fbc_digest = ? AND error = '') AS BOOLEAN)
+SELECT CAST(EXISTS (SELECT 1 FROM reconcile_runs WHERE release_name = ? AND fbc_digest = ?) AS BOOLEAN)
 `
 
 type ReconcileRunDoneParams struct {
@@ -377,30 +321,22 @@ func (q *Queries) ReconcileRunDone(ctx context.Context, arg ReconcileRunDonePara
 
 const upsertReconcileAction = `-- name: UpsertReconcileAction :exec
 INSERT INTO reconcile_actions (
-    fbc_digest, issue_key, release_name, assembly, fbc_nvr, baseline_digest, evidence_json,
-    desired_target_version, actual_target_version, status_before, status_after, status,
-    skip_reason, error, version_step, transition_step, comment_step, comment_marker,
-    comment_id, attempts, last_attempt_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    fbc_digest, issue_key, release_name, assembly, fbc_nvr, evidence_json,
+    desired_target_version, status, skip_reason, error, version_step,
+    transition_step, comment_step, attempts, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(fbc_digest, issue_key, release_name) DO UPDATE SET
     assembly = excluded.assembly,
     fbc_nvr = excluded.fbc_nvr,
-    baseline_digest = excluded.baseline_digest,
     evidence_json = excluded.evidence_json,
     desired_target_version = excluded.desired_target_version,
-    actual_target_version = excluded.actual_target_version,
-    status_before = excluded.status_before,
-    status_after = excluded.status_after,
     status = excluded.status,
     skip_reason = excluded.skip_reason,
     error = excluded.error,
     version_step = excluded.version_step,
     transition_step = excluded.transition_step,
     comment_step = excluded.comment_step,
-    comment_marker = excluded.comment_marker,
-    comment_id = excluded.comment_id,
     attempts = excluded.attempts,
-    last_attempt_at = excluded.last_attempt_at,
     updated_at = excluded.updated_at
 WHERE (excluded.attempts = 0 AND reconcile_actions.attempts = 0 AND reconcile_actions.status != 'proposed')
    OR (excluded.attempts >= reconcile_actions.attempts AND excluded.attempts > 0
@@ -413,22 +349,15 @@ type UpsertReconcileActionParams struct {
 	ReleaseName          string
 	Assembly             string
 	FbcNvr               string
-	BaselineDigest       string
 	EvidenceJson         string
 	DesiredTargetVersion string
-	ActualTargetVersion  string
-	StatusBefore         string
-	StatusAfter          string
 	Status               string
 	SkipReason           string
 	Error                string
 	VersionStep          string
 	TransitionStep       string
 	CommentStep          string
-	CommentMarker        string
-	CommentID            string
 	Attempts             int64
-	LastAttemptAt        string
 	UpdatedAt            string
 }
 
@@ -442,48 +371,16 @@ func (q *Queries) UpsertReconcileAction(ctx context.Context, arg UpsertReconcile
 		arg.ReleaseName,
 		arg.Assembly,
 		arg.FbcNvr,
-		arg.BaselineDigest,
 		arg.EvidenceJson,
 		arg.DesiredTargetVersion,
-		arg.ActualTargetVersion,
-		arg.StatusBefore,
-		arg.StatusAfter,
 		arg.Status,
 		arg.SkipReason,
 		arg.Error,
 		arg.VersionStep,
 		arg.TransitionStep,
 		arg.CommentStep,
-		arg.CommentMarker,
-		arg.CommentID,
 		arg.Attempts,
-		arg.LastAttemptAt,
 		arg.UpdatedAt,
-	)
-	return err
-}
-
-const upsertReconcileRun = `-- name: UpsertReconcileRun :exec
-INSERT INTO reconcile_runs (release_name, fbc_digest, error, done_at)
-VALUES (?, ?, ?, ?)
-ON CONFLICT(release_name, fbc_digest) DO UPDATE SET
-    error = excluded.error,
-    done_at = excluded.done_at
-`
-
-type UpsertReconcileRunParams struct {
-	ReleaseName string
-	FbcDigest   string
-	Error       string
-	DoneAt      string
-}
-
-func (q *Queries) UpsertReconcileRun(ctx context.Context, arg UpsertReconcileRunParams) error {
-	_, err := q.db.ExecContext(ctx, upsertReconcileRun,
-		arg.ReleaseName,
-		arg.FbcDigest,
-		arg.Error,
-		arg.DoneAt,
 	)
 	return err
 }

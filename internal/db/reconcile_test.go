@@ -30,8 +30,8 @@ func TestProvenanceStore(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	qo := reconcile.Source{RecordID: "rec-qo", Name: "quay-operator", NVR: "qo-1", Digest: "sha256:aaaa", SourceRepo: "https://github.com/quay/quay-operator", Commitish: "c1"}
-	if err := d.UpsertSource(ctx, qo); err != nil {
+	qo := reconcile.Source{Name: "quay-operator", SourceRepo: "https://github.com/quay/quay-operator", Commitish: "c1"}
+	if err := d.UpsertArtSourceRepo(ctx, "rec-qo", qo.Name, qo.SourceRepo); err != nil {
 		t.Fatal(err)
 	}
 	// rec-base was checked and names no source repo.
@@ -46,14 +46,6 @@ func TestProvenanceStore(t *testing.T) {
 	if len(pending) != 1 || pending[0].RecordID != "rec-new" || pending[0].Pullspec != "x@sha256:bbbb" {
 		t.Errorf("without source: %+v, want only rec-new", pending)
 	}
-	if got, ok, err := d.SourceByRecord(ctx, "rec-qo"); err != nil || !ok || got != qo {
-		t.Errorf("source of rec-qo: %+v, %v, %v; want %+v", got, ok, err, qo)
-	}
-	for _, id := range []string{"rec-base", "rec-new"} {
-		if got, ok, err := d.SourceByRecord(ctx, id); err != nil || ok {
-			t.Errorf("source of %s: %+v, %v, %v; want none", id, got, ok, err)
-		}
-	}
 	if got, err := d.SourcesByDigest(ctx, "sha256:aaaa"); err != nil || len(got) != 1 || got[0] != qo {
 		t.Errorf("sources of sha256:aaaa: %+v, %v; want only %+v", got, err, qo)
 	}
@@ -63,17 +55,17 @@ func TestProvenanceStore(t *testing.T) {
 		}
 	}
 
-	first := reconcile.Baseline{Stream: "3.18", Operator: "quay-operator", OCP: "4.21", FBCDigest: "sha256:ffff", FBCNVR: "fbc-1"}
+	first := reconcile.Baseline{Stream: "3.18", Operator: "quay-operator", OCP: "4.21", FBCDigest: "sha256:ffff"}
 	if _, ok, err := d.GetBaseline(ctx, "3.18", "quay-operator", "4.21"); err != nil || ok {
 		t.Fatalf("baseline before insert: %v, %v", ok, err)
 	}
-	for _, b := range []reconcile.Baseline{first, {Stream: "3.18", Operator: "quay-operator", OCP: "4.21", FBCDigest: "sha256:eeee", FBCNVR: "fbc-2"}} {
+	for _, b := range []reconcile.Baseline{first, {Stream: "3.18", Operator: "quay-operator", OCP: "4.21", FBCDigest: "sha256:eeee"}} {
 		if err := d.InsertBaseline(ctx, b); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if got, ok, err := d.GetBaseline(ctx, "3.18", "quay-operator", "4.21"); err != nil || !ok || got != first {
-		t.Errorf("baseline: %+v, %v, %v; want the first %+v", got, ok, err, first)
+	if got, ok, err := d.GetBaseline(ctx, "3.18", "quay-operator", "4.21"); err != nil || !ok || got != first.FBCDigest {
+		t.Errorf("baseline: %q, %v, %v; want the first %q", got, ok, err, first.FBCDigest)
 	}
 }
 
@@ -198,14 +190,13 @@ func TestReconcileStore(t *testing.T) {
 		t.Errorf("pending: %+v, %v; want d3 and d1", got, err)
 	}
 
-	if err := d.MarkRun(ctx, "rel-b", "sha256:b", "boom"); err != nil {
-		t.Fatal(err)
-	}
 	if done, err := d.RunDone(ctx, "rel-b", "sha256:b"); err != nil || done {
-		t.Errorf("failed run done: %v, %v", done, err)
+		t.Errorf("unmarked run done: %v, %v", done, err)
 	}
-	if err := d.MarkRun(ctx, "rel-b", "sha256:b", ""); err != nil {
-		t.Fatal(err)
+	for range 2 {
+		if err := d.MarkRun(ctx, "rel-b", "sha256:b"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if done, err := d.RunDone(ctx, "rel-b", "sha256:b"); err != nil || !done {
 		t.Errorf("run done: %v, %v", done, err)

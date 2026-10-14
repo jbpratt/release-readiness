@@ -1,11 +1,5 @@
--- name: GetSourceByRecord :one
-SELECT h.record_id, s.name, h.nvr, h.digest, s.source_repo, h.commitish
-FROM art_history_records h
-JOIN art_source_repos s ON s.record_id = h.record_id
-WHERE h.record_id = ? AND s.source_repo != '';
-
 -- name: ListSourcesByDigest :many
-SELECT h.record_id, s.name, h.nvr, h.digest, s.source_repo, h.commitish
+SELECT s.name, s.source_repo, h.commitish
 FROM art_history_records h
 JOIN art_source_repos s ON s.record_id = h.record_id
 WHERE h.digest = ? AND s.source_repo != ''
@@ -19,13 +13,13 @@ LEFT JOIN art_source_repos s ON s.record_id = h.record_id
 WHERE h.digest = ?;
 
 -- name: GetReconcileBaseline :one
-SELECT stream, operator, ocp, fbc_digest, fbc_nvr
+SELECT fbc_digest
 FROM reconcile_baselines
 WHERE stream = ? AND operator = ? AND ocp = ?;
 
 -- name: InsertReconcileBaseline :exec
-INSERT INTO reconcile_baselines (stream, operator, ocp, fbc_digest, fbc_nvr, created_at)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO reconcile_baselines (stream, operator, ocp, fbc_digest)
+VALUES (?, ?, ?, ?)
 ON CONFLICT(stream, operator, ocp) DO NOTHING;
 
 -- name: UpsertReconcileAction :exec
@@ -33,30 +27,22 @@ ON CONFLICT(stream, operator, ocp) DO NOTHING;
 -- unproposed rows; the writer's move a proposed or error row on, never back
 -- to an earlier attempt.
 INSERT INTO reconcile_actions (
-    fbc_digest, issue_key, release_name, assembly, fbc_nvr, baseline_digest, evidence_json,
-    desired_target_version, actual_target_version, status_before, status_after, status,
-    skip_reason, error, version_step, transition_step, comment_step, comment_marker,
-    comment_id, attempts, last_attempt_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    fbc_digest, issue_key, release_name, assembly, fbc_nvr, evidence_json,
+    desired_target_version, status, skip_reason, error, version_step,
+    transition_step, comment_step, attempts, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(fbc_digest, issue_key, release_name) DO UPDATE SET
     assembly = excluded.assembly,
     fbc_nvr = excluded.fbc_nvr,
-    baseline_digest = excluded.baseline_digest,
     evidence_json = excluded.evidence_json,
     desired_target_version = excluded.desired_target_version,
-    actual_target_version = excluded.actual_target_version,
-    status_before = excluded.status_before,
-    status_after = excluded.status_after,
     status = excluded.status,
     skip_reason = excluded.skip_reason,
     error = excluded.error,
     version_step = excluded.version_step,
     transition_step = excluded.transition_step,
     comment_step = excluded.comment_step,
-    comment_marker = excluded.comment_marker,
-    comment_id = excluded.comment_id,
     attempts = excluded.attempts,
-    last_attempt_at = excluded.last_attempt_at,
     updated_at = excluded.updated_at
 WHERE (excluded.attempts = 0 AND reconcile_actions.attempts = 0 AND reconcile_actions.status != 'proposed')
    OR (excluded.attempts >= reconcile_actions.attempts AND excluded.attempts > 0
@@ -64,7 +50,7 @@ WHERE (excluded.attempts = 0 AND reconcile_actions.attempts = 0 AND reconcile_ac
 
 -- name: ListPendingReconcileActions :many
 SELECT * FROM reconcile_actions
-WHERE issue_key != '' AND (status = 'proposed' OR (status = 'error' AND attempts < ?))
+WHERE status = 'proposed' OR (status = 'error' AND attempts < ?)
 ORDER BY updated_at, release_name, fbc_digest, issue_key;
 
 -- name: FirstIncludedReconcileAction :one
@@ -109,11 +95,9 @@ WHERE fbc_renders.digest = sqlc.arg(fbc_digest) AND state = 'rendered' AND head_
 ORDER BY 1;
 
 -- name: ReconcileRunDone :one
-SELECT CAST(EXISTS (SELECT 1 FROM reconcile_runs WHERE release_name = ? AND fbc_digest = ? AND error = '') AS BOOLEAN);
+SELECT CAST(EXISTS (SELECT 1 FROM reconcile_runs WHERE release_name = ? AND fbc_digest = ?) AS BOOLEAN);
 
--- name: UpsertReconcileRun :exec
-INSERT INTO reconcile_runs (release_name, fbc_digest, error, done_at)
-VALUES (?, ?, ?, ?)
-ON CONFLICT(release_name, fbc_digest) DO UPDATE SET
-    error = excluded.error,
-    done_at = excluded.done_at;
+-- name: InsertReconcileRun :exec
+INSERT INTO reconcile_runs (release_name, fbc_digest)
+VALUES (?, ?)
+ON CONFLICT(release_name, fbc_digest) DO NOTHING;

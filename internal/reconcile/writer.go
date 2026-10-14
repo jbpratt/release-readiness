@@ -8,7 +8,6 @@ import (
 	"path"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/quay/release-readiness/internal/jira"
 )
@@ -39,11 +38,10 @@ type Writer struct {
 	store   ActionStore
 	project string
 	logger  *slog.Logger
-	now     func() time.Time
 }
 
 func NewWriter(j JiraWriter, store ActionStore, project string, log *slog.Logger) *Writer {
-	return &Writer{jira: j, store: store, project: project, logger: log, now: time.Now}
+	return &Writer{jira: j, store: store, project: project, logger: log}
 }
 
 // ApplyPending applies every pending action. Only store errors fail it.
@@ -69,7 +67,6 @@ func (w *Writer) Apply(ctx context.Context, a Action) error {
 		return nil
 	}
 	a.Attempts++
-	a.LastAttemptAt = w.now().UTC()
 	for _, step := range []func(context.Context, *Action) error{w.version, w.transition, w.comment} {
 		err := step(ctx, &a)
 		switch {
@@ -98,10 +95,6 @@ func (w *Writer) issue(ctx context.Context, a *Action) (jira.WriteIssue, bool, e
 	if err != nil {
 		return issue, false, err
 	}
-	if a.StatusBefore == "" {
-		a.StatusBefore = issue.Status
-	}
-	a.StatusAfter = issue.Status
 	stream := placeholder(a.DesiredTargetVersion)
 	switch {
 	case issue.Project != w.project:
@@ -151,7 +144,6 @@ func (w *Writer) version(ctx context.Context, a *Action) error {
 	if !meta.TargetVersion {
 		return skip(a, "Target Version is not editable")
 	}
-	a.ActualTargetVersion = a.DesiredTargetVersion
 	if slices.Contains(issue.TargetVersions, a.DesiredTargetVersion) {
 		a.VersionStep = "already"
 		return nil
@@ -193,7 +185,7 @@ func (w *Writer) transition(ctx context.Context, a *Action) error {
 	if err := w.jira.Transition(ctx, a.Key.IssueKey, ts[i].ID); err != nil {
 		return err
 	}
-	a.TransitionStep, a.StatusAfter = "transitioned", releasePending
+	a.TransitionStep = "transitioned"
 	return nil
 }
 
@@ -206,13 +198,13 @@ func (w *Writer) comment(ctx context.Context, a *Action) error {
 	if _, ok, err := w.issue(ctx, a); !ok {
 		return err
 	}
-	a.CommentMarker = fmt.Sprintf("release-readiness FBC stamp %s %s", a.Key.FBCDigest, a.Key.IssueKey)
+	marker := fmt.Sprintf("release-readiness FBC stamp %s %s", a.Key.FBCDigest, a.Key.IssueKey)
 	comments, err := w.jira.ListComments(ctx, a.Key.IssueKey)
 	if err != nil {
 		return err
 	}
-	if i := slices.IndexFunc(comments, func(c jira.Comment) bool { return strings.Contains(c.Body, a.CommentMarker) }); i >= 0 {
-		a.CommentID, a.CommentStep = comments[i].ID, "already"
+	if slices.ContainsFunc(comments, func(c jira.Comment) bool { return strings.Contains(c.Body, marker) }) {
+		a.CommentStep = "already"
 		return nil
 	}
 	var ev []evidence
@@ -224,12 +216,11 @@ func (w *Writer) comment(ctx context.Context, a *Action) error {
 	for _, e := range ev {
 		fmt.Fprintf(&b, "* %s/commit/%s (%s)\n", e.Repo, e.SHA, e.Component)
 	}
-	fmt.Fprintf(&b, "\n%s\n", a.CommentMarker)
-	id, err := w.jira.AddComment(ctx, a.Key.IssueKey, b.String())
-	if err != nil {
+	fmt.Fprintf(&b, "\n%s\n", marker)
+	if _, err := w.jira.AddComment(ctx, a.Key.IssueKey, b.String()); err != nil {
 		return err
 	}
-	a.CommentID, a.CommentStep = id, "added"
+	a.CommentStep = "added"
 	return nil
 }
 

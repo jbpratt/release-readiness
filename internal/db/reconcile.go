@@ -13,22 +13,6 @@ import (
 
 var _ reconcile.Store = (*DB)(nil)
 
-// UpsertSource stores s's name and source repo for its stored ART record.
-func (d *DB) UpsertSource(ctx context.Context, s reconcile.Source) error {
-	return d.UpsertArtSourceRepo(ctx, s.RecordID, s.Name, s.SourceRepo)
-}
-
-func (d *DB) SourceByRecord(ctx context.Context, recordID string) (reconcile.Source, bool, error) {
-	r, err := d.queries().GetSourceByRecord(ctx, recordID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return reconcile.Source{}, false, nil
-	}
-	if err != nil {
-		return reconcile.Source{}, false, err
-	}
-	return reconcile.Source{RecordID: r.RecordID, Name: r.Name, NVR: r.Nvr, Digest: r.Digest, SourceRepo: r.SourceRepo, Commitish: r.Commitish}, true, nil
-}
-
 func (d *DB) SourcesByDigest(ctx context.Context, digest string) ([]reconcile.Source, error) {
 	rows, err := d.queries().ListSourcesByDigest(ctx, digest)
 	if err != nil {
@@ -36,7 +20,7 @@ func (d *DB) SourcesByDigest(ctx context.Context, digest string) ([]reconcile.So
 	}
 	sources := make([]reconcile.Source, len(rows))
 	for i, r := range rows {
-		sources[i] = reconcile.Source{RecordID: r.RecordID, Name: r.Name, NVR: r.Nvr, Digest: r.Digest, SourceRepo: r.SourceRepo, Commitish: r.Commitish}
+		sources[i] = reconcile.Source{Name: r.Name, SourceRepo: r.SourceRepo, Commitish: r.Commitish}
 	}
 	return sources, nil
 }
@@ -46,15 +30,12 @@ func (d *DB) SourceState(ctx context.Context, digest string) (stored, unchecked 
 	return r.HasRecord, r.HasUnchecked, err
 }
 
-func (d *DB) GetBaseline(ctx context.Context, stream, operator, ocp string) (reconcile.Baseline, bool, error) {
-	r, err := d.queries().GetReconcileBaseline(ctx, dbsqlc.GetReconcileBaselineParams{Stream: stream, Operator: operator, Ocp: ocp})
+func (d *DB) GetBaseline(ctx context.Context, stream, operator, ocp string) (string, bool, error) {
+	digest, err := d.queries().GetReconcileBaseline(ctx, dbsqlc.GetReconcileBaselineParams{Stream: stream, Operator: operator, Ocp: ocp})
 	if errors.Is(err, sql.ErrNoRows) {
-		return reconcile.Baseline{}, false, nil
+		return "", false, nil
 	}
-	if err != nil {
-		return reconcile.Baseline{}, false, err
-	}
-	return reconcile.Baseline{Stream: r.Stream, Operator: r.Operator, OCP: r.Ocp, FBCDigest: r.FbcDigest, FBCNVR: r.FbcNvr}, true, nil
+	return digest, err == nil, err
 }
 
 func (d *DB) InsertBaseline(ctx context.Context, b reconcile.Baseline) error {
@@ -63,8 +44,6 @@ func (d *DB) InsertBaseline(ctx context.Context, b reconcile.Baseline) error {
 		Operator:  b.Operator,
 		Ocp:       b.OCP,
 		FbcDigest: b.FBCDigest,
-		FbcNvr:    b.FBCNVR,
-		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	})
 }
 
@@ -85,22 +64,15 @@ func (d *DB) UpsertAction(ctx context.Context, a reconcile.Action) error {
 		ReleaseName:          a.Key.Release,
 		Assembly:             a.Assembly,
 		FbcNvr:               a.FBCNVR,
-		BaselineDigest:       a.BaselineDigest,
 		EvidenceJson:         a.EvidenceJSON,
 		DesiredTargetVersion: a.DesiredTargetVersion,
-		ActualTargetVersion:  a.ActualTargetVersion,
-		StatusBefore:         a.StatusBefore,
-		StatusAfter:          a.StatusAfter,
 		Status:               a.Status,
 		SkipReason:           a.SkipReason,
 		Error:                a.Error,
 		VersionStep:          a.VersionStep,
 		TransitionStep:       a.TransitionStep,
 		CommentStep:          a.CommentStep,
-		CommentMarker:        a.CommentMarker,
-		CommentID:            a.CommentID,
 		Attempts:             int64(a.Attempts),
-		LastAttemptAt:        formatActionTime(a.LastAttemptAt),
 		UpdatedAt:            formatActionTime(a.UpdatedAt),
 	})
 }
@@ -133,22 +105,15 @@ func toAction(r dbsqlc.ReconcileAction) reconcile.Action {
 		Key:                  reconcile.ActionKey{FBCDigest: r.FbcDigest, IssueKey: r.IssueKey, Release: r.ReleaseName},
 		Assembly:             r.Assembly,
 		FBCNVR:               r.FbcNvr,
-		BaselineDigest:       r.BaselineDigest,
 		EvidenceJSON:         r.EvidenceJson,
 		DesiredTargetVersion: r.DesiredTargetVersion,
-		ActualTargetVersion:  r.ActualTargetVersion,
-		StatusBefore:         r.StatusBefore,
-		StatusAfter:          r.StatusAfter,
 		Status:               r.Status,
 		SkipReason:           r.SkipReason,
 		Error:                r.Error,
 		VersionStep:          r.VersionStep,
 		TransitionStep:       r.TransitionStep,
 		CommentStep:          r.CommentStep,
-		CommentMarker:        r.CommentMarker,
-		CommentID:            r.CommentID,
 		Attempts:             int(r.Attempts),
-		LastAttemptAt:        parseTime(r.LastAttemptAt),
 		UpdatedAt:            parseTime(r.UpdatedAt),
 	}
 }
@@ -180,11 +145,6 @@ func (d *DB) RunDone(ctx context.Context, release, fbcDigest string) (bool, erro
 	return d.queries().ReconcileRunDone(ctx, dbsqlc.ReconcileRunDoneParams{ReleaseName: release, FbcDigest: fbcDigest})
 }
 
-func (d *DB) MarkRun(ctx context.Context, release, fbcDigest, errText string) error {
-	return d.queries().UpsertReconcileRun(ctx, dbsqlc.UpsertReconcileRunParams{
-		ReleaseName: release,
-		FbcDigest:   fbcDigest,
-		Error:       errText,
-		DoneAt:      time.Now().UTC().Format(time.RFC3339),
-	})
+func (d *DB) MarkRun(ctx context.Context, release, fbcDigest string) error {
+	return d.queries().InsertReconcileRun(ctx, dbsqlc.InsertReconcileRunParams{ReleaseName: release, FbcDigest: fbcDigest})
 }
