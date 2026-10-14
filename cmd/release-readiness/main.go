@@ -25,6 +25,7 @@ import (
 	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/kube"
 	"github.com/quay/release-readiness/internal/prow"
+	"github.com/quay/release-readiness/internal/reconcile"
 	"github.com/quay/release-readiness/internal/scan"
 	"github.com/quay/release-readiness/internal/server"
 	"github.com/quay/release-readiness/internal/shipment"
@@ -76,7 +77,7 @@ func main() {
 	retention := flag.Duration("retention", 720*time.Hour, "age past which data no release needs is pruned daily and not ingested (0 disables)")
 
 	// GitHub flags
-	flag.String("github-token", os.Getenv("GITHUB_TOKEN"), "read-only GitHub token for commit range lookups")
+	githubToken := flag.String("github-token", os.Getenv("GITHUB_TOKEN"), "read-only GitHub token for commit range lookups")
 
 	flag.Parse()
 
@@ -171,6 +172,23 @@ func main() {
 		render := fbc.NewSync(fbc.NewRegistry(&http.Client{Timeout: 5 * time.Minute}), database, history, logger.With("component", "fbc-render"))
 		render.Status = status.Track("fbc-render", 10*time.Minute)
 		wg.Go(func() { render.Run(ctx, 10*time.Minute) })
+
+		if cfg, err := reconcile.Load(); err != nil {
+			logger.Error("load reconcile sources, reconcile disabled", "error", err)
+		} else {
+			if *githubToken == "" {
+				logger.Warn("no -github-token, reconcile reads GitHub unauthenticated")
+			}
+			commits := reconcile.NewGitHubFetcher(&http.Client{Timeout: time.Minute}, func() string { return *githubToken })
+			reconciler := reconcile.NewSync(cfg, database, commits, logger.With("component", "reconcile"))
+			reconciler.Tx = func(ctx context.Context, fn func(reconcile.Store) error) error {
+				return database.InTx(ctx, func(txDB *db.DB) error {
+					return fn(txDB)
+				})
+			}
+			reconciler.Status = status.Track("reconcile", 10*time.Minute)
+			wg.Go(func() { reconciler.Run(ctx, 10*time.Minute) })
+		}
 	}
 
 	var shipped *catalog.Shipped

@@ -18,8 +18,17 @@ var sourcesJSON []byte
 // Config is the allowlist of streams and ART components whose source commits
 // are reconciled. Anything it does not list is uncertain.
 type Config struct {
-	Streams    []string    `json:"streams"`
-	Components []Component `json:"components"`
+	Streams    []string     `json:"streams"`
+	Baseline   BaselineRule `json:"baseline"`
+	Components []Component  `json:"components"`
+}
+
+// BaselineRule is how each slot's baseline FBC is chosen. Only the rule
+// Sync implements is accepted.
+type BaselineRule struct {
+	Selection string `json:"selection"`
+	Scope     string `json:"scope"`
+	Persist   bool   `json:"persist"`
 }
 
 // Component is an ART build, by its ART name, with the public repository
@@ -53,6 +62,9 @@ func Parse(data []byte) (Config, error) {
 		if (comp.Branch == "") == (len(comp.Branches) == 0) {
 			return Config{}, fmt.Errorf("component %q: needs exactly one of branch and branches", comp.Name)
 		}
+	}
+	if c.Baseline != (BaselineRule{Selection: "latest-successful-staged-fbc-at-first-run", Scope: "stream-operator-ocp-slot", Persist: true}) {
+		return Config{}, fmt.Errorf("unsupported baseline rule %+v", c.Baseline)
 	}
 	return c, nil
 }
@@ -94,6 +106,9 @@ type ProvenanceStore interface {
 	// SourcesByDigest returns the records of an image digest that have a
 	// source repo.
 	SourcesByDigest(context.Context, string) ([]Source, error)
+	// SourceState reports whether an image digest has stored ART records,
+	// and whether one of them is not checked for a source repo yet.
+	SourceState(ctx context.Context, digest string) (stored, unchecked bool, err error)
 	GetBaseline(ctx context.Context, stream, operator, ocp string) (Baseline, bool, error)
 	// InsertBaseline stores b unless its slot has a baseline already.
 	InsertBaseline(context.Context, Baseline) error

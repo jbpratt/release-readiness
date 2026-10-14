@@ -35,6 +35,7 @@ func TestParseRejects(t *testing.T) {
 		{"bare github", `{"streams":["3.18"],"components":[{"name":"a","sourceRepo":"https://github.com/","branch":"main"}]}`, "not on https://github.com/"},
 		{"both branches", `{"streams":["3.18"],"components":[{"name":"a","sourceRepo":"https://github.com/quay/a","branch":"main","branches":{"3.18":"x"}}]}`, "exactly one"},
 		{"no branch", `{"streams":["3.18"],"components":[{"name":"a","sourceRepo":"https://github.com/quay/a"}]}`, "exactly one"},
+		{"bad baseline", `{"streams":["3.18"],"baseline":{"selection":"latest","scope":"stream-operator-ocp-slot","persist":true},"components":[]}`, "unsupported baseline"},
 	} {
 		if _, err := Parse([]byte(tc.json)); err == nil || !strings.Contains(err.Error(), tc.err) {
 			t.Errorf("%s: error %v, want %q", tc.name, err, tc.err)
