@@ -75,6 +75,9 @@ func main() {
 	// Retention flags
 	retention := flag.Duration("retention", 720*time.Hour, "age past which data no release needs is pruned daily and not ingested (0 disables)")
 
+	// GitHub flags
+	flag.String("github-token", os.Getenv("GITHUB_TOKEN"), "read-only GitHub token for commit range lookups")
+
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
