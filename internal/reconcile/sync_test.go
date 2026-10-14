@@ -63,7 +63,9 @@ func (f *fakeStore) InsertBaseline(_ context.Context, b Baseline) error {
 }
 
 func (f *fakeStore) UpsertAction(_ context.Context, a Action) error {
-	if old, ok := f.actions[a.Key]; !ok || old.Status != StatusProposed {
+	old, ok := f.actions[a.Key]
+	if !ok || a.Attempts == 0 && old.Attempts == 0 && old.Status != StatusProposed ||
+		a.Attempts > 0 && a.Attempts >= old.Attempts && (old.Status == StatusProposed || old.Status == StatusError) {
 		f.actions[a.Key] = a
 	}
 	return nil
@@ -71,11 +73,21 @@ func (f *fakeStore) UpsertAction(_ context.Context, a Action) error {
 
 func (f *fakeStore) ListActions(context.Context, string) ([]Action, error) { return nil, nil }
 
+func (f *fakeStore) PendingActions(_ context.Context, maxAttempts int) ([]Action, error) {
+	var pending []Action
+	for _, a := range f.actions {
+		if a.Key.IssueKey != "" && (a.Status == StatusProposed || a.Status == StatusError && a.Attempts < maxAttempts) {
+			pending = append(pending, a)
+		}
+	}
+	return pending, nil
+}
+
 func (f *fakeStore) FirstIncludedAction(_ context.Context, stream, issueKey string) (Action, bool, error) {
 	var first Action
 	var found bool
 	for _, a := range f.actions {
-		if a.Key.IssueKey != issueKey || !strings.HasPrefix(a.Assembly, stream+".") || a.Status != StatusProposed {
+		if a.Key.IssueKey != issueKey || !strings.HasPrefix(a.Assembly, stream+".") || !slices.Contains([]string{StatusProposed, StatusApplied, StatusError}, a.Status) {
 			continue
 		}
 		if !found || a.UpdatedAt.Before(first.UpdatedAt) || a.UpdatedAt.Equal(first.UpdatedAt) && a.Key.Release < first.Key.Release {

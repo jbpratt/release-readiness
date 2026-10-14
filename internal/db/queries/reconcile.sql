@@ -29,7 +29,9 @@ VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT(stream, operator, ocp) DO NOTHING;
 
 -- name: UpsertReconcileAction :exec
--- A proposed row is final, so only another is replaced.
+-- The reconciler's rows (no attempts) replace only its other unattempted,
+-- unproposed rows; the writer's move a proposed or error row on, never back
+-- to an earlier attempt.
 INSERT INTO reconcile_actions (
     fbc_digest, issue_key, release_name, assembly, fbc_nvr, baseline_digest, evidence_json,
     desired_target_version, actual_target_version, status_before, status_after, status,
@@ -56,7 +58,14 @@ ON CONFLICT(fbc_digest, issue_key, release_name) DO UPDATE SET
     attempts = excluded.attempts,
     last_attempt_at = excluded.last_attempt_at,
     updated_at = excluded.updated_at
-WHERE reconcile_actions.status != 'proposed';
+WHERE (excluded.attempts = 0 AND reconcile_actions.attempts = 0 AND reconcile_actions.status != 'proposed')
+   OR (excluded.attempts >= reconcile_actions.attempts AND excluded.attempts > 0
+       AND reconcile_actions.status IN ('proposed', 'error'));
+
+-- name: ListPendingReconcileActions :many
+SELECT * FROM reconcile_actions
+WHERE issue_key != '' AND (status = 'proposed' OR (status = 'error' AND attempts < ?))
+ORDER BY updated_at, release_name, fbc_digest, issue_key;
 
 -- name: ListReconcileActions :many
 SELECT * FROM reconcile_actions
@@ -68,7 +77,7 @@ ORDER BY release_name, fbc_digest, issue_key;
 SELECT * FROM reconcile_actions
 WHERE issue_key = sqlc.arg(issue_key)
   AND substr(assembly, 1, length(CAST(sqlc.arg(prefix) AS TEXT))) = CAST(sqlc.arg(prefix) AS TEXT)
-  AND status IN ('proposed', 'applied')
+  AND status IN ('proposed', 'applied', 'error')
 ORDER BY updated_at, release_name
 LIMIT 1;
 

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -78,6 +79,13 @@ func main() {
 
 	// GitHub flags
 	githubToken := flag.String("github-token", os.Getenv("GITHUB_TOKEN"), "read-only GitHub token for commit range lookups")
+
+	// Jira writer flags
+	jiraWrite := flag.Bool("jira-write", envBool("JIRA_WRITE"), "write the reconciler's proposed actions to JIRA (needs -jira-write-email and -jira-write-token)")
+	jiraWriteDryRun := flag.Bool("jira-write-dry-run", envBool("JIRA_WRITE_DRY_RUN"), "with -jira-write, read JIRA and log each write instead of making it")
+	jiraWriteKillFile := flag.String("jira-write-kill-file", os.Getenv("JIRA_WRITE_KILL_FILE"), "path whose existence stops every JIRA write")
+	jiraWriteEmail := flag.String("jira-write-email", os.Getenv("JIRA_WRITE_EMAIL"), "JIRA Cloud account email of the write credential")
+	jiraWriteToken := flag.String("jira-write-token", os.Getenv("JIRA_WRITE_TOKEN"), "JIRA Cloud API token of the write credential, never the -jira-token one")
 
 	flag.Parse()
 
@@ -187,6 +195,18 @@ func main() {
 				})
 			}
 			reconciler.Status = status.Track("reconcile", 10*time.Minute)
+			switch {
+			case !*jiraWrite:
+			case *jiraWriteEmail == "" || *jiraWriteToken == "":
+				logger.Error("-jira-write without -jira-write-email and -jira-write-token, jira writer disabled")
+			default:
+				apiURL := cmp.Or(*jiraAPIURL, *jiraURL)
+				logger.Info("jira writer enabled", "api_url", apiURL, "dry_run", *jiraWriteDryRun, "kill_file", *jiraWriteKillFile)
+				writeClient := jira.NewWriteClient(jira.Config{BaseURL: apiURL, Email: *jiraWriteEmail, Token: *jiraWriteToken, Project: *jiraProject})
+				reconciler.Writer = reconcile.NewWriter(writeClient, database, *jiraProject, logger.With("component", "jira-writer"))
+				reconciler.Writer.DryRun = *jiraWriteDryRun
+				reconciler.Writer.KillFile = *jiraWriteKillFile
+			}
 			wg.Go(func() { reconciler.Run(ctx, 10*time.Minute) })
 		}
 	}
@@ -281,4 +301,11 @@ func main() {
 
 	wg.Wait()
 	logger.Info("all background tasks stopped")
+}
+
+// envBool reads a boolean flag's environment fallback; unset or invalid is
+// false.
+func envBool(name string) bool {
+	v, _ := strconv.ParseBool(os.Getenv(name))
+	return v
 }

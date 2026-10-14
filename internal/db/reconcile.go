@@ -117,6 +117,18 @@ func (d *DB) ListActions(ctx context.Context, assembly string) ([]reconcile.Acti
 	return actions, nil
 }
 
+func (d *DB) PendingActions(ctx context.Context, maxAttempts int) ([]reconcile.Action, error) {
+	rows, err := d.queries().ListPendingReconcileActions(ctx, int64(maxAttempts))
+	if err != nil {
+		return nil, err
+	}
+	actions := make([]reconcile.Action, len(rows))
+	for i, r := range rows {
+		actions[i] = toAction(r)
+	}
+	return actions, nil
+}
+
 func (d *DB) FirstIncludedAction(ctx context.Context, stream, issueKey string) (reconcile.Action, bool, error) {
 	r, err := d.queries().FirstIncludedReconcileAction(ctx, dbsqlc.FirstIncludedReconcileActionParams{IssueKey: issueKey, Prefix: stream + "."})
 	if errors.Is(err, sql.ErrNoRows) {

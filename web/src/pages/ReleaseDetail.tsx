@@ -984,6 +984,8 @@ const actionColor: Record<FBCJiraAction["status"], LabelProps["color"]> = {
 	proposed: "blue",
 	skipped: "grey",
 	uncertain: "orange",
+	applied: "green",
+	error: "red",
 };
 
 /**
@@ -1005,7 +1007,7 @@ function JiraActionsCard({
 	}
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<LinkedCardTitle>Jira actions (report only)</LinkedCardTitle>
+			<LinkedCardTitle>Jira actions</LinkedCardTitle>
 			<CardBody>
 				{groups.size > 0 ? (
 					<Table variant="compact" style={{ tableLayout: "auto" }}>

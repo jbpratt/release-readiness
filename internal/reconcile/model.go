@@ -10,6 +10,8 @@ const (
 	StatusProposed  = "proposed"
 	StatusSkipped   = "skipped"
 	StatusUncertain = "uncertain"
+	StatusApplied   = "applied"
+	StatusError     = "error"
 )
 
 // ActionKey identifies an action: an issue an FBC's Release fixes. IssueKey
@@ -37,11 +39,16 @@ type Action struct {
 
 // ActionStore stores actions.
 type ActionStore interface {
-	// UpsertAction stores a, leaving an existing proposed row as it is.
+	// UpsertAction stores a. Without attempts, a leaves an existing
+	// proposed or attempted row as it is; with them, a replaces only a
+	// proposed or error row, from no later attempt.
 	UpsertAction(context.Context, Action) error
 	ListActions(ctx context.Context, assembly string) ([]Action, error)
-	// FirstIncludedAction returns the earliest proposed or applied action
-	// for issueKey in an assembly of stream.
+	// PendingActions returns the issue actions still to write: proposed,
+	// or error after fewer than maxAttempts attempts.
+	PendingActions(ctx context.Context, maxAttempts int) ([]Action, error)
+	// FirstIncludedAction returns the earliest proposed, applied or error
+	// action for issueKey in an assembly of stream.
 	FirstIncludedAction(ctx context.Context, stream, issueKey string) (Action, bool, error)
 }
 

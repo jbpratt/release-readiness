@@ -13,7 +13,7 @@ const firstIncludedReconcileAction = `-- name: FirstIncludedReconcileAction :one
 SELECT fbc_digest, issue_key, release_name, assembly, fbc_nvr, baseline_digest, evidence_json, desired_target_version, actual_target_version, status_before, status_after, status, skip_reason, error, version_step, transition_step, comment_step, comment_marker, comment_id, attempts, last_attempt_at, updated_at FROM reconcile_actions
 WHERE issue_key = ?1
   AND substr(assembly, 1, length(CAST(?2 AS TEXT))) = CAST(?2 AS TEXT)
-  AND status IN ('proposed', 'applied')
+  AND status IN ('proposed', 'applied', 'error')
 ORDER BY updated_at, release_name
 LIMIT 1
 `
@@ -190,6 +190,58 @@ func (q *Queries) ListFBCMemberDigests(ctx context.Context, fbcDigest string) ([
 			return nil, err
 		}
 		items = append(items, digest)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingReconcileActions = `-- name: ListPendingReconcileActions :many
+SELECT fbc_digest, issue_key, release_name, assembly, fbc_nvr, baseline_digest, evidence_json, desired_target_version, actual_target_version, status_before, status_after, status, skip_reason, error, version_step, transition_step, comment_step, comment_marker, comment_id, attempts, last_attempt_at, updated_at FROM reconcile_actions
+WHERE issue_key != '' AND (status = 'proposed' OR (status = 'error' AND attempts < ?))
+ORDER BY updated_at, release_name, fbc_digest, issue_key
+`
+
+func (q *Queries) ListPendingReconcileActions(ctx context.Context, attempts int64) ([]ReconcileAction, error) {
+	rows, err := q.db.QueryContext(ctx, listPendingReconcileActions, attempts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ReconcileAction
+	for rows.Next() {
+		var i ReconcileAction
+		if err := rows.Scan(
+			&i.FbcDigest,
+			&i.IssueKey,
+			&i.ReleaseName,
+			&i.Assembly,
+			&i.FbcNvr,
+			&i.BaselineDigest,
+			&i.EvidenceJson,
+			&i.DesiredTargetVersion,
+			&i.ActualTargetVersion,
+			&i.StatusBefore,
+			&i.StatusAfter,
+			&i.Status,
+			&i.SkipReason,
+			&i.Error,
+			&i.VersionStep,
+			&i.TransitionStep,
+			&i.CommentStep,
+			&i.CommentMarker,
+			&i.CommentID,
+			&i.Attempts,
+			&i.LastAttemptAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -398,7 +450,9 @@ ON CONFLICT(fbc_digest, issue_key, release_name) DO UPDATE SET
     attempts = excluded.attempts,
     last_attempt_at = excluded.last_attempt_at,
     updated_at = excluded.updated_at
-WHERE reconcile_actions.status != 'proposed'
+WHERE (excluded.attempts = 0 AND reconcile_actions.attempts = 0 AND reconcile_actions.status != 'proposed')
+   OR (excluded.attempts >= reconcile_actions.attempts AND excluded.attempts > 0
+       AND reconcile_actions.status IN ('proposed', 'error'))
 `
 
 type UpsertReconcileActionParams struct {
@@ -426,7 +480,9 @@ type UpsertReconcileActionParams struct {
 	UpdatedAt            string
 }
 
-// A proposed row is final, so only another is replaced.
+// The reconciler's rows (no attempts) replace only its other unattempted,
+// unproposed rows; the writer's move a proposed or error row on, never back
+// to an earlier attempt.
 func (q *Queries) UpsertReconcileAction(ctx context.Context, arg UpsertReconcileActionParams) error {
 	_, err := q.db.ExecContext(ctx, upsertReconcileAction,
 		arg.FbcDigest,

@@ -39,6 +39,8 @@ type Sync struct {
 	Tx func(ctx context.Context, fn func(Store) error) error
 	// Status receives each pass's outcome; nil reports nowhere.
 	Status *syncstatus.Source
+	// Writer, when set, applies the pending actions after each pass.
+	Writer *Writer
 }
 
 func NewSync(cfg Config, store Store, commits CommitFetcher, log *slog.Logger) *Sync {
@@ -66,7 +68,8 @@ func (s *Sync) Run(ctx context.Context, interval time.Duration) {
 
 type slot struct{ stream, operator, ocp string }
 
-// RunOnce reconciles every StageFBC not yet done. Only store errors fail it;
+// RunOnce reconciles every StageFBC not yet done, then writes the pending
+// actions to Jira when a Writer is set. Only store errors fail it;
 // anything that keeps an FBC's issues from being known is recorded as its
 // uncertainty.
 func (s *Sync) RunOnce(ctx context.Context) error {
@@ -127,6 +130,9 @@ func (s *Sync) RunOnce(ctx context.Context) error {
 		if err := s.reconcileSlot(ctx, sl, slots[sl]); err != nil {
 			return err
 		}
+	}
+	if s.Writer != nil {
+		return s.Writer.ApplyPending(ctx)
 	}
 	return nil
 }

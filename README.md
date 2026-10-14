@@ -38,6 +38,14 @@ For each Quay stream with a stored Snapshot (ART group `quay-X.Y`), lists ART's 
 
 Reads up to 20 FBC images a pass anonymously from their registry (Registry v2 API): the catalogs of staged FBC Snapshots, then the newest ART FBC build of each operator, version and OCP version. It keeps, by digest, the image's `com.redhat.art.nvr` label and the head bundle of its `stable-X.Y` channel; a failed read is retried after an hour. Each head bundle is joined to its ART bundle build, read from ART build history when not yet stored.
 
+### FBC JIRA reconciler (every 10m, with `-art-build-history-url`)
+
+For each successful STAGE Release of an ART-staged FBC Snapshot whose catalog is rendered, in a stream `internal/reconcile/sources.json` lists, finds the PROJQUAY issues the FBC fixes and stores them as actions, shown on the release page. FBCs are grouped by stream, operator and OCP version; the newest FBC of a group when first seen is its baseline and proposes nothing. Each later FBC is compared with the one before: for each member image whose digest changed and whose ART build is an allowlisted component from its listed repository, the commits between the two builds' commits on the stream's branch are read from the GitHub compare API, and each PROJQUAY key in their messages is `proposed` for `quay-vX.Y.Z`, or `skipped` when an earlier FBC of the stream already included it. Anything that keeps an FBC's fixes from being known (such as a component not allowlisted, a GitHub error, a revert of a key, a missing ART source, an FBC rendered after a later one was reconciled) is listed in its `uncertain` row instead. An FBC whose ART source records are not yet checked, or not yet stored within 6 hours of its Release completing, waits, and so do the FBCs after it. `-github-token` reads GitHub authenticated; without it the 60-requests-an-hour anonymous limit applies. Actions are not pruned by `-retention`. Its sync status is `reconcile`.
+
+### FBC JIRA writer (off by default, with `-jira-write`)
+
+After each reconcile pass, applies the proposed actions to their PROJQUAY issues, re-reading each issue before every step: replaces the stream's `quay-vX.Y.z` Target Version with the release's `quay-vX.Y.Z` (keeping every other Target Version, and skipping the issue when that version is missing, archived or released), moves a Verified issue to Release Pending (an issue already there, e.g. moved by release-tool, is never transitioned), then comments the FBC NVR, digest and commits once, found again by a marker. Each step's result is stored on the action, so a failed one is retried alone, up to 5 attempts. It uses its own credential (`-jira-write-email`, `-jira-write-token`), never the read one; `-jira-write-dry-run` makes every read and logs each write instead; while `-jira-write-kill-file` exists no write is made.
+
 ### Sync status
 
 `/api/v1/sync-status` lists as `problems` each enabled sync (`konflux`, `jira`, `art-builds`, `art-history`, `fbc-render`, `catalog`, `prow`, `image-scans`, `shipment-mrs`) whose last pass failed or that has had no success within 3 poll intervals (at least 10 minutes), and as `sources` every enabled sync with its `last_success`, null before its first success; the header shows a warning icon while any problems exist.
@@ -84,6 +92,12 @@ cd web && npm install && npm run build
 | `-jira-token` | `JIRA_TOKEN` | — | JIRA Cloud API token (required to enable JIRA sync) |
 | `-jira-project` | `JIRA_PROJECT` | `PROJQUAY` | JIRA project key |
 | `-jira-poll-interval` | — | `5m` | JIRA sync poll interval |
+| `-github-token` | `GITHUB_TOKEN` | — | Read-only GitHub token for the reconciler's commit range lookups (empty reads GitHub unauthenticated) |
+| `-jira-write` | `JIRA_WRITE` | `false` | Write the reconciler's proposed actions to JIRA; needs `-jira-write-email` and `-jira-write-token`, else stays off |
+| `-jira-write-dry-run` | `JIRA_WRITE_DRY_RUN` | `false` | With `-jira-write`, read JIRA and log each write instead of making it |
+| `-jira-write-kill-file` | `JIRA_WRITE_KILL_FILE` | — | Path whose existence stops every JIRA write, checked before each one |
+| `-jira-write-email` | `JIRA_WRITE_EMAIL` | — | JIRA Cloud account email of the write credential |
+| `-jira-write-token` | `JIRA_WRITE_TOKEN` | — | JIRA Cloud API token of the write credential, separate from `-jira-token` |
 | `-stage-release-plan-pattern` | `STAGE_RELEASE_PLAN_PATTERN` | `^quay-advisory-stage-\d+-\d+$` | Regexp matching the Konflux ReleasePlan names whose successful Releases are image STAGE builds (empty selects no staged build) |
 | `-prow-jobs` | `PROW_JOBS` | — | Periodic Prow jobs to ingest, as `job_name=konflux_application[,...]`, e.g. `periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly=quay-3-18` |
 | `-prow-interval` | — | `15m` | Prow sync poll interval |

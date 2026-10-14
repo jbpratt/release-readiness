@@ -439,7 +439,7 @@ export interface FBCJiraAction {
 	release: string;
 	/** "" on the row listing the FBC's uncertainties. */
 	issue_key: string;
-	status: "proposed" | "skipped" | "uncertain";
+	status: "proposed" | "skipped" | "uncertain" | "applied" | "error";
 	desired_target_version: string;
 	actual_target_version: string;
 	/** On an uncertain row, its reasons joined by "; ". */

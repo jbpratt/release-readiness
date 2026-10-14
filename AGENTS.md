@@ -53,6 +53,13 @@ Flags (env fallback in parentheses; defaults point at production services):
 - JIRA: `-jira-url` (`JIRA_URL`), `-jira-api-url` (`JIRA_API_URL`),
   `-jira-email` (`JIRA_EMAIL`), `-jira-token` (`JIRA_TOKEN`), `-jira-project`
   (`JIRA_PROJECT`, default `PROJQUAY`), `-jira-poll-interval`.
+- `-github-token` (`GITHUB_TOKEN`): read-only token for the FBC reconciler's
+  GitHub commit lookups; empty reads GitHub unauthenticated.
+- JIRA writer, off by default: `-jira-write` (`JIRA_WRITE`),
+  `-jira-write-dry-run` (`JIRA_WRITE_DRY_RUN`), `-jira-write-kill-file`
+  (`JIRA_WRITE_KILL_FILE`), `-jira-write-email` (`JIRA_WRITE_EMAIL`) and
+  `-jira-write-token` (`JIRA_WRITE_TOKEN`), a credential separate from the
+  read one.
 - `-art-build-history-url`, `-tekton-results-url`, `-catalog-url`: empty
   disables that source.
 - Prow: `-prow-jobs` (`PROW_JOBS`, `job_name=konflux_application[,...]`),
@@ -101,7 +108,7 @@ Each loop is started in `main.go` only when its inputs are set:
 |---|---|
 | Konflux Snapshots/Releases (`konflux`) | a kube client can be built; otherwise `konflux` is reported failing |
 | JIRA (`jira`) | `-jira-token` is set |
-| ART build resolve and history, FBC render (`art-builds`, `art-history`, `fbc-render`) | `-art-build-history-url` is set |
+| ART build resolve and history, FBC render, FBC JIRA reconciler (`art-builds`, `art-history`, `fbc-render`, `reconcile`) | `-art-build-history-url` is set |
 | Catalog (`catalog`) | `-catalog-url` is set |
 | Prow (`prow`) | `-prow-jobs` names a job |
 | GitLab shipment MRs (`shipment-mrs`) | `-gitlab-url` is set |

@@ -240,7 +240,8 @@ CREATE TABLE IF NOT EXISTS reconcile_baselines (
 
 -- What the reconciler decided for each issue an FBC's STAGE Release fixes,
 -- with its commit evidence. issue_key '' is the row listing the FBC's
--- uncertainties. A proposed row is final.
+-- uncertainties. The reconciler never replaces a proposed row; the JIRA
+-- writer moves it to applied, error or skipped.
 CREATE TABLE IF NOT EXISTS reconcile_actions (
     fbc_digest              TEXT NOT NULL,
     issue_key               TEXT NOT NULL,

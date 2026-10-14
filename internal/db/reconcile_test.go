@@ -177,6 +177,24 @@ func TestReconcileStore(t *testing.T) {
 		t.Errorf("actions of 3.18.2: %+v, %v", got, err)
 	}
 
+	// The writer moves proposed to error to applied; the reconciler
+	// cannot overwrite either, nor the writer go back an attempt.
+	failed := first
+	failed.Status, failed.Error, failed.VersionStep, failed.Attempts = reconcile.StatusError, "boom", "edited", 1
+	applied := failed
+	applied.Status, applied.Error, applied.Attempts = reconcile.StatusApplied, "", 2
+	for _, a := range []reconcile.Action{failed, applied, first, failed} {
+		if err := d.UpsertAction(ctx, a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got, err := d.ListActions(ctx, "3.18.2"); err != nil || !reflect.DeepEqual(got[0], applied) {
+		t.Errorf("after writes: %+v, %v; want %+v", got, err, applied)
+	}
+	if got, err := d.PendingActions(ctx, 5); err != nil || len(got) != 2 || got[0].Key.FBCDigest != "d3" || got[1].Key.FBCDigest != "d1" {
+		t.Errorf("pending: %+v, %v; want d3 and d1", got, err)
+	}
+
 	if err := d.MarkRun(ctx, "rel-b", "sha256:b", "boom"); err != nil {
 		t.Fatal(err)
 	}
