@@ -21,6 +21,31 @@ spec:
         - name: dashboard
           image: quay.io/quay/release-readiness:latest
           env:
+            # The FBC JIRA writer stays off until JIRA_WRITE is "true" and the
+            # jira-write secret holds its credential; creating the kill file
+            # stops every write.
+            - name: JIRA_WRITE
+              value: "false"
+            - name: JIRA_WRITE_KILL_FILE
+              value: /data/jira-write.stop
+            - name: JIRA_WRITE_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: release-readiness-jira-write
+                  key: email
+                  optional: true
+            - name: JIRA_WRITE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: release-readiness-jira-write
+                  key: token
+                  optional: true
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: release-readiness-github
+                  key: token
+                  optional: true
             - name: PROW_JOBS
               value: "periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-odf-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-azure-ocp422-e2e-install-azure-blob-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-gcp-ocp422-e2e-install-gcp-gcs-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly=quay-3-17,periodic-ci-quay-quay-redhat-3.18-aws-arm64-ocp422-e2e-install-aws-s3-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-aws-ocp414-e2e-install-aws-s3-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly-fips=quay-3-18,periodic-ci-quay-quay-redhat-3.18-aws-ocp50-e2e-install-aws-s3-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-libvirt-s390x-ocp422-e2e-install-libvirt-s3-nightly=quay-3-18"
             # The cluster-injected bundle holds the public roots and the Red

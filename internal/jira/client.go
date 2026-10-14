@@ -252,14 +252,26 @@ func (c *Client) doGetWithRetry(ctx context.Context, reqURL string) ([]byte, err
 	return nil, fmt.Errorf("max retries exceeded for %s", reqURL)
 }
 
-func (c *Client) doGet(ctx context.Context, reqURL string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+// newRequest returns a JSON request authenticated with c's credential.
+func (c *Client) newRequest(ctx context.Context, method, reqURL string, body io.Reader) (*http.Request, error) {
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, body)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	if c.token != "" {
 		req.SetBasicAuth(c.email, c.token)
+	}
+	return req, nil
+}
+
+func (c *Client) doGet(ctx context.Context, reqURL string) ([]byte, error) {
+	req, err := c.newRequest(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return nil, err
 	}
 
 	resp, err := c.httpClient.Do(req)

@@ -237,3 +237,46 @@ CREATE TABLE IF NOT EXISTS reconcile_baselines (
     created_at  TEXT NOT NULL,
     PRIMARY KEY (stream, operator, ocp)
 );
+
+-- What the reconciler decided for each issue an FBC's STAGE Release fixes,
+-- with its commit evidence. issue_key '' is the row listing the FBC's
+-- uncertainties. The reconciler never replaces a proposed row; the JIRA
+-- writer moves it to applied, error or skipped.
+CREATE TABLE IF NOT EXISTS reconcile_actions (
+    fbc_digest              TEXT NOT NULL,
+    issue_key               TEXT NOT NULL,
+    release_name            TEXT NOT NULL,
+    assembly                TEXT NOT NULL,
+    fbc_nvr                 TEXT NOT NULL DEFAULT '',
+    baseline_digest         TEXT NOT NULL DEFAULT '',
+    evidence_json           TEXT NOT NULL DEFAULT '',
+    desired_target_version  TEXT NOT NULL DEFAULT '',
+    actual_target_version   TEXT NOT NULL DEFAULT '',
+    status_before           TEXT NOT NULL DEFAULT '',
+    status_after            TEXT NOT NULL DEFAULT '',
+    status                  TEXT NOT NULL,
+    skip_reason             TEXT NOT NULL DEFAULT '',
+    error                   TEXT NOT NULL DEFAULT '',
+    version_step            TEXT NOT NULL DEFAULT '',
+    transition_step         TEXT NOT NULL DEFAULT '',
+    comment_step            TEXT NOT NULL DEFAULT '',
+    comment_marker          TEXT NOT NULL DEFAULT '',
+    comment_id              TEXT NOT NULL DEFAULT '',
+    attempts                INTEGER NOT NULL DEFAULT 0,
+    last_attempt_at         TEXT NOT NULL DEFAULT '',
+    updated_at              TEXT NOT NULL,
+    PRIMARY KEY (fbc_digest, issue_key, release_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_reconcile_actions_assembly ON reconcile_actions(assembly);
+CREATE INDEX IF NOT EXISTS idx_reconcile_actions_issue ON reconcile_actions(issue_key);
+
+-- Each STAGE FBC the reconciler has passed over. A row with error '' is
+-- done; one with an error is retried.
+CREATE TABLE IF NOT EXISTS reconcile_runs (
+    release_name TEXT NOT NULL,
+    fbc_digest  TEXT NOT NULL,
+    error       TEXT NOT NULL DEFAULT '',
+    done_at     TEXT NOT NULL,
+    PRIMARY KEY (release_name, fbc_digest)
+);

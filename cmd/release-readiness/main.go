@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"regexp"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -25,6 +26,7 @@ import (
 	"github.com/quay/release-readiness/internal/jira"
 	"github.com/quay/release-readiness/internal/kube"
 	"github.com/quay/release-readiness/internal/prow"
+	"github.com/quay/release-readiness/internal/reconcile"
 	"github.com/quay/release-readiness/internal/scan"
 	"github.com/quay/release-readiness/internal/server"
 	"github.com/quay/release-readiness/internal/shipment"
@@ -76,7 +78,14 @@ func main() {
 	retention := flag.Duration("retention", 720*time.Hour, "age past which data no release needs is pruned daily and not ingested (0 disables)")
 
 	// GitHub flags
-	flag.String("github-token", os.Getenv("GITHUB_TOKEN"), "read-only GitHub token for commit range lookups")
+	githubToken := flag.String("github-token", os.Getenv("GITHUB_TOKEN"), "read-only GitHub token for commit range lookups")
+
+	// Jira writer flags
+	jiraWrite := flag.Bool("jira-write", envBool("JIRA_WRITE"), "write the reconciler's proposed actions to JIRA (needs -jira-write-email and -jira-write-token)")
+	jiraWriteDryRun := flag.Bool("jira-write-dry-run", envBool("JIRA_WRITE_DRY_RUN"), "with -jira-write, read JIRA and log each write instead of making it")
+	jiraWriteKillFile := flag.String("jira-write-kill-file", os.Getenv("JIRA_WRITE_KILL_FILE"), "path whose existence stops every JIRA write")
+	jiraWriteEmail := flag.String("jira-write-email", os.Getenv("JIRA_WRITE_EMAIL"), "JIRA Cloud account email of the write credential")
+	jiraWriteToken := flag.String("jira-write-token", os.Getenv("JIRA_WRITE_TOKEN"), "JIRA Cloud API token of the write credential, never the -jira-token one")
 
 	flag.Parse()
 
@@ -171,6 +180,35 @@ func main() {
 		render := fbc.NewSync(fbc.NewRegistry(&http.Client{Timeout: 5 * time.Minute}), database, history, logger.With("component", "fbc-render"))
 		render.Status = status.Track("fbc-render", 10*time.Minute)
 		wg.Go(func() { render.Run(ctx, 10*time.Minute) })
+
+		if cfg, err := reconcile.Load(); err != nil {
+			logger.Error("load reconcile sources, reconcile disabled", "error", err)
+		} else {
+			if *githubToken == "" {
+				logger.Warn("no -github-token, reconcile reads GitHub unauthenticated")
+			}
+			commits := reconcile.NewGitHubFetcher(&http.Client{Timeout: time.Minute}, func() string { return *githubToken })
+			reconciler := reconcile.NewSync(cfg, database, commits, logger.With("component", "reconcile"))
+			reconciler.Tx = func(ctx context.Context, fn func(reconcile.Store) error) error {
+				return database.InTx(ctx, func(txDB *db.DB) error {
+					return fn(txDB)
+				})
+			}
+			reconciler.Status = status.Track("reconcile", 10*time.Minute)
+			switch {
+			case !*jiraWrite:
+			case *jiraWriteEmail == "" || *jiraWriteToken == "":
+				logger.Error("-jira-write without -jira-write-email and -jira-write-token, jira writer disabled")
+			default:
+				apiURL := cmp.Or(*jiraAPIURL, *jiraURL)
+				logger.Info("jira writer enabled", "api_url", apiURL, "dry_run", *jiraWriteDryRun, "kill_file", *jiraWriteKillFile)
+				writeClient := jira.NewWriteClient(jira.Config{BaseURL: apiURL, Email: *jiraWriteEmail, Token: *jiraWriteToken, Project: *jiraProject})
+				reconciler.Writer = reconcile.NewWriter(writeClient, database, *jiraProject, logger.With("component", "jira-writer"))
+				reconciler.Writer.DryRun = *jiraWriteDryRun
+				reconciler.Writer.KillFile = *jiraWriteKillFile
+			}
+			wg.Go(func() { reconciler.Run(ctx, 10*time.Minute) })
+		}
 	}
 
 	var shipped *catalog.Shipped
@@ -263,4 +301,20 @@ func main() {
 
 	wg.Wait()
 	logger.Info("all background tasks stopped")
+}
+
+// envBool reads a boolean flag's environment fallback; unset is false. An
+// invalid value exits, since reading it as false could silently turn off a
+// safety switch such as JIRA_WRITE_DRY_RUN.
+func envBool(name string) bool {
+	s := os.Getenv(name)
+	if s == "" {
+		return false
+	}
+	v, err := strconv.ParseBool(s)
+	if err != nil {
+		slog.Error("invalid boolean environment variable", "name", name, "value", s)
+		os.Exit(1)
+	}
+	return v
 }
