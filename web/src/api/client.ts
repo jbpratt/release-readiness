@@ -1,6 +1,7 @@
 import type {
 	DashboardConfig,
 	FBCBuild,
+	FBCJiraAction,
 	JiraIssue,
 	ReleaseCandidate,
 	ReleaseDetail,
@@ -46,4 +47,10 @@ export function getCandidate(version: string): Promise<ReleaseCandidate> {
 
 export function getReleaseCI(version: string): Promise<FBCBuild[]> {
 	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}/ci`);
+}
+
+export function listFBCJiraActions(version: string): Promise<FBCJiraAction[]> {
+	return fetchJSON(
+		`${BASE}/releases/${encodeURIComponent(version)}/fbc-jira-actions`,
+	);
 }

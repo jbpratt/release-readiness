@@ -42,10 +42,16 @@ import {
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { type ReactNode, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
+import {
+	getCandidate,
+	getRelease,
+	listFBCJiraActions,
+	listReleaseIssues,
+} from "../api/client";
 import type {
 	DashboardConfig,
 	FBCCandidate,
+	FBCJiraAction,
 	JiraIssue,
 	KonfluxRelease,
 	ReleaseCandidate,
@@ -125,6 +131,9 @@ export default function ReleaseDetail() {
 	} = useCachedFetch(`issues:${version}`, () => listReleaseIssues(version!));
 	const candidate = useCachedFetch(`candidate:${version}`, () =>
 		getCandidate(version!),
+	);
+	const jiraActions = useCachedFetch(`fbc-jira-actions:${version}`, () =>
+		listFBCJiraActions(version!),
 	);
 
 	if (loadingRelease && !release) {
@@ -242,6 +251,12 @@ export default function ReleaseDetail() {
 				version={version!}
 				config={config}
 				ticketKey={release.release_ticket_key}
+			/>
+
+			<JiraActionsCard
+				actions={jiraActions.data}
+				error={jiraActions.error}
+				jiraBaseUrl={config?.jira_base_url}
 			/>
 		</PageSection>
 	);
@@ -962,5 +977,113 @@ function IssuesTable({ issues }: { issues: JiraIssue[] }) {
 				))}
 			</Tbody>
 		</Table>
+	);
+}
+
+const actionColor: Record<FBCJiraAction["status"], LabelProps["color"]> = {
+	proposed: "blue",
+	skipped: "grey",
+	uncertain: "orange",
+};
+
+/**
+ * What the reconciler would change in Jira for the version's staged FBCs,
+ * grouped by FBC, with the commits naming each issue.
+ */
+function JiraActionsCard({
+	actions,
+	error,
+	jiraBaseUrl,
+}: {
+	actions?: FBCJiraAction[];
+	error?: Error;
+	jiraBaseUrl?: string;
+}) {
+	const groups = new Map<string, FBCJiraAction[]>();
+	for (const a of actions ?? []) {
+		groups.set(a.fbc_nvr, [...(groups.get(a.fbc_nvr) ?? []), a]);
+	}
+	return (
+		<Card isCompact style={{ marginBottom: "1rem" }}>
+			<LinkedCardTitle>Jira actions (report only)</LinkedCardTitle>
+			<CardBody>
+				{groups.size > 0 ? (
+					<Table variant="compact" style={{ tableLayout: "auto" }}>
+						<Thead>
+							<Tr>
+								<Th modifier="nowrap">Issue</Th>
+								<Th modifier="fitContent">Status</Th>
+								<Th modifier="nowrap">Target version</Th>
+								<Th>Reason</Th>
+								<Th>Commits</Th>
+							</Tr>
+						</Thead>
+						{[...groups].map(([nvr, rows]) => (
+							<Tbody key={nvr}>
+								<Tr>
+									<Td colSpan={5}>
+										<strong>{nvr}</strong>
+									</Td>
+								</Tr>
+								{rows.map((a) => (
+									<Tr key={`${a.release} ${a.fbc_digest} ${a.issue_key}`}>
+										<Td modifier="nowrap">
+											{a.issue_key && (
+												<ExtLink
+													href={
+														jiraBaseUrl
+															? jiraIssueUrl(a.issue_key, jiraBaseUrl)
+															: null
+													}
+												>
+													{a.issue_key}
+												</ExtLink>
+											)}
+										</Td>
+										<Td>
+											<Label isCompact color={actionColor[a.status]}>
+												{a.status}
+											</Label>
+										</Td>
+										<Td modifier="nowrap">{a.desired_target_version}</Td>
+										<Td
+											style={{ whiteSpace: "normal", wordBreak: "break-word" }}
+										>
+											{(a.skip_reason || a.error)
+												.split("; ")
+												.filter(Boolean)
+												.map((r) => (
+													<div key={r}>{r}</div>
+												))}
+										</Td>
+										<Td modifier="nowrap">
+											{a.evidence?.map((e) => (
+												<div key={`${e.repo} ${e.sha}`} title={e.component}>
+													<ExtLink
+														href={
+															e.repo && e.sha
+																? `${e.repo}/commit/${e.sha}`
+																: null
+														}
+													>
+														<code>{e.sha.slice(0, 7)}</code>
+													</ExtLink>
+												</div>
+											))}
+										</Td>
+									</Tr>
+								))}
+							</Tbody>
+						))}
+					</Table>
+				) : error ? (
+					error.message
+				) : !actions ? (
+					<Spinner size="md" />
+				) : (
+					"No staged FBC reconciled for this version yet."
+				)}
+			</CardBody>
+		</Card>
 	);
 }

@@ -424,3 +424,35 @@ export interface SyncStatus {
 	/** Every tracked source, sorted. */
 	sources: SyncSource[];
 }
+
+export interface FBCJiraEvidence {
+	component: string;
+	repo: string;
+	sha: string;
+	url: string;
+}
+
+/** What the reconciler decided for an issue fixed in a staged FBC. */
+export interface FBCJiraAction {
+	fbc_digest: string;
+	fbc_nvr: string;
+	release: string;
+	/** "" on the row listing the FBC's uncertainties. */
+	issue_key: string;
+	status: "proposed" | "skipped" | "uncertain";
+	desired_target_version: string;
+	actual_target_version: string;
+	/** On an uncertain row, its reasons joined by "; ". */
+	skip_reason: string;
+	error: string;
+	evidence: FBCJiraEvidence[] | null;
+	status_before: string;
+	status_after: string;
+	version_step: string;
+	transition_step: string;
+	comment_step: string;
+	comment_id: string;
+	attempts: number;
+	last_attempt_at: string | null;
+	updated_at: string;
+}

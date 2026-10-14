@@ -20,6 +20,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/releases/{version}/issues", s.handleListReleaseIssues)
 	mux.HandleFunc("GET /api/v1/releases/{version}/candidate", s.handleGetCandidate)
 	mux.HandleFunc("GET /api/v1/releases/{version}/ci", s.handleGetReleaseCI)
+	mux.HandleFunc("GET /api/v1/releases/{version}/fbc-jira-actions", s.handleListFBCJiraActions)
 
 	// SPA — serve React app from embedded dist/
 	distSub, _ := fs.Sub(web.DistFS, "dist")
