@@ -65,6 +65,13 @@ func setVerdict(resp *model.ReleaseCandidate, assembly string, pending int) {
 				add("blocker", op, "ART", "image_mismatch", fmt.Sprintf("Image shipment has bundle %s, the FBCs ship %s", o.ImageCheck.BundleNVR, o.HeadBundleNVR))
 			}
 		}
+		if o.FBCRIStage.State == "failed" {
+			text := fmt.Sprintf("%s bundle %s: image push to stage failed", op, o.HeadBundleNVR)
+			if r := o.FBCRIStage.Release; r != nil && r.FailedTask != "" {
+				text += " (" + r.FailedTask + ")"
+			}
+			add("blocker", op, "ART/Konflux", "stage_push_failed", text)
+		}
 		for _, m := range slices.Concat(o.Members, o.Conflicts) {
 			switch {
 			case !staged:

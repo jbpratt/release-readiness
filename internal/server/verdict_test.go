@@ -100,6 +100,9 @@ func TestSetVerdict(t *testing.T) {
 		{name: "stage_release_failed", state: "not_ready", edit: func(r *model.ReleaseCandidate) {
 			r.FBCCandidate.Operators[1].Members[0].StageFailed = &model.KonfluxRelease{ReleasedReason: "Failed", FailedTask: "verify-conforma"}
 		}, items: []string{"blocker container-security-operator ART/Konflux stage_release_failed: container-security-operator OCP 4.20: stage release failed (verify-conforma)"}},
+		{name: "stage_push_failed", state: "not_ready", edit: func(r *model.ReleaseCandidate) {
+			r.FBCCandidate.Operators[0].FBCRIStage = model.CIState{State: "failed", Release: &model.KonfluxRelease{FailedTask: "push-snapshot"}}
+		}, items: []string{"blocker quay-operator ART/Konflux stage_push_failed: quay-operator bundle quay-operator-bundle: image push to stage failed (push-snapshot)"}},
 		// Built for an OCP version and staged without it, nothing releases.
 		{name: "missing_ocp", state: "not_ready", edit: func(r *model.ReleaseCandidate) {
 			r.FBCCandidate.Pullspecs = []string{}
