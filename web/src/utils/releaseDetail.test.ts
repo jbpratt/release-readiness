@@ -322,7 +322,7 @@ test("stream only, no stage (3.16): not staged, pullspecs from the stream", () =
 	});
 	assert.deepEqual(fbcCIStep(c), {
 		variant: "warning",
-		text: "No runs",
+		text: "No runs found",
 	});
 	assert.equal(
 		fbcPullspecs(c),
@@ -625,7 +625,7 @@ test("checking: nothing warns or fails", () => {
 	assert.equal(shipsVersion(o), "");
 	assert.deepEqual(whileChecking(fbcCIStep(c), true), {
 		variant: "info",
-		text: "No runs",
+		text: "No runs found",
 	});
 	assert.deepEqual(whileChecking(fbcCIStep(c), false).variant, "warning");
 	assert.deepEqual(verdictLine({ state: "checking", items: [] }), {
@@ -876,7 +876,7 @@ test("rowChips: exceptions only, per row", () => {
 		fbc: fbcMember("4.14", head, m),
 	});
 	assert.deepEqual(chips(member({ release: ok, staged: 1 })), []);
-	assert.deepEqual(chips(member({ release: ok, staged: 3 })), ["staged 3x"]);
+	assert.deepEqual(chips(member({ release: ok, staged: 3 })), []);
 	assert.deepEqual(chips(member({ release: failed })), []);
 	const held = {
 		ocp: "4.21",
@@ -939,8 +939,8 @@ test("record mode: no prompts, only facts", () => {
 				}),
 			},
 			{ shipped: true, unreadable: "x" },
-		).map((c) => c.text),
-		["staged 2x"],
+		),
+		[],
 	);
 	assert.deepEqual(
 		rowChips(
@@ -1212,11 +1212,9 @@ const issue = (key: string, issue_type: string): JiraIssue => ({
 test("splitTickets", () => {
 	const issues = [issue("PROJQUAY-1", "Bug"), issue("PROJQUAY-2", "Task")];
 	assert.deepEqual(splitTickets(issues, "PROJQUAY-2"), {
-		ticket: issues[1],
 		work: [issues[0]],
 	});
 	assert.deepEqual(splitTickets(issues, undefined), {
-		ticket: undefined,
 		work: issues,
 	});
 });

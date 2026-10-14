@@ -93,7 +93,7 @@ export function fbcCIStep(c: FBCCandidate): CIStep {
 	const exact = runsStep(states("exact"));
 	if (exact) return exact;
 	const same = runsStep(states("equivalent"));
-	if (!same) return { variant: "warning", text: "No runs" };
+	if (!same) return { variant: "warning", text: "No runs found" };
 	return {
 		variant: "warning",
 		text: `${same.text} (same bundle)`,
@@ -346,16 +346,14 @@ export interface Chip {
 }
 
 /**
- * An FBC row's exception chips. Shipped, only facts of the record: restages;
- * else also a missing or unreadable FBC.
+ * An FBC row's exception chips: a missing or unreadable FBC, none shipped;
+ * the row's FBC build says how often it was staged.
  */
 export function rowChips(
 	r: SlotRow,
 	{ shipped, unreadable }: { shipped: boolean; unreadable?: string },
 ): Chip[] {
 	const chips: Chip[] = [];
-	if ((r.fbc?.staged ?? 0) > 1)
-		chips.push({ color: "grey", text: `staged ${r.fbc?.staged}x` });
 	if (shipped) return chips;
 	if (r.kind === "missing") chips.push({ color: "red", text: "no FBC" });
 	if (unreadable)
@@ -801,12 +799,9 @@ function oldest(times: (string | null)[]): string {
 	return relative(new Date(t).toISOString());
 }
 
-/** A version's fixVersion issues split into its release ticket, if among them, and the rest. */
+/** A version's fixVersion issues without its release ticket. */
 export function splitTickets(issues: JiraIssue[], ticketKey?: string) {
-	return {
-		ticket: issues.find((i) => i.key === ticketKey),
-		work: issues.filter((i) => i.key !== ticketKey),
-	};
+	return { work: issues.filter((i) => i.key !== ticketKey) };
 }
 
 /**

@@ -557,17 +557,20 @@ function Candidate({
 				<Step
 					title="CI"
 					variant={tested.variant}
-					description={
-						<>
-							{`Advisory · ${tested.text}`}
-							{sippy && (
+					description={sippy && <ExtLink href={sippy}>Sippy</ExtLink>}
+					popoverRender={(ref) => (
+						<Popover
+							aria-label="CI detail"
+							headerContent="CI"
+							triggerRef={ref}
+							bodyContent={
 								<>
-									{" · "}
-									<ExtLink href={sippy}>Sippy</ExtLink>
+									<div>{tested.text}</div>
+									<div>Advisory: does not block the verdict.</div>
 								</>
-							)}
-						</>
-					}
+							}
+						/>
+					)}
 				/>
 				<Step
 					title="Stage"
@@ -867,10 +870,10 @@ const fbcLabel = (nvr: string) => nvr.replace(/^.*-fbc-/, "");
 type BlockTab = "fbcs" | "images";
 
 /**
- * An operator's detail: the bundle and channel its FBCs ship, their CSV
- * version when not the release's, and a newer stream build not on stage;
- * then its FBCs by OCP version, with exception chips, their Snapshot and
- * Release, and CI where runs exist, and its images, compared with the
+ * An operator's detail: its FBCs' CSV version when not the release's, a
+ * failed image push to stage, and a newer stream build not on stage;
+ * then its FBCs by OCP version, the tab naming their bundle and channel, with
+ * exception chips, and CI where runs exist, and its images, compared with the
  * previous z or that newer build. A left-out operator's are the stream's FBCs
  * to add.
  */
@@ -906,21 +909,19 @@ function OperatorDetail({
 	const nvr = o.head_bundle_nvr;
 	const unread = unreadText(items, o.operator);
 	const csv = shipsVersion(o);
-	const head = nvr ? (
-		<>
-			{csv && csv !== `v${version}` && `CSV ${csv} · `}
-			<span title={nvr}>bundle {bundleBuilt(nvr) || nvr}</span>
-			{o.channel && ` · ${o.channel}`}
-			{o.fbc_ri_stage.state === "failed" && " · image push to stage failed"}
-		</>
-	) : (
-		(unread ?? "reading…")
-	);
+	const head = nvr
+		? [
+				csv && csv !== `v${version}` && `CSV ${csv}`,
+				o.fbc_ri_stage.state === "failed" && "image push to stage failed",
+			]
+				.filter(Boolean)
+				.join(" · ")
+		: (unread ?? "reading…");
 	const newer = o.compare.find((c) => c.kind === "newer");
 	const change = newer && compareLine(newer);
 	return (
 		<>
-			<div style={muted}>{head}</div>
+			{head && <div style={muted}>{head}</div>}
 			{ahead && (
 				<Flex gap={{ default: "gapSm" }} flexWrap={{ default: "nowrap" }}>
 					<FlexItem>{levelIcons[change?.level ?? "info"]}</FlexItem>
@@ -948,7 +949,22 @@ function OperatorDetail({
 				aria-label={`${o.operator} FBCs and images`}
 				style={{ marginBottom: "var(--pf-t--global--spacer--md)" }}
 			>
-				<Tab eventKey="fbcs" title={<TabTitleText>FBCs {fbcs}</TabTitleText>}>
+				<Tab
+					eventKey="fbcs"
+					title={<TabTitleText>FBCs {fbcs}</TabTitleText>}
+					tooltip={
+						nvr ? (
+							<Tooltip
+								content={
+									<>
+										<div>Bundle {nvr}</div>
+										{o.channel && <div>Channel {o.channel}</div>}
+									</>
+								}
+							/>
+						) : undefined
+					}
+				>
 					<Gallery
 						hasGutter
 						minWidths={{ default: "18rem" }}
@@ -956,7 +972,25 @@ function OperatorDetail({
 					>
 						{rows.map((r) => (
 							<Card isCompact key={`${r.ocp} ${r.fbc?.digest ?? ""}`}>
-								<CardTitle>OCP {r.ocp}</CardTitle>
+								<CardTitle>
+									<Flex gap={{ default: "gapSm" }}>
+										OCP {r.ocp}
+										{rowChips(r, {
+											shipped,
+											unreadable: slotItem(
+												items,
+												"read_failed",
+												o.operator,
+												r.ocp,
+											)?.text,
+										}).map((c) => (
+											<Label key={c.text} isCompact color={c.color}>
+												<span title={c.title}>{c.text}</span>
+											</Label>
+										))}
+										<OtherBundle row={r} />
+									</Flex>
+								</CardTitle>
 								<CardBody>
 									<DescriptionList isCompact>
 										{r.fbc && (
@@ -966,7 +1000,11 @@ function OperatorDetail({
 													<DescriptionListDescription>
 														<ExtLink
 															href={r.fbc.build_url || null}
-															title={r.fbc.nvr}
+															title={
+																(r.fbc.staged ?? 0) > 1
+																	? `${r.fbc.nvr}\nstaged ${r.fbc.staged}x`
+																	: r.fbc.nvr
+															}
 														>
 															{r.fbc.nvr
 																? fbcLabel(r.fbc.nvr)
@@ -990,27 +1028,6 @@ function OperatorDetail({
 												</DescriptionListGroup>
 											</>
 										)}
-										<DescriptionListGroup>
-											<DescriptionListTerm>Stage</DescriptionListTerm>
-											<DescriptionListDescription>
-												<Flex gap={{ default: "gapXs" }}>
-													{rowChips(r, {
-														shipped,
-														unreadable: slotItem(
-															items,
-															"read_failed",
-															o.operator,
-															r.ocp,
-														)?.text,
-													}).map((c) => (
-														<Label key={c.text} isCompact color={c.color}>
-															<span title={c.title}>{c.text}</span>
-														</Label>
-													))}
-													<OtherBundle row={r} />
-												</Flex>
-											</DescriptionListDescription>
-										</DescriptionListGroup>
 										{((r.fbc?.ci?.exact.length ?? 0) > 0 ||
 											(r.fbc?.ci?.equivalent.length ?? 0) > 0) && (
 											<DescriptionListGroup>
@@ -1607,22 +1624,7 @@ function CICard({
 					</>
 				}
 			>
-				CI{" "}
-				<Popover
-					bodyContent={
-						<>
-							<div>CI runs that tested this candidate's FBC.</div>
-							<div>Failed or missing CI runs do not block the verdict.</div>
-						</>
-					}
-				>
-					<Button
-						variant="plain"
-						hasNoPadding
-						aria-label="About CI"
-						icon={<OutlinedQuestionCircleIcon />}
-					/>
-				</Popover>
+				CI
 			</LinkedCardTitle>
 			<CardBody>
 				<List isPlain>
@@ -1653,8 +1655,8 @@ function CICard({
 }
 
 /**
- * The version's fixVersion issues: its release ticket apart from the work,
- * which a shipped version folds behind a summary.
+ * The version's fixVersion issues but its release ticket, shown atop the
+ * page; a shipped version folds them behind a summary.
  */
 function TicketsCard({
 	issues,
@@ -1672,7 +1674,7 @@ function TicketsCard({
 	shipped: boolean;
 }) {
 	const [expanded, setExpanded] = useState(false);
-	const { ticket, work } = splitTickets(issues ?? [], ticketKey);
+	const { work } = splitTickets(issues ?? [], ticketKey);
 	const hasIssues = work.length > 0;
 	const jira = config?.jira_project
 		? jiraSearchUrl(
@@ -1688,21 +1690,6 @@ function TicketsCard({
 				{hasIssues && ` (${work.length})`}
 			</LinkedCardTitle>
 			<CardBody>
-				{ticketKey && (
-					<div style={{ marginBottom: "0.5rem" }}>
-						<span className="rr-label">Release ticket</span>{" "}
-						<a
-							href={jiraIssueUrl(
-								ticketKey,
-								config?.jira_base_url || "https://redhat.atlassian.net",
-							)}
-							{...external}
-						>
-							{ticketKey}
-						</a>{" "}
-						{ticket?.summary}
-					</div>
-				)}
 				{hasIssues && shipped ? (
 					<ExpandableSection
 						toggleText={issueSummary(work)}
@@ -1720,7 +1707,11 @@ function TicketsCard({
 				) : config?.jira_enabled === false ? (
 					"Jira sync off."
 				) : (
-					"No linked fixVersion issues."
+					<EmptyState
+						variant="xs"
+						headingLevel="h4"
+						titleText="No linked fixVersion issues"
+					/>
 				)}
 			</CardBody>
 		</Card>
