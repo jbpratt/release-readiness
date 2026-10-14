@@ -34,6 +34,7 @@ import {
 	Tooltip,
 } from "@patternfly/react-core";
 import {
+	CopyIcon,
 	ExclamationCircleIcon,
 	ExclamationTriangleIcon,
 	ExternalLinkAltIcon,
@@ -583,6 +584,7 @@ function Candidate({
 							<Th>OCP</Th>
 							<Th>Built (UTC)</Th>
 							<Th>Stage and CI</Th>
+							<Th screenReaderText="FBC sha" />
 						</Tr>
 					</Thead>
 					<Tbody>
@@ -614,6 +616,20 @@ function Candidate({
 										<RunPills runs={r.runs} />
 										<Flags flags={r.flags} />
 									</Flex>
+								</Td>
+								<Td dataLabel="FBC sha" modifier="fitContent">
+									{r.fbc && (
+										<Button
+											variant="plain"
+											size="sm"
+											icon={<CopyIcon />}
+											aria-label={`Copy the ${r.operator} OCP ${r.ocp} FBC sha`}
+											title={r.fbc.digest}
+											onClick={() =>
+												navigator.clipboard.writeText(r.fbc?.digest ?? "")
+											}
+										/>
+									)}
 								</Td>
 							</Tr>
 						))}
@@ -655,11 +671,11 @@ const levelStatus: Record<VerdictItem["level"], LabelProps["status"]> = {
 	info: "info",
 };
 
-const pillColors: Record<string, LabelProps["color"]> = {
-	success: "green",
-	failure: "red",
-	error: "red",
-	pending: "blue",
+const pillStatus: Record<string, LabelProps["status"]> = {
+	success: "success",
+	failure: "danger",
+	error: "danger",
+	pending: "info",
 };
 
 const pillWords: Record<string, string> = {
@@ -680,14 +696,15 @@ function RunPills({ runs }: { runs: RunPill[] }) {
 			key={`${p.job} ${p.equivalent}`}
 			isCompact
 			isClickable
-			color={pillColors[p.state] ?? "grey"}
+			status={pillStatus[p.state]}
 			render={({ className, content, componentRef }) => (
 				<a
 					className={className}
 					href={p.prow_url}
 					ref={componentRef}
+					aria-label={`${jobShortName(p.job)} ${pillWords[p.state] ?? p.state}`}
 					title={[
-						p.job,
+						`${p.job}: ${pillWords[p.state] ?? p.state}`,
 						`Started ${when(p.started_at)}`,
 						p.install_failed && "Install failed",
 						p.runs > 1 && `Newest of ${p.runs} runs`,
@@ -703,7 +720,8 @@ function RunPills({ runs }: { runs: RunPill[] }) {
 			)}
 		>
 			{p.equivalent && "≈ "}
-			{jobShortName(p.job)} {pillWords[p.state] ?? p.state}
+			{jobShortName(p.job)}
+			{!pillStatus[p.state] && ` ${p.state}`}
 		</Label>
 	));
 }
