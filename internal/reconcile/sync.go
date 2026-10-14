@@ -28,7 +28,6 @@ var (
 // Sync proposes, for each successful STAGE FBC after its slot's baseline,
 // the Jira issues fixed by the commits between it and the previous one.
 type Sync struct {
-	cfg     Config
 	store   Store
 	commits CommitFetcher
 	logger  *slog.Logger
@@ -43,8 +42,8 @@ type Sync struct {
 	Writer *Writer
 }
 
-func NewSync(cfg Config, store Store, commits CommitFetcher, log *slog.Logger) *Sync {
-	return &Sync{cfg: cfg, store: store, commits: commits, logger: log, now: time.Now, waiting: map[[2]string]string{}}
+func NewSync(store Store, commits CommitFetcher, log *slog.Logger) *Sync {
+	return &Sync{store: store, commits: commits, logger: log, now: time.Now, waiting: map[[2]string]string{}}
 }
 
 // Run reconciles immediately and then every interval until ctx is cancelled.
@@ -92,7 +91,7 @@ func (s *Sync) RunOnce(ctx context.Context) error {
 		if i := strings.LastIndex(stream, "."); i >= 0 {
 			stream = stream[:i]
 		}
-		if !slices.Contains(s.cfg.Streams, stream) {
+		if !slices.Contains(streams, stream) {
 			s.logger.Debug("stream not configured", "release", f.Release, "assembly", f.Assembly)
 			continue
 		}
@@ -323,7 +322,7 @@ func (s *Sync) actions(ctx context.Context, stream string, base Baseline, f Stag
 			uncertain = append(uncertain, fmt.Sprintf("component %s: no ART source", digest))
 		}
 		for _, src := range srcs {
-			comp, reason := s.component(src, stream)
+			repo, branch, reason := allowlisted(src, stream)
 			if reason == "" {
 				p, ok := before[src.Name]
 				switch {
@@ -331,12 +330,11 @@ func (s *Sync) actions(ctx context.Context, stream string, base Baseline, f Stag
 					reason = "new component"
 				case ambiguous[src.Name]:
 					reason = "more than one commit in the previous FBC"
-				case p.SourceRepo != comp.SourceRepo:
-					reason = fmt.Sprintf("previous source repo %s is not %s", p.SourceRepo, comp.SourceRepo)
+				case p.SourceRepo != repo:
+					reason = fmt.Sprintf("previous source repo %s is not %s", p.SourceRepo, repo)
 				default:
-					k := span{comp.SourceRepo, p.Commitish, src.Commitish}
+					k := span{repo, p.Commitish, src.Commitish}
 					if spans[k] == nil {
-						branch, _ := s.cfg.Branch(src.Name, stream)
 						spans[k] = &spanOf{branch: branch}
 					}
 					spans[k].components = append(spans[k].components, src.Name)
@@ -455,24 +453,23 @@ func (s *Sync) memberSources(ctx context.Context, fbcDigest string) (map[string]
 	return sources, nil
 }
 
-// component returns src's allowlisted component, or why its commits cannot
-// be trusted.
-func (s *Sync) component(src Source, stream string) (Component, string) {
-	i := slices.IndexFunc(s.cfg.Components, func(c Component) bool { return c.Name == src.Name })
-	if i < 0 {
-		return Component{}, "not in the allowlist"
+// allowlisted returns the repository and branch of src's allowlisted
+// component, or why its commits cannot be trusted.
+func allowlisted(src Source, stream string) (repo, branch, reason string) {
+	c, ok := allowlist[src.Name]
+	switch {
+	case !ok:
+		return "", "", "not in the allowlist"
+	case src.SourceRepo != c.repo:
+		return "", "", fmt.Sprintf("source repo %s is not %s", src.SourceRepo, c.repo)
+	case !fullSHA.MatchString(src.Commitish):
+		return "", "", fmt.Sprintf("commit %q is not a full SHA", src.Commitish)
 	}
-	comp := s.cfg.Components[i]
-	if src.SourceRepo != comp.SourceRepo {
-		return Component{}, fmt.Sprintf("source repo %s is not %s", src.SourceRepo, comp.SourceRepo)
+	b, ok := branchOf(src.Name, stream)
+	if !ok {
+		return "", "", "no branch for stream " + stream
 	}
-	if !fullSHA.MatchString(src.Commitish) {
-		return Component{}, fmt.Sprintf("commit %q is not a full SHA", src.Commitish)
-	}
-	if _, ok := s.cfg.Branch(src.Name, stream); !ok {
-		return Component{}, "no branch for stream " + stream
-	}
-	return comp, ""
+	return c.repo, b, ""
 }
 
 func (s *Sync) uncertain(f StageFBC, baseline string, reasons []string) Action {

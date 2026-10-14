@@ -4,86 +4,48 @@ package reconcile
 
 import (
 	"context"
-	_ "embed"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"slices"
-	"strings"
 )
 
-//go:embed sources.json
-var sourcesJSON []byte
+// streams are the Quay streams whose FBCs are reconciled.
+var streams = []string{"3.16", "3.17", "3.18"}
 
-// Config is the allowlist of streams and ART components whose source commits
-// are reconciled. Anything it does not list is uncertain.
-type Config struct {
-	Streams    []string     `json:"streams"`
-	Baseline   BaselineRule `json:"baseline"`
-	Components []Component  `json:"components"`
+// component is an allowlisted ART build's public repository, and the branch
+// of each stream its commits land on; nil branches is redhat-{stream}.
+type component struct {
+	repo     string
+	branches map[string]string
 }
 
-// BaselineRule is how each slot's baseline FBC is chosen. Only the rule
-// Sync implements is accepted.
-type BaselineRule struct {
-	Selection string `json:"selection"`
-	Scope     string `json:"scope"`
-	Persist   bool   `json:"persist"`
+// allowlist holds the ART builds, by ART name, whose source commits are
+// reconciled. Anything it does not list is uncertain.
+var allowlist = map[string]component{
+	"quay-quay":                               {repo: "https://github.com/quay/quay"},
+	"quay-clair":                              {repo: "https://github.com/quay/clair", branches: map[string]string{"3.16": "release-4.8", "3.17": "release-4.9", "3.18": "release-4.9"}},
+	"quay-builder":                            {repo: "https://github.com/quay/quay-builder"},
+	"quay-builder-qemu":                       {repo: "https://github.com/quay/quay-builder-qemu"},
+	"quay-operator":                           {repo: "https://github.com/quay/quay-operator"},
+	"quay-operator-bundle":                    {repo: "https://github.com/quay/quay-operator"},
+	"quay-operator-fbc":                       {repo: "https://github.com/quay/quay-operator"},
+	"quay-bridge-operator":                    {repo: "https://github.com/quay/quay-bridge-operator"},
+	"quay-bridge-operator-bundle":             {repo: "https://github.com/quay/quay-bridge-operator"},
+	"quay-bridge-operator-fbc":                {repo: "https://github.com/quay/quay-bridge-operator"},
+	"container-security-operator":             {repo: "https://github.com/quay/container-security-operator"},
+	"quay-container-security-operator-bundle": {repo: "https://github.com/quay/container-security-operator"},
+	"container-security-operator-fbc":         {repo: "https://github.com/quay/container-security-operator"},
 }
 
-// Component is an ART build, by its ART name, with the public repository
-// and branch its commits come from. Branch may hold {stream}; Branches maps
-// a stream to its branch.
-type Component struct {
-	Name       string            `json:"name"`
-	SourceRepo string            `json:"sourceRepo"`
-	Branch     string            `json:"branch"`
-	Branches   map[string]string `json:"branches"`
-}
-
-// Load returns the embedded allowlist.
-func Load() (Config, error) {
-	return Parse(sourcesJSON)
-}
-
-// Parse decodes and validates an allowlist.
-func Parse(data []byte) (Config, error) {
-	var c Config
-	if err := json.Unmarshal(data, &c); err != nil {
-		return Config{}, err
-	}
-	if len(c.Streams) == 0 {
-		return Config{}, errors.New("no streams")
-	}
-	for _, comp := range c.Components {
-		if rest, ok := strings.CutPrefix(comp.SourceRepo, "https://github.com/"); !ok || rest == "" {
-			return Config{}, fmt.Errorf("component %q: source repo %q is not on https://github.com/", comp.Name, comp.SourceRepo)
-		}
-		if (comp.Branch == "") == (len(comp.Branches) == 0) {
-			return Config{}, fmt.Errorf("component %q: needs exactly one of branch and branches", comp.Name)
-		}
-	}
-	if c.Baseline != (BaselineRule{Selection: "latest-successful-staged-fbc-at-first-run", Scope: "stream-operator-ocp-slot", Persist: true}) {
-		return Config{}, fmt.Errorf("unsupported baseline rule %+v", c.Baseline)
-	}
-	return c, nil
-}
-
-// Branch returns the branch component's commits for stream land on, false
-// when the allowlist does not list both.
-func (c Config) Branch(component, stream string) (string, bool) {
-	if !slices.Contains(c.Streams, stream) {
+// branchOf returns the branch name's commits for stream land on, false when
+// the allowlist does not list both.
+func branchOf(name, stream string) (string, bool) {
+	c, ok := allowlist[name]
+	if !ok || !slices.Contains(streams, stream) {
 		return "", false
 	}
-	i := slices.IndexFunc(c.Components, func(comp Component) bool { return comp.Name == component })
-	if i < 0 {
-		return "", false
+	if c.branches == nil {
+		return "redhat-" + stream, true
 	}
-	comp := c.Components[i]
-	if comp.Branch != "" {
-		return strings.ReplaceAll(comp.Branch, "{stream}", stream), true
-	}
-	b, ok := comp.Branches[stream]
+	b, ok := c.branches[stream]
 	return b, ok
 }
 

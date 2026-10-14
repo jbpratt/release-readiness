@@ -142,12 +142,8 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
-	cfg, err := Load()
-	if err != nil {
-		t.Fatal(err)
-	}
 	fx := &fixture{store: newFakeStore(), commits: &fakeCommits{ranges: map[string][]Commit{}, errs: map[string]error{}}, clock: time.Date(2026, 10, 15, 0, 0, 0, 0, time.UTC)}
-	fx.sync = NewSync(cfg, fx.store, fx.commits, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	fx.sync = NewSync(fx.store, fx.commits, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	fx.sync.now = func() time.Time { fx.clock = fx.clock.Add(time.Second); return fx.clock }
 	return fx
 }
