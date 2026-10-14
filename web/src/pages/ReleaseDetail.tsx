@@ -82,7 +82,7 @@ import {
 	fbcPullspecs,
 	fbcsBuilt,
 	freshnessLine,
-	jobShortName,
+	jobLabel,
 	needsAttention,
 	noFbcText,
 	type RunPill,
@@ -702,7 +702,7 @@ function RunPills({ runs }: { runs: RunPill[] }) {
 					className={className}
 					href={p.prow_url}
 					ref={componentRef}
-					aria-label={`${jobShortName(p.job)} ${pillWords[p.state] ?? p.state}`}
+					aria-label={`${jobLabel(p.job)} ${pillWords[p.state] ?? p.state}`}
 					title={[
 						`${p.job}: ${pillWords[p.state] ?? p.state}`,
 						`Started ${when(p.started_at)}`,
@@ -720,7 +720,7 @@ function RunPills({ runs }: { runs: RunPill[] }) {
 			)}
 		>
 			{p.equivalent && "≈ "}
-			{jobShortName(p.job)}
+			{jobLabel(p.job)}
 			{!pillStatus[p.state] && ` ${p.state}`}
 		</Label>
 	));

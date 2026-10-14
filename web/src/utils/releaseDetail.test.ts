@@ -23,6 +23,7 @@ import {
 	fbcsBuilt,
 	fixableLabels,
 	freshnessLine,
+	jobLabel,
 	jobLabels,
 	jobShortName,
 	needsAttention,
@@ -67,6 +68,18 @@ test("jobShortName", () => {
 	assert.equal(
 		jobShortName("periodic-ci-quay-quay-tests-master-e2e"),
 		"periodic-ci-quay-quay-tests-master-e2e",
+	);
+});
+
+test("jobLabel keeps the arch", () => {
+	const job = (name: string) => `periodic-ci-quay-quay-redhat-3.18-${name}`;
+	assert.equal(
+		jobLabel(job("libvirt-s390x-ocp422-e2e-install-libvirt-s3-nightly")),
+		"libvirt-s390x-ocp422-libvirt-s3",
+	);
+	assert.equal(
+		jobLabel(job("aws-arm64-ocp422-e2e-install-aws-s3-nightly")),
+		"aws-arm64-ocp422-aws-s3",
 	);
 });
 
