@@ -1,13 +1,14 @@
+# SQLite's WAL needs a local block filesystem; EFS/NFS stalls requests.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: release-readiness-data
+  name: release-readiness-data-ebs
   labels:
     app: release-readiness
   annotations:
     kubernetes.io/reclaimPolicy: Delete
 spec:
-  storageClassName: aws-efs-tier-c4
+  storageClassName: aws-ebs
   accessModes:
     - ReadWriteOnce
   resources:

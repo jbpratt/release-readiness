@@ -20,6 +20,7 @@ spec:
       containers:
         - name: dashboard
           image: quay.io/quay/release-readiness:latest
+          args: ["-addr", ":8080", "-db", "/data/release-readiness.db", "-konflux-poll-interval", "10m"]
           env:
             - name: PROW_JOBS
               value: "periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-odf-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-azure-ocp422-e2e-install-azure-blob-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-gcp-ocp422-e2e-install-gcp-gcs-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.17-aws-ocp422-e2e-install-aws-s3-nightly=quay-3-17,periodic-ci-quay-quay-redhat-3.18-aws-arm64-ocp422-e2e-install-aws-s3-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-aws-ocp414-e2e-install-aws-s3-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly-fips=quay-3-18,periodic-ci-quay-quay-redhat-3.18-aws-ocp50-e2e-install-aws-s3-nightly=quay-3-18,periodic-ci-quay-quay-redhat-3.18-libvirt-s390x-ocp422-e2e-install-libvirt-s3-nightly=quay-3-18"
@@ -35,12 +36,14 @@ spec:
               port: 8080
             initialDelaySeconds: 5
             periodSeconds: 30
+            timeoutSeconds: 10
           readinessProbe:
             httpGet:
               path: /api/v1/health
               port: 8080
             initialDelaySeconds: 3
             periodSeconds: 10
+            timeoutSeconds: 10
           resources:
             requests:
               cpu: 100m
@@ -51,4 +54,4 @@ spec:
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: release-readiness-data
+            claimName: release-readiness-data-ebs
