@@ -719,9 +719,12 @@ function RunPills({ runs }: { runs: RunPill[] }) {
 				</a>
 			)}
 		>
-			{p.equivalent && "≈ "}
-			{jobLabel(p.job)}
-			{!pillStatus[p.state] && ` ${p.state}`}
+			{/* PatternFly ellipsizes label text; wrap so narrow cells show the whole job */}
+			<span style={{ whiteSpace: "normal" }}>
+				{p.equivalent && "≈ "}
+				{jobLabel(p.job)}
+				{!pillStatus[p.state] && ` ${p.state}`}
+			</span>
 		</Label>
 	));
 }
