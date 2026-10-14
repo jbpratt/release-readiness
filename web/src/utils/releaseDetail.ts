@@ -646,19 +646,6 @@ export function splitTickets(issues: JiraIssue[], ticketKey?: string) {
 	return { work: issues.filter((i) => i.key !== ticketKey) };
 }
 
-/**
- * "42 issues: 30 Bug, 12 Story", by type, most first. Synced issues carry no
- * status, so there is no open or closed count.
- */
-export function issueSummary(issues: JiraIssue[]): string {
-	const n = new Map<string, number>();
-	for (const i of issues) n.set(i.issue_type, (n.get(i.issue_type) ?? 0) + 1);
-	const types = [...n]
-		.sort(([a, x], [b, y]) => y - x || a.localeCompare(b))
-		.map(([type, count]) => `${count} ${type}`);
-	return `${issues.length} issue${issues.length === 1 ? "" : "s"}: ${types.join(", ")}`;
-}
-
 /** The backend's no-FBC reasons in release terms, each with what to do next. */
 const noFbcReasons: Record<string, string> = {
 	"no Konflux application":

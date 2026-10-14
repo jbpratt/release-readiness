@@ -23,7 +23,6 @@ import {
 	fbcsBuilt,
 	fixableLabels,
 	freshnessLine,
-	issueSummary,
 	jobLabels,
 	jobShortName,
 	needsAttention,
@@ -938,19 +937,6 @@ test("splitTickets", () => {
 	assert.deepEqual(splitTickets(issues, undefined), {
 		work: issues,
 	});
-});
-
-test("issueSummary", () => {
-	assert.equal(
-		issueSummary([
-			issue("A", "Story"),
-			issue("B", "Bug"),
-			issue("C", "Bug"),
-			issue("D", "Epic"),
-		]),
-		"4 issues: 2 Bug, 1 Epic, 1 Story",
-	);
-	assert.equal(issueSummary([issue("A", "Bug")]), "1 issue: 1 Bug");
 });
 
 test("noFbcText", () => {

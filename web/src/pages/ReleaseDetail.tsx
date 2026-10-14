@@ -9,7 +9,6 @@ import {
 	ClipboardCopy,
 	EmptyState,
 	EmptyStateBody,
-	ExpandableSection,
 	Flex,
 	FlexItem,
 	Icon,
@@ -82,7 +81,6 @@ import {
 	fbcPullspecs,
 	fbcsBuilt,
 	freshnessLine,
-	issueSummary,
 	jobShortName,
 	needsAttention,
 	noFbcText,
@@ -239,7 +237,6 @@ export default function ReleaseDetail() {
 				version={version!}
 				config={config}
 				ticketKey={release.release_ticket_key}
-				shipped={candidate.data?.shipped ?? release.released}
 			/>
 		</PageSection>
 	);
@@ -888,7 +885,7 @@ const line = { marginTop: "0.5rem" };
 
 /**
  * The version's fixVersion issues but its release ticket, shown atop the
- * page; a shipped version folds them behind a summary.
+ * page.
  */
 function TicketsCard({
 	issues,
@@ -896,16 +893,13 @@ function TicketsCard({
 	version,
 	config,
 	ticketKey,
-	shipped,
 }: {
 	issues?: JiraIssue[];
 	error?: Error;
 	version: string;
 	config?: DashboardConfig;
 	ticketKey?: string;
-	shipped: boolean;
 }) {
-	const [expanded, setExpanded] = useState(false);
 	const { work } = splitTickets(issues ?? [], ticketKey);
 	const hasIssues = work.length > 0;
 	const jira = config?.jira_project
@@ -922,15 +916,7 @@ function TicketsCard({
 				{hasIssues && ` (${work.length})`}
 			</LinkedCardTitle>
 			<CardBody>
-				{hasIssues && shipped ? (
-					<ExpandableSection
-						toggleText={issueSummary(work)}
-						isExpanded={expanded}
-						onToggle={(_e, open) => setExpanded(open)}
-					>
-						<IssuesTable issues={work} />
-					</ExpandableSection>
-				) : hasIssues ? (
+				{hasIssues ? (
 					<IssuesTable issues={work} />
 				) : error ? (
 					error.message
