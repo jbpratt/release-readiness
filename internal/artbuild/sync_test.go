@@ -35,6 +35,8 @@ type fakeART struct {
 	days map[string][]searchBuild
 	// searches is every /search query, in order.
 	searches []url.Values
+	// reads counts /build requests.
+	reads int
 }
 
 func pullspec(nvr string) string {
@@ -73,6 +75,7 @@ func (f *fakeART) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"builds": rows, "warnings": []string{}})
 	case "/build":
+		f.reads++
 		for _, rec := range f.records {
 			if rec.RecordID == q.Get("record_id") {
 				_ = json.NewEncoder(w).Encode(rec)
@@ -89,6 +92,8 @@ func (f *fakeART) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 type fakeHistoryStore struct {
 	builds  []HistoryBuild
 	scanned []string
+	// sources maps a record ID to its name and source repo.
+	sources map[string][2]string
 }
 
 func (s *fakeHistoryStore) ListSnapshotApplications(context.Context) ([]string, error) {
@@ -123,6 +128,24 @@ func (s *fakeHistoryStore) HasArtHistoryDigest(_ context.Context, buildType, dig
 func (s *fakeHistoryStore) UpsertArtHistoryBuild(_ context.Context, b HistoryBuild) error {
 	s.builds = append(s.builds, b)
 	return nil
+}
+
+func (s *fakeHistoryStore) UpsertArtSourceRepo(_ context.Context, id, name, repo string) error {
+	if s.sources == nil {
+		s.sources = map[string][2]string{}
+	}
+	s.sources[id] = [2]string{name, repo}
+	return nil
+}
+
+func (s *fakeHistoryStore) ArtHistoryWithoutSource(_ context.Context, limit int) ([]HistoryBuild, error) {
+	var out []HistoryBuild
+	for _, b := range s.builds {
+		if _, ok := s.sources[b.RecordID]; !ok && len(out) < limit {
+			out = append(out, b)
+		}
+	}
+	return out, nil
 }
 
 func (s *fakeHistoryStore) stored() []string {
@@ -285,6 +308,52 @@ func TestCloseBundleByDigest(t *testing.T) {
 	}
 	if len(f.searches) != n {
 		t.Errorf("searched %v for a stored bundle", f.searches[n:])
+	}
+}
+
+func TestRecordSourceRepo(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, "testdata/record.json")
+	}))
+	t.Cleanup(srv.Close)
+	rec, err := NewClient(srv.URL, srv.Client()).record(t.Context(), "nvr", "id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Name != "quay-operator" || rec.SourceRepo != "https://github.com/quay/quay-operator" {
+		t.Errorf("name %q, source repo %q; want quay-operator from the public repo, not the rebase repo", rec.Name, rec.SourceRepo)
+	}
+}
+
+// A stored record gets its source repo, "" when ART names none, and records
+// stored before source repos were kept get theirs from the backfill, once.
+func TestHistorySyncSourceRepos(t *testing.T) {
+	f := quayART()
+	for i := range f.records {
+		if r := &f.records[i]; r.NVR != clairImage {
+			r.Name, r.SourceRepo = "name-"+r.NVR, "https://github.com/quay/"+r.NVR
+		}
+	}
+	f.days["fbc$"] = f.days["^quay-operator-fbc$"]
+	h, store := syncWith(t, f)
+	// CSO's builds were stored before source repos were kept.
+	for _, rec := range f.records {
+		if strings.HasPrefix(rec.NVR, "container-security-operator") {
+			store.builds = append(store.builds, historyBuild("quay-3.17", TypeImage, &rec))
+		}
+	}
+	h.SyncOnce(t.Context())
+
+	for _, rec := range f.records {
+		want := [2]string{rec.Name, rec.SourceRepo}
+		if got, ok := store.sources[rec.RecordID]; !ok || got != want {
+			t.Errorf("%s source %q (stored %v), want %q", rec.NVR, got, ok, want)
+		}
+	}
+	n := f.reads
+	h.SyncOnce(t.Context())
+	if f.reads != n {
+		t.Errorf("read %d records again, want none", f.reads-n)
 	}
 }
 

@@ -35,6 +35,12 @@ type ArtHistoryRecordDay struct {
 	CheckedAt string
 }
 
+type ArtSourceRepo struct {
+	RecordID   string
+	Name       string
+	SourceRepo string
+}
+
 type FbcRelatedImage struct {
 	Digest string
 	Role   string
@@ -118,6 +124,15 @@ type ProwRunImage struct {
 	BuildID string
 	Role    string
 	Digest  string
+}
+
+type ReconcileBaseline struct {
+	Stream    string
+	Operator  string
+	Ocp       string
+	FbcDigest string
+	FbcNvr    string
+	CreatedAt string
 }
 
 type ReleaseVersion struct {

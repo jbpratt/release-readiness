@@ -32,6 +32,9 @@ const (
 	refreshDays = 3
 	// backfillPerPass bounds the older unscanned days a pass reads per group.
 	backfillPerPass = 7
+	// sourcesPerPass bounds the stored records a pass reads the source repo
+	// of, for those stored before it was kept.
+	sourcesPerPass = 50
 )
 
 // nvrDate is the build date embedded in an image or bundle NVR, as
@@ -58,6 +61,11 @@ type HistoryStore interface {
 	HasArtHistoryNVR(ctx context.Context, group, buildType, nvr string) (bool, error)
 	HasArtHistoryDigest(ctx context.Context, buildType, digest string) (bool, error)
 	UpsertArtHistoryBuild(ctx context.Context, b HistoryBuild) error
+	// UpsertArtSourceRepo stores a record's name and source repo, "" for none.
+	UpsertArtSourceRepo(ctx context.Context, recordID, name, sourceRepo string) error
+	// ArtHistoryWithoutSource returns up to limit stored records never
+	// checked for a source repo; RecordID, NVR and Pullspec are set.
+	ArtHistoryWithoutSource(ctx context.Context, limit int) ([]HistoryBuild, error)
 }
 
 // HistorySync stores the successful FBC builds of each Quay stream from ART
@@ -98,6 +106,8 @@ func (h *HistorySync) Run(ctx context.Context, interval time.Duration) {
 // SyncOnce scans, for each stream with a stored Snapshot, the newest
 // refreshDays and up to backfillPerPass older unscanned days, newest first.
 // A day is marked scanned only once all its successful FBC builds are stored.
+// It then reads the source repo of up to sourcesPerPass stored records that
+// lack one.
 func (h *HistorySync) SyncOnce(ctx context.Context) {
 	var pass syncstatus.Pass
 	defer func() { h.Status.Report(pass.Err()) }()
@@ -150,6 +160,29 @@ func (h *HistorySync) SyncOnce(ctx context.Context) {
 			}
 		}
 	}
+	h.backfillSources(ctx, &pass)
+}
+
+// backfillSources stores the source repo of up to sourcesPerPass records
+// stored without one.
+func (h *HistorySync) backfillSources(ctx context.Context, pass *syncstatus.Pass) {
+	builds, err := h.store.ArtHistoryWithoutSource(ctx, sourcesPerPass)
+	if err != nil {
+		pass.Add(fmt.Errorf("list records without source: %w", err))
+		return
+	}
+	for _, b := range builds {
+		rec, err := h.read(ctx, searchBuild{NVR: b.NVR, RecordID: b.RecordID, ImagePullspec: b.Pullspec})
+		if err == nil {
+			err = h.store.UpsertArtSourceRepo(ctx, rec.RecordID, rec.Name, rec.SourceRepo)
+		}
+		if err != nil {
+			if ctx.Err() != nil {
+				return
+			}
+			pass.Add(fmt.Errorf("source of %s: %w", b.NVR, err))
+		}
+	}
 }
 
 // UnscannedDays counts the days before today that the history sync reads and
@@ -193,7 +226,7 @@ func (h *HistorySync) scanDay(ctx context.Context, group, day string) error {
 				return fmt.Errorf("%s: %w", rec.NVR, err)
 			}
 		}
-		if err := h.store.UpsertArtHistoryBuild(ctx, historyBuild(group, TypeFBC, rec)); err != nil {
+		if err := h.upsert(ctx, group, TypeFBC, rec); err != nil {
 			return err
 		}
 		stored++
@@ -320,7 +353,7 @@ func (h *HistorySync) closeBundle(ctx context.Context, group string, q url.Value
 			return fmt.Errorf("%s: %w", rec.NVR, err)
 		}
 	}
-	return h.store.UpsertArtHistoryBuild(ctx, historyBuild(group, TypeBundle, rec))
+	return h.upsert(ctx, group, TypeBundle, rec)
 }
 
 // storeImage stores the successful image build nvr of group unless stored.
@@ -340,7 +373,7 @@ func (h *HistorySync) storeImage(ctx context.Context, group, nvr string) error {
 	if err != nil {
 		return err
 	}
-	return h.store.UpsertArtHistoryBuild(ctx, historyBuild(group, TypeImage, rec))
+	return h.upsert(ctx, group, TypeImage, rec)
 }
 
 // findSuccess returns the successful row of q that match accepts; pending
@@ -374,6 +407,15 @@ func nvrQuery(group, nvr string) (url.Values, error) {
 		"nvr":       {nvr},
 		"dateRange": {d.AddDate(0, 0, -1).Format(time.DateOnly) + " to " + d.AddDate(0, 0, 3).Format(time.DateOnly)},
 	}, nil
+}
+
+// upsert stores rec and its source repo. A record stored without its source
+// repo gets it from backfillSources.
+func (h *HistorySync) upsert(ctx context.Context, group, buildType string, rec *record) error {
+	if err := h.store.UpsertArtHistoryBuild(ctx, historyBuild(group, buildType, rec)); err != nil {
+		return err
+	}
+	return h.store.UpsertArtSourceRepo(ctx, rec.RecordID, rec.Name, rec.SourceRepo)
 }
 
 func historyBuild(group, buildType string, rec *record) HistoryBuild {

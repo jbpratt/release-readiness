@@ -122,3 +122,23 @@ func (d *DB) ArtHistoryImages(ctx context.Context, digests []string) (map[string
 	}
 	return builds, nil
 }
+
+// UpsertArtSourceRepo stores the name and source repo of a record; "" marks
+// it checked with none.
+func (d *DB) UpsertArtSourceRepo(ctx context.Context, recordID, name, sourceRepo string) error {
+	return d.queries().UpsertArtSourceRepo(ctx, dbsqlc.UpsertArtSourceRepoParams{RecordID: recordID, Name: name, SourceRepo: sourceRepo})
+}
+
+// ArtHistoryWithoutSource returns up to limit stored records never checked
+// for a source repo, newest first; RecordID, NVR and Pullspec are set.
+func (d *DB) ArtHistoryWithoutSource(ctx context.Context, limit int) ([]artbuild.HistoryBuild, error) {
+	rows, err := d.queries().ListArtHistoryWithoutSource(ctx, int64(limit))
+	if err != nil {
+		return nil, err
+	}
+	builds := make([]artbuild.HistoryBuild, len(rows))
+	for i, r := range rows {
+		builds[i] = artbuild.HistoryBuild{RecordID: r.RecordID, NVR: r.Nvr, Pullspec: r.Pullspec}
+	}
+	return builds, nil
+}

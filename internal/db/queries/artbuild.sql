@@ -93,3 +93,19 @@ LEFT JOIN art_history_records b ON b.build_type = 'bundle'
   AND b.digest = substr(r.head_bundle_pullspec, instr(r.head_bundle_pullspec, '@') + 1)
 WHERE f.group_name = ? AND f.build_type = 'fbc'
 ORDER BY f.nvr DESC, f.record_id;
+
+-- name: UpsertArtSourceRepo :exec
+INSERT INTO art_source_repos (record_id, name, source_repo)
+VALUES (?, ?, ?)
+ON CONFLICT(record_id) DO UPDATE SET
+    name = excluded.name,
+    source_repo = excluded.source_repo;
+
+-- name: ListArtHistoryWithoutSource :many
+-- Stored records never checked for a source repo, newest first.
+SELECT h.record_id, h.nvr, h.pullspec
+FROM art_history_records h
+LEFT JOIN art_source_repos s ON s.record_id = h.record_id
+WHERE s.record_id IS NULL
+ORDER BY h.start_time DESC, h.record_id
+LIMIT ?;
