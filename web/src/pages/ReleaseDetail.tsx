@@ -946,6 +946,7 @@ function OperatorDetail({
 				activeKey={tab}
 				onSelect={(_e, k) => onTab(k as BlockTab)}
 				aria-label={`${o.operator} FBCs and images`}
+				style={{ marginBottom: "var(--pf-t--global--spacer--md)" }}
 			>
 				<Tab eventKey="fbcs" title={<TabTitleText>FBCs {fbcs}</TabTitleText>}>
 					<Gallery
