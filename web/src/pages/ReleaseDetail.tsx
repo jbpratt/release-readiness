@@ -88,6 +88,7 @@ import {
 	type RunPill,
 	readingLine,
 	releaseLine,
+	type StatusLine,
 	splitTickets,
 	tknCommand,
 	verdictEntries,
@@ -583,7 +584,8 @@ function Candidate({
 							<Th>Operator</Th>
 							<Th>OCP</Th>
 							<Th>Built (UTC)</Th>
-							<Th>Stage and CI</Th>
+							<Th>Stage</Th>
+							<Th>CI</Th>
 							<Th screenReaderText="FBC" />
 						</Tr>
 					</Thead>
@@ -603,7 +605,7 @@ function Candidate({
 										<span style={muted}>–</span>
 									)}
 								</Td>
-								<Td dataLabel="Stage and CI">
+								<Td dataLabel="Stage">
 									<Flex
 										gap={{ default: "gapMd" }}
 										alignItems={{ default: "alignItemsCenter" }}
@@ -613,9 +615,15 @@ function Candidate({
 										) : (
 											<span style={muted}>{r.fbc ? "Not staged" : "–"}</span>
 										)}
-										<RunPills runs={r.runs} />
 										<Flags flags={r.flags} />
 									</Flex>
+								</Td>
+								<Td dataLabel="CI" modifier="nowrap">
+									{r.runs.length === 0 ? (
+										<span style={muted}>No runs</span>
+									) : (
+										<RunSummary runs={r.runs} />
+									)}
 								</Td>
 								<Td dataLabel="FBC" modifier="fitContent">
 									{r.fbc && (
@@ -671,62 +679,76 @@ const levelStatus: Record<VerdictItem["level"], LabelProps["status"]> = {
 	info: "info",
 };
 
-const pillStatus: Record<string, LabelProps["status"]> = {
-	success: "success",
-	failure: "danger",
-	error: "danger",
-	pending: "info",
-};
-
-const pillWords: Record<string, string> = {
-	success: "passed",
+const runStatus: Record<string, StatusLine["status"]> = {
+	success: "done",
 	failure: "failed",
-	error: "error",
+	error: "failed",
 	pending: "running",
 };
+const runStatusOf = (p: RunPill) => runStatus[p.state] ?? "warning";
+
+/** Run results as counted, worst first. */
+const runWords: [StatusLine["status"], string][] = [
+	["failed", "failed"],
+	["running", "running"],
+	["warning", "other"],
+	["done", "passed"],
+];
+const runWordOf = (p: RunPill) =>
+	runWords.find(([s]) => s === runStatusOf(p))?.[1];
 
 /**
- * An FBC row's CI: a label per job, its newest run's result, opening that run
- * in Prow. A run on another FBC of the same bundle is marked "≈".
+ * An FBC row's CI: its jobs counted by result, worst first, opening a list of
+ * the jobs, each linking to its newest run in Prow. A run on another FBC of
+ * the same bundle is marked "≈".
  */
-function RunPills({ runs }: { runs: RunPill[] }) {
-	if (runs.length === 0) return <span style={muted}>No runs</span>;
-	return runs.map((p) => (
-		<Label
-			key={`${p.job} ${p.equivalent}`}
-			isCompact
-			isClickable
-			status={pillStatus[p.state]}
-			render={({ className, content, componentRef }) => (
-				<a
-					className={className}
-					href={p.prow_url}
-					ref={componentRef}
-					aria-label={`${jobLabel(p.job)} ${pillWords[p.state] ?? p.state}`}
-					title={[
-						`${p.job}: ${pillWords[p.state] ?? p.state}`,
-						`Started ${when(p.started_at)}`,
-						p.install_failed && "Install failed",
-						p.runs > 1 && `Newest of ${p.runs} runs`,
-						p.equivalent &&
-							"Ran on another FBC with the same bundle; its channel graph can differ.",
-					]
-						.filter(Boolean)
-						.join("\n")}
-					{...external}
-				>
-					{content}
-				</a>
-			)}
+function RunSummary({ runs }: { runs: RunPill[] }) {
+	const counts = runWords
+		.map(([s, word]) => ({
+			s,
+			word,
+			n: runs.filter((p) => runStatusOf(p) === s).length,
+		}))
+		.filter((c) => c.n > 0);
+	return (
+		<Popover
+			headerContent={`${runs.length} CI jobs`}
+			bodyContent={
+				<List isPlain>
+					{runs.map((p) => (
+						<ListItem key={`${p.job} ${p.equivalent}`}>
+							<a
+								href={p.prow_url}
+								aria-label={`${jobLabel(p.job)} ${runWordOf(p)}`}
+								title={[
+									`${p.job}: ${runWordOf(p)}`,
+									`Started ${when(p.started_at)}`,
+									p.install_failed && "Install failed",
+									p.runs > 1 && `Newest of ${p.runs} runs`,
+									p.equivalent &&
+										"Ran on another FBC with the same bundle; its channel graph can differ.",
+								]
+									.filter(Boolean)
+									.join("\n")}
+								{...external}
+							>
+								<Status status={runStatusOf(p)}>
+									{p.equivalent && "≈ "}
+									{jobLabel(p.job)}
+								</Status>
+							</a>
+						</ListItem>
+					))}
+				</List>
+			}
 		>
-			{/* PatternFly ellipsizes label text; wrap so narrow cells show the whole job */}
-			<span style={{ whiteSpace: "normal" }}>
-				{p.equivalent && "≈ "}
-				{jobLabel(p.job)}
-				{!pillStatus[p.state] && ` ${p.state}`}
-			</span>
-		</Label>
-	));
+			<Button variant="link" isInline>
+				<Status status={counts[0].s}>
+					{counts.map((c) => `${c.n} ${c.word}`).join(" · ")}
+				</Status>
+			</Button>
+		</Popover>
+	);
 }
 
 const warningIcon = (
