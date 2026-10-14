@@ -265,7 +265,6 @@ type evidence struct {
 	Component string `json:"component"`
 	Repo      string `json:"repo"`
 	SHA       string `json:"sha"`
-	URL       string `json:"url"`
 }
 
 // actions returns the actions for the issues in the commits between the
@@ -365,7 +364,7 @@ func (s *Sync) actions(ctx context.Context, stream string, f StageFBC, prev stri
 					uncertain = append(uncertain, fmt.Sprintf("%s: reverted by %s", key, c.SHA))
 					continue
 				}
-				found[key] = append(found[key], evidence{Component: components, Repo: k.repo, SHA: c.SHA, URL: c.URL})
+				found[key] = append(found[key], evidence{Component: components, Repo: k.repo, SHA: c.SHA})
 			}
 		}
 	}
@@ -379,7 +378,7 @@ func (s *Sync) actions(ctx context.Context, stream string, f StageFBC, prev stri
 	for _, key := range slices.Sorted(maps.Keys(found)) {
 		ev := found[key]
 		slices.SortFunc(ev, func(a, b evidence) int {
-			return cmp.Or(cmp.Compare(a.Component, b.Component), cmp.Compare(a.Repo, b.Repo), cmp.Compare(a.SHA, b.SHA), cmp.Compare(a.URL, b.URL))
+			return cmp.Or(cmp.Compare(a.Component, b.Component), cmp.Compare(a.Repo, b.Repo), cmp.Compare(a.SHA, b.SHA))
 		})
 		evJSON, err := json.Marshal(slices.Compact(ev))
 		if err != nil {
@@ -462,8 +461,11 @@ func allowlisted(src Source, stream string) (repo, branch, reason string) {
 	case !fullSHA.MatchString(src.Commitish):
 		return "", "", fmt.Sprintf("commit %q is not a full SHA", src.Commitish)
 	}
-	b, ok := branchOf(src.Name, stream)
-	if !ok {
+	b := "redhat-" + stream
+	if c.branches != nil {
+		b = c.branches[stream]
+	}
+	if b == "" || !slices.Contains(streams, stream) {
 		return "", "", "no branch for stream " + stream
 	}
 	return c.repo, b, ""

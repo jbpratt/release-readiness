@@ -200,8 +200,8 @@ func TestRunOnce(t *testing.T) {
 
 	f3 := fx.stage("r3", "3.18.2", "sha256:f3", sha(3), op)
 	fx.commits.ranges[quayRepo+" redhat-3.18 "+sha(2)+" "+sha(3)] = []Commit{
-		{SHA: sha(3), Message: "PROJQUAY-1 fix\n\nSee PROJQUAY-1.", URL: "https://github.com/quay/quay/commit/" + sha(3)},
-		{SHA: sha(30), Message: "chore: bump (PROJQUAY-2)", URL: "https://github.com/quay/quay/commit/" + sha(30)},
+		{SHA: sha(3), Message: "PROJQUAY-1 fix\n\nSee PROJQUAY-1."},
+		{SHA: sha(30), Message: "chore: bump (PROJQUAY-2)"},
 	}
 	fx.run(t)
 	for _, key := range []string{"PROJQUAY-1", "PROJQUAY-2"} {
@@ -211,7 +211,7 @@ func TestRunOnce(t *testing.T) {
 		}
 	}
 	ev := fx.store.actions[ActionKey{FBCDigest: "sha256:f3", IssueKey: "PROJQUAY-1", Release: "r3"}].EvidenceJSON
-	if want := `[{"component":"quay-quay","repo":"https://github.com/quay/quay","sha":"` + sha(3) + `","url":"https://github.com/quay/quay/commit/` + sha(3) + `"}]`; ev != want {
+	if want := `[{"component":"quay-quay","repo":"https://github.com/quay/quay","sha":"` + sha(3) + `"}]`; ev != want {
 		t.Errorf("evidence = %s; want %s", ev, want)
 	}
 	if len(fx.store.actions) != 2 {

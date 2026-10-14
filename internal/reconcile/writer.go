@@ -35,12 +35,12 @@ const (
 // and comments the FBC that includes the fix.
 type Writer struct {
 	jira    JiraWriter
-	store   ActionStore
+	store   Store
 	project string
 	logger  *slog.Logger
 }
 
-func NewWriter(j JiraWriter, store ActionStore, project string, log *slog.Logger) *Writer {
+func NewWriter(j JiraWriter, store Store, project string, log *slog.Logger) *Writer {
 	return &Writer{jira: j, store: store, project: project, logger: log}
 }
 
@@ -51,21 +51,18 @@ func (w *Writer) ApplyPending(ctx context.Context) error {
 		return err
 	}
 	for _, a := range actions {
-		if err := w.Apply(ctx, a); err != nil {
+		if err := w.apply(ctx, a); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// Apply edits the Target Version, transitions and comments, in that order,
+// apply edits the Target Version, transitions and comments, in that order,
 // re-reading the issue before each. Each step's result is stored as it
 // completes, so a retry redoes only the steps not done. A failed Jira call
 // leaves a in error; only store errors are returned.
-func (w *Writer) Apply(ctx context.Context, a Action) error {
-	if a.Key.IssueKey == "" || a.Status != StatusProposed && a.Status != StatusError {
-		return nil
-	}
+func (w *Writer) apply(ctx context.Context, a Action) error {
 	a.Attempts++
 	for _, step := range []func(context.Context, *Action) error{w.version, w.transition, w.comment} {
 		err := step(ctx, &a)

@@ -181,7 +181,7 @@ func main() {
 		if *githubToken == "" {
 			logger.Warn("no -github-token, reconcile reads GitHub unauthenticated")
 		}
-		commits := reconcile.NewGitHubFetcher(&http.Client{Timeout: time.Minute}, func() string { return *githubToken })
+		commits := reconcile.NewGitHubFetcher(&http.Client{Timeout: time.Minute}, *githubToken)
 		reconciler := reconcile.NewSync(database, commits, logger.With("component", "reconcile"))
 		reconciler.Tx = func(ctx context.Context, fn func(reconcile.Store) error) error {
 			return database.InTx(ctx, func(txDB *db.DB) error {

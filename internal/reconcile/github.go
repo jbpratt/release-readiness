@@ -6,16 +6,12 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
-	"slices"
-	"strconv"
 	"strings"
-	"sync"
-	"time"
 )
 
 // Commit is a source commit.
 type Commit struct {
-	SHA, Message, URL string
+	SHA, Message string
 }
 
 // CommitFetcher lists the commits between two commits of a branch.
@@ -30,18 +26,13 @@ type CommitFetcher interface {
 type GitHubFetcher struct {
 	baseURL string
 	http    *http.Client
-	token   func() string
-
-	mu    sync.Mutex
-	cache map[string][]Commit
+	token   string
+	cache   map[string][]Commit
 }
 
-// NewGitHubFetcher returns a fetcher using hc (nil uses
-// http.DefaultClient). A nil token, or one returning "", is unauthenticated.
-func NewGitHubFetcher(hc *http.Client, token func() string) *GitHubFetcher {
-	if hc == nil {
-		hc = http.DefaultClient
-	}
+// NewGitHubFetcher returns a fetcher using hc. An empty token is
+// unauthenticated.
+func NewGitHubFetcher(hc *http.Client, token string) *GitHubFetcher {
 	return &GitHubFetcher{baseURL: "https://api.github.com", http: hc, token: token, cache: map[string][]Commit{}}
 }
 
@@ -55,9 +46,8 @@ type comparison struct {
 		SHA string `json:"sha"`
 	} `json:"merge_base_commit"`
 	Commits []struct {
-		SHA     string `json:"sha"`
-		HTMLURL string `json:"html_url"`
-		Commit  struct {
+		SHA    string `json:"sha"`
+		Commit struct {
 			Message string `json:"message"`
 		} `json:"commit"`
 	} `json:"commits"`
@@ -79,11 +69,8 @@ func (f *GitHubFetcher) Range(ctx context.Context, repo, branch, base, head stri
 	// Branch is in the key so a range is never served for a branch it was
 	// not checked against.
 	key := strings.Join([]string{repo, branch, base, head}, " ")
-	f.mu.Lock()
-	cached, ok := f.cache[key]
-	f.mu.Unlock()
-	if ok {
-		return slices.Clone(cached), nil
+	if cached, ok := f.cache[key]; ok {
+		return cached, nil
 	}
 
 	api := f.baseURL + "/repos/" + rest
@@ -108,7 +95,7 @@ func (f *GitHubFetcher) Range(ctx context.Context, repo, branch, base, head stri
 		}
 		total = c.TotalCommits
 		for _, cm := range c.Commits {
-			commits = append(commits, Commit{SHA: cm.SHA, Message: cm.Commit.Message, URL: cm.HTMLURL})
+			commits = append(commits, Commit{SHA: cm.SHA, Message: cm.Commit.Message})
 		}
 	}
 	if len(commits) != total {
@@ -126,10 +113,8 @@ func (f *GitHubFetcher) Range(ctx context.Context, repo, branch, base, head stri
 		return nil, fmt.Errorf("%s: head is not on branch %s (status %q)", what, branch, onBranch.Status)
 	}
 
-	f.mu.Lock()
 	f.cache[key] = commits
-	f.mu.Unlock()
-	return slices.Clone(commits), nil
+	return commits, nil
 }
 
 // get decodes u's JSON into v and returns its rel="next" link, "" for none.
@@ -140,10 +125,8 @@ func (f *GitHubFetcher) get(ctx context.Context, u string, v any) (string, error
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
-	if f.token != nil {
-		if t := f.token(); t != "" {
-			req.Header.Set("Authorization", "Bearer "+t)
-		}
+	if f.token != "" {
+		req.Header.Set("Authorization", "Bearer "+f.token)
 	}
 	resp, err := f.http.Do(req)
 	if err != nil {
@@ -151,16 +134,7 @@ func (f *GitHubFetcher) get(ctx context.Context, u string, v any) (string, error
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		err := fmt.Errorf("GET %s: %s", u, resp.Status)
-		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
-			if ra := resp.Header.Get("Retry-After"); ra != "" {
-				return "", fmt.Errorf("%w: rate limited, retry after %ss", err, ra)
-			}
-			if reset, perr := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64); perr == nil {
-				return "", fmt.Errorf("%w: rate limited until %s", err, time.Unix(reset, 0).UTC().Format(time.RFC3339))
-			}
-		}
-		return "", err
+		return "", fmt.Errorf("GET %s: %s", u, resp.Status)
 	}
 	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
 		return "", fmt.Errorf("decode %s: %w", u, err)

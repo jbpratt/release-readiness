@@ -2,11 +2,6 @@
 // fix.
 package reconcile
 
-import (
-	"context"
-	"slices"
-)
-
 // streams are the Quay streams whose FBCs are reconciled.
 var streams = []string{"3.16", "3.17", "3.18"}
 
@@ -33,43 +28,4 @@ var allowlist = map[string]component{
 	"container-security-operator":             {repo: "https://github.com/quay/container-security-operator"},
 	"quay-container-security-operator-bundle": {repo: "https://github.com/quay/container-security-operator"},
 	"container-security-operator-fbc":         {repo: "https://github.com/quay/container-security-operator"},
-}
-
-// branchOf returns the branch name's commits for stream land on, false when
-// the allowlist does not list both.
-func branchOf(name, stream string) (string, bool) {
-	c, ok := allowlist[name]
-	if !ok || !slices.Contains(streams, stream) {
-		return "", false
-	}
-	if c.branches == nil {
-		return "redhat-" + stream, true
-	}
-	b, ok := c.branches[stream]
-	return b, ok
-}
-
-// Source is an ART build, by its ART name, with the public repository and
-// commit it was built from.
-type Source struct {
-	Name, SourceRepo, Commitish string
-}
-
-// Baseline is the first FBC a stream/operator/OCP slot was reconciled from.
-type Baseline struct {
-	Stream, Operator, OCP, FBCDigest string
-}
-
-// ProvenanceStore reads ART source provenance and stores slot baselines.
-type ProvenanceStore interface {
-	// SourcesByDigest returns the records of an image digest that have a
-	// source repo.
-	SourcesByDigest(context.Context, string) ([]Source, error)
-	// SourceState reports whether an image digest has stored ART records,
-	// and whether one of them is not checked for a source repo yet.
-	SourceState(ctx context.Context, digest string) (stored, unchecked bool, err error)
-	// GetBaseline returns the FBC digest of a slot's baseline.
-	GetBaseline(ctx context.Context, stream, operator, ocp string) (string, bool, error)
-	// InsertBaseline stores b unless its slot has a baseline already.
-	InsertBaseline(context.Context, Baseline) error
 }

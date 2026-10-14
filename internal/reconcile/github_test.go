@@ -46,7 +46,7 @@ func newFake(t *testing.T) *fakeGitHub {
 	return g
 }
 
-func (g *fakeGitHub) start(t *testing.T, token func() string) *GitHubFetcher {
+func (g *fakeGitHub) start(t *testing.T, token string) *GitHubFetcher {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		g.requests++
@@ -82,15 +82,15 @@ func (g *fakeGitHub) start(t *testing.T, token func() string) *GitHubFetcher {
 
 func TestRangeTwoPages(t *testing.T) {
 	g := newFake(t)
-	f := g.start(t, func() string { return "secret" })
+	f := g.start(t, "secret")
 	got, err := f.Range(context.Background(), repo, branch, base, head)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []Commit{
-		{"2222222222222222222222222222222222222222", "PROJQUAY-1: fix the thing (#1)\n\nBody.", "https://github.com/quay/quay/commit/2222222222222222222222222222222222222222"},
-		{"3333333333333333333333333333333333333333", "chore: bump deps (#2)", "https://github.com/quay/quay/commit/3333333333333333333333333333333333333333"},
-		{head, "PROJQUAY-2: another fix (#3)", "https://github.com/quay/quay/commit/" + head},
+		{"2222222222222222222222222222222222222222", "PROJQUAY-1: fix the thing (#1)\n\nBody."},
+		{"3333333333333333333333333333333333333333", "chore: bump deps (#2)"},
+		{head, "PROJQUAY-2: another fix (#3)"},
 	}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("Range = %q, want %q", got, want)
@@ -107,7 +107,7 @@ func TestRangeTwoPages(t *testing.T) {
 
 func TestRangeCached(t *testing.T) {
 	g := newFake(t)
-	f := g.start(t, nil)
+	f := g.start(t, "")
 	for range 2 {
 		if _, err := f.Range(context.Background(), repo, branch, base, head); err != nil {
 			t.Fatal(err)
@@ -119,19 +119,14 @@ func TestRangeCached(t *testing.T) {
 }
 
 func TestRangeUnauthenticated(t *testing.T) {
-	for name, token := range map[string]func() string{
-		"nil":   nil,
-		"empty": func() string { return "" },
-	} {
-		g := newFake(t)
-		f := g.start(t, token)
-		if _, err := f.Range(context.Background(), repo, branch, base, head); err != nil {
-			t.Fatal(err)
-		}
-		for _, a := range g.auth {
-			if a != "" {
-				t.Errorf("%s token: Authorization %q, want none", name, a)
-			}
+	g := newFake(t)
+	f := g.start(t, "")
+	if _, err := f.Range(context.Background(), repo, branch, base, head); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range g.auth {
+		if a != "" {
+			t.Errorf("Authorization %q, want none", a)
 		}
 	}
 }
@@ -152,15 +147,12 @@ func TestRangeFailsClosed(t *testing.T) {
 		}, "not head"},
 		{"head not on branch", func(g *fakeGitHub) { g.branchStatus = "diverged" }, "not on branch"},
 		{"rate limited", func(g *fakeGitHub) {
-			g.fail = func(w http.ResponseWriter) {
-				w.Header().Set("Retry-After", "60")
-				w.WriteHeader(http.StatusTooManyRequests)
-			}
-		}, "retry after 60s"},
+			g.fail = func(w http.ResponseWriter) { w.WriteHeader(http.StatusTooManyRequests) }
+		}, "429"},
 	} {
 		g := newFake(t)
 		tc.setup(g)
-		f := g.start(t, nil)
+		f := g.start(t, "")
 		got, err := f.Range(context.Background(), repo, branch, base, head)
 		if err == nil || !strings.Contains(err.Error(), tc.err) {
 			t.Errorf("%s: error %v, want %q", tc.name, err, tc.err)
@@ -181,7 +173,7 @@ func TestRangeNoRequest(t *testing.T) {
 		{"base is head", repo, head, head, ""},
 	} {
 		g := newFake(t)
-		f := g.start(t, nil)
+		f := g.start(t, "")
 		got, err := f.Range(context.Background(), tc.repo, branch, tc.base, tc.head)
 		if tc.err == "" {
 			if err != nil || got == nil || len(got) != 0 {

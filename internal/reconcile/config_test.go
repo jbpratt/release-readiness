@@ -2,21 +2,20 @@ package reconcile
 
 import "testing"
 
-func TestBranch(t *testing.T) {
+func TestAllowlisted(t *testing.T) {
 	for _, tc := range []struct {
-		component, stream, want string
-		ok                      bool
+		component, repo, stream, branch, reason string
 	}{
-		{"quay-quay", "3.18", "redhat-3.18", true},
-		{"quay-operator-fbc", "3.16", "redhat-3.16", true},
-		{"quay-clair", "3.16", "release-4.8", true},
-		{"quay-clair", "3.18", "release-4.9", true},
-		{"quay-quay", "3.15", "", false},
-		{"base-rhel9", "3.18", "", false},
+		{"quay-quay", quayRepo, "3.18", "redhat-3.18", ""},
+		{"quay-operator-fbc", "https://github.com/quay/quay-operator", "3.16", "redhat-3.16", ""},
+		{"quay-clair", "https://github.com/quay/clair", "3.16", "release-4.8", ""},
+		{"quay-clair", "https://github.com/quay/clair", "3.18", "release-4.9", ""},
+		{"quay-quay", quayRepo, "3.15", "", "no branch for stream 3.15"},
+		{"base-rhel9", quayRepo, "3.18", "", "not in the allowlist"},
 	} {
-		got, ok := branchOf(tc.component, tc.stream)
-		if got != tc.want || ok != tc.ok {
-			t.Errorf("branchOf(%s, %s) = %q, %v; want %q, %v", tc.component, tc.stream, got, ok, tc.want, tc.ok)
+		_, branch, reason := allowlisted(Source{Name: tc.component, SourceRepo: tc.repo, Commitish: sha(1)}, tc.stream)
+		if branch != tc.branch || reason != tc.reason {
+			t.Errorf("allowlisted(%s, %s) = %q, %q; want %q, %q", tc.component, tc.stream, branch, reason, tc.branch, tc.reason)
 		}
 	}
 }
