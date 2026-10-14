@@ -1,0 +1,31 @@
+{
+  "url": "https://api.github.com/repos/quay/quay/compare/1111111111111111111111111111111111111111...4444444444444444444444444444444444444444",
+  "status": "ahead",
+  "ahead_by": 3,
+  "behind_by": 0,
+  "total_commits": 3,
+  "base_commit": {"sha": "1111111111111111111111111111111111111111"},
+  "merge_base_commit": {"sha": "1111111111111111111111111111111111111111"},
+  "commits": [
+    {
+      "sha": "2222222222222222222222222222222222222222",
+      "html_url": "https://github.com/quay/quay/commit/2222222222222222222222222222222222222222",
+      "commit": {
+        "author": {"name": "Dev", "email": "dev@example.com", "date": "2026-10-01T00:00:00Z"},
+        "message": "PROJQUAY-1: fix the thing (#1)\n\nBody."
+      },
+      "parents": [{"sha": "1111111111111111111111111111111111111111"}]
+    }
+    ,
+    {
+      "sha": "3333333333333333333333333333333333333333",
+      "html_url": "https://github.com/quay/quay/commit/3333333333333333333333333333333333333333",
+      "commit": {
+        "author": {"name": "Dev", "email": "dev@example.com", "date": "2026-10-01T00:00:00Z"},
+        "message": "chore: bump deps (#2)"
+      },
+      "parents": [{"sha": "2222222222222222222222222222222222222222"}]
+    }
+  ],
+  "files": [{"filename": "go.mod", "status": "modified"}]
+}
