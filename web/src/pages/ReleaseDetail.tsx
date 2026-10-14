@@ -47,7 +47,6 @@ import {
 	ExclamationTriangleIcon,
 	ExternalLinkAltIcon,
 	InfoCircleIcon,
-	OutlinedQuestionCircleIcon,
 } from "@patternfly/react-icons";
 import {
 	ExpandableRowContent,
@@ -99,7 +98,6 @@ import {
 	ciList,
 	compareLine,
 	componentLabel,
-	decisions,
 	fbcBuildStep,
 	fbcCIStep,
 	fbcParams,
@@ -538,11 +536,7 @@ function Candidate({
 	const [tabs, setTabs] = useState<Record<string, BlockTab>>({});
 	return (
 		<>
-			<VerdictHeader
-				verdict={withoutStage(verdict)}
-				blockers={decisions(verdict)}
-				prod={prodRelease}
-			/>
+			<VerdictHeader verdict={withoutStage(verdict)} prod={prodRelease} />
 			{read && (
 				<div style={line}>
 					<Status status={read.status}>{read.text}</Status>
@@ -558,19 +552,6 @@ function Candidate({
 					title="CI"
 					variant={tested.variant}
 					description={sippy && <ExtLink href={sippy}>Sippy</ExtLink>}
-					popoverRender={(ref) => (
-						<Popover
-							aria-label="CI detail"
-							headerContent="CI"
-							triggerRef={ref}
-							bodyContent={
-								<>
-									<div>{tested.text}</div>
-									<div>Advisory: does not block the verdict.</div>
-								</>
-							}
-						/>
-					)}
 				/>
 				<Step
 					title="Stage"
@@ -771,19 +752,12 @@ function StageCell({ stage }: { stage: StatusLine | null }) {
 	);
 }
 
-/**
- * Whether the version can ship; its blockers on no one operator, with who
- * acts and the next action, and its warnings and info on no one operator
- * open in a popover, as the operator table shows the rest. A shipped
- * version's is its prod Release.
- */
+/** Whether the version can ship; a shipped version's is its prod Release. */
 function VerdictHeader({
 	verdict,
-	blockers,
 	prod,
 }: {
 	verdict: Verdict;
-	blockers: ReturnType<typeof decisions>;
 	prod: KonfluxRelease | null;
 }) {
 	const head = verdictLine(verdict);
@@ -791,56 +765,9 @@ function VerdictHeader({
 		verdict.state === "shipped" && prod?.completion_time
 			? `Shipped ${when(prod.completion_time, "UTC")} UTC`
 			: head.text;
-	const notes = verdict.items.filter(
-		(i) => !i.operator && i.level !== "blocker",
-	);
 	return (
 		<Status status={head.status}>
-			<strong>{text}</strong>{" "}
-			{(blockers.length > 0 || notes.length > 0) && (
-				<Popover
-					headerContent="Why not ready"
-					bodyContent={
-						<>
-							{blockers.map((d) => (
-								<Flex
-									key={`${d.code} ${d.text}`}
-									gap={{ default: "gapSm" }}
-									flexWrap={{ default: "nowrap" }}
-								>
-									<FlexItem>{levelIcons.blocker}</FlexItem>
-									<FlexItem>
-										{d.text}
-										{d.owner && <span style={muted}> · {d.owner}</span>}
-										{d.action && <div>Next: {d.action}</div>}
-									</FlexItem>
-								</Flex>
-							))}
-							{notes.map((i) => (
-								<Flex
-									key={`${i.code} ${i.text}`}
-									gap={{ default: "gapSm" }}
-									flexWrap={{ default: "nowrap" }}
-								>
-									<FlexItem>{levelIcons[i.level]}</FlexItem>
-									<FlexItem>
-										{i.text}
-										{i.owner && <span style={muted}> · {i.owner}</span>}
-									</FlexItem>
-								</Flex>
-							))}
-						</>
-					}
-				>
-					<Button
-						variant="plain"
-						hasNoPadding
-						aria-label="Why not ready"
-						icon={<OutlinedQuestionCircleIcon />}
-					/>
-				</Popover>
-			)}{" "}
-			<DataFreshness />
+			<strong>{text}</strong> <DataFreshness />
 		</Status>
 	);
 }
