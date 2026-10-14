@@ -3,8 +3,8 @@ import type {
 	FBCBuild,
 	JiraIssue,
 	ReleaseCandidate,
+	ReleaseDetail,
 	ReleaseOverview,
-	ReleaseVersion,
 	SyncStatus,
 } from "./types";
 
@@ -32,7 +32,7 @@ export function listReleasesOverview(): Promise<ReleaseOverview[]> {
 	return fetchJSON(`${BASE}/releases/overview`);
 }
 
-export function getRelease(version: string): Promise<ReleaseVersion> {
+export function getRelease(version: string): Promise<ReleaseDetail> {
 	return fetchJSON(`${BASE}/releases/${encodeURIComponent(version)}`);
 }
 

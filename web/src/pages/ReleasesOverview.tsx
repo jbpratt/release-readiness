@@ -36,8 +36,10 @@ import type {
 	IssueSummary,
 	ReadinessResponse,
 	ReleaseVersion,
+	ShipmentMR,
 } from "../api/types";
 import LoadError from "../components/LoadError";
+import { ShipmentLabels } from "../components/ShipmentLabels";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
 import { day } from "../utils/format";
@@ -173,6 +175,7 @@ export default function ReleasesOverview() {
 						issueSummary={ov.issue_summary}
 						readinessSignal={ov.readiness}
 						latestBuild={ov.latest_build}
+						shipmentMR={ov.shipment_mr}
 						viewMode={viewMode}
 						jiraBaseUrl={config?.jira_base_url}
 					/>
@@ -187,6 +190,7 @@ function ReleaseCard({
 	issueSummary,
 	readinessSignal,
 	latestBuild,
+	shipmentMR,
 	viewMode,
 	jiraBaseUrl,
 }: {
@@ -194,6 +198,7 @@ function ReleaseCard({
 	issueSummary?: IssueSummary;
 	readinessSignal: ReadinessResponse;
 	latestBuild?: string;
+	shipmentMR: ShipmentMR | null;
 	viewMode: ViewMode;
 	jiraBaseUrl?: string;
 }) {
@@ -245,17 +250,24 @@ function ReleaseCard({
 							</Link>
 						</Title>
 					</FlexItem>
-					{readinessSignal.signal && (
-						<FlexItem>
-							<Label
-								color={readinessSignal.signal}
-								icon={signalIcons[readinessSignal.signal]}
-								isCompact
-							>
-								{readinessSignal.message}
-							</Label>
-						</FlexItem>
-					)}
+					<Flex spaceItems={{ default: "spaceItemsSm" }}>
+						{shipmentMR && (
+							<FlexItem>
+								<ShipmentLabels mr={shipmentMR} />
+							</FlexItem>
+						)}
+						{readinessSignal.signal && (
+							<FlexItem>
+								<Label
+									color={readinessSignal.signal}
+									icon={signalIcons[readinessSignal.signal]}
+									isCompact
+								>
+									{readinessSignal.message}
+								</Label>
+							</FlexItem>
+						)}
+					</Flex>
 				</Flex>
 			</CardTitle>
 			<CardBody>

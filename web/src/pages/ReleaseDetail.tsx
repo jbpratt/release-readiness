@@ -50,6 +50,7 @@ import type {
 	KonfluxRelease,
 	ReleaseCandidate,
 	ReleaseVersion,
+	ShipmentMR,
 	Verdict,
 	VerdictItem,
 } from "../api/types";
@@ -61,6 +62,7 @@ import {
 	muted,
 	OperatorImages,
 } from "../components/OperatorImages";
+import { ShipmentLabels } from "../components/ShipmentLabels";
 import { Status } from "../components/Status";
 import { SyncProblems, useSyncStatus } from "../components/SyncStatusWarning";
 import { useCachedFetch } from "../hooks/useCachedFetch";
@@ -195,6 +197,7 @@ export default function ReleaseDetail() {
 			<ReleaseStatusCard
 				release={release}
 				shipped={candidate.data?.shipped ?? release.released}
+				shipmentMR={release.shipment_mr}
 				jiraBaseUrl={config?.jira_base_url}
 			/>
 
@@ -248,10 +251,12 @@ export default function ReleaseDetail() {
 function ReleaseStatusCard({
 	release,
 	shipped,
+	shipmentMR,
 	jiraBaseUrl,
 }: {
 	release: ReleaseVersion;
 	shipped: boolean;
+	shipmentMR: ShipmentMR | null;
 	jiraBaseUrl?: string;
 }) {
 	const ticket = release.release_ticket_key;
@@ -307,6 +312,12 @@ function ReleaseStatusCard({
 						<div className="rr-label">Assignee</div>
 						<div>{release.release_ticket_assignee || "Unassigned"}</div>
 					</FlexItem>
+					{shipmentMR && (
+						<FlexItem style={{ textAlign: "center" }}>
+							<div className="rr-label">Shipment</div>
+							<ShipmentLabels mr={shipmentMR} />
+						</FlexItem>
+					)}
 				</Flex>
 			</CardBody>
 		</Card>
