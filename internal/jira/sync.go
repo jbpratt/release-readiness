@@ -67,6 +67,12 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 
 	s.logger.Info("discovered active releases", "count", len(releases))
 
+	// A failed fetch leaves versions nil: each lookup misses as a missing version would.
+	versions, err := s.client.ListVersions(ctx)
+	if err != nil {
+		s.logger.Warn("list versions", "error", err)
+	}
+
 	activeSet := make(map[string]bool, len(releases))
 
 	for _, rel := range releases {
@@ -80,10 +86,10 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 			DueDate:               rel.DueDate,
 		}
 
-		versionInfo, err := s.client.GetVersion(ctx, rel.FixVersion)
-		if err != nil {
+		versionInfo, ok := versions[rel.FixVersion]
+		if !ok {
 			// A fixVersion missing from JIRA is a data problem on one ticket, not sync health.
-			s.logger.Warn("get version metadata", "version", rel.FixVersion, "error", err)
+			s.logger.Warn("version not found in project", "version", rel.FixVersion)
 		} else {
 			rv.Released = versionInfo.Released
 			rv.Archived = versionInfo.Archived
@@ -113,8 +119,8 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 		if dbv.Archived || activeSet[dbv.Name] {
 			continue
 		}
-		versionInfo, err := s.client.GetVersion(ctx, dbv.Name)
-		if err != nil {
+		versionInfo, ok := versions[dbv.Name]
+		if !ok {
 			continue
 		}
 		dbv.Released = versionInfo.Released

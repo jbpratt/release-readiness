@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -74,9 +75,11 @@ type versionStore struct {
 	Store
 	versions []model.ReleaseVersion
 	synced   []string
+	upserted []model.ReleaseVersion
 }
 
-func (v *versionStore) UpsertReleaseVersion(context.Context, *model.ReleaseVersion) error {
+func (v *versionStore) UpsertReleaseVersion(_ context.Context, rv *model.ReleaseVersion) error {
+	v.upserted = append(v.upserted, *rv)
 	return nil
 }
 
@@ -126,5 +129,63 @@ func TestSyncOnceSyncsShippedUnarchivedVersions(t *testing.T) {
 
 	if got := strings.Join(store.synced, ","); got != "quay-v3.17.4,quay-v3.17.5" {
 		t.Errorf("synced = %s, want the retained versions", got)
+	}
+}
+
+func TestSyncOnceListsVersionsOncePerPass(t *testing.T) {
+	var versionGets int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.Contains(r.URL.Query().Get("jql"), "-area/release"):
+			_ = json.NewEncoder(w).Encode(searchResponse{Issues: []Issue{
+				{Key: "PROJQUAY-1", Fields: IssueFields{Summary: "Release Quay v3.17.5", DueDate: "2026-10-30"}},
+				{Key: "PROJQUAY-2", Fields: IssueFields{Summary: "Release Quay v3.18.0"}},
+				{Key: "PROJQUAY-3", Fields: IssueFields{Summary: "Release OMR v2.0.10"}},
+			}})
+		case r.URL.Path == "/rest/api/3/search/jql":
+			_ = json.NewEncoder(w).Encode(searchResponse{})
+		case r.URL.Path == "/rest/api/3/project/PROJQUAY/versions":
+			versionGets++
+			_ = json.NewEncoder(w).Encode([]VersionField{
+				{Name: "quay-v3.17.4", Released: true, ReleaseDate: "2026-09-01"},
+				{Name: "quay-v3.17.5", ReleaseDate: "2026-10-20"},
+				{Name: "quay-v3.18.0", Released: true},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	client := New(Config{BaseURL: srv.URL, Token: "t", Project: "PROJQUAY"})
+	client.minDelay = 0
+	store := &versionStore{versions: []model.ReleaseVersion{
+		{Name: "quay-v3.10.1", Released: true, Archived: true},
+		{Name: "quay-v3.16.9"},
+		{Name: "quay-v3.17.4"},
+		{Name: "quay-v3.17.5"},
+	}}
+	withTx := func(ctx context.Context, fn func(Store) error) error { return fn(store) }
+	s := NewSyncer(client, store, withTx, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	s.SyncOnce(context.Background())
+
+	if versionGets != 1 {
+		t.Errorf("versions list GETs = %d, want 1", versionGets)
+	}
+	date := func(s string) *time.Time {
+		d, _ := time.Parse(time.DateOnly, s)
+		return &d
+	}
+	// omr-v2.0.10 is missing from the list: stored without version fields.
+	// quay-v3.16.9 is missing and inactive: skipped.
+	want := []model.ReleaseVersion{
+		{Name: "quay-v3.17.5", ReleaseDate: date("2026-10-20"), ReleaseTicketKey: "PROJQUAY-1", KonfluxApplication: "quay-3-17", DueDate: date("2026-10-30")},
+		{Name: "quay-v3.18.0", Released: true, ReleaseTicketKey: "PROJQUAY-2", KonfluxApplication: "quay-3-18"},
+		{Name: "omr-v2.0.10", ReleaseTicketKey: "PROJQUAY-3", KonfluxApplication: "omr-2-0"},
+		{Name: "quay-v3.17.4", Released: true, ReleaseDate: date("2026-09-01")},
+	}
+	if !reflect.DeepEqual(store.upserted, want) {
+		t.Errorf("upserted:\n got %+v\nwant %+v", store.upserted, want)
 	}
 }

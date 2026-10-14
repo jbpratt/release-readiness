@@ -71,7 +71,7 @@ func TestSearchIssues(t *testing.T) {
 	}
 }
 
-func TestGetVersion(t *testing.T) {
+func TestListVersions(t *testing.T) {
 	versions := []VersionField{
 		{Name: "3.16.1", Released: true},
 		{Name: "3.16.2", ReleaseDate: "2026-02-20", Released: false},
@@ -94,21 +94,15 @@ func TestGetVersion(t *testing.T) {
 	})
 	client.minDelay = 0
 
-	v, err := client.GetVersion(context.Background(), "3.16.2")
+	got, err := client.ListVersions(context.Background())
 	if err != nil {
-		t.Fatalf("GetVersion: %v", err)
+		t.Fatalf("ListVersions: %v", err)
 	}
-	if v.Name != "3.16.2" {
-		t.Errorf("name: got %q, want 3.16.2", v.Name)
+	if v := got["3.16.2"]; v != versions[1] {
+		t.Errorf("3.16.2: got %+v, want %+v", v, versions[1])
 	}
-	if v.Released {
-		t.Error("released: got true, want false")
-	}
-
-	// Test version not found
-	_, err = client.GetVersion(context.Background(), "99.99.99")
-	if err == nil {
-		t.Error("expected error for non-existent version")
+	if _, ok := got["99.99.99"]; ok {
+		t.Error("found non-existent version")
 	}
 }
 

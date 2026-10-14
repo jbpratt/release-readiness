@@ -192,8 +192,8 @@ func (c *Client) search(ctx context.Context, jql, fields, what string) ([]Issue,
 	}
 }
 
-// GetVersion fetches version metadata from JIRA for the given project and version name.
-func (c *Client) GetVersion(ctx context.Context, versionName string) (*VersionField, error) {
+// ListVersions fetches the project's versions from JIRA, keyed by name.
+func (c *Client) ListVersions(ctx context.Context) (map[string]VersionField, error) {
 	reqURL := fmt.Sprintf("%s/rest/api/3/project/%s/versions", c.baseURL, url.PathEscape(c.project))
 	body, err := c.doGetWithRetry(ctx, reqURL)
 	if err != nil {
@@ -205,12 +205,11 @@ func (c *Client) GetVersion(ctx context.Context, versionName string) (*VersionFi
 		return nil, fmt.Errorf("decode versions: %w", err)
 	}
 
+	byName := make(map[string]VersionField, len(versions))
 	for _, v := range versions {
-		if v.Name == versionName {
-			return &v, nil
-		}
+		byName[v.Name] = v
 	}
-	return nil, fmt.Errorf("version %q not found in project %s", versionName, c.project)
+	return byName, nil
 }
 
 // doGetWithRetry performs an HTTP GET with rate limiting and retry on 429 responses.
