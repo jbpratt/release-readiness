@@ -174,14 +174,3 @@ func (q *Queries) ListStreamBuildImages(ctx context.Context, application string)
 	}
 	return items, nil
 }
-
-const snapshotExistsByName = `-- name: SnapshotExistsByName :one
-SELECT COUNT(*) FROM snapshots WHERE name = ?
-`
-
-func (q *Queries) SnapshotExistsByName(ctx context.Context, name string) (int64, error) {
-	row := q.db.QueryRowContext(ctx, snapshotExistsByName, name)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}

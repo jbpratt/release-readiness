@@ -159,7 +159,7 @@ func (s *Syncer) each(ctx context.Context, pass *syncstatus.Pass, gvr schema.Gro
 
 func (s *Syncer) sync(ctx context.Context, obj *unstructured.Unstructured, st *stored) error {
 	name := obj.GetName()
-	// Recorded on every pass, so Snapshots stored before this table existed get theirs.
+	// Checked on every pass, so Snapshots stored before this table existed get theirs.
 	a := obj.GetAnnotations()
 	assembly, kind, env := a["art.redhat.com/assembly"], a["art.redhat.com/kind"], a["art.redhat.com/env"]
 	staged := db.StagedSnapshot{Assembly: assembly, Kind: kind, Env: env}

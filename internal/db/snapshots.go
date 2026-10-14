@@ -16,14 +16,6 @@ func (d *DB) CreateSnapshot(ctx context.Context, application, name string, creat
 	})
 }
 
-func (d *DB) SnapshotExistsByName(ctx context.Context, name string) (bool, error) {
-	count, err := d.queries().SnapshotExistsByName(ctx, name)
-	if err != nil {
-		return false, err
-	}
-	return count > 0, nil
-}
-
 // SnapshotNames returns the names of every stored Snapshot.
 func (d *DB) SnapshotNames(ctx context.Context) (map[string]bool, error) {
 	names, err := d.queries().ListSnapshotNames(ctx)

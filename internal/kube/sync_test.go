@@ -216,7 +216,7 @@ func TestSyncOnce(t *testing.T) {
 	}
 	s.SyncOnce(ctx)
 	check()
-	if exists, _ := database.SnapshotExistsByName(ctx, "orphan"); exists {
+	if names, _ := database.SnapshotNames(ctx); names["orphan"] {
 		t.Error("snapshot without application was stored")
 	}
 	s.SyncOnce(ctx)
@@ -431,9 +431,10 @@ func TestSyncListContinueExpired(t *testing.T) {
 			if !slices.Equal(continues, tc.continues) {
 				t.Errorf("continue parameters = %q, want %q", continues, tc.continues)
 			}
+			names, _ := database.SnapshotNames(ctx)
 			var stored []string
 			for _, name := range []string{"quay-3-18-a", "quay-3-18-b"} {
-				if ok, _ := database.SnapshotExistsByName(ctx, name); ok {
+				if names[name] {
 					stored = append(stored, name)
 				}
 			}

@@ -2,9 +2,6 @@
 INSERT INTO snapshots (application, name, created_at)
 VALUES (?, ?, ?);
 
--- name: SnapshotExistsByName :one
-SELECT COUNT(*) FROM snapshots WHERE name = ?;
-
 -- name: GetSnapshotRow :one
 SELECT id, application, name, created_at
 FROM snapshots WHERE name = ?;
