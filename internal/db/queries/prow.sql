@@ -41,3 +41,9 @@ FROM prow_run_images i
 JOIN prow_runs r ON r.job_name = i.job_name AND r.build_id = i.build_id
 WHERE r.application = ?
 ORDER BY i.id;
+
+-- name: ListProwRunStarts :many
+-- The job's runs, newest first.
+SELECT build_id, started_at FROM prow_runs
+WHERE job_name = ?
+ORDER BY started_at DESC, build_id DESC;

@@ -472,3 +472,74 @@ current-context: x
 		t.Fatalf("RESTConfig: %+v, %v; want the token t", rc, err)
 	}
 }
+
+// With retention set, an unstored Snapshot older than it is skipped unless ART
+// staged it or a stored Release shipped it, and so is an unstored Failed
+// Release older than it unless its Snapshot is staged. Without retention every
+// one is ingested.
+func TestSyncRetention(t *testing.T) {
+	ctx := context.Background()
+	database, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	old, young := time.Now().Add(-48*time.Hour).UTC().Truncate(time.Second), time.Now().UTC().Truncate(time.Second)
+	if err := database.UpsertKonfluxRelease(ctx, &model.KonfluxRelease{
+		Name: "shipped-r1", Application: "quay-3-18", Snapshot: "old-shipped", ReleasedStatus: "True", ReleasedReason: "Succeeded", CreatedAt: old,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	staged := snapshot("old-staged", "quay-3-18", old)
+	staged.SetAnnotations(map[string]string{"art.redhat.com/assembly": "3.18.1", "art.redhat.com/kind": "image", "art.redhat.com/env": "stage"})
+	failed := map[string]any{"type": "Released", "status": "False", "reason": "Failed"}
+	stagedFailed := release("staged-failed", "quay-3-18", old, failed)
+	if err := unstructured.SetNestedField(stagedFailed.Object, "old-staged", "spec", "snapshot"); err != nil {
+		t.Fatal(err)
+	}
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{snapshotGVR: "SnapshotList", releaseGVR: "ReleaseList"},
+		snapshot("old", "quay-3-18", old),
+		staged,
+		snapshot("old-shipped", "quay-3-18", old),
+		snapshot("young", "quay-3-18", young),
+		release("old-failed", "quay-3-18", old, failed),
+		release("old-succeeded", "quay-3-18", old, map[string]any{"type": "Released", "status": "True", "reason": "Succeeded"}),
+		release("young-failed", "quay-3-18", young, failed),
+		stagedFailed,
+	)
+	s := NewSyncer(client, testNamespace, database, slog.New(slog.DiscardHandler))
+	s.Retention = 24 * time.Hour
+	s.SyncOnce(ctx)
+
+	stored := func() []string {
+		t.Helper()
+		snaps, err := database.SnapshotNames(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rels, err := database.KonfluxReleases(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for n := range snaps {
+			names = append(names, n)
+		}
+		for n := range rels {
+			names = append(names, n)
+		}
+		slices.Sort(names)
+		return names
+	}
+	if got, want := stored(), []string{"old-shipped", "old-staged", "old-succeeded", "shipped-r1", "staged-failed", "young", "young-failed"}; !slices.Equal(got, want) {
+		t.Errorf("stored with retention = %v, want %v", got, want)
+	}
+
+	s.Retention = 0
+	s.SyncOnce(ctx)
+	if got, want := stored(), []string{"old", "old-failed", "old-shipped", "old-staged", "old-succeeded", "shipped-r1", "staged-failed", "young", "young-failed"}; !slices.Equal(got, want) {
+		t.Errorf("stored without retention = %v, want %v", got, want)
+	}
+}

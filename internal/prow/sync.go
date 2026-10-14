@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -86,6 +87,7 @@ func (c *Client) get(ctx context.Context, u string) ([]byte, error) {
 type Store interface {
 	ListFinishedProwBuildIDs(ctx context.Context, jobName string) ([]string, error)
 	UpsertProwRun(ctx context.Context, r *Run) error
+	ListProwRunStarts(ctx context.Context, jobName string) ([]Run, error)
 }
 
 // Syncer polls configured job prefixes and upserts their runs.
@@ -97,6 +99,8 @@ type Syncer struct {
 	logger   *slog.Logger
 	// Status receives each pass's outcome; nil reports nowhere.
 	Status *syncstatus.Source
+	// Retention, when set, skips runs older than it that are not stored.
+	Retention time.Duration
 }
 
 func NewSyncer(client *Client, store Store, jobs []Job, interval time.Duration, logger *slog.Logger) *Syncer {
@@ -148,9 +152,13 @@ func (s *Syncer) syncJob(ctx context.Context, job Job) (int, error) {
 	for _, id := range finishedIDs {
 		done[id] = true
 	}
+	expired, err := s.expired(ctx, job.Name)
+	if err != nil {
+		return 0, err
+	}
 	n := 0
 	for _, id := range ids {
-		if done[id] {
+		if done[id] || expired(id) {
 			continue
 		}
 		run, err := s.fetchRun(ctx, job, id)
@@ -166,6 +174,37 @@ func (s *Syncer) syncJob(ctx context.Context, job Job) (int, error) {
 		n++
 	}
 	return n, nil
+}
+
+// expired reports whether an unstored run predates the retention window: its
+// ID is numerically below those of the job's stored runs started in the
+// window and of its newest stored run. Build IDs grow with time; a
+// non-numeric one never expires, nor does any while the job has no runs.
+func (s *Syncer) expired(ctx context.Context, job string) (func(id string) bool, error) {
+	if s.Retention <= 0 {
+		return func(string) bool { return false }, nil
+	}
+	runs, err := s.store.ListProwRunStarts(ctx, job)
+	if err != nil {
+		return nil, err
+	}
+	cutoff := time.Now().Add(-s.Retention)
+	stored := make(map[string]bool, len(runs))
+	var floor uint64
+	// runs is newest first.
+	for i, r := range runs {
+		stored[r.BuildID] = true
+		if i > 0 && (r.StartedAt == nil || r.StartedAt.Before(cutoff)) {
+			continue
+		}
+		if n, err := strconv.ParseUint(r.BuildID, 10, 64); err == nil && (floor == 0 || n < floor) {
+			floor = n
+		}
+	}
+	return func(id string) bool {
+		n, err := strconv.ParseUint(id, 10, 64)
+		return err == nil && n < floor && !stored[id]
+	}, nil
 }
 
 // fetchRun returns nil when the run has no readable prowjob.json yet.

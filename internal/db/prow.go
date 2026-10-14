@@ -89,3 +89,17 @@ func (d *DB) ListProwRunsByApplication(ctx context.Context, application string) 
 	}
 	return runs, nil
 }
+
+// ListProwRunStarts returns the build ID and start of each of the job's runs,
+// newest first.
+func (d *DB) ListProwRunStarts(ctx context.Context, jobName string) ([]prow.Run, error) {
+	rows, err := d.queries().ListProwRunStarts(ctx, jobName)
+	if err != nil {
+		return nil, err
+	}
+	runs := make([]prow.Run, len(rows))
+	for i, r := range rows {
+		runs[i] = prow.Run{JobName: jobName, BuildID: r.BuildID, StartedAt: parseOptionalTime(r.StartedAt)}
+	}
+	return runs, nil
+}

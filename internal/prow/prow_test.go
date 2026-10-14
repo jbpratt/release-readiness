@@ -190,6 +190,17 @@ func (m *memStore) UpsertProwRun(_ context.Context, r *Run) error {
 	return nil
 }
 
+func (m *memStore) ListProwRunStarts(_ context.Context, job string) ([]Run, error) {
+	var runs []Run
+	for _, r := range m.runs {
+		if r.JobName == job {
+			runs = append(runs, *r)
+		}
+	}
+	slices.SortFunc(runs, func(a, b Run) int { return b.StartedAt.Compare(*a.StartedAt) })
+	return runs, nil
+}
+
 // fakeGCS serves recorded listing pages and objects from testdata, plus
 // extra objects (a nil one answers 503), and counts object requests.
 func fakeGCS(t *testing.T, extra map[string][]byte) (*httptest.Server, map[string]int) {
@@ -402,5 +413,27 @@ func TestSyncReportsFailedListing(t *testing.T) {
 	p := reg.Problems(time.Now())
 	if len(p) != 1 || p[0].Source != "prow" || !strings.Contains(p[0].Message, "503") || !strings.Contains(p[0].Message, "2 errors this pass") {
 		t.Fatalf("problems = %+v, want one prow failure covering both jobs", p)
+	}
+}
+
+// With retention set, unstored runs below the build IDs of the stored runs
+// started in the window and of the newest stored run are not fetched; runs
+// above them are.
+func TestSyncRetention(t *testing.T) {
+	srv, gets := fakeGCS(t, nil)
+	now, old := time.Now(), time.Now().Add(-48*time.Hour)
+	store := &memStore{runs: map[string]*Run{
+		"2107000000000000000": {JobName: periodicJob, BuildID: "2107000000000000000", StartedAt: &now},
+		"2099000000000000000": {JobName: periodicJob, BuildID: "2099000000000000000", StartedAt: &old},
+	}}
+	s := NewSyncer(NewClient(srv.URL), store, testJobs(t), 15*time.Minute, slog.New(slog.DiscardHandler))
+	s.Retention = 24 * time.Hour
+
+	s.SyncOnce(t.Context())
+
+	for id, n := range map[string]int{periodicRun: 0, noneRun: 0, olmRun: 1, pendingRun: 1} {
+		if got := gets["logs/"+periodicJob+"/"+id+"/prowjob.json"]; got != n {
+			t.Errorf("prowjob.json fetches for %s = %d, want %d", id, got, n)
+		}
 	}
 }

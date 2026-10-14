@@ -143,6 +143,41 @@ func (q *Queries) ListProwRunImagesByApplication(ctx context.Context, applicatio
 	return items, nil
 }
 
+const listProwRunStarts = `-- name: ListProwRunStarts :many
+SELECT build_id, started_at FROM prow_runs
+WHERE job_name = ?
+ORDER BY started_at DESC, build_id DESC
+`
+
+type ListProwRunStartsRow struct {
+	BuildID   string
+	StartedAt string
+}
+
+// The job's runs, newest first.
+func (q *Queries) ListProwRunStarts(ctx context.Context, jobName string) ([]ListProwRunStartsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProwRunStarts, jobName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProwRunStartsRow
+	for rows.Next() {
+		var i ListProwRunStartsRow
+		if err := rows.Scan(&i.BuildID, &i.StartedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProwRunsByApplication = `-- name: ListProwRunsByApplication :many
 SELECT r.job_name, r.build_id, r.application, r.state, r.started_at, r.completed_at, r.prow_url, r.artifact_state, r.catalog_ref, r.fetched_at,
        f.build_id IS NOT NULL AS install_failed

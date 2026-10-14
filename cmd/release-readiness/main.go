@@ -64,6 +64,9 @@ func main() {
 	// Selected STAGE build flags
 	stagePlanPattern := flag.String("stage-release-plan-pattern", cmp.Or(os.Getenv("STAGE_RELEASE_PLAN_PATTERN"), `^quay-advisory-stage-\d+-\d+$`), "regexp matching the Konflux ReleasePlan names whose Releases are image STAGE (empty selects no staged build)")
 
+	// Retention flags
+	retention := flag.Duration("retention", 720*time.Hour, "age past which data no release needs is pruned daily and not ingested (0 disables)")
+
 	flag.Parse()
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -117,6 +120,7 @@ func main() {
 		logger.Info("konflux sync enabled", "namespace", *namespace, "interval", *konfluxPollInterval)
 		syncer := kube.NewSyncer(kc, *namespace, database, konfluxLog)
 		syncer.Status = status.Track("konflux", *konfluxPollInterval)
+		syncer.Retention = *retention
 		wg.Go(func() { syncer.Run(ctx, *konfluxPollInterval) })
 	}
 
@@ -170,7 +174,35 @@ func main() {
 		logger.Info("prow sync enabled", "jobs", len(prowJobList), "interval", *prowInterval)
 		syncer := prow.NewSyncer(prow.NewClient(prow.DefaultBaseURL), database, prowJobList, *prowInterval, logger.With("component", "prow-sync"))
 		syncer.Status = status.Track("prow", *prowInterval)
+		syncer.Retention = *retention
 		wg.Go(func() { syncer.Run(ctx) })
+	}
+
+	if *retention > 0 {
+		logger.Info("retention enabled", "retention", *retention)
+		retentionStatus := status.Track("retention", 24*time.Hour)
+		prune := func() {
+			deleted, err := database.Prune(ctx, time.Now().Add(-*retention))
+			if err != nil {
+				logger.Error("prune", "component", "retention", "deleted", deleted, "error", err)
+			} else {
+				logger.Info("pruned", "component", "retention", "deleted", deleted)
+			}
+			retentionStatus.Report(err)
+		}
+		wg.Go(func() {
+			prune()
+			ticker := time.NewTicker(24 * time.Hour)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					prune()
+				}
+			}
+		})
 	}
 
 	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, shipped, status, logger)
