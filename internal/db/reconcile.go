@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"slices"
-	"time"
 
 	"github.com/quay/release-readiness/internal/db/sqlc"
 	"github.com/quay/release-readiness/internal/reconcile"
@@ -50,13 +49,6 @@ func (d *DB) InsertBaseline(ctx context.Context, b reconcile.Baseline) error {
 // actionTime is fixed width, so updated_at orders as text.
 const actionTime = "2006-01-02T15:04:05.000000000Z"
 
-func formatActionTime(t time.Time) string {
-	if t.IsZero() {
-		return ""
-	}
-	return t.UTC().Format(actionTime)
-}
-
 func (d *DB) UpsertAction(ctx context.Context, a reconcile.Action) error {
 	return d.queries().UpsertReconcileAction(ctx, dbsqlc.UpsertReconcileActionParams{
 		FbcDigest:            a.Key.FBCDigest,
@@ -73,7 +65,7 @@ func (d *DB) UpsertAction(ctx context.Context, a reconcile.Action) error {
 		TransitionStep:       a.TransitionStep,
 		CommentStep:          a.CommentStep,
 		Attempts:             int64(a.Attempts),
-		UpdatedAt:            formatActionTime(a.UpdatedAt),
+		UpdatedAt:            a.UpdatedAt.UTC().Format(actionTime),
 	})
 }
 
