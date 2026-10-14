@@ -79,6 +79,7 @@ import {
 	noFbcText,
 	type RunPill,
 	readingLine,
+	releaseLine,
 	splitTickets,
 	tknCommand,
 	verdictEntries,
@@ -423,9 +424,9 @@ function BuildsCard({
 }
 
 /**
- * The FBC candidate: its verdict and the verdict's items, beside the release
- * command; then its FBCs needing attention, or all
- * of them, each with its build, stage and CI.
+ * The FBC candidate: its verdict, a failed or running prod Release and the
+ * verdict's items, beside the release command; then its FBCs needing
+ * attention, or all of them, each with its build, stage and CI.
  */
 function Candidate({
 	data,
@@ -447,6 +448,8 @@ function Candidate({
 	const shown = all ? rows : attention;
 	const entries = verdictEntries(data.verdict);
 	const read = readingLine(data.reading);
+	const prod = data.candidate?.prod;
+	const prodLine = prod && releaseLine(prod);
 	return (
 		<>
 			<Flex
@@ -462,6 +465,11 @@ function Candidate({
 					{read && (
 						<div style={line}>
 							<Status status={read.status}>{read.text}</Status>
+						</div>
+					)}
+					{prodLine && prodLine.status !== "done" && (
+						<div style={line} title={prod.name}>
+							<Status status={prodLine.status}>Prod: {prodLine.text}</Status>
 						</div>
 					)}
 				</FlexItem>
