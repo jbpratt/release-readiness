@@ -30,7 +30,7 @@ import {
 	ListIcon,
 	ThIcon,
 } from "@patternfly/react-icons";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { listReleasesOverview } from "../api/client";
 import type {
 	IssueSummary,
@@ -43,6 +43,8 @@ import { day } from "../utils/format";
 import { formatReleaseName, jiraIssueUrl } from "../utils/links";
 
 type ViewMode = "compact" | "expanded";
+
+const muted = { color: "var(--pf-t--global--text--color--subtle)" };
 
 export default function ReleasesOverview() {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -107,8 +109,15 @@ export default function ReleasesOverview() {
 
 	return (
 		<PageSection>
+			<Title
+				headingLevel="h1"
+				size="lg"
+				style={{ marginBottom: "var(--pf-t--global--spacer--md)" }}
+			>
+				Releases
+			</Title>
 			<Toolbar>
-				<ToolbarContent>
+				<ToolbarContent alignItems="center">
 					<ToolbarItem>
 						<Switch
 							id="show-all-versions"
@@ -117,6 +126,9 @@ export default function ReleasesOverview() {
 							onChange={(_e, checked) => setParam("all", checked ? "1" : "")}
 						/>
 					</ToolbarItem>
+					{!showAll && (
+						<ToolbarItem style={muted}>Next version in each stream</ToolbarItem>
+					)}
 					<ToolbarGroup align={{ default: "alignEnd" }}>
 						<ToolbarItem>
 							<ToggleGroup aria-label="View mode">
@@ -138,7 +150,11 @@ export default function ReleasesOverview() {
 				</ToolbarContent>
 			</Toolbar>
 
-			<Gallery hasGutter minWidths={{ default: galleryMinWidth }}>
+			<Gallery
+				component="ul"
+				hasGutter
+				minWidths={{ default: galleryMinWidth }}
+			>
 				{visible.map((ov) => (
 					<ReleaseCard
 						key={ov.release.name}
@@ -183,7 +199,6 @@ function ReleaseCard({
 		? new Date(latestBuild).toLocaleDateString()
 		: "None";
 
-	const navigate = useNavigate();
 	const displayName = formatReleaseName(release.name);
 
 	const ticket =
@@ -201,21 +216,19 @@ function ReleaseCard({
 		);
 
 	return (
-		<Card
-			isCompact
-			isClickable
-			style={{ cursor: "pointer" }}
-			onClick={(e) => {
-				if ((e.target as HTMLElement).closest("a, button")) return;
-				navigate(`/releases/${encodeURIComponent(release.name)}`);
-			}}
-		>
+		<Card component="li" isCompact>
 			<CardTitle>
 				<Flex
 					justifyContent={{ default: "justifyContentSpaceBetween" }}
 					alignItems={{ default: "alignItemsCenter" }}
 				>
-					<FlexItem>{displayName}</FlexItem>
+					<FlexItem>
+						<Title headingLevel="h2" size="md">
+							<Link to={`/releases/${encodeURIComponent(release.name)}`}>
+								{displayName}
+							</Link>
+						</Title>
+					</FlexItem>
 					{readinessSignal.signal && (
 						<FlexItem>
 							<Label
