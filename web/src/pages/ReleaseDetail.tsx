@@ -67,7 +67,6 @@ import {
 } from "../utils/links";
 import {
 	bundleBuilt,
-	decisions,
 	type Flag,
 	fbcGroups,
 	fbcParams,
@@ -82,8 +81,8 @@ import {
 	readingLine,
 	splitTickets,
 	tknCommand,
+	verdictEntries,
 	verdictLine,
-	withoutStage,
 } from "../utils/releaseDetail";
 
 const external = { target: "_blank", rel: "noopener noreferrer" };
@@ -424,8 +423,8 @@ function BuildsCard({
 }
 
 /**
- * The FBC candidate: its verdict, the release's blockers and the operators'
- * labels, beside the release command; then its FBCs needing attention, or all
+ * The FBC candidate: its verdict and the verdict's items, beside the release
+ * command; then its FBCs needing attention, or all
  * of them, each with its build, stage and CI.
  */
 function Candidate({
@@ -446,8 +445,7 @@ function Candidate({
 	const attention = rows.filter(needsAttention);
 	const [all, setAll] = useState(false);
 	const shown = all ? rows : attention;
-	const reasons = decisions(data.verdict);
-	const flagged = groups.filter((g) => g.labels.length > 0);
+	const entries = verdictEntries(data.verdict);
 	const read = readingLine(data.reading);
 	return (
 		<>
@@ -458,7 +456,7 @@ function Candidate({
 			>
 				<FlexItem>
 					<VerdictHeader
-						verdict={withoutStage(data.verdict)}
+						verdict={data.verdict}
 						prod={data.candidate?.prod ?? null}
 					/>
 					{read && (
@@ -469,29 +467,17 @@ function Candidate({
 				</FlexItem>
 				{inputs && <FlexItem>{inputs}</FlexItem>}
 			</Flex>
-			{(reasons.length > 0 || flagged.length > 0) && (
+			{entries.length > 0 && (
 				<List style={line}>
-					{reasons.map((r) => (
-						<ListItem key={r.text}>
-							{r.text}
-							{r.action && <span style={muted}> · Next: {r.action}</span>}
-						</ListItem>
-					))}
-					{flagged.map((g) => (
-						<ListItem key={g.operator}>
-							<Flex gap={{ default: "gapSm" }}>
-								{g.operator}
-								{g.labels.map((l) => (
-									<Tooltip
-										key={l.text}
-										content={l.tip.map((t) => <div key={t}>{t}</div>)}
-									>
-										<Label isCompact tabIndex={0} status={levelStatus[l.level]}>
-											{l.text}
-										</Label>
-									</Tooltip>
-								))}
-							</Flex>
+					{entries.map((e) => (
+						<ListItem key={`${e.level} ${e.text}`}>
+							<Tooltip content={e.tip.map((t) => <div key={t}>{t}</div>)}>
+								<Label isCompact tabIndex={0} status={levelStatus[e.level]}>
+									{e.count > 1 ? `${e.text} (${e.count})` : e.text}
+								</Label>
+							</Tooltip>
+							{e.on && ` ${e.on}`}
+							{e.action && <span style={muted}> · Next: {e.action}</span>}
 						</ListItem>
 					))}
 				</List>

@@ -214,16 +214,13 @@ export interface FbcRow {
 	runs: RunPill[];
 }
 
-// Verdict codes each row already shows as its stage status or a flag.
-const ROW_CODES = ["stage_release_failed", "read_failed"];
-
 /**
- * The candidate's FBCs by operator: the operator's verdict labels the rows do
- * not already show, and a row per OCP version with its stage, flags and CI.
+ * The candidate's FBCs by operator: a row per OCP version with its stage,
+ * flags and CI.
  */
 export function fbcGroups(
 	d: ReleaseCandidate,
-): { operator: string; labels: ActionLabel[]; rows: FbcRow[] }[] {
+): { operator: string; rows: FbcRow[] }[] {
 	const c = d.fbc_candidate;
 	if (!c) return [];
 	const items = d.verdict.items;
@@ -232,10 +229,6 @@ export function fbcGroups(
 		const staged = !s.leftOut && c.source !== "stream";
 		return {
 			operator: o.operator,
-			labels: actionLabels(
-				items.filter((i) => !ROW_CODES.includes(i.code)),
-				o.operator,
-			),
 			rows: slotRows(o).map((r) => {
 				const flags: Flag[] = rowChips(r, {
 					shipped: d.shipped,
@@ -306,37 +299,86 @@ const day = (iso: string) =>
 		day: "numeric",
 	});
 
-// Stage blockers the FBC rows already show, as "Not staged" or "no FBC".
-const STAGE_CODES = ["not_staged", "missing_operator", "missing_ocp"];
-
-/** A verdict without the stage blockers the FBC rows show. */
-export const withoutStage = (v: Verdict): Verdict => ({
-	...v,
-	items: v.items.filter((i) => !STAGE_CODES.includes(i.code)),
-});
-
 // The next action on a blocker on the whole release, by its code.
 const blockerActions: Record<string, string> = {
 	not_staged: "Stage the candidate",
 };
 
 /**
- * A not-ready verdict's blockers on the whole release, each with its next
- * action, "" for a code without one.
+ * A line of the verdict's list: a level's items of one code. text is a whole
+ * release item's own, else the code in a word or two.
  */
-export const decisions = (v: Verdict) =>
-	v.state === "not_ready"
-		? v.items
-				.filter((i) => i.level === "blocker" && !i.operator)
-				.map((i) => ({ ...i, action: blockerActions[i.code] ?? "" }))
-		: [];
+export interface VerdictEntry {
+	level: VerdictItem["level"];
+	text: string;
+	count: number;
+	/** What its items are on: "quay-operator OCP 4.14, 4.15"; "" on the whole release. */
+	on: string;
+	/** The next action, "" without one. */
+	action: string;
+	/** Each item's text and owner. */
+	tip: string[];
+}
+
+const levelRank = { blocker: 0, warning: 1, info: 2 };
 
 /**
- * The verdict's headline; a shipped version's is the record of its prod
- * Release, which the page adds.
+ * The verdict's items as its list, one entry per level and code: blockers
+ * first, the whole release's before the operators'. The headline counts the
+ * blocker entries' items.
+ */
+export function verdictEntries(v: Verdict): VerdictEntry[] {
+	const entries = new Map<
+		string,
+		VerdictEntry & { ocps: Map<string, string[]> }
+	>();
+	for (const i of v.items) {
+		const key = `${i.level} ${i.code}`;
+		const e = entries.get(key) ?? {
+			level: i.level,
+			text: i.operator ? (actionWords[i.code] ?? i.text) : i.text,
+			count: 0,
+			on: "",
+			action: blockerActions[i.code] ?? "",
+			tip: [],
+			ocps: new Map<string, string[]>(),
+		};
+		e.count++;
+		e.tip.push(i.owner ? `${i.text} · ${i.owner}` : i.text);
+		if (i.operator) {
+			const ocps = e.ocps.get(i.operator) ?? [];
+			const ocp = i.text.startsWith(i.operator)
+				? i.text
+						.slice(i.operator.length)
+						.match(/^ OCP ([\d.]+(?:, [\d.]+)*)[: ]/)?.[1]
+				: undefined;
+			if (ocp) ocps.push(ocp);
+			e.ocps.set(i.operator, ocps);
+		}
+		entries.set(key, e);
+	}
+	return [...entries.values()]
+		.map(({ ocps, ...e }) => ({
+			...e,
+			on: [...ocps]
+				.map(([op, o]) => (o.length ? `${op} OCP ${o.join(", ")}` : op))
+				.join("; "),
+		}))
+		.sort(
+			(a, b) =>
+				levelRank[a.level] - levelRank[b.level] ||
+				Number(a.on !== "") - Number(b.on !== ""),
+		);
+}
+
+/**
+ * The verdict's headline, counting the blockers its list shows; a shipped
+ * version's is the record of its prod Release, which the page adds.
  */
 export function verdictLine(v: Verdict): StatusLine {
-	const blockers = v.items.filter((i) => i.level === "blocker").length;
+	const blockers = verdictEntries(v)
+		.filter((e) => e.level === "blocker")
+		.reduce((n, e) => n + e.count, 0);
 	switch (v.state) {
 		case "checking":
 			return { status: "running", text: "Checking…" };
@@ -455,31 +497,6 @@ const actionWords: Record<string, string> = {
 	stage_release_failed: "Release failed",
 	stream_ahead: "Newer build",
 };
-
-/** A verdict label: its level, a word or two, and each item's text and owner. */
-export interface ActionLabel {
-	level: VerdictItem["level"];
-	text: string;
-	tip: string[];
-}
-
-/** An operator's verdict items as labels, one per code, in the items' order. */
-export function actionLabels(
-	items: VerdictItem[],
-	operator: string,
-): ActionLabel[] {
-	const labels = new Map<string, ActionLabel>();
-	for (const i of items.filter((i) => i.operator === operator)) {
-		const l = labels.get(i.code) ?? {
-			level: i.level,
-			text: actionWords[i.code] ?? i.text,
-			tip: [],
-		};
-		l.tip.push(i.owner ? `${i.text} · ${i.owner}` : i.text);
-		labels.set(i.code, l);
-	}
-	return [...labels.values()];
-}
 
 /** A Konflux application's ART group: quay-3-17 is quay-3.17. */
 export const artGroup = (app: string) => app.replace(/-(\d+)$/, ".$1");

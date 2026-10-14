@@ -9,14 +9,13 @@ import type {
 	KonfluxRelease,
 	OperatorFBC,
 	ReleaseCandidate,
+	Verdict,
 	VerdictItem,
 } from "../api/types.ts";
 import {
-	actionLabels,
 	artGroup,
 	bundleBuilt,
 	compareVersions,
-	decisions,
 	fbcGroups,
 	fbcParams,
 	fbcPullspecs,
@@ -40,8 +39,8 @@ import {
 	slotRows,
 	splitTickets,
 	tknCommand,
+	verdictEntries,
 	verdictLine,
-	withoutStage,
 } from "./releaseDetail.ts";
 
 test("jobShortName", () => {
@@ -465,78 +464,91 @@ const item = (
 	text = "",
 ): VerdictItem => ({ level, operator, owner: "", code, text });
 
-test("withoutStage: the FBC rows show stage blockers", () => {
-	const items = [
-		item("blocker", "", "not_staged"),
-		item("blocker", "quay-operator", "missing_ocp"),
-		item("blocker", "quay-bridge-operator", "missing_operator"),
-		item("blocker", "quay-operator", "csv_mismatch"),
-	];
-	const v = withoutStage({ state: "not_ready", items });
+test("verdictEntries: the headline counts every listed blocker (3.16.7)", () => {
+	const v: Verdict = {
+		state: "not_ready",
+		items: [
+			{
+				...item("blocker", "", "not_staged", "Not in a stage shipment"),
+				owner: "Quay (release-from-fbc)",
+			},
+			...["quay-operator", "container-security-operator"].map((op) =>
+				item(
+					"blocker",
+					op,
+					"mixed_builds",
+					`${op} FBCs ship different bundles: OCP 4.13 not on b`,
+				),
+			),
+			item("info", "quay-operator", "stream_ahead", "newer build"),
+		],
+	};
+	const entries = verdictEntries(v);
 	assert.deepEqual(
-		v.items.map((i) => i.code),
-		["csv_mismatch"],
-	);
-	assert.deepEqual(
-		verdictLine(withoutStage({ state: "not_ready", items: v.items.slice(1) })),
-		{ status: "failed", text: "Not ready" },
-	);
-	// Operator rows keep their stage labels, so none reads "Ready".
-	assert.deepEqual(
-		actionLabels(items, "quay-bridge-operator").map((l) => l.text),
-		["Not staged"],
-	);
-});
-
-test("decisions: the whole release's blockers, with a known code's action", () => {
-	const items = [
-		{
-			...item("blocker", "", "not_staged", "Not in a stage shipment"),
-			owner: "Quay (release-from-fbc)",
-		},
-		item("blocker", "", "unknown_fbc", "Staged FBCs with no ART build name: 1"),
-		item("blocker", "quay-operator", "csv_mismatch"),
-		item("warning", "", "stream_ahead"),
-	];
-	assert.deepEqual(
-		decisions({ state: "not_ready", items }).map((d) => [
-			d.text,
-			d.owner,
-			d.action,
-		]),
+		entries.map((e) => [e.level, e.text, e.count, e.on, e.action]),
 		[
+			["blocker", "Not in a stage shipment", 1, "", "Stage the candidate"],
 			[
-				"Not in a stage shipment",
-				"Quay (release-from-fbc)",
-				"Stage the candidate",
+				"blocker",
+				"Mixed bundles",
+				2,
+				"quay-operator; container-security-operator",
+				"",
 			],
-			["Staged FBCs with no ART build name: 1", "", ""],
+			["info", "Newer build", 1, "quay-operator", ""],
 		],
 	);
-	assert.deepEqual(decisions({ state: "checking", items }), []);
+	assert.deepEqual(entries[0].tip, [
+		"Not in a stage shipment · Quay (release-from-fbc)",
+	]);
+	assert.equal(verdictLine(v).text, "Not ready: 3 blockers");
 });
 
-test("actionLabels: one per code, the operator's only, texts and owners as tip", () => {
-	const owned = (i: VerdictItem, owner: string) => ({ ...i, owner });
-	const items = [
-		owned(
-			item("blocker", "quay-operator", "read_failed", "OCP 4.14: can't read"),
-			"ART",
-		),
-		item("blocker", "quay-operator", "read_failed", "OCP 4.15: can't read"),
-		item("blocker", "quay-bridge-operator", "missing_operator", "x"),
-		item("info", "quay-operator", "stream_ahead", "newer build"),
-		item("warning", "quay-operator", "unknown_code", "Something new"),
+test("verdictEntries: one code's blockers grouped with their OCPs (3.17.6)", () => {
+	const ocps = [
+		"4.14",
+		"4.15",
+		"4.16",
+		"4.17",
+		"4.18",
+		"4.19",
+		"4.20",
+		"4.21",
+		"4.22",
 	];
-	assert.deepEqual(actionLabels(items, "quay-operator"), [
-		{
-			level: "blocker",
-			text: "Can't read",
-			tip: ["OCP 4.14: can't read · ART", "OCP 4.15: can't read"],
-		},
-		{ level: "info", text: "Newer build", tip: ["newer build"] },
-		{ level: "warning", text: "Something new", tip: ["Something new"] },
-	]);
+	const op = "container-security-operator";
+	const v: Verdict = {
+		state: "not_ready",
+		items: ocps.map((o) =>
+			item(
+				"blocker",
+				op,
+				"stage_release_failed",
+				`${op} OCP ${o}: stage release failed (verify-conforma)`,
+			),
+		),
+	};
+	const [e, ...rest] = verdictEntries(v);
+	assert.deepEqual(rest, []);
+	assert.equal(e.text, "Release failed");
+	assert.equal(e.count, 9);
+	assert.equal(e.on, `${op} OCP ${ocps.join(", ")}`);
+	assert.equal(e.tip.length, 9);
+	assert.equal(verdictLine(v).text, "Not ready: 9 blockers");
+	assert.deepEqual(
+		verdictEntries({
+			state: "not_ready",
+			items: [
+				item(
+					"blocker",
+					"quay-operator",
+					"missing_ocp",
+					"quay-operator OCP 4.12, 4.13 not in the stage shipment",
+				),
+			],
+		})[0].on,
+		"quay-operator OCP 4.12, 4.13",
+	);
 });
 
 test("rowChips: exceptions only, per row", () => {
@@ -711,10 +723,6 @@ test("fbcGroups and needsAttention: a failed stage, a flag or a failed run", () 
 	};
 	const [g] = fbcGroups(d);
 	assert.deepEqual(
-		g.labels.map((l) => l.text),
-		["Mixed bundles"],
-	);
-	assert.deepEqual(
 		g.rows.map((r) => [
 			r.ocp,
 			r.stage?.text ?? null,
@@ -757,7 +765,6 @@ test("fbcGroups and needsAttention: a failed stage, a flag or a failed run", () 
 			items: [item("blocker", "quay-operator", "read_failed", unreadable)],
 		},
 	});
-	assert.deepEqual(read.labels, []);
 	assert.deepEqual(read.rows[0].flags, [
 		{ color: "red", text: "can't read", title: unreadable },
 	]);
