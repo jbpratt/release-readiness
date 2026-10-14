@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ShipmentMR } from "../api/types.ts";
-import { shipmentChip, shipmentChips, shipmentFlags } from "./shipment.ts";
+import {
+	cardStatus,
+	shipmentChip,
+	shipmentFlags,
+	shipmentLabel,
+	shipmentText,
+} from "./shipment.ts";
 
 function mr(over: Partial<ShipmentMR> = {}): ShipmentMR {
 	return {
@@ -47,10 +53,11 @@ test("shipmentChip stages", () => {
 	});
 });
 
-test("shipmentChip is danger when the pipeline failed", () => {
+test("shipmentChip is not danger when the pipeline failed", () => {
+	// The flag carries it, so a card shows danger at most once.
 	assert.equal(
 		shipmentChip(mr({ stage: "stage_released", pipeline_failed: true })).status,
-		"danger",
+		"info",
 	);
 });
 
@@ -63,40 +70,76 @@ test("shipmentChip tooltip names draft and branch search", () => {
 
 test("shipmentFlags", () => {
 	assert.deepEqual(shipmentFlags(mr()), []);
-	assert.deepEqual(shipmentFlags(mr({ pipeline_failed: true })), [
-		{ text: "Pipeline failed", status: "danger" },
-	]);
-	assert.deepEqual(shipmentFlags(mr({ needs_approval: true })), [
-		{ text: "Needs approval", status: "warning" },
-	]);
+	assert.deepEqual(
+		shipmentFlags(mr({ pipeline_failed: true, needs_approval: true })),
+		["Pipeline failed", "Needs approval"],
+	);
 });
 
-test("shipmentChips of a shipped version is one chip linking the MR", () => {
-	const shipped = {
-		text: "Shipped",
-		status: "success",
-		tooltip: "!948 · Shipped",
-		link: true,
-	};
-	assert.deepEqual(
-		shipmentChips(mr({ stage: "shipped", state: "merged" }), true),
-		[shipped],
-	);
+test("shipmentLabel of a shipped version reads Shipped", () => {
 	// ART can merge the MR after the release ships.
 	assert.deepEqual(
-		shipmentChips(mr({ stage: "prod_released", needs_approval: true }), true),
-		[{ ...shipped, tooltip: "!948 · Prod released" }],
+		shipmentLabel(mr({ stage: "prod_released", needs_approval: true }), true),
+		{ text: "Shipped", status: "success", tooltip: "!948 · Prod released" },
+	);
+	assert.equal(shipmentLabel(mr(), false).text, "Shipment MR open");
+});
+
+test("shipmentText names the stage and, before shipping, the flags", () => {
+	const v3173 = mr({
+		stage: "stage_released",
+		pipeline_failed: true,
+		needs_approval: true,
+	});
+	assert.equal(
+		shipmentText(v3173, false),
+		"Stage released · pipeline failed · needs approval",
+	);
+	// ART can merge the MR after the release ships.
+	assert.equal(shipmentText(v3173, true), "Stage released");
+});
+
+test("cardStatus of a shipped version is one success label linking the MR", () => {
+	assert.deepEqual(
+		cardStatus(
+			{ signal: "green", message: "Released" },
+			mr({ stage: "prod_released", pipeline_failed: true }),
+		),
+		{ text: "Released", status: "success", link: true },
 	);
 });
 
-test("shipmentChips of an unshipped version is the MR's chip and flags", () => {
-	assert.deepEqual(shipmentChips(mr({ needs_approval: true }), false), [
-		{
-			text: "Shipment MR open",
-			status: "info",
-			tooltip: "!948 · Shipment MR open",
-			link: true,
-		},
-		{ text: "Needs approval", status: "warning" },
-	]);
+test("cardStatus picks the most severe of readiness and the MR", () => {
+	assert.deepEqual(
+		cardStatus(
+			{ signal: "yellow", message: "No build snapshots yet" },
+			mr({
+				stage: "stage_released",
+				pipeline_failed: true,
+				needs_approval: true,
+			}),
+		),
+		{ text: "Pipeline failed", status: "danger", link: true },
+	);
+	// On a tie the readiness signal wins.
+	assert.deepEqual(
+		cardStatus(
+			{ signal: "red", message: "Past due date" },
+			mr({ pipeline_failed: true }),
+		),
+		{ text: "Past due date", status: "danger", link: false },
+	);
+	assert.deepEqual(cardStatus({ signal: "", message: "" }, mr()), {
+		text: "Shipment MR open",
+		status: "info",
+		link: true,
+	});
+});
+
+test("cardStatus without an MR is the readiness label", () => {
+	assert.deepEqual(
+		cardStatus({ signal: "yellow", message: "Due in 2 days" }, null),
+		{ text: "Due in 2 days", status: "warning", link: false },
+	);
+	assert.equal(cardStatus({ signal: "", message: "" }, null), undefined);
 });

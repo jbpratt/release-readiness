@@ -23,13 +23,7 @@ import {
 	ToolbarGroup,
 	ToolbarItem,
 } from "@patternfly/react-core";
-import {
-	CheckCircleIcon,
-	ExclamationCircleIcon,
-	ExclamationTriangleIcon,
-	ListIcon,
-	ThIcon,
-} from "@patternfly/react-icons";
+import { ListIcon, ThIcon } from "@patternfly/react-icons";
 import { Link, useSearchParams } from "react-router-dom";
 import { listReleasesOverview } from "../api/client";
 import type {
@@ -39,12 +33,13 @@ import type {
 	ShipmentMR,
 } from "../api/types";
 import LoadError from "../components/LoadError";
-import { mrLink, ShipmentLabels } from "../components/ShipmentLabels";
+import { external } from "../components/OperatorImages";
+import { mrLink } from "../components/ShipmentLabels";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
 import { day } from "../utils/format";
 import { formatReleaseName, jiraIssueUrl } from "../utils/links";
-import { shipmentChip } from "../utils/shipment";
+import { cardStatus, shipmentChip, shipmentText } from "../utils/shipment";
 
 type ViewMode = "compact" | "expanded";
 
@@ -206,15 +201,21 @@ function ReleaseCard({
 	const target = release.due_date ?? release.release_date;
 	const targetDate = target && day(target);
 
-	// Readiness is green only once the version is released or shipped; then
-	// its chip links the shipment MR in place of the MR's own chips.
-	const shipped = readinessSignal.signal === "green";
-
-	const signalIcons = {
-		green: <CheckCircleIcon />,
-		red: <ExclamationCircleIcon />,
-		yellow: <ExclamationTriangleIcon />,
-	};
+	const status = cardStatus(readinessSignal, shipmentMR);
+	// The readiness message the header label does not carry, shown as text.
+	const readiness =
+		readinessSignal.signal && status?.text !== readinessSignal.message
+			? readinessSignal.message
+			: undefined;
+	const shipment = shipmentMR && (
+		<>
+			<a href={shipmentMR.web_url} {...external}>
+				MR !{shipmentMR.iid}
+			</a>
+			{" · "}
+			{shipmentText(shipmentMR, readinessSignal.signal === "green")}
+		</>
+	);
 
 	// A build time, so its local date, in the same format as the target date.
 	const lastBuild = latestBuild
@@ -255,29 +256,21 @@ function ReleaseCard({
 							</Link>
 						</Title>
 					</FlexItem>
-					<Flex spaceItems={{ default: "spaceItemsSm" }}>
-						{shipmentMR && !shipped && (
-							<FlexItem>
-								<ShipmentLabels mr={shipmentMR} shipped={false} />
-							</FlexItem>
-						)}
-						{readinessSignal.signal && (
-							<FlexItem>
-								<Label
-									color={readinessSignal.signal}
-									icon={signalIcons[readinessSignal.signal]}
-									isCompact
-									render={
-										shipped && shipmentMR
-											? mrLink(shipmentMR, shipmentChip(shipmentMR).tooltip)
-											: undefined
-									}
-								>
-									{readinessSignal.message}
-								</Label>
-							</FlexItem>
-						)}
-					</Flex>
+					{status && (
+						<FlexItem>
+							<Label
+								status={status.status}
+								isCompact
+								render={
+									status.link && shipmentMR
+										? mrLink(shipmentMR, shipmentChip(shipmentMR).tooltip)
+										: undefined
+								}
+							>
+								{status.text}
+							</Label>
+						</FlexItem>
+					)}
 				</Flex>
 			</CardTitle>
 			<CardBody>
@@ -305,6 +298,22 @@ function ReleaseCard({
 								</DescriptionListDescription>
 							</DescriptionListGroup>
 						)}
+						{shipment && (
+							<DescriptionListGroup>
+								<DescriptionListTerm>Shipment</DescriptionListTerm>
+								<DescriptionListDescription>
+									{shipment}
+								</DescriptionListDescription>
+							</DescriptionListGroup>
+						)}
+						{readiness && (
+							<DescriptionListGroup>
+								<DescriptionListTerm>Readiness</DescriptionListTerm>
+								<DescriptionListDescription>
+									{readiness}
+								</DescriptionListDescription>
+							</DescriptionListGroup>
+						)}
 					</DescriptionList>
 				) : (
 					<Flex justifyContent={{ default: "justifyContentSpaceBetween" }}>
@@ -324,6 +333,18 @@ function ReleaseCard({
 							<span className="rr-label">Image snapshot</span>
 							<div>{lastBuild}</div>
 						</FlexItem>
+						{shipment && (
+							<FlexItem>
+								<span className="rr-label">Shipment</span>
+								<div>{shipment}</div>
+							</FlexItem>
+						)}
+						{readiness && (
+							<FlexItem>
+								<span className="rr-label">Readiness</span>
+								<div>{readiness}</div>
+							</FlexItem>
+						)}
 						{issueSummary && issueSummary.cves > 0 && (
 							<FlexItem>
 								<span className="rr-label">CVEs</span>

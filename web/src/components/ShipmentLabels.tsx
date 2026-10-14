@@ -1,6 +1,11 @@
-import { Label, LabelGroup, type LabelProps } from "@patternfly/react-core";
+import {
+	HelperText,
+	HelperTextItem,
+	Label,
+	type LabelProps,
+} from "@patternfly/react-core";
 import type { ShipmentMR } from "../api/types";
-import { shipmentChips } from "../utils/shipment";
+import { shipmentFlags, shipmentLabel } from "../utils/shipment";
 import { external } from "./OperatorImages";
 
 /** A Label render prop that makes the label a link to the shipment MR. */
@@ -18,7 +23,7 @@ export function mrLink(mr: ShipmentMR, title?: string): LabelProps["render"] {
 	);
 }
 
-/** A version's ART shipment MR chips: see shipmentChips. */
+/** A version's ART shipment MR label, linking it, and its flags as text. */
 export function ShipmentLabels({
 	mr,
 	shipped,
@@ -26,18 +31,18 @@ export function ShipmentLabels({
 	mr: ShipmentMR;
 	shipped: boolean;
 }) {
+	const label = shipmentLabel(mr, shipped);
+	const flags = shipped ? [] : shipmentFlags(mr);
 	return (
-		<LabelGroup>
-			{shipmentChips(mr, shipped).map((c) => (
-				<Label
-					key={c.text}
-					isCompact
-					status={c.status}
-					render={c.link ? mrLink(mr, c.tooltip) : undefined}
-				>
-					{c.text}
-				</Label>
-			))}
-		</LabelGroup>
+		<>
+			<Label isCompact status={label.status} render={mrLink(mr, label.tooltip)}>
+				{label.text}
+			</Label>
+			{flags.length > 0 && (
+				<HelperText>
+					<HelperTextItem>{flags.join(" · ")}</HelperTextItem>
+				</HelperText>
+			)}
+		</>
 	);
 }
