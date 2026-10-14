@@ -1,10 +1,13 @@
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: release-readiness
+  name: release-readiness-int
   labels:
     app: release-readiness
+    shard: internal
+    paas.redhat.com/appcode: QRR-001
 spec:
+  host: release-readiness-quay-release-readiness--runtime-int.apps.int.spoke.prod.us-west-2.aws.paas.redhat.com
   to:
     kind: Service
     name: release-readiness
