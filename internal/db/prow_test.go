@@ -102,3 +102,44 @@ func TestListFinishedProwBuildIDs(t *testing.T) {
 		t.Errorf("finished = %v, %v, want [2]", ids, err)
 	}
 }
+
+// Each run carries its own images in insertion order, and only the
+// application's runs are listed.
+func TestListProwRunsByApplicationImages(t *testing.T) {
+	d, err := Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	ctx := t.Context()
+
+	at := time.Date(2026, 10, 8, 0, 0, 0, 0, time.UTC)
+	runs := []prow.Run{
+		{JobName: "a", BuildID: "1", Application: "quay-3-18", Images: []prow.Image{{Role: "quay", Digest: "sha256:q1"}, {Role: "catalog", Digest: "sha256:c1"}}},
+		{JobName: "b", BuildID: "2", Application: "quay-3-17", Images: []prow.Image{{Role: "quay", Digest: "sha256:other"}}},
+		{JobName: "b", BuildID: "3", Application: "quay-3-18", InstallFailed: true},
+		{JobName: "a", BuildID: "4", Application: "quay-3-18", Images: []prow.Image{{Role: "catalog", Digest: "sha256:c4"}, {Role: "quay", Digest: "sha256:q4"}, {Role: "clair", Digest: "sha256:k4"}}},
+	}
+	for i := range runs {
+		started := at.Add(time.Duration(i) * time.Hour)
+		runs[i].State, runs[i].StartedAt, runs[i].ArtifactState, runs[i].FetchedAt = "success", &started, prow.ArtifactPresent, at
+		if err := d.UpsertProwRun(ctx, &runs[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got, err := d.ListProwRunsByApplication(ctx, "quay-3-18")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []prow.Run{runs[3], runs[2], runs[0]}
+	if len(got) != len(want) {
+		t.Fatalf("runs = %+v, want %d", got, len(want))
+	}
+	for i, w := range want {
+		g := got[i]
+		if g.JobName != w.JobName || g.BuildID != w.BuildID || g.InstallFailed != w.InstallFailed || !slices.Equal(g.Images, w.Images) {
+			t.Errorf("runs[%d] = %+v, want %+v", i, g, w)
+		}
+	}
+}

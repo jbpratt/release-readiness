@@ -41,15 +41,11 @@ func (s *Server) releaseCI(ctx context.Context, release *model.ReleaseVersion) (
 	if err != nil {
 		return nil, err
 	}
-	c, err := s.releaseCandidate(ctx, release)
+	c, runs, err := s.releaseCandidate(ctx, release)
 	if err != nil {
 		return nil, err
 	}
 	candidate := fbcDigests(c.FBCCandidate)
-	runs, err := s.db.ListProwRunsByApplication(ctx, app)
-	if err != nil {
-		return nil, err
-	}
 	// runs is newest first.
 	byDigest := map[string][]model.FBCRun{}
 	for _, run := range runs {

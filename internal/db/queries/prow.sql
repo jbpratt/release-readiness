@@ -35,8 +35,9 @@ LEFT JOIN prow_install_failures f ON f.job_name = r.job_name AND f.build_id = r.
 WHERE r.application = ?
 ORDER BY r.started_at DESC, r.build_id DESC;
 
--- name: ListProwRunImages :many
-SELECT role, digest
-FROM prow_run_images
-WHERE job_name = ? AND build_id = ?
-ORDER BY id;
+-- name: ListProwRunImagesByApplication :many
+SELECT i.job_name, i.build_id, i.role, i.digest
+FROM prow_run_images i
+JOIN prow_runs r ON r.job_name = i.job_name AND r.build_id = i.build_id
+WHERE r.application = ?
+ORDER BY i.id;

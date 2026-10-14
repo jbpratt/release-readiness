@@ -61,12 +61,17 @@ func (d *DB) ListProwRunsByApplication(ctx context.Context, application string) 
 	if err != nil {
 		return nil, err
 	}
+	imgRows, err := d.queries().ListProwRunImagesByApplication(ctx, application)
+	if err != nil {
+		return nil, err
+	}
+	imgs := map[[2]string][]prow.Image{}
+	for _, img := range imgRows {
+		k := [2]string{img.JobName, img.BuildID}
+		imgs[k] = append(imgs[k], prow.Image{Role: img.Role, Digest: img.Digest})
+	}
 	runs := make([]prow.Run, len(rows))
 	for i, r := range rows {
-		imgs, err := d.queries().ListProwRunImages(ctx, dbsqlc.ListProwRunImagesParams{JobName: r.JobName, BuildID: r.BuildID})
-		if err != nil {
-			return nil, err
-		}
 		runs[i] = prow.Run{
 			JobName:       r.JobName,
 			BuildID:       r.BuildID,
@@ -79,10 +84,7 @@ func (d *DB) ListProwRunsByApplication(ctx context.Context, application string) 
 			CatalogRef:    r.CatalogRef,
 			InstallFailed: r.InstallFailed,
 			FetchedAt:     parseTime(r.FetchedAt),
-			Images:        make([]prow.Image, len(imgs)),
-		}
-		for j, img := range imgs {
-			runs[i].Images[j] = prow.Image{Role: img.Role, Digest: img.Digest}
+			Images:        imgs[[2]string{r.JobName, r.BuildID}],
 		}
 	}
 	return runs, nil

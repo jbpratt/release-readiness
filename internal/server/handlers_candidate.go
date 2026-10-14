@@ -36,7 +36,7 @@ func (s *Server) handleGetCandidate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Errorf("release %q not found", version))
 		return
 	}
-	resp, err := s.releaseCandidate(r.Context(), release)
+	resp, _, err := s.releaseCandidate(r.Context(), release)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -44,16 +44,16 @@ func (s *Server) handleGetCandidate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// releaseCandidate is the version's candidate response, with its verdict. A
-// shipped version has no reason.
-func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVersion) (*model.ReleaseCandidate, error) {
+// releaseCandidate is the version's candidate response, with its verdict, and
+// the Prow runs of its application it read. A shipped version has no reason.
+func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVersion) (*model.ReleaseCandidate, []prow.Run, error) {
 	c, err := s.selectCandidate(ctx, release)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	resp, err := s.candidateResponse(ctx, release, c)
+	resp, runs, err := s.candidateResponse(ctx, release, c)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// A shipped version's record is its candidate alone.
 	shown := []*model.FBCCandidate{resp.FBCCandidate}
@@ -64,22 +64,22 @@ func (s *Server) releaseCandidate(ctx context.Context, release *model.ReleaseVer
 	}
 	r := &resp.Reading
 	if r.Read, r.Failed, r.Pending, err = s.db.FBCReadProgress(ctx, fbcDigests(shown...)); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	_, _, pending, err := s.db.FBCReadProgress(ctx, fbcDigests(resp.FBCCandidate))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if !c.shipped && c.assembly != "" && s.artBaseURL != "" {
 		group := "quay-" + c.assembly[:strings.LastIndex(c.assembly, ".")]
 		scanned, err := s.db.ScannedArtHistoryDays(ctx, group, artbuild.TypeFBC)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		r.HistoryDays = artbuild.UnscannedDays(time.Now(), scanned)
 	}
 	setVerdict(resp, c.assembly, pending)
-	return resp, nil
+	return resp, runs, nil
 }
 
 // fbcDigests returns the digests of the FBC images of cs, the ones the page
@@ -102,26 +102,26 @@ func fbcDigests(cs ...*model.FBCCandidate) []string {
 	return digests
 }
 
-func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVersion, c *candidate) (*model.ReleaseCandidate, error) {
+func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVersion, c *candidate) (*model.ReleaseCandidate, []prow.Run, error) {
 	var err error
 	resp := &model.ReleaseCandidate{Shipped: c.shipped, Reason: c.reason}
 	if c.assembly == "" {
-		return resp, nil
+		return resp, nil, nil
 	}
 	app := release.KonfluxApplication
 	releases, err := s.db.StageReleases(ctx, release, s.StageReleasePlanPattern)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	runs, err := s.db.ListProwRunsByApplication(ctx, app)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if resp.FBCCandidate, resp.FBCStream, resp.CIHistory, err = s.fbcCandidates(ctx, app, c, releases, runs); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if resp.Catalogs, err = s.candidateCatalogs(ctx, app, c.assembly); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	cand := c.build
 	if cand == nil {
@@ -129,7 +129,7 @@ func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVe
 		if c.newest == nil && c.art != "" && compareVersions(c.art, c.assembly) < 0 {
 			resp.Reason = "no " + c.assembly + " builds yet: ART still builds " + c.art
 		}
-		return resp, nil
+		return resp, runs, nil
 	}
 	resp.Candidate = cand
 	held := map[string]string{}
@@ -137,12 +137,12 @@ func (s *Server) candidateResponse(ctx context.Context, release *model.ReleaseVe
 		held[cc.Name] = imageDigest(cc.Image)
 	}
 	if resp.UnshippedBuilds, err = s.unshippedBuilds(ctx, app, c, held); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if cand.Prod, err = s.db.LatestProdRelease(ctx, c.assembly); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return resp, nil
+	return resp, runs, nil
 }
 
 // unshippedBuilds returns, sorted by component, the newest image of the
@@ -840,7 +840,7 @@ func (s *Server) CandidateDigests(ctx context.Context) ([]string, error) {
 		if v.Archived {
 			continue
 		}
-		c, err := s.releaseCandidate(ctx, &v)
+		c, _, err := s.releaseCandidate(ctx, &v)
 		if err != nil {
 			return nil, err
 		}
