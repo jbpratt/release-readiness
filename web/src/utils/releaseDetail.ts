@@ -595,6 +595,97 @@ export function scanCell(scan: ImageScan | null): {
 	}
 }
 
+/**
+ * An image the release ships, once per digest: the operators and
+ * repositories referencing it, and what is wrong with it.
+ */
+export interface ReleaseImage {
+	image: OperatorImage;
+	/** Its relatedImage name, or "<operator> bundle". */
+	label: string;
+	operators: string[];
+	repos: string[];
+	issues: Flag[];
+}
+
+/** The operators the page shows: the stream's for one stage leaves out. */
+export const candidateOperators = (d: ReleaseCandidate): OperatorFBC[] =>
+	d.fbc_candidate
+		? shownOperators(d.fbc_candidate, d.fbc_stream, d.shipped).map(
+				(s) => s.operator,
+			)
+		: [];
+
+const repo = (image: string) => image.split("@")[0];
+
+/** The X.Y.Z an ART image was built as: ...-container-3.18.1-2026... is 3.18.1. */
+const nvrVersion = (nvr: string) =>
+	nvr.match(/-container-(\d+\.\d+\.\d+)[.-]/)?.[1] ?? "";
+
+/** Operators' head bundle images, each once per digest, with their issues. */
+export function releaseImages(
+	ops: OperatorFBC[],
+	version: string,
+): ReleaseImage[] {
+	const byDigest = new Map<string, ReleaseImage>();
+	for (const o of ops)
+		for (const i of o.images) {
+			const seen = byDigest.get(i.digest);
+			if (!seen) {
+				byDigest.set(i.digest, {
+					image: i,
+					label: i.name || `${o.operator} bundle`,
+					operators: [o.operator],
+					repos: [repo(i.image)],
+					issues: [],
+				});
+				continue;
+			}
+			if (!seen.operators.includes(o.operator)) seen.operators.push(o.operator);
+			if (!seen.repos.includes(repo(i.image))) seen.repos.push(repo(i.image));
+		}
+	const images = [...byDigest.values()];
+	for (const r of images) r.issues = imageIssues(r, version);
+	return images;
+}
+
+/**
+ * An image's issues: a pullspec off registry.redhat.io; for one ART built, not
+ * on stage, built as another version, or its scan unread or with fixable
+ * critical or high CVEs.
+ */
+function imageIssues({ image: i, repos }: ReleaseImage, version: string) {
+	const issues: Flag[] = [];
+	const off = repos.filter((r) => !r.startsWith("registry.redhat.io/"));
+	if (off.length > 0)
+		issues.push({
+			color: "red",
+			text: "not registry.redhat.io",
+			title: off.join("\n"),
+		});
+	if (!i.nvr) return issues;
+	if (!i.stage) issues.push({ color: "red", text: "not on stage" });
+	const built = nvrVersion(i.nvr);
+	if (built && built !== version)
+		issues.push({ color: "orange", text: `${built} build`, title: i.nvr });
+	const fixable = i.scan?.counts?.fixable;
+	if (fixable && fixable.critical + fixable.high > 0)
+		issues.push({
+			color: "red",
+			text: `${fixable.critical + fixable.high} fixable critical/high`,
+		});
+	else if (!i.scan) issues.push({ color: "grey", text: "scan pending" });
+	else if (i.scan.state !== "scanned")
+		issues.push({ ...scanCell(i.scan), title: i.scan.url });
+	return issues;
+}
+
+const ranks = { red: 0, orange: 1, grey: 2 };
+
+/** An image's worst issue's rank, 0 for red; 3 without one. */
+export const worst = (r: ReleaseImage) =>
+	Math.min(3, ...r.issues.map((f) => ranks[f.color]));
+
 // The syncs the candidate verdict reads (handlers_candidate.go): konflux its
 // Snapshots and Releases, art-builds their images' NVRs, art-history the
 // stream's FBC builds and scanned days, fbc-render the FBC reads, catalog

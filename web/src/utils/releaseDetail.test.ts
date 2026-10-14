@@ -30,6 +30,7 @@ import {
 	nvrLabel,
 	otherBundle,
 	readingLine,
+	releaseImages,
 	releaseLine,
 	releaseWord,
 	rowChips,
@@ -41,6 +42,7 @@ import {
 	tknCommand,
 	verdictEntries,
 	verdictLine,
+	worst,
 } from "./releaseDetail.ts";
 
 test("jobShortName", () => {
@@ -800,6 +802,42 @@ test("fbcGroups and needsAttention: a failed stage, a flag or a failed run", () 
 		{ color: "red", text: "can't read", title: unreadable },
 	]);
 	assert.deepEqual(fbcGroups({ ...d, fbc_candidate: null }), []);
+});
+
+test("releaseImages and worst: each digest once, with its issues", () => {
+	const quay = {
+		...image("quay-rhel9", "sha256:q"),
+		nvr: "quay-rhel9-container-3.18.1-202610121915",
+		stage: true,
+	};
+	const pg = {
+		...image("postgresql-15", "sha256:p"),
+		image: "quay.io/sclorg/postgresql-15@sha256:p",
+	};
+	const images = releaseImages(
+		[
+			operatorFBC("quay-operator", "", [], { images: [quay, pg] }),
+			operatorFBC("container-security-operator", "", [], { images: [quay] }),
+		],
+		"3.18.2",
+	);
+	assert.deepEqual(
+		images.map((r) => [
+			r.label,
+			r.operators,
+			r.issues.map((f) => f.text),
+			worst(r),
+		]),
+		[
+			[
+				"quay-rhel9",
+				["quay-operator", "container-security-operator"],
+				["3.18.1 build", "scan pending"],
+				1,
+			],
+			["postgresql-15", ["quay-operator"], ["not registry.redhat.io"], 0],
+		],
+	);
 });
 
 test("fixableLabels", () => {

@@ -2,16 +2,9 @@ import { Card, CardBody, CardTitle } from "@patternfly/react-core";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { useSearchParams } from "react-router-dom";
 import type { ReleaseCandidate } from "../api/types";
-import {
-	BuiltCell,
-	CveCell,
-	candidateOperators,
-	FbcImagesPage,
-	Flags,
-	muted,
-	releaseImages,
-	ShipCell,
-} from "./fbcImages";
+import { BuiltCell, CveCell, Flags, muted } from "../components/OperatorImages";
+import { candidateOperators, releaseImages } from "../utils/releaseDetail";
+import { FbcImagesPage, ShipCell } from "./fbcImages";
 
 /** Design A: one table of the release's images, each once. */
 export default function FbcImagesA() {

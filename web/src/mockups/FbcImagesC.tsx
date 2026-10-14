@@ -17,16 +17,16 @@ import type {
 	OperatorFBC,
 	ReleaseCandidate,
 } from "../api/types";
-import { bundleBuilt, nvrLabel } from "../utils/releaseDetail";
+import { Flags, muted } from "../components/OperatorImages";
 import {
+	bundleBuilt,
 	candidateOperators,
-	FbcImagesPage,
-	Flags,
-	muted,
+	nvrLabel,
 	type ReleaseImage,
 	releaseImages,
 	worst,
-} from "./fbcImages";
+} from "../utils/releaseDetail";
+import { FbcImagesPage } from "./fbcImages";
 
 /**
  * Design C: an images summary on each FBC row holding its operator's head

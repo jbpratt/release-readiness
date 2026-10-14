@@ -38,15 +38,7 @@ import {
 	ExclamationTriangleIcon,
 	ExternalLinkAltIcon,
 } from "@patternfly/react-icons";
-import {
-	ExpandableRowContent,
-	Table,
-	Tbody,
-	Td,
-	Th,
-	Thead,
-	Tr,
-} from "@patternfly/react-table";
+import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { type ReactNode, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
@@ -55,13 +47,19 @@ import type {
 	FBCCandidate,
 	JiraIssue,
 	KonfluxRelease,
-	OperatorImage,
 	ReleaseCandidate,
 	ReleaseVersion,
 	Verdict,
 	VerdictItem,
 } from "../api/types";
 import LoadError from "../components/LoadError";
+import {
+	ExtLink,
+	external,
+	Flags,
+	muted,
+	OperatorImages,
+} from "../components/OperatorImages";
 import { Status } from "../components/Status";
 import { SyncProblems, useSyncStatus } from "../components/SyncStatusWarning";
 import { useCachedFetch } from "../hooks/useCachedFetch";
@@ -78,7 +76,6 @@ import {
 import {
 	bundleBuilt,
 	compareVersions,
-	type Flag,
 	fbcGroups,
 	fbcParams,
 	fbcPullspecs,
@@ -87,7 +84,6 @@ import {
 	jobShortName,
 	needsAttention,
 	noFbcText,
-	nvrLabel,
 	type RunPill,
 	readingLine,
 	releaseLine,
@@ -96,9 +92,6 @@ import {
 	verdictEntries,
 	verdictLine,
 } from "../utils/releaseDetail";
-
-const external = { target: "_blank", rel: "noopener noreferrer" };
-const muted = { color: "var(--pf-t--global--text--color--subtle)" };
 
 /** A date and time to the minute, local unless timeZone: "Oct 9, 21:48". */
 const when = (iso: string, timeZone?: string) =>
@@ -234,6 +227,10 @@ export default function ReleaseDetail() {
 				}
 			/>
 
+			{candidate.data?.fbc_candidate && (
+				<OperatorImages d={candidate.data} version={xyz} />
+			)}
+
 			<TicketsCard
 				issues={tickets}
 				error={ticketsError}
@@ -311,25 +308,6 @@ function ReleaseStatusCard({
 				</Flex>
 			</CardBody>
 		</Card>
-	);
-}
-
-/** A link opening in a new tab, or plain text without an href. */
-function ExtLink({
-	href,
-	title,
-	children,
-}: {
-	href: string | null;
-	title?: string;
-	children: ReactNode;
-}) {
-	return href ? (
-		<a href={href} title={title} {...external}>
-			{children}
-		</a>
-	) : (
-		<span title={title}>{children}</span>
 	);
 }
 
@@ -473,9 +451,7 @@ function Candidate({
 	);
 	const attention = rows.filter(needsAttention);
 	const [all, setAll] = useState(false);
-	const [opened, setOpened] = useState<Record<string, boolean>>({});
 	const shown = all ? rows : attention;
-	const expandable = shown.some((r) => r.images.length > 0);
 	const entries = verdictEntries(data.verdict);
 	const read = readingLine(data.reading);
 	const prod = data.candidate?.prod;
@@ -600,135 +576,53 @@ function Candidate({
 					}
 				/>
 			) : (
-				<Table
-					variant="compact"
-					aria-label="Candidate FBCs"
-					isExpandable={expandable}
-				>
+				<Table variant="compact" aria-label="Candidate FBCs">
 					<Thead>
 						<Tr>
-							{expandable && <Th screenReaderText="Images" />}
 							<Th>Operator</Th>
 							<Th>OCP</Th>
 							<Th>Built (UTC)</Th>
 							<Th>Stage and CI</Th>
 						</Tr>
 					</Thead>
-					{shown.map((r, rowIndex) => {
-						const key = `${r.operator} ${r.ocp} ${r.fbc?.digest ?? ""}`;
-						const open = opened[key] ?? false;
-						return (
-							<Tbody key={key} isExpanded={open}>
-								<Tr>
-									{expandable && (
-										<Td
-											expand={
-												r.images.length > 0
-													? {
-															rowIndex,
-															isExpanded: open,
-															onToggle: () =>
-																setOpened((o) => ({ ...o, [key]: !open })),
-														}
-													: undefined
-											}
-										/>
+					<Tbody>
+						{shown.map((r) => (
+							<Tr key={`${r.operator} ${r.ocp} ${r.fbc?.digest ?? ""}`}>
+								<Td dataLabel="Operator">{r.operator}</Td>
+								<Td dataLabel="OCP" modifier="nowrap">
+									{r.ocp}
+								</Td>
+								<Td dataLabel="Built (UTC)" modifier="nowrap">
+									{r.fbc ? (
+										<ExtLink href={r.fbc.build_url || null} title={r.fbc.nvr}>
+											{bundleBuilt(r.fbc.nvr) || r.fbc.nvr || "unresolved"}
+										</ExtLink>
+									) : (
+										<span style={muted}>–</span>
 									)}
-									<Td dataLabel="Operator">{r.operator}</Td>
-									<Td dataLabel="OCP" modifier="nowrap">
-										{r.ocp}
-									</Td>
-									<Td dataLabel="Built (UTC)" modifier="nowrap">
-										{r.fbc ? (
-											<ExtLink href={r.fbc.build_url || null} title={r.fbc.nvr}>
-												{bundleBuilt(r.fbc.nvr) || r.fbc.nvr || "unresolved"}
-											</ExtLink>
+								</Td>
+								<Td dataLabel="Stage and CI">
+									<Flex
+										gap={{ default: "gapMd" }}
+										alignItems={{ default: "alignItemsCenter" }}
+									>
+										{r.stage ? (
+											<Status status={r.stage.status}>{r.stage.text}</Status>
 										) : (
-											<span style={muted}>–</span>
+											<span style={muted}>{r.fbc ? "Not staged" : "–"}</span>
 										)}
-									</Td>
-									<Td dataLabel="Stage and CI">
-										<Flex
-											gap={{ default: "gapMd" }}
-											alignItems={{ default: "alignItemsCenter" }}
-										>
-											{r.stage ? (
-												<Status status={r.stage.status}>{r.stage.text}</Status>
-											) : (
-												<span style={muted}>{r.fbc ? "Not staged" : "–"}</span>
-											)}
-											<RunPills runs={r.runs} />
-											<Flags flags={r.flags} />
-										</Flex>
-									</Td>
-								</Tr>
-								{open && (
-									<Tr isExpanded>
-										<Td colSpan={5}>
-											<ExpandableRowContent>
-												<FbcImages operator={r.operator} images={r.images} />
-											</ExpandableRowContent>
-										</Td>
-									</Tr>
-								)}
-							</Tbody>
-						);
-					})}
+										<RunPills runs={r.runs} />
+										<Flags flags={r.flags} />
+									</Flex>
+								</Td>
+							</Tr>
+						))}
+					</Tbody>
 				</Table>
 			)}
 		</>
 	);
 }
-
-/** An FBC's images, its head bundle's relatedImages, each with its ART build. */
-function FbcImages({
-	operator,
-	images,
-}: {
-	operator: string;
-	images: OperatorImage[];
-}) {
-	return (
-		// A plain table: the FBC table's mobile layout would stack a nested
-		// PatternFly Table's cells too.
-		<table
-			aria-label={`${operator} images`}
-			style={{ overflowWrap: "anywhere" }}
-		>
-			<thead>
-				<tr>
-					<th className="rr-label" style={cell}>
-						Image
-					</th>
-					<th className="rr-label" style={cell}>
-						ART build
-					</th>
-				</tr>
-			</thead>
-			<tbody>
-				{images.map((i) => (
-					<tr key={`${i.name} ${i.digest}`}>
-						<td style={cell}>{i.name || "bundle"}</td>
-						<td style={{ ...cell, whiteSpace: "nowrap" }}>
-							{i.nvr ? (
-								<ExtLink href={i.build_url || null} title={i.nvr}>
-									{bundleBuilt(i.nvr) || nvrLabel(i.nvr)}
-								</ExtLink>
-							) : (
-								<span style={muted}>external</span>
-							)}
-						</td>
-					</tr>
-				))}
-			</tbody>
-		</table>
-	);
-}
-
-const cell = {
-	padding: "0.125rem 2rem 0.125rem 0",
-	textAlign: "left",
-} as const;
 
 /** A small link button opening href in a new tab, hidden without an href. */
 function OutLink({
@@ -760,34 +654,6 @@ const levelStatus: Record<VerdictItem["level"], LabelProps["status"]> = {
 	warning: "warning",
 	info: "info",
 };
-
-/** An FBC row's flags, otherBundle's linking its FBC's build. */
-function Flags({ flags }: { flags: Flag[] }) {
-	return flags.map((f) => (
-		<Label
-			key={f.text}
-			isCompact
-			color={f.color}
-			render={
-				f.href
-					? ({ className, content, componentRef }) => (
-							<a
-								className={className}
-								href={f.href ?? undefined}
-								ref={componentRef}
-								title={f.title}
-								{...external}
-							>
-								{content}
-							</a>
-						)
-					: undefined
-			}
-		>
-			<span title={f.title}>{f.text}</span>
-		</Label>
-	));
-}
 
 const pillColors: Record<string, LabelProps["color"]> = {
 	success: "green",
