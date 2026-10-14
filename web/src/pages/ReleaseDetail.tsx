@@ -315,7 +315,7 @@ function ReleaseStatusCard({
 					{shipmentMR && (
 						<FlexItem style={{ textAlign: "center" }}>
 							<div className="rr-label">Shipment</div>
-							<ShipmentLabels mr={shipmentMR} />
+							<ShipmentLabels mr={shipmentMR} shipped={shipped} />
 						</FlexItem>
 					)}
 				</Flex>

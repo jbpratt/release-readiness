@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { ShipmentMR } from "../api/types.ts";
-import { shipmentChip, shipmentFlags } from "./shipment.ts";
+import { shipmentChip, shipmentChips, shipmentFlags } from "./shipment.ts";
 
 function mr(over: Partial<ShipmentMR> = {}): ShipmentMR {
 	return {
@@ -67,6 +67,36 @@ test("shipmentFlags", () => {
 		{ text: "Pipeline failed", status: "danger" },
 	]);
 	assert.deepEqual(shipmentFlags(mr({ needs_approval: true })), [
+		{ text: "Needs approval", status: "warning" },
+	]);
+});
+
+test("shipmentChips of a shipped version is one chip linking the MR", () => {
+	const shipped = {
+		text: "Shipped",
+		status: "success",
+		tooltip: "!948 · Shipped",
+		link: true,
+	};
+	assert.deepEqual(
+		shipmentChips(mr({ stage: "shipped", state: "merged" }), true),
+		[shipped],
+	);
+	// ART can merge the MR after the release ships.
+	assert.deepEqual(
+		shipmentChips(mr({ stage: "prod_released", needs_approval: true }), true),
+		[{ ...shipped, tooltip: "!948 · Prod released" }],
+	);
+});
+
+test("shipmentChips of an unshipped version is the MR's chip and flags", () => {
+	assert.deepEqual(shipmentChips(mr({ needs_approval: true }), false), [
+		{
+			text: "Shipment MR open",
+			status: "info",
+			tooltip: "!948 · Shipment MR open",
+			link: true,
+		},
 		{ text: "Needs approval", status: "warning" },
 	]);
 });

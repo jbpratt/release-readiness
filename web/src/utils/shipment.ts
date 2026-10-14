@@ -39,3 +39,17 @@ export function shipmentFlags(
 		flags.push({ text: "Needs approval", status: "warning" });
 	return flags;
 }
+
+/**
+ * A version's shipment chips. Once the version shipped, one chip linking its
+ * MR, whatever the MR's stage: ART can merge it after the release. Before,
+ * the MR's stage chip, linking it, and its flags.
+ */
+export function shipmentChips(
+	mr: ShipmentMR,
+	shipped: boolean,
+): { text: string; status: Status; tooltip?: string; link?: boolean }[] {
+	const chip = { ...shipmentChip(mr), link: true };
+	if (shipped) return [{ ...chip, text: "Shipped", status: "success" }];
+	return [chip, ...shipmentFlags(mr)];
+}

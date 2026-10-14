@@ -39,11 +39,12 @@ import type {
 	ShipmentMR,
 } from "../api/types";
 import LoadError from "../components/LoadError";
-import { ShipmentLabels } from "../components/ShipmentLabels";
+import { mrLink, ShipmentLabels } from "../components/ShipmentLabels";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
 import { day } from "../utils/format";
 import { formatReleaseName, jiraIssueUrl } from "../utils/links";
+import { shipmentChip } from "../utils/shipment";
 
 type ViewMode = "compact" | "expanded";
 
@@ -205,6 +206,10 @@ function ReleaseCard({
 	const target = release.due_date ?? release.release_date;
 	const targetDate = target && day(target);
 
+	// Readiness is green only once the version is released or shipped; then
+	// its chip links the shipment MR in place of the MR's own chips.
+	const shipped = readinessSignal.signal === "green";
+
 	const signalIcons = {
 		green: <CheckCircleIcon />,
 		red: <ExclamationCircleIcon />,
@@ -251,9 +256,9 @@ function ReleaseCard({
 						</Title>
 					</FlexItem>
 					<Flex spaceItems={{ default: "spaceItemsSm" }}>
-						{shipmentMR && (
+						{shipmentMR && !shipped && (
 							<FlexItem>
-								<ShipmentLabels mr={shipmentMR} />
+								<ShipmentLabels mr={shipmentMR} shipped={false} />
 							</FlexItem>
 						)}
 						{readinessSignal.signal && (
@@ -262,6 +267,11 @@ function ReleaseCard({
 									color={readinessSignal.signal}
 									icon={signalIcons[readinessSignal.signal]}
 									isCompact
+									render={
+										shipped && shipmentMR
+											? mrLink(shipmentMR, shipmentChip(shipmentMR).tooltip)
+											: undefined
+									}
 								>
 									{readinessSignal.message}
 								</Label>
