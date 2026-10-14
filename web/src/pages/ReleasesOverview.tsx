@@ -37,6 +37,7 @@ import type {
 	ReadinessResponse,
 	ReleaseVersion,
 } from "../api/types";
+import LoadError from "../components/LoadError";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
 import { day } from "../utils/format";
@@ -53,10 +54,12 @@ export default function ReleasesOverview() {
 
 	const config = useConfig();
 
-	const { data: overviews, loading } = useCachedFetch(
-		"releasesOverview",
-		listReleasesOverview,
-	);
+	const {
+		data: overviews,
+		loading,
+		error,
+		refetch,
+	} = useCachedFetch("releasesOverview", listReleasesOverview);
 
 	const setParam = (key: string, value: string) => {
 		setSearchParams((prev) => {
@@ -76,6 +79,16 @@ export default function ReleasesOverview() {
 				<div style={{ textAlign: "center" }}>
 					<Spinner />
 				</div>
+			</PageSection>
+		);
+	}
+
+	if (!overviews && error) {
+		return (
+			<PageSection>
+				<LoadError title="Could not load releases" onRetry={refetch}>
+					The server did not return the release list. Try again in a moment.
+				</LoadError>
 			</PageSection>
 		);
 	}

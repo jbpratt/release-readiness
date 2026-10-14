@@ -77,6 +77,7 @@ import type {
 	Verdict,
 	VerdictItem,
 } from "../api/types";
+import LoadError from "../components/LoadError";
 import { Status } from "../components/Status";
 import { SyncProblems, useSyncStatus } from "../components/SyncStatusWarning";
 import { useCachedFetch } from "../hooks/useCachedFetch";
@@ -158,14 +159,17 @@ export default function ReleaseDetail() {
 	const { version } = useParams<{ version: string }>();
 	const config = useConfig();
 
-	const { data: release, loading: loadingRelease } = useCachedFetch(
-		`release:${version}`,
-		() => getRelease(version!),
-	);
-	const { data: tickets, error: ticketsError } = useCachedFetch(
-		`issues:${version}`,
-		() => listReleaseIssues(version!),
-	);
+	const {
+		data: release,
+		loading: loadingRelease,
+		error: releaseError,
+		refetch: refetchRelease,
+	} = useCachedFetch(`release:${version}`, () => getRelease(version!));
+	const {
+		data: tickets,
+		error: ticketsError,
+		refetch: refetchTickets,
+	} = useCachedFetch(`issues:${version}`, () => listReleaseIssues(version!));
 	const candidate = useCachedFetch(`candidate:${version}`, () =>
 		getCandidate(version!),
 	);
@@ -176,6 +180,25 @@ export default function ReleaseDetail() {
 				<div style={{ textAlign: "center" }}>
 					<Spinner />
 				</div>
+			</PageSection>
+		);
+	}
+
+	// Only a 404 means the release does not exist; any other failure can be retried.
+	if (!release && releaseError && !releaseError.message.startsWith("404 ")) {
+		return (
+			<PageSection>
+				<LoadError
+					title="Could not load this release"
+					onRetry={() => {
+						refetchRelease();
+						refetchTickets();
+						candidate.refetch();
+					}}
+				>
+					The server did not return data for {formatReleaseName(version!)}. Try
+					again in a moment.
+				</LoadError>
 			</PageSection>
 		);
 	}
@@ -235,6 +258,8 @@ export default function ReleaseDetail() {
 			<BuildsCard
 				data={candidate.data}
 				error={candidate.error}
+				loading={candidate.loading}
+				onRetry={candidate.refetch}
 				version={xyz}
 				app={app}
 				konflux={konflux}
@@ -418,6 +443,8 @@ function LinkedCardTitle({
 function BuildsCard({
 	data,
 	error,
+	loading,
+	onRetry,
 	version,
 	app,
 	konflux,
@@ -425,6 +452,8 @@ function BuildsCard({
 }: {
 	data?: ReleaseCandidate;
 	error?: Error;
+	loading: boolean;
+	onRetry: () => void;
 	/** The version's X.Y.Z. */
 	version: string;
 	app: string;
@@ -439,8 +468,16 @@ function BuildsCard({
 				Release candidate
 			</LinkedCardTitle>
 			<CardBody>
-				{error ? (
-					error.message
+				{!data && loading ? (
+					<Spinner size="md" />
+				) : error ? (
+					<LoadError
+						variant="xs"
+						title="Could not load the release candidate"
+						onRetry={onRetry}
+					>
+						Its builds, CI, and release status are unavailable right now.
+					</LoadError>
 				) : !data ? (
 					<Spinner size="md" />
 				) : fbc ? (

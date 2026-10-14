@@ -19,6 +19,7 @@ import {
 } from "@patternfly/react-core";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { getReleaseCI } from "../api/client";
+import LoadError from "../components/LoadError";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { formatReleaseName } from "../utils/links";
 import { compareVersions, jobLabels } from "../utils/releaseDetail";
@@ -49,8 +50,9 @@ const states = {
 export default function ReleaseCI() {
 	const { version } = useParams<{ version: string }>();
 	const [params, setParams] = useSearchParams();
-	const { data, error } = useCachedFetch(`ci:${version}`, () =>
-		getReleaseCI(version!),
+	const { data, loading, error, refetch } = useCachedFetch(
+		`ci:${version}`,
+		() => getReleaseCI(version!),
 	);
 	const operator = params.get("operator") ?? "";
 	const ocp = params.get("ocp") ?? "";
@@ -136,8 +138,17 @@ export default function ReleaseCI() {
 							</ToolbarItem>
 						</ToolbarContent>
 					</Toolbar>
-					{error ? (
-						<div>Failed to load CI history: {error.message}</div>
+					{!data && loading ? (
+						<Spinner size="lg" />
+					) : error ? (
+						<LoadError
+							variant="sm"
+							title="Could not load CI history"
+							onRetry={refetch}
+						>
+							The server did not return this release's FBC builds and their CI
+							runs. Try again in a moment.
+						</LoadError>
 					) : !data ? (
 						<Spinner size="lg" />
 					) : shown.length === 0 ? (
