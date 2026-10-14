@@ -155,33 +155,23 @@ function OperatorPanel({ o, version }: { o: OperatorFBC; version: string }) {
 					alignItems={{ default: "alignItemsCenter" }}
 				>
 					<span>{o.operator}</span>
-					{problems > 0 ? (
+					{problems > 0 && (
 						<Label isCompact color="red">
 							{problems} to check
 						</Label>
-					) : (
-						<Label isCompact color="green">
-							All {art.length} ART images OK
-						</Label>
 					)}
 				</Flex>
-				<div style={{ ...muted, fontSize: "0.85rem", fontWeight: "normal" }}>
-					Bundle built {bundleBuilt(o.head_bundle_nvr) || "unknown"} UTC
-					{ri?.job_url && (
-						<>
-							{" · "}
-							<ExtLink href={ri.job_url}>ART job</ExtLink>
-						</>
-					)}
-					{ri?.advisory && (
-						<>
-							{" · "}
+				{(ri?.job_url || ri?.advisory) && (
+					<div style={{ ...muted, fontSize: "0.85rem", fontWeight: "normal" }}>
+						{ri.job_url && <ExtLink href={ri.job_url}>ART job</ExtLink>}
+						{ri.job_url && ri.advisory && " · "}
+						{ri.advisory && (
 							<ExtLink href={ri.advisory}>
 								{ri.advisory.match(/[A-Z]+-\d{4}:\d+$/)?.[0] ?? "Advisory"}
 							</ExtLink>
-						</>
-					)}
-				</div>
+						)}
+					</div>
+				)}
 			</CardTitle>
 			<CardBody>
 				{art.map((r) => (
@@ -201,7 +191,8 @@ function OperatorPanel({ o, version }: { o: OperatorFBC; version: string }) {
 							<code style={muted} title={r.image.commit}>
 								{r.image.commit.slice(0, 7)}
 							</code>
-							<CveCell image={r.image} />
+							{/* CVE column hidden until pulls to the scan results exist; re-enable then. */}
+							{/* <CveCell image={r.image} /> */}
 							<Flags flags={r.issues} />
 						</Flex>
 					</div>
@@ -216,6 +207,11 @@ function OperatorPanel({ o, version }: { o: OperatorFBC; version: string }) {
 						}}
 					>
 						Not built by ART: {others.map((r) => r.label).join(", ")}
+					</div>
+				)}
+				{images.length === 0 && (
+					<div style={{ ...muted, fontSize: "0.85rem" }}>
+						No images rendered yet
 					</div>
 				)}
 			</CardBody>
