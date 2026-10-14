@@ -11,6 +11,8 @@ import {
 	EmptyStateBody,
 	Flex,
 	FlexItem,
+	FormSelect,
+	FormSelectOption,
 	Icon,
 	Label,
 	type LabelProps,
@@ -46,7 +48,7 @@ import {
 	Tr,
 } from "@patternfly/react-table";
 import { type ReactNode, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
 import type {
 	DashboardConfig,
@@ -75,6 +77,7 @@ import {
 } from "../utils/links";
 import {
 	bundleBuilt,
+	compareVersions,
 	type Flag,
 	fbcGroups,
 	fbcParams,
@@ -449,7 +452,25 @@ function Candidate({
 	inputs?: ReactNode;
 }) {
 	const groups = fbcGroups(data);
-	const rows = groups.flatMap((g) => g.rows);
+	const allRows = groups.flatMap((g) => g.rows);
+	const [params, setParams] = useSearchParams();
+	const operator = params.get("operator") ?? "";
+	const ocp = params.get("ocp") ?? "";
+	const set = (key: string, value: string) =>
+		setParams(
+			(prev) => {
+				const next = new URLSearchParams(prev);
+				if (value) next.set(key, value);
+				else next.delete(key);
+				return next;
+			},
+			{ replace: true },
+		);
+	const operators = [...new Set(allRows.map((r) => r.operator))].sort();
+	const ocps = [...new Set(allRows.map((r) => r.ocp))].sort(compareVersions);
+	const rows = allRows.filter(
+		(r) => (!operator || r.operator === operator) && (!ocp || r.ocp === ocp),
+	);
 	const attention = rows.filter(needsAttention);
 	const [all, setAll] = useState(false);
 	const [opened, setOpened] = useState<Record<string, boolean>>({});
@@ -502,6 +523,31 @@ function Candidate({
 			<Toolbar style={{ marginTop: "1rem", paddingBlock: 0 }}>
 				<ToolbarContent>
 					<ToolbarItem>
+						<FormSelect
+							value={operator}
+							onChange={(_e, v) => set("operator", v)}
+							aria-label="Operator"
+						>
+							<FormSelectOption value="" label="All operators" />
+							{operators.map((o) => (
+								<FormSelectOption key={o} value={o} label={o} />
+							))}
+						</FormSelect>
+					</ToolbarItem>
+					<ToolbarItem>
+						<FormSelect
+							value={ocp}
+							onChange={(_e, v) => set("ocp", v)}
+							aria-label="OCP version"
+							style={{ width: "12rem" }}
+						>
+							<FormSelectOption value="" label="All OCP versions" />
+							{ocps.map((o) => (
+								<FormSelectOption key={o} value={o} label={`OCP ${o}`} />
+							))}
+						</FormSelect>
+					</ToolbarItem>
+					<ToolbarItem>
 						<ToggleGroup isCompact aria-label="FBCs shown">
 							<ToggleGroupItem
 								text={`Needs attention (${attention.length})`}
@@ -518,7 +564,12 @@ function Candidate({
 					<ToolbarGroup align={{ default: "alignEnd" }}>
 						<ToolbarItem>
 							<Button
-								component={(p) => <Link {...p} to="ci" />}
+								component={(p) => (
+									<Link
+										{...p}
+										to={{ pathname: "ci", search: params.toString() }}
+									/>
+								)}
 								variant="link"
 								size="sm"
 							>
@@ -540,7 +591,13 @@ function Candidate({
 				<EmptyState
 					variant="xs"
 					headingLevel="h4"
-					titleText={all ? "No FBCs" : "No FBC needs attention"}
+					titleText={
+						rows.length === 0 && (operator || ocp)
+							? "No FBC matches the filters"
+							: all
+								? "No FBCs"
+								: "No FBC needs attention"
+					}
 				/>
 			) : (
 				<Table
