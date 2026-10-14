@@ -7,19 +7,11 @@ import {
 	CardBody,
 	CardTitle,
 	ClipboardCopy,
-	clipboardCopyFunc,
-	DescriptionList,
-	DescriptionListDescription,
-	DescriptionListGroup,
-	DescriptionListTerm,
 	EmptyState,
 	EmptyStateBody,
 	ExpandableSection,
 	Flex,
 	FlexItem,
-	FormSelect,
-	FormSelectOption,
-	Gallery,
 	Icon,
 	Label,
 	type LabelProps,
@@ -30,50 +22,32 @@ import {
 	ModalHeader,
 	PageSection,
 	Popover,
-	ProgressStep,
-	type ProgressStepProps,
-	ProgressStepper,
 	Spinner,
-	Tab,
-	Tabs,
-	TabTitleText,
 	Title,
+	ToggleGroup,
+	ToggleGroupItem,
+	Toolbar,
+	ToolbarContent,
+	ToolbarGroup,
+	ToolbarItem,
 	Tooltip,
 } from "@patternfly/react-core";
 import {
-	AngleDownIcon,
-	AngleRightIcon,
 	ExclamationCircleIcon,
 	ExclamationTriangleIcon,
 	ExternalLinkAltIcon,
-	InfoCircleIcon,
 } from "@patternfly/react-icons";
-import {
-	ExpandableRowContent,
-	Table,
-	Tbody,
-	Td,
-	Th,
-	Thead,
-	Tr,
-} from "@patternfly/react-table";
-import { Fragment, type ReactNode, useMemo, useState } from "react";
+import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
+import { type ReactNode, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
 import type {
-	CIJob,
-	CISlot,
 	DashboardConfig,
 	FBCCandidate,
-	ImageCompare,
-	ImageRef,
 	JiraIssue,
 	KonfluxRelease,
-	OperatorFBC,
-	ReadProgress,
 	ReleaseCandidate,
 	ReleaseVersion,
-	UnshippedBuild,
 	Verdict,
 	VerdictItem,
 } from "../api/types";
@@ -88,58 +62,29 @@ import {
 	jiraIssueUrl,
 	jiraSearchUrl,
 	konfluxUrl,
-	sippyJobUrl,
 	sippyRunsUrl,
 	ticketsJql,
 } from "../utils/links";
 import {
-	actionLabels,
-	blockedReasons,
 	bundleBuilt,
-	ciList,
-	compareLine,
-	componentLabel,
-	fbcBuildStep,
-	fbcCIStep,
+	decisions,
+	type Flag,
+	fbcGroups,
 	fbcParams,
 	fbcPullspecs,
-	fbcStageStep,
 	fbcsBuilt,
 	freshnessLine,
 	issueSummary,
-	jobLabels,
+	jobShortName,
+	needsAttention,
 	noFbcText,
-	nvrLabel,
-	otherBundle,
+	type RunPill,
 	readingLine,
-	readyText,
-	releaseLine,
-	rowChips,
-	runsStatus,
-	type ShownOperator,
-	type SlotRow,
-	type StatusLine,
-	shipsVersion,
-	shownOperators,
-	slotItem,
-	slotRows,
 	splitTickets,
-	stageText,
-	streamAhead,
 	tknCommand,
-	unreadText,
-	unshippedOf,
 	verdictLine,
-	whileChecking,
 	withoutStage,
 } from "../utils/releaseDetail";
-
-/** A Konflux UI page of the version's application, or of application. */
-type KonfluxLink = (
-	kind?: "snapshots" | "releases",
-	name?: string,
-	application?: string,
-) => string | null;
 
 const external = { target: "_blank", rel: "noopener noreferrer" };
 const muted = { color: "var(--pf-t--global--text--color--subtle)" };
@@ -222,17 +167,8 @@ export default function ReleaseDetail() {
 	const displayName = formatReleaseName(release.name);
 	const app = release.konflux_application ?? "";
 	const xyz = release.name.replace(/^[a-z]+-v/, "");
-	// Every Release the candidate response names is in the version's
-	// application, but its FBC catalogs'.
-	const konflux: KonfluxLink = (kind, name, application) =>
-		konfluxUrl(
-			config?.konflux_ui_url ?? "",
-			config?.konflux_namespace ?? "",
-			application ?? app,
-			kind,
-			name,
-		);
 	const fbc = candidate.data?.fbc_candidate;
+	const pullspecs = fbc && fbcPullspecs(fbc);
 
 	return (
 		<PageSection>
@@ -262,16 +198,19 @@ export default function ReleaseDetail() {
 				loading={candidate.loading}
 				onRetry={candidate.refetch}
 				version={xyz}
-				app={app}
-				konflux={konflux}
+				konflux={konfluxUrl(
+					config?.konflux_ui_url ?? "",
+					config?.konflux_namespace ?? "",
+					app,
+				)}
 				inputs={
-					fbc &&
+					pullspecs &&
 					!candidate.data?.shipped && (
 						<ReleaseInputsButton>
 							<ReleaseInputs
-								fbc={fbc}
 								app={app}
 								version={xyz}
+								pullspecs={pullspecs}
 								bugs={
 									config?.jira_enabled === false
 										? undefined
@@ -283,14 +222,6 @@ export default function ReleaseDetail() {
 					)
 				}
 			/>
-
-			{fbc && (candidate.data?.ci_history?.length ?? 0) > 0 && (
-				<CICard
-					slots={candidate.data?.ci_history ?? []}
-					fbc={fbc}
-					version={xyz}
-				/>
-			)}
 
 			<TicketsCard
 				issues={tickets}
@@ -392,19 +323,14 @@ function ExtLink({
 	);
 }
 
-/**
- * A card title with actions and a link out on the right, the link hidden
- * without an href.
- */
+/** A card title with a link out on the right, hidden without an href. */
 function LinkedCardTitle({
 	href,
 	link,
-	actions,
 	children,
 }: {
 	href?: string | null;
 	link?: string;
-	actions?: ReactNode;
 	children: ReactNode;
 }) {
 	return (
@@ -415,7 +341,6 @@ function LinkedCardTitle({
 			>
 				<FlexItem>{children}</FlexItem>
 				<Flex spaceItems={{ default: "spaceItemsSm" }}>
-					{actions}
 					{href && (
 						<FlexItem>
 							<Button
@@ -447,7 +372,6 @@ function BuildsCard({
 	loading,
 	onRetry,
 	version,
-	app,
 	konflux,
 	inputs,
 }: {
@@ -457,15 +381,15 @@ function BuildsCard({
 	onRetry: () => void;
 	/** The version's X.Y.Z. */
 	version: string;
-	app: string;
-	konflux: KonfluxLink;
-	/** The release inputs button, beside the Konflux link. */
+	/** The version's application in the Konflux UI. */
+	konflux: string | null;
+	/** The release command button, beside the verdict. */
 	inputs?: ReactNode;
 }) {
 	const fbc = data?.fbc_candidate;
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<LinkedCardTitle href={konflux()} link="Konflux" actions={fbc && inputs}>
+			<LinkedCardTitle href={fbc ? null : konflux} link="Konflux">
 				Release candidate
 			</LinkedCardTitle>
 			<CardBody>
@@ -483,16 +407,11 @@ function BuildsCard({
 					<Spinner size="md" />
 				) : fbc ? (
 					<Candidate
+						data={data}
 						fbc={fbc}
-						stream={data.fbc_stream}
-						prod={data.candidate?.prod ?? null}
-						shipped={data.shipped}
-						verdict={data.verdict}
-						reading={data.reading}
-						unshipped={data.unshipped_builds ?? []}
 						version={version}
-						app={app}
 						konflux={konflux}
+						inputs={inputs}
 					/>
 				) : data.shipped ? (
 					`v${version} has shipped. No FBC build data is recorded for it.`
@@ -505,273 +424,194 @@ function BuildsCard({
 }
 
 /**
- * The FBC candidate: its verdict and how far FBC reads are; where it is, from
- * the stream's build through CI and stage to prod; and a row per operator,
- * opening to its detail. The Prod step's popover shows its Release.
- * While FBC reads are pending no step warns or fails.
+ * The FBC candidate: its verdict, the release's blockers and the operators'
+ * labels, beside the release command; then its FBCs needing attention, or all
+ * of them, each with its build, stage and CI.
  */
 function Candidate({
+	data,
 	fbc,
-	stream,
-	prod: prodRelease,
-	shipped,
-	verdict,
-	reading,
-	unshipped,
 	version,
-	app,
 	konflux,
+	inputs,
 }: {
+	data: ReleaseCandidate;
 	fbc: FBCCandidate;
-	stream: FBCCandidate | null;
-	prod: KonfluxRelease | null;
-	shipped: boolean;
-	verdict: Verdict;
-	reading: ReadProgress;
-	unshipped: UnshippedBuild[];
 	version: string;
-	app: string;
-	konflux: KonfluxLink;
+	konflux: string | null;
+	inputs?: ReactNode;
 }) {
-	const prod = prodRelease && {
-		name: prodRelease.name,
-		...releaseLine(prodRelease),
-	};
-	const checking = verdict.state === "checking";
-	const built = whileChecking(
-		fbcBuildStep(stream ?? fbc, reading.history_days),
-		checking,
-	);
-	const ci = fbcCIStep(fbc);
-	// CI never gates the verdict, so a failed run only warns.
-	const tested = whileChecking(
-		ci.variant === "danger" ? { ...ci, variant: "warning" } : ci,
-		checking,
-	);
-	const sippy = sippyRunsUrl(version, fbcsBuilt(fbc));
-	const staged = whileChecking(fbcStageStep(fbc), checking);
-	const gaps = verdict.items
-		.filter((i) => i.code === "missing_ocp")
-		.map((i) => i.text);
-	const read = readingLine(reading);
-	const jobs = [
-		...new Set(
-			fbc.operators.flatMap((o) =>
-				[...o.members, ...o.conflicts].flatMap((m) =>
-					[...(m.ci?.exact ?? []), ...(m.ci?.equivalent ?? [])].map(
-						(j) => j.job_name,
-					),
-				),
-			),
-		),
-	];
-	const labels = jobLabels(jobs);
-	const label = (job: string) => labels[jobs.indexOf(job)];
-	const shown = shownOperators(fbc, stream, shipped);
-	const operators = fbc.operators.map((o) => o.operator);
-	// Rows the reader opened, and their tabs; rows start collapsed.
-	const [opened, setOpened] = useState<Record<string, boolean>>({});
-	const [tabs, setTabs] = useState<Record<string, BlockTab>>({});
+	const groups = fbcGroups(data);
+	const rows = groups.flatMap((g) => g.rows);
+	const attention = rows.filter(needsAttention);
+	const [all, setAll] = useState(false);
+	const shown = all ? rows : attention;
+	const reasons = decisions(data.verdict);
+	const flagged = groups.filter((g) => g.labels.length > 0);
+	const read = readingLine(data.reading);
 	return (
 		<>
-			<VerdictHeader verdict={withoutStage(verdict)} prod={prodRelease} />
-			{read && (
-				<div style={line}>
-					<Status status={read.status}>{read.text}</Status>
-				</div>
-			)}
-			<ProgressStepper
-				isCenterAligned
-				aria-label="Where the release candidate is"
-				style={{ marginTop: "1rem" }}
+			<Flex
+				justifyContent={{ default: "justifyContentSpaceBetween" }}
+				alignItems={{ default: "alignItemsFlexStart" }}
+				gap={{ default: "gapSm" }}
 			>
-				<Step title="Build" variant={built.variant} description={built.text} />
-				<Step
-					title="CI"
-					variant={tested.variant}
-					description={sippy && <ExtLink href={sippy}>Sippy</ExtLink>}
-				/>
-				<Step
-					title="Stage"
-					variant={staged.variant}
-					isCurrent={!prod && !shipped}
-					description={
-						<>
-							{staged.text}
-							{gaps.length > 0 && (
-								<span title={gaps.join("\n")}>{staged.text ? " ?" : "?"}</span>
-							)}
-						</>
-					}
-				/>
-				<Step
-					title="Prod"
-					variant={
-						prod
-							? releaseVariants[prod.status]
-							: shipped
-								? "success"
-								: "pending"
-					}
-					isCurrent={!!prod || shipped}
-					description={
-						prod ? (
-							<ExtLink href={konflux("releases", prod.name)} title={prod.name}>
-								{prod.status === "failed" ? "Release failed" : prod.text}
-							</ExtLink>
-						) : shipped ? (
-							"Shipped"
-						) : undefined
-					}
-					popoverRender={
-						prod?.status === "failed"
-							? (ref) => (
-									<Popover
-										aria-label="Prod detail"
-										headerContent="Prod"
-										triggerRef={ref}
-										bodyContent={
-											<ExtLink
-												href={konflux("releases", prod.name)}
-												title={prod.name}
-											>
-												{prod.text}
-											</ExtLink>
-										}
-									/>
-								)
-							: undefined
-					}
-				/>
-			</ProgressStepper>
-			<Table
-				variant="compact"
-				aria-label="Operators"
-				style={{ marginTop: "1rem" }}
-			>
-				<Thead>
-					<Tr>
-						<Th>Operator</Th>
-						<Th>Stage</Th>
-						<Th>Needs action</Th>
-					</Tr>
-				</Thead>
-				{shown.map((s) => {
-					const op = s.operator.operator;
-					const open = opened[op] ?? false;
-					const actions = actionLabels(verdict.items, op);
-					const stage = stageText(fbc, s);
-					return (
-						<Tbody key={op} isExpanded={open}>
-							<Tr>
-								<Td dataLabel="Operator">
-									<Button
-										variant="link"
-										isInline
-										icon={open ? <AngleDownIcon /> : <AngleRightIcon />}
-										aria-label={`${op} details`}
-										aria-expanded={open}
-										onClick={() => setOpened((o) => ({ ...o, [op]: !open }))}
+				<FlexItem>
+					<VerdictHeader
+						verdict={withoutStage(data.verdict)}
+						prod={data.candidate?.prod ?? null}
+					/>
+					{read && (
+						<div style={line}>
+							<Status status={read.status}>{read.text}</Status>
+						</div>
+					)}
+				</FlexItem>
+				{inputs && <FlexItem>{inputs}</FlexItem>}
+			</Flex>
+			{(reasons.length > 0 || flagged.length > 0) && (
+				<List style={line}>
+					{reasons.map((r) => (
+						<ListItem key={r.text}>
+							{r.text}
+							{r.action && <span style={muted}> · Next: {r.action}</span>}
+						</ListItem>
+					))}
+					{flagged.map((g) => (
+						<ListItem key={g.operator}>
+							<Flex gap={{ default: "gapSm" }}>
+								{g.operator}
+								{g.labels.map((l) => (
+									<Tooltip
+										key={l.text}
+										content={l.tip.map((t) => <div key={t}>{t}</div>)}
 									>
-										{op}
-									</Button>
+										<Label isCompact tabIndex={0} status={levelStatus[l.level]}>
+											{l.text}
+										</Label>
+									</Tooltip>
+								))}
+							</Flex>
+						</ListItem>
+					))}
+				</List>
+			)}
+			<Toolbar style={{ marginTop: "1rem", paddingBlock: 0 }}>
+				<ToolbarContent>
+					<ToolbarItem>
+						<ToggleGroup isCompact aria-label="FBCs shown">
+							<ToggleGroupItem
+								text={`Needs attention (${attention.length})`}
+								isSelected={!all}
+								onChange={() => setAll(false)}
+							/>
+							<ToggleGroupItem
+								text={`All (${rows.length})`}
+								isSelected={all}
+								onChange={() => setAll(true)}
+							/>
+						</ToggleGroup>
+					</ToolbarItem>
+					<ToolbarGroup align={{ default: "alignEnd" }}>
+						<ToolbarItem>
+							<Button
+								component={(p) => <Link {...p} to="ci" />}
+								variant="link"
+								size="sm"
+							>
+								CI history
+							</Button>
+						</ToolbarItem>
+						<ToolbarItem>
+							<OutLink href={sippyRunsUrl(version, fbcsBuilt(fbc))}>
+								Sippy
+							</OutLink>
+						</ToolbarItem>
+						<ToolbarItem>
+							<OutLink href={konflux}>Konflux</OutLink>
+						</ToolbarItem>
+					</ToolbarGroup>
+				</ToolbarContent>
+			</Toolbar>
+			{shown.length === 0 ? (
+				<EmptyState
+					variant="xs"
+					headingLevel="h4"
+					titleText={all ? "No FBCs" : "No FBC needs attention"}
+				/>
+			) : (
+				<Table variant="compact" aria-label="Candidate FBCs">
+					<Thead>
+						<Tr>
+							<Th>Operator</Th>
+							<Th>OCP</Th>
+							<Th>Built (UTC)</Th>
+							<Th>Stage and CI</Th>
+						</Tr>
+					</Thead>
+					<Tbody>
+						{shown.map((r) => (
+							<Tr key={`${r.operator} ${r.ocp} ${r.fbc?.digest ?? ""}`}>
+								<Td dataLabel="Operator">{r.operator}</Td>
+								<Td dataLabel="OCP" modifier="nowrap">
+									{r.ocp}
 								</Td>
-								<Td dataLabel="Stage" modifier="nowrap">
-									{shipped ? "" : <StageCell stage={stage} />}
-								</Td>
-								<Td dataLabel="Needs action">
-									{checking ? (
-										<span style={muted}>Checking…</span>
-									) : actions.length > 0 ? (
-										<Flex gap={{ default: "gapXs" }}>
-											{actions.map((a) => (
-												<Tooltip
-													key={a.text}
-													content={a.tip.map((t) => <div key={t}>{t}</div>)}
-												>
-													<Label
-														isCompact
-														tabIndex={0}
-														status={levelStatus[a.level]}
-													>
-														{a.text}
-													</Label>
-												</Tooltip>
-											))}
-										</Flex>
+								<Td dataLabel="Built (UTC)" modifier="nowrap">
+									{r.fbc ? (
+										<ExtLink href={r.fbc.build_url || null} title={r.fbc.nvr}>
+											{bundleBuilt(r.fbc.nvr) || r.fbc.nvr || "unresolved"}
+										</ExtLink>
 									) : (
-										readyText(verdict.items)
+										<span style={muted}>–</span>
 									)}
 								</Td>
+								<Td dataLabel="Stage and CI">
+									<Flex
+										gap={{ default: "gapMd" }}
+										alignItems={{ default: "alignItemsCenter" }}
+									>
+										{r.stage ? (
+											<Status status={r.stage.status}>{r.stage.text}</Status>
+										) : (
+											<span style={muted}>{r.fbc ? "Not staged" : "–"}</span>
+										)}
+										<RunPills runs={r.runs} />
+										<Flags flags={r.flags} />
+									</Flex>
+								</Td>
 							</Tr>
-							{open && (
-								<Tr isExpanded>
-									<Td colSpan={3}>
-										<ExpandableRowContent>
-											<OperatorDetail
-												shown={s}
-												tab={tabs[op] ?? "fbcs"}
-												onTab={(tab) => setTabs((t) => ({ ...t, [op]: tab }))}
-												ahead={
-													shipped || s.leftOut
-														? null
-														: streamAhead(fbc, stream, op)
-												}
-												items={verdict.items}
-												shipped={shipped}
-												unshipped={unshippedOf(unshipped, operators, op)}
-												label={label}
-												version={version}
-												app={app}
-												konflux={konflux}
-											/>
-										</ExpandableRowContent>
-									</Td>
-								</Tr>
-							)}
-						</Tbody>
-					);
-				})}
-			</Table>
-			{fbc.unknown.length > 0 && (
-				<div style={line}>
-					<Status status="warning">
-						{`${fbc.unknown.length} unidentified catalog${fbc.unknown.length === 1 ? "" : "s"}: `}
-						{fbc.unknown.map((m, i) => (
-							<span key={m.digest}>
-								{i > 0 && ", "}
-								<ExtLink
-									href={konflux("snapshots", m.snapshot, `fbc-${app}`)}
-									title={m.pullspec}
-								>
-									{shortDigest(m.pullspec)}
-								</ExtLink>
-							</span>
 						))}
-					</Status>
-				</div>
+					</Tbody>
+				</Table>
 			)}
 		</>
 	);
 }
 
-const levelIcons: Record<VerdictItem["level"], ReactNode> = {
-	blocker: (
-		<Icon status="danger" isInline>
-			<ExclamationCircleIcon />
-		</Icon>
-	),
-	warning: (
-		<Icon status="warning" isInline>
-			<ExclamationTriangleIcon />
-		</Icon>
-	),
-	info: (
-		<Icon status="info" isInline>
-			<InfoCircleIcon />
-		</Icon>
-	),
-};
+/** A small link button opening href in a new tab, hidden without an href. */
+function OutLink({
+	href,
+	children,
+}: {
+	href: string | null;
+	children: ReactNode;
+}) {
+	return (
+		href && (
+			<Button
+				component="a"
+				variant="link"
+				size="sm"
+				href={href}
+				{...external}
+				icon={<ExternalLinkAltIcon />}
+				iconPosition="end"
+			>
+				{children}
+			</Button>
+		)
+	);
+}
 
 const levelStatus: Record<VerdictItem["level"], LabelProps["status"]> = {
 	blocker: "danger",
@@ -779,14 +619,92 @@ const levelStatus: Record<VerdictItem["level"], LabelProps["status"]> = {
 	info: "info",
 };
 
-/** An operator's Stage cell: a status icon and a word or date, else a dash. */
-function StageCell({ stage }: { stage: StatusLine | null }) {
-	return stage ? (
-		<Status status={stage.status}>{stage.text}</Status>
-	) : (
-		<span style={muted}>–</span>
-	);
+/** An FBC row's flags, otherBundle's linking its FBC's build. */
+function Flags({ flags }: { flags: Flag[] }) {
+	return flags.map((f) => (
+		<Label
+			key={f.text}
+			isCompact
+			color={f.color}
+			render={
+				f.href
+					? ({ className, content, componentRef }) => (
+							<a
+								className={className}
+								href={f.href ?? undefined}
+								ref={componentRef}
+								title={f.title}
+								{...external}
+							>
+								{content}
+							</a>
+						)
+					: undefined
+			}
+		>
+			<span title={f.title}>{f.text}</span>
+		</Label>
+	));
 }
+
+const pillColors: Record<string, LabelProps["color"]> = {
+	success: "green",
+	failure: "red",
+	error: "red",
+	pending: "blue",
+};
+
+const pillWords: Record<string, string> = {
+	success: "passed",
+	failure: "failed",
+	error: "error",
+	pending: "running",
+};
+
+/**
+ * An FBC row's CI: a label per job, its newest run's result, opening that run
+ * in Prow. A run on another FBC of the same bundle is marked "≈".
+ */
+function RunPills({ runs }: { runs: RunPill[] }) {
+	if (runs.length === 0) return <span style={muted}>No runs</span>;
+	return runs.map((p) => (
+		<Label
+			key={`${p.job} ${p.equivalent}`}
+			isCompact
+			isClickable
+			color={pillColors[p.state] ?? "grey"}
+			render={({ className, content, componentRef }) => (
+				<a
+					className={className}
+					href={p.prow_url}
+					ref={componentRef}
+					title={[
+						p.job,
+						`Started ${when(p.started_at)}`,
+						p.install_failed && "Install failed",
+						p.runs > 1 && `Newest of ${p.runs} runs`,
+						p.equivalent &&
+							"Ran on another FBC with the same bundle; its channel graph can differ.",
+					]
+						.filter(Boolean)
+						.join("\n")}
+					{...external}
+				>
+					{content}
+				</a>
+			)}
+		>
+			{p.equivalent && "≈ "}
+			{jobShortName(p.job)} {pillWords[p.state] ?? p.state}
+		</Label>
+	));
+}
+
+const warningIcon = (
+	<Icon status="warning" isInline>
+		<ExclamationTriangleIcon />
+	</Icon>
+);
 
 /** Whether the version can ship; a shipped version's is its prod Release. */
 function VerdictHeader({
@@ -820,459 +738,10 @@ function DataFreshness() {
 			headerContent="Sync problems"
 			bodyContent={<SyncProblems problems={line.problems} />}
 		>
-			<Button variant="link" isInline icon={levelIcons.warning}>
+			<Button variant="link" isInline icon={warningIcon}>
 				{line.text}
 			</Button>
 		</Popover>
-	);
-}
-
-/** An FBC NVR without its operator: quay-operator-fbc-3.17.6-1.ocp4.14 is 3.17.6-1.ocp4.14. */
-const fbcLabel = (nvr: string) => nvr.replace(/^.*-fbc-/, "");
-
-type BlockTab = "fbcs" | "images";
-
-/**
- * An operator's detail: its FBCs' CSV version when not the release's, a
- * failed image push to stage, and a newer stream build not on stage;
- * then its FBCs by OCP version, the tab naming their bundle and channel, with
- * exception chips, and CI where runs exist, and its images, compared with the
- * previous z or that newer build. A left-out operator's are the stream's FBCs
- * to add.
- */
-function OperatorDetail({
-	shown: { operator: o },
-	tab,
-	onTab,
-	ahead,
-	items,
-	shipped,
-	unshipped,
-	label,
-	version,
-	app,
-	konflux,
-}: {
-	shown: ShownOperator;
-	tab: BlockTab;
-	onTab: (tab: BlockTab) => void;
-	/** The stream's newer head bundle, when the stage candidate is behind it. */
-	ahead: string | null;
-	items: VerdictItem[];
-	shipped: boolean;
-	unshipped: UnshippedBuild[];
-	label: (job: string) => string;
-	version: string;
-	app: string;
-	konflux: KonfluxLink;
-}) {
-	const [compare, setCompare] = useState("");
-	const rows = slotRows(o);
-	const fbcs = rows.filter((r) => r.fbc).length;
-	const nvr = o.head_bundle_nvr;
-	const unread = unreadText(items, o.operator);
-	const csv = shipsVersion(o);
-	const head = nvr
-		? [
-				csv && csv !== `v${version}` && `CSV ${csv}`,
-				o.fbc_ri_stage.state === "failed" && "image push to stage failed",
-			]
-				.filter(Boolean)
-				.join(" · ")
-		: (unread ?? "reading…");
-	const newer = o.compare.find((c) => c.kind === "newer");
-	const change = newer && compareLine(newer);
-	return (
-		<>
-			{head && <div style={muted}>{head}</div>}
-			{ahead && (
-				<Flex gap={{ default: "gapSm" }} flexWrap={{ default: "nowrap" }}>
-					<FlexItem>{levelIcons[change?.level ?? "info"]}</FlexItem>
-					<FlexItem>
-						<span title={ahead}>Newer bundle {bundleBuilt(ahead)}</span>
-						{change && `: ${change.text}`}{" "}
-						{newer && (
-							<Button
-								variant="link"
-								isInline
-								onClick={() => {
-									setCompare("newer");
-									onTab("images");
-								}}
-							>
-								Compare
-							</Button>
-						)}
-					</FlexItem>
-				</Flex>
-			)}
-			<Tabs
-				activeKey={tab}
-				onSelect={(_e, k) => onTab(k as BlockTab)}
-				aria-label={`${o.operator} FBCs and images`}
-				style={{ marginBottom: "var(--pf-t--global--spacer--md)" }}
-			>
-				<Tab
-					eventKey="fbcs"
-					title={<TabTitleText>FBCs {fbcs}</TabTitleText>}
-					tooltip={
-						nvr ? (
-							<Tooltip
-								content={
-									<>
-										<div>Bundle {nvr}</div>
-										{o.channel && <div>Channel {o.channel}</div>}
-									</>
-								}
-							/>
-						) : undefined
-					}
-				>
-					<Gallery
-						hasGutter
-						minWidths={{ default: "18rem" }}
-						aria-label={`${o.operator} FBCs by OCP version`}
-					>
-						{rows.map((r) => (
-							<Card isCompact key={`${r.ocp} ${r.fbc?.digest ?? ""}`}>
-								<CardTitle>
-									<Flex gap={{ default: "gapSm" }}>
-										OCP {r.ocp}
-										{rowChips(r, {
-											shipped,
-											unreadable: slotItem(
-												items,
-												"read_failed",
-												o.operator,
-												r.ocp,
-											)?.text,
-										}).map((c) => (
-											<Label key={c.text} isCompact color={c.color}>
-												<span title={c.title}>{c.text}</span>
-											</Label>
-										))}
-										<OtherBundle row={r} />
-									</Flex>
-								</CardTitle>
-								<CardBody>
-									<DescriptionList isCompact>
-										{r.fbc && (
-											<>
-												<DescriptionListGroup>
-													<DescriptionListTerm>FBC build</DescriptionListTerm>
-													<DescriptionListDescription>
-														<ExtLink
-															href={r.fbc.build_url || null}
-															title={
-																(r.fbc.staged ?? 0) > 1
-																	? `${r.fbc.nvr}\nstaged ${r.fbc.staged}x`
-																	: r.fbc.nvr
-															}
-														>
-															{r.fbc.nvr
-																? fbcLabel(r.fbc.nvr)
-																: shortDigest(r.fbc.pullspec)}
-														</ExtLink>
-													</DescriptionListDescription>
-												</DescriptionListGroup>
-												<DescriptionListGroup>
-													<DescriptionListTerm>Pullspec</DescriptionListTerm>
-													<DescriptionListDescription>
-														<ClipboardCopy
-															variant="inline-compact"
-															isCode
-															onCopy={(e) =>
-																clipboardCopyFunc(e, r.fbc?.pullspec ?? "")
-															}
-														>
-															{shortDigest(r.fbc.pullspec)}
-														</ClipboardCopy>
-													</DescriptionListDescription>
-												</DescriptionListGroup>
-											</>
-										)}
-										{((r.fbc?.ci?.exact.length ?? 0) > 0 ||
-											(r.fbc?.ci?.equivalent.length ?? 0) > 0) && (
-											<DescriptionListGroup>
-												<DescriptionListTerm>CI</DescriptionListTerm>
-												<DescriptionListDescription>
-													<Flex gap={{ default: "gapXs" }}>
-														{(r.fbc?.ci?.exact.length ?? 0) > 0 && (
-															<JobPills
-																jobs={r.fbc?.ci?.exact ?? []}
-																label={label}
-																version={version}
-															/>
-														)}
-														{(r.fbc?.ci?.equivalent.length ?? 0) > 0 && (
-															<JobPills
-																jobs={r.fbc?.ci?.equivalent ?? []}
-																label={label}
-																version={version}
-																equivalent
-															/>
-														)}
-													</Flex>
-												</DescriptionListDescription>
-											</DescriptionListGroup>
-										)}
-									</DescriptionList>
-								</CardBody>
-							</Card>
-						))}
-					</Gallery>
-				</Tab>
-				<Tab
-					eventKey="images"
-					title={
-						<TabTitleText>Images {uniqueImages(o).length || null}</TabTitleText>
-					}
-				>
-					<OperatorImages
-						operator={o}
-						compare={o.compare.find((c) => c.kind === compare) ?? null}
-						onCompare={setCompare}
-						unread={unread ?? "Reading FBC contents…"}
-					/>
-					{!shipped && (
-						<UnshippedTable builds={unshipped} app={app} konflux={konflux} />
-					)}
-				</Tab>
-			</Tabs>
-		</>
-	);
-}
-
-/** A warning naming the other bundle an FBC row's FBC heads, if it does. */
-function OtherBundle({ row }: { row: SlotRow }) {
-	const held = otherBundle(row);
-	return (
-		held && (
-			<span style={{ whiteSpace: "nowrap" }}>
-				{levelIcons.warning}{" "}
-				<ExtLink href={held.href} title={held.title}>
-					{held.text}
-				</ExtLink>
-			</span>
-		)
-	);
-}
-
-/** An operator's images, each once: opm can list the bundle image twice. */
-const uniqueImages = (o: OperatorFBC) =>
-	o.images.filter(
-		(i, k) =>
-			o.images.findIndex((x) => x.name === i.name && x.digest === i.digest) ===
-			k,
-	);
-
-/**
- * An image of a compared bundle: its build and commit, else its digest,
- * linked to its ART build page.
- */
-function ImageRefCell({ image }: { image: ImageRef | null }) {
-	if (!image) return <span style={muted}>–</span>;
-	return (
-		<ExtLink href={image.build_url || null} title={image.nvr || image.digest}>
-			{image.nvr
-				? `${bundleBuilt(image.nvr) || nvrLabel(image.nvr)} ${image.commit.slice(0, 7)}`
-				: image.digest.slice(7, 19)}
-		</ExtLink>
-	);
-}
-
-/** A compared image's repository without its registry. */
-const repoName = (image: ImageRef | null) =>
-	image?.repository.split("/").slice(1).join("/") ?? "";
-
-// How a compared image changed: a rebuild from the same source is info,
-// anything else may change behaviour.
-const changeColors: Record<string, LabelProps["color"]> = {
-	rebuild: "blue",
-	"new source": "orange",
-	"new build": "orange",
-	renamed: "orange",
-	added: "orange",
-	removed: "orange",
-};
-
-/**
- * An operator's images, the relatedImages of its head bundle, each once with
- * its ART build; or, compared, each image's change against the previous z or
- * a newer build. Under them, the OCP versions shipping another bundle and an image
- * shipment's other bundle.
- */
-function OperatorImages({
-	operator: o,
-	compare,
-	onCompare,
-	unread,
-}: {
-	operator: OperatorFBC;
-	compare: ImageCompare | null;
-	onCompare: (kind: string) => void;
-	/** What the tab says without images. */
-	unread: string;
-}) {
-	if (o.images.length === 0)
-		return <div style={{ ...line, ...muted }}>{unread}</div>;
-	const images = uniqueImages(o);
-	const other = o.conflicts.filter((m) => m.head_bundle_nvr).map((m) => m.ocp);
-	const check = o.image_check;
-	return (
-		<>
-			{o.compare.length > 0 && (
-				<div style={{ ...line, width: "16rem", marginLeft: "auto" }}>
-					<FormSelect
-						value={compare?.kind ?? ""}
-						onChange={(_e, v) => onCompare(v)}
-						aria-label={`Compare ${o.operator} images`}
-					>
-						<FormSelectOption value="" label="This bundle's images" />
-						{o.compare.map((c) => (
-							<FormSelectOption
-								key={c.kind}
-								value={c.kind}
-								label={
-									c.kind === "previous" ? `vs ${c.label}` : "vs newer build"
-								}
-							/>
-						))}
-					</FormSelect>
-				</div>
-			)}
-			{compare ? (
-				<Table variant="compact" aria-label={`${o.operator} images compared`}>
-					<Thead>
-						<Tr>
-							<Th>Image</Th>
-							<Th>{compare.kind === "previous" ? compare.label : "staged"}</Th>
-							<Th>{compare.kind === "previous" ? "this bundle" : "newer"}</Th>
-							<Th>Change</Th>
-						</Tr>
-					</Thead>
-					<Tbody>
-						{compare.rows.map((r) => (
-							<Tr key={`${r.name} ${r.from?.digest} ${r.to?.digest}`}>
-								<Td>{r.name || "bundle"}</Td>
-								<Td modifier="nowrap">
-									<ImageRefCell image={r.from} />
-								</Td>
-								<Td modifier="nowrap">
-									<ImageRefCell image={r.to} />
-								</Td>
-								<Td>
-									{changeColors[r.change] ? (
-										<Label isCompact color={changeColors[r.change]}>
-											{r.change}
-										</Label>
-									) : (
-										<span style={muted}>{r.change}</span>
-									)}
-									{r.change === "renamed" && (
-										<span style={{ ...muted, marginLeft: "0.5rem" }}>
-											{repoName(r.from)} → {repoName(r.to)}
-										</span>
-									)}
-								</Td>
-							</Tr>
-						))}
-					</Tbody>
-				</Table>
-			) : (
-				<Table variant="compact" aria-label={`${o.operator} images`}>
-					<Thead>
-						<Tr>
-							<Th>Image</Th>
-							<Th>ART build</Th>
-						</Tr>
-					</Thead>
-					<Tbody>
-						{images.map((i) => (
-							<Tr key={`${i.name} ${i.digest}`}>
-								<Td>{i.name || "bundle"}</Td>
-								<Td modifier="nowrap">
-									{i.nvr ? (
-										<ExtLink href={i.build_url || null} title={i.nvr}>
-											{bundleBuilt(i.nvr) || nvrLabel(i.nvr)}
-										</ExtLink>
-									) : (
-										<span style={muted}>external</span>
-									)}
-								</Td>
-							</Tr>
-						))}
-					</Tbody>
-				</Table>
-			)}
-			<div style={muted}>
-				{other.length > 0 &&
-					`OCP ${other.join(", ")} ${other.length === 1 ? "ships" : "ship"} a different bundle. `}
-				{check.state === "differs" &&
-					`Image shipment has bundle ${bundleBuilt(check.bundle_nvr)}.`}
-			</div>
-		</>
-	);
-}
-
-/**
- * The images of an operator's components the candidate's image shipment
- * leaves out, each with its stream build and ART build, copying its pullspec.
- * ART stages them by another path, so they are not "not staged".
- */
-function UnshippedTable({
-	builds,
-	app,
-	konflux,
-}: {
-	builds: UnshippedBuild[];
-	app: string;
-	konflux: KonfluxLink;
-}) {
-	if (builds.length === 0) return null;
-	return (
-		<>
-			<Title headingLevel="h4" size="md" style={{ marginTop: "1rem" }}>
-				Not in the image shipment
-			</Title>
-			<Table variant="compact">
-				<Thead>
-					<Tr>
-						<Th>Component</Th>
-						<Th>Build</Th>
-						<Th>Pullspec</Th>
-					</Tr>
-				</Thead>
-				<Tbody>
-					{builds.map((b) => (
-						<Tr key={b.name}>
-							<Td>
-								<ExtLink
-									href={konflux("snapshots", b.snapshot)}
-									title={b.snapshot}
-								>
-									{componentLabel(b.name, app)}
-								</ExtLink>
-							</Td>
-							<Td>
-								<ExtLink href={b.build_url || null} title={b.nvr}>
-									{nvrLabel(b.nvr)}
-								</ExtLink>
-							</Td>
-							<Td modifier="nowrap">
-								<ClipboardCopy
-									variant="inline-compact"
-									isCode
-									onCopy={(e) => clipboardCopyFunc(e, b.image)}
-								>
-									{shortDigest(b.image)}
-								</ClipboardCopy>
-							</Td>
-						</Tr>
-					))}
-				</Tbody>
-			</Table>
-		</>
 	);
 }
 
@@ -1302,323 +771,32 @@ function ReleaseInputsButton({ children }: { children: ReactNode }) {
 
 /**
  * release-from-fbc's dry-run tkn command for its one release-wide run, to
- * review and run by hand: RR starts no run. Without one, why the candidate
- * has none to run with.
+ * review and run by hand: RR starts no run.
  */
 function ReleaseInputs({
-	fbc,
 	app,
 	version,
+	pullspecs,
 	bugs,
 	dueDate,
 }: {
-	fbc: FBCCandidate;
 	app: string;
 	/** The version's X.Y.Z. */
 	version: string;
+	/** The candidate's fbc-pullspecs. */
+	pullspecs: string;
 	/** The version's ticket keys; undefined while unknown. */
 	bugs?: string[];
 	dueDate?: string;
 }) {
-	const pullspecs = fbcPullspecs(fbc);
-	return pullspecs ? (
+	return (
 		<ClipboardCopy isReadOnly isCode isExpanded variant="expansion">
 			{tknCommand(fbcParams(app, version, pullspecs, bugs ?? [], dueDate))}
 		</ClipboardCopy>
-	) : (
-		<div>
-			{blockedReasons(fbc).map((r) => (
-				<Status key={r} status="failed">
-					{r}
-				</Status>
-			))}
-		</div>
 	);
 }
-
-/** An image's digest to 12 hex digits: "sha256:0123456789ab". */
-const shortDigest = (image: string) =>
-	image.slice(image.indexOf("@") + 1).slice(0, 19);
 
 const line = { marginTop: "0.5rem" };
-
-// What a step's variant means, read out after its title: only its icon shows it.
-const stepStates = {
-	success: "done",
-	warning: "warning",
-	danger: "failed",
-	info: "in progress",
-	pending: "not started",
-} as const;
-
-const releaseVariants: Record<StatusLine["status"], keyof typeof stepStates> = {
-	done: "success",
-	failed: "danger",
-	running: "info",
-	warning: "warning",
-};
-
-/** A step of the candidate's stepper, read out as "<title>: <state>". */
-function Step({
-	title,
-	variant,
-	...props
-}: Pick<ProgressStepProps, "isCurrent" | "description" | "popoverRender"> & {
-	title: string;
-	variant: keyof typeof stepStates;
-}) {
-	const id = `candidate-${title.toLowerCase()}`;
-	return (
-		<ProgressStep
-			id={id}
-			titleId={`${id}-title`}
-			variant={variant}
-			aria-label={`${title}: ${stepStates[variant]}`}
-			{...props}
-		>
-			{title}
-		</ProgressStep>
-	);
-}
-
-// Prow job states as the OCP release controller words them.
-const ciStates: Record<string, string> = {
-	success: "Succeeded",
-	failure: "Failed",
-	error: "Error",
-};
-
-const runState = (state: string) =>
-	ciStates[state] ?? state.charAt(0).toUpperCase() + state.slice(1);
-
-// Job statuses, failures first.
-const jobRank = { danger: 0, warning: 1, success: 2, none: 3 } as const;
-
-const jobStatus = (j: CIJob): keyof typeof jobRank =>
-	runsStatus(j.runs.map((r) => r.state)) ?? "none";
-
-/**
- * A pill per job, failures first, opening its Sippy page; its runs, each
- * opening it in Prow, on hover. Passing jobs fold into one "N passed" toggle.
- * Runs on an equivalent FBC are marked "≈".
- */
-function JobPills({
-	jobs,
-	label,
-	version,
-	equivalent,
-}: {
-	jobs: CIJob[];
-	label: (job: string) => string;
-	/** The version's X.Y.Z. */
-	version: string;
-	/** The runs installed another FBC of this OCP version on the same bundle. */
-	equivalent?: boolean;
-}) {
-	const mark = equivalent ? "≈ " : "";
-	const [showPassed, setShowPassed] = useState(false);
-	const sorted = [...jobs].sort(
-		(a, b) =>
-			jobRank[jobStatus(a)] - jobRank[jobStatus(b)] ||
-			label(a.job_name).localeCompare(label(b.job_name)),
-	);
-	const passed = sorted.filter((j) => jobStatus(j) === "success");
-	const pill = (job: CIJob) => {
-		const s = jobStatus(job);
-		return (
-			<Pill
-				key={job.job_name}
-				status={s === "none" ? undefined : s}
-				href={sippyJobUrl(version, job.job_name)}
-				tip={
-					<>
-						{equivalent && (
-							<div style={muted}>
-								Ran on another FBC with the same bundle; its channel graph can
-								differ.
-							</div>
-						)}
-						<div>{job.job_name}</div>
-						{job.runs.map((r) => (
-							<div key={r.prow_url}>
-								<ExtLink href={r.prow_url}>{when(r.started_at)}</ExtLink>
-								{` · ${r.install_failed ? "Install failed" : runState(r.state)}`}
-							</div>
-						))}
-					</>
-				}
-			>
-				{mark}
-				{label(job.job_name)}
-				{job.runs.length > 1 && ` ×${job.runs.length}`}
-			</Pill>
-		);
-	};
-	return (
-		<Flex gap={{ default: "gapXs" }}>
-			{sorted.filter((j) => jobStatus(j) !== "success").map(pill)}
-			{passed.length > 0 && (
-				<Label
-					isCompact
-					isClickable
-					status="success"
-					render={({ className, content, componentRef }) => (
-						<button
-							type="button"
-							className={className}
-							ref={componentRef}
-							aria-expanded={showPassed}
-							onClick={() => setShowPassed(!showPassed)}
-						>
-							{content}
-						</button>
-					)}
-				>
-					{`${mark}${passed.length} passed`}
-				</Label>
-			)}
-			{showPassed && passed.map(pill)}
-		</Flex>
-	);
-}
-
-/**
- * A compact label with a popover, which stays open under the pointer as tip
- * has links, opening href in a new tab; without href it takes keyboard focus,
- * which shows the popover.
- */
-function Pill({
-	tip,
-	href,
-	children,
-	...props
-}: Pick<LabelProps, "status" | "children"> & {
-	tip: ReactNode;
-	href?: string | null;
-}) {
-	const [open, setOpen] = useState<"hover" | "focus">();
-	const label = href ? (
-		<Label
-			isCompact
-			isClickable
-			render={({ className, content, componentRef }) => (
-				<a className={className} href={href} ref={componentRef} {...external}>
-					{content}
-				</a>
-			)}
-			{...props}
-		>
-			{children}
-		</Label>
-	) : (
-		<Label isCompact tabIndex={0} {...props}>
-			{children}
-		</Label>
-	);
-	return (
-		// Open while focus is inside, and inline then so Tab reaches tip's links;
-		// on hover it stays in body, where the card's overflow cannot flip it.
-		// biome-ignore lint/a11y/noStaticElementInteractions: tracks focus, not input
-		<span
-			style={{ display: "contents" }}
-			onFocus={(e) => {
-				// React bubbles focus out of the hover portal; going inline then
-				// would remount the link under a pending click.
-				if (e.currentTarget.contains(e.target)) setOpen("focus");
-			}}
-			onBlur={(e) => {
-				if (!e.currentTarget.contains(e.relatedTarget)) setOpen(undefined);
-			}}
-		>
-			<Popover
-				triggerAction="hover"
-				isVisible={!!open}
-				shouldOpen={() => setOpen((o) => o ?? "hover")}
-				shouldClose={() => setOpen(undefined)}
-				appendTo={open === "focus" ? "inline" : undefined}
-				aria-label="Runs"
-				bodyContent={tip}
-			>
-				{label}
-			</Popover>
-		</span>
-	);
-}
-
-/**
- * The CI of each slot's candidate FBC, a line per slot with a run: each job
- * opens in Sippy and each run in Prow.
- */
-function CICard({
-	slots,
-	fbc,
-	version,
-}: {
-	slots: CISlot[];
-	fbc: FBCCandidate;
-	version: string;
-}) {
-	const lines = ciList(slots);
-	const jobs = [...new Set(lines.flatMap((l) => l.runs.map((r) => r.job)))];
-	const labels = jobLabels(jobs);
-	const sippy = sippyRunsUrl(version, fbcsBuilt(fbc));
-	return (
-		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<LinkedCardTitle
-				actions={
-					<>
-						<Button
-							component={(p) => <Link {...p} to="ci" />}
-							variant="secondary"
-							size="sm"
-						>
-							FBC CI history
-						</Button>
-						{sippy && (
-							<Button
-								component="a"
-								variant="secondary"
-								size="sm"
-								href={sippy}
-								{...external}
-								icon={<ExternalLinkAltIcon />}
-								iconPosition="end"
-							>
-								Runs in Sippy
-							</Button>
-						)}
-					</>
-				}
-			>
-				CI
-			</LinkedCardTitle>
-			<CardBody>
-				<List isPlain>
-					{lines.map((l) => (
-						<ListItem key={`${l.operator} ${l.ocp}`}>
-							<strong>
-								{l.operator} {l.ocp}
-							</strong>
-							<span style={muted}> — </span>
-							{l.runs.map((r, i) => (
-								<Fragment key={r.run.prow_url}>
-									{i > 0 && <span style={muted}> · </span>}
-									<ExtLink href={sippyJobUrl(version, r.job)} title={r.job}>
-										{labels[jobs.indexOf(r.job)]}
-									</ExtLink>{" "}
-									{runState(r.run.state).toLowerCase()}{" "}
-									<a href={r.run.prow_url} style={muted} {...external}>
-										{when(r.run.started_at)}
-									</a>
-								</Fragment>
-							))}
-						</ListItem>
-					))}
-				</List>
-			</CardBody>
-		</Card>
-	);
-}
 
 /**
  * The version's fixVersion issues but its release ticket, shown atop the

@@ -5,7 +5,6 @@ import {
 	jiraIssueUrl,
 	jiraSearchUrl,
 	konfluxUrl,
-	sippyJobUrl,
 	sippyRunsUrl,
 	ticketsJql,
 } from "./links.ts";
@@ -68,16 +67,6 @@ test("ticketsJql", () => {
 test("formatReleaseName", () => {
 	assert.equal(formatReleaseName("quay-v3.18.0"), "Quay v3.18.0");
 	assert.equal(formatReleaseName("omr-v2.0.10"), "OMR v2.0.10");
-});
-
-test("sippyJobUrl", () => {
-	const job =
-		"periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly";
-	assert.equal(
-		sippyJobUrl("3.18.2", job),
-		"https://sippy.dptools.openshift.org/sippy-ng/jobs/quay-3.18?filters=%7B%22items%22%3A%5B%7B%22columnField%22%3A%22name%22%2C%22operatorValue%22%3A%22equals%22%2C%22value%22%3A%22periodic-ci-quay-quay-redhat-3.18-aws-ocp422-e2e-install-aws-s3-nightly%22%7D%5D%7D",
-	);
-	assert.equal(sippyJobUrl("next", job), null);
 });
 
 test("sippyRunsUrl", () => {

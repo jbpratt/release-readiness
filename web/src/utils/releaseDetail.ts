@@ -1,17 +1,16 @@
 import type {
-	CISlot,
+	CIRun,
 	FBCCandidate,
 	FBCMember,
-	ImageCompare,
 	ImageScan,
 	JiraIssue,
 	KonfluxRelease,
 	OperatorFBC,
 	ReadProgress,
+	ReleaseCandidate,
 	ScanCounts,
 	SyncProblem,
 	SyncStatus,
-	UnshippedBuild,
 	Verdict,
 	VerdictItem,
 } from "../api/types";
@@ -42,63 +41,9 @@ export const jobLabels = (jobs: string[]) =>
 
 const failedState = (s: string) => s === "failure" || s === "error";
 
-/**
- * A job's status by its runs' Prow states: success when every run that passed
- * or failed passed, danger when none did, warning when both. Aborted and other
- * runs do not count.
- */
-export function runsStatus(
-	states: string[],
-): "success" | "warning" | "danger" | undefined {
-	const passed = states.includes("success");
-	const failed = states.some(failedState);
-	if (passed && failed) return "warning";
-	if (passed) return "success";
-	return failed ? "danger" : undefined;
-}
-
-type CIStep = {
-	variant: "success" | "warning" | "danger" | "info" | "pending";
-	text: string;
-};
-
-/**
- * Runs' step: runsStatus of their states, and when some passed and some
- * failed, how many of those passed; undefined without a counted run.
- */
-function runsStep(states: string[]): CIStep | undefined {
-	const s = runsStatus(states);
-	if (!s) return undefined;
-	if (s === "success") return { variant: s, text: "Passed" };
-	if (s === "danger") return { variant: s, text: "Failed" };
-	const passed = states.filter((st) => st === "success").length;
-	const counted = passed + states.filter(failedState).length;
-	return { variant: s, text: `${passed}/${counted} passed` };
-}
-
 /** Each FBC of a slot, on the head bundle or not, of every operator. */
 const slotFBCs = (c: FBCCandidate) =>
 	c.operators.flatMap((o) => [...o.members, ...o.conflicts]);
-
-/**
- * The candidate's CI step: the runs that installed one of its FBCs by digest;
- * without one, runs on another FBC of the same bundle only, which do not
- * count as tested.
- */
-export function fbcCIStep(c: FBCCandidate): CIStep {
-	const states = (tier: "exact" | "equivalent") =>
-		slotFBCs(c).flatMap(
-			(m) => m.ci?.[tier].flatMap((j) => j.runs.map((r) => r.state)) ?? [],
-		);
-	const exact = runsStep(states("exact"));
-	if (exact) return exact;
-	const same = runsStep(states("equivalent"));
-	if (!same) return { variant: "warning", text: "No runs found" };
-	return {
-		variant: "warning",
-		text: `${same.text} (same bundle)`,
-	};
-}
 
 /**
  * When ART built the candidate's oldest FBC, by its NVR's UTC timestamp:
@@ -115,85 +60,8 @@ export function fbcsBuilt(c: FBCCandidate): string {
 		: "";
 }
 
-/**
- * The CI list: a line per slot whose candidate FBC has a run, exact runs
- * first.
- */
-export function ciList(slots: CISlot[]) {
-	return slots.flatMap((s) => {
-		const runs = [...(s.ci?.exact ?? []), ...(s.ci?.equivalent ?? [])].flatMap(
-			(j) => j.runs.map((run) => ({ job: j.job_name, run })),
-		);
-		return runs.length > 0 ? [{ operator: s.operator, ocp: s.ocp, runs }] : [];
-	});
-}
-
 /** Whether an operator has an FBC, on the head bundle or not. */
 const hasFBC = (o: OperatorFBC) => o.members.length + o.conflicts.length > 0;
-
-/**
- * The Build step, of the stream's FBCs, naming any operator without one;
- * while history, the days of ART build history left to read, is not 0, only
- * that it is reading, as one may be missing.
- */
-export function fbcBuildStep(c: FBCCandidate, history = 0): CIStep {
-	if (history > 0) return { variant: "info", text: "Reading…" };
-	const unbuilt = c.operators.filter((o) => !hasFBC(o)).map(shortName);
-	return unbuilt.length > 0
-		? { variant: "warning", text: `${unbuilt.join(", ")} not built` }
-		: { variant: "success", text: "" };
-}
-
-// Operators as the stepper names them.
-const shortNames: Record<string, string> = {
-	"container-security-operator": "CSO",
-	"quay-bridge-operator": "QBO",
-};
-
-const shortName = (o: OperatorFBC) => shortNames[o.operator] ?? o.operator;
-
-/** Each of an operator's FBCs' newest stage Release status, running before one. */
-const releaseStates = (o: OperatorFBC) =>
-	[...o.members, ...o.conflicts].map((m) =>
-		m.release ? releaseLine(m.release).status : "running",
-	);
-
-/**
- * The candidate's Stage step: not staged for the stream; else any operator
- * whose FBC's newest Release failed fails it, one the shipment leaves out
- * warns, and one with a Release still running is in progress.
- */
-export function fbcStageStep(c: FBCCandidate): CIStep {
-	if (c.source === "stream") return { variant: "pending", text: "Not staged" };
-	const failed = c.operators
-		.filter((o) => releaseStates(o).includes("failed"))
-		.map(shortName);
-	if (failed.length > 0)
-		return { variant: "danger", text: `${failed.join(", ")} failed` };
-	const unstaged = c.operators.filter((o) => !hasFBC(o)).map(shortName);
-	if (unstaged.length > 0)
-		return { variant: "warning", text: `${unstaged.join(", ")} not staged` };
-	return c.operators.every((o) => releaseStates(o).every((s) => s === "done"))
-		? { variant: "success", text: "" }
-		: { variant: "info", text: "In progress" };
-}
-
-/**
- * A step, in progress rather than a warning or failure while checking, as FBC
- * reads are pending: nothing is wrong with the release until they finish.
- */
-export const whileChecking = <S extends CIStep>(s: S, checking: boolean): S =>
-	checking && (s.variant === "warning" || s.variant === "danger")
-		? { ...s, variant: "info" }
-		: s;
-
-// What each candidate state means.
-const stateTexts: Record<FBCCandidate["state"], string> = {
-	complete: "every operator's FBCs head one bundle",
-	incomplete: "an operator or OCP version has no FBC",
-	inconsistent: "an operator's FBCs head more than one bundle",
-	unknown: "a head bundle or staged catalog is not resolved yet",
-};
 
 /**
  * release-from-fbc's fbc-pullspecs, comma-separated, only for a complete
@@ -203,24 +71,6 @@ export const fbcPullspecs = (c: FBCCandidate): string | null =>
 	c.state === "complete" && c.pullspecs.length > 0
 		? c.pullspecs.join(",")
 		: null;
-
-/**
- * Why a candidate has no fbc-pullspecs to run with, naming each operator and
- * the OCP versions it has no FBC for; [] with pullspecs.
- */
-export function blockedReasons(c: FBCCandidate): string[] {
-	if (fbcPullspecs(c)) return [];
-	const reasons = [
-		...c.errors,
-		...c.operators
-			.filter((o) => hasFBC(o) && o.missing_ocp.length > 0)
-			.map(
-				(o) =>
-					`${o.operator} has no FBC for OCP ${[...o.missing_ocp].sort(compareVersions).join(", ")}`,
-			),
-	];
-	return reasons.length > 0 ? reasons : [stateTexts[c.state]];
-}
 
 /** Compares dot-separated versions numerically: OCP 4.9 is lower than 4.12. */
 export function compareVersions(a: string, b: string): number {
@@ -260,25 +110,6 @@ export function slotRows(o: OperatorFBC): SlotRow[] {
 		})),
 	];
 	return rows.sort((a, b) => compareVersions(a.ocp, b.ocp));
-}
-
-/**
- * The stream's head bundle of an operator when a staged candidate heads
- * another one; else null.
- */
-export function streamAhead(
-	c: FBCCandidate,
-	stream: FBCCandidate | null,
-	operator: string,
-): string | null {
-	if (c.source === "stream") return null;
-	const head = c.operators.find(
-		(o) => o.operator === operator,
-	)?.head_bundle_nvr;
-	const ahead = stream?.operators.find(
-		(o) => o.operator === operator,
-	)?.head_bundle_nvr;
-	return ahead && ahead !== head ? ahead : null;
 }
 
 /** An operator as the page shows it, and whether it is the stream's. */
@@ -322,22 +153,6 @@ export const slotItem = (
 			i.text.startsWith(`${operator} OCP ${ocp}: `),
 	);
 
-/**
- * Why an operator's FBC contents show nothing though read: its read failed,
- * with the error, or its FBC heads no known bundle; else null, read pending.
- */
-export function unreadText(
-	items: VerdictItem[],
-	operator: string,
-): string | null {
-	const on = (code: string) =>
-		items.find((i) => i.operator === operator && i.code === code);
-	const failed = on("read_failed");
-	if (failed)
-		return `Can't read FBC: ${failed.text.replace(/^.*?: can't read FBC: /, "")}`;
-	return on("no_head_bundle") ? "FBC heads no known bundle" : null;
-}
-
 /** A chip on an FBC row, flagging an exception. */
 export interface Chip {
 	color: "red" | "orange" | "grey";
@@ -377,68 +192,110 @@ export function otherBundle(
 	};
 }
 
+/** A job's newest run on an FBC, how many runs it had, and on which FBC. */
+export type RunPill = CIRun & {
+	job: string;
+	runs: number;
+	/** It installed another FBC of this OCP version on the same bundle. */
+	equivalent: boolean;
+};
+
+/** An exception on an FBC row; otherBundle's links its FBC's build. */
+export type Flag = Chip & { href?: string | null };
+
+/** A candidate FBC as a table row. */
+export interface FbcRow {
+	operator: string;
+	ocp: string;
+	fbc: FBCMember | null;
+	/** Its stage Release; null when the stage shipment does not hold it. */
+	stage: StatusLine | null;
+	flags: Flag[];
+	runs: RunPill[];
+}
+
+// Verdict codes each row already shows as its stage status or a flag.
+const ROW_CODES = ["stage_release_failed", "read_failed"];
+
 /**
- * What changed between two bundles' images: info for rebuilds from the same
- * source only, a warning for any new source, unknown commit, added or removed
- * image.
+ * The candidate's FBCs by operator: the operator's verdict labels the rows do
+ * not already show, and a row per OCP version with its stage, flags and CI.
  */
-export function compareLine(c: ImageCompare): {
-	level: "info" | "warning";
-	text: string;
-} {
-	const named = (change: string) =>
-		c.rows.filter((r) => r.change === change).map((r) => r.name || "bundle");
-	const n = (change: string, one: string, many = `${one}s`) => {
-		const k = named(change).length;
-		return k > 0 ? `${k} ${k === 1 ? one : many}` : "";
-	};
-	const source = named("new source");
-	const parts = [
-		source.length > 0 ? `${source.join(", ")} new source` : "",
-		n("rebuild", "rebuilt", "rebuilt"),
-		n("new build", "new build"),
-		n("renamed", "renamed", "renamed"),
-		n("added", "added", "added"),
-		n("removed", "removed", "removed"),
-	].filter(Boolean);
+export function fbcGroups(
+	d: ReleaseCandidate,
+): { operator: string; labels: ActionLabel[]; rows: FbcRow[] }[] {
+	const c = d.fbc_candidate;
+	if (!c) return [];
+	const items = d.verdict.items;
+	return shownOperators(c, d.fbc_stream, d.shipped).map((s) => {
+		const o = s.operator;
+		const staged = !s.leftOut && c.source !== "stream";
+		return {
+			operator: o.operator,
+			labels: actionLabels(
+				items.filter((i) => !ROW_CODES.includes(i.code)),
+				o.operator,
+			),
+			rows: slotRows(o).map((r) => {
+				const flags: Flag[] = rowChips(r, {
+					shipped: d.shipped,
+					unreadable: slotItem(items, "read_failed", o.operator, r.ocp)?.text,
+				});
+				const held = otherBundle(r);
+				if (held) flags.push({ color: "orange", ...held });
+				return {
+					operator: o.operator,
+					ocp: r.ocp,
+					fbc: r.fbc,
+					stage: staged && r.fbc?.release ? fbcStage(r.fbc.release) : null,
+					flags,
+					runs: [
+						...(r.fbc?.ci?.exact ?? []).map((j) => ({ j, equivalent: false })),
+						...(r.fbc?.ci?.equivalent ?? []).map((j) => ({
+							j,
+							equivalent: true,
+						})),
+					]
+						.filter(({ j }) => j.runs.length > 0)
+						.map(({ j, equivalent }) => ({
+							...j.runs[0],
+							job: j.job_name,
+							runs: j.runs.length,
+							equivalent,
+						})),
+				};
+			}),
+		};
+	});
+}
+
+/** An FBC's stage Release in a word or two. */
+function fbcStage(r: KonfluxRelease): StatusLine {
+	const l = releaseLine(r);
+	if (l.status === "failed") return { status: "failed", text: "Stage failed" };
+	if (l.status === "running") return { status: "running", text: "Staging" };
 	return {
-		level: c.rows.every((r) => r.change === "same" || r.change === "rebuild")
-			? "info"
-			: "warning",
-		text: parts.join(", ") || "same images",
+		status: "done",
+		text: r.completion_time ? `Staged ${day(r.completion_time)}` : "Staged",
 	};
 }
 
-/**
- * The image shipment's builds of an operator: those it names, else, as the
- * operands' operator, quay-operator's.
- */
-export function unshippedOf(
-	builds: UnshippedBuild[],
-	operators: string[],
-	operator: string,
-): UnshippedBuild[] {
-	const owner = (name: string) =>
-		operators.find((o) => o !== "quay-operator" && name.includes(o)) ??
-		"quay-operator";
-	return builds.filter((b) => owner(b.name) === operator);
-}
-
-/** The version an operator's FBCs ship, by their head CSV: "v3.17.6". */
-export const shipsVersion = (o: OperatorFBC) =>
-	o.head_csv.includes(".v")
-		? o.head_csv.slice(o.head_csv.indexOf(".v") + 1)
-		: "";
+/** Whether a row has something to act on: a failed stage, a flag or a failed run. */
+export const needsAttention = (r: FbcRow) =>
+	r.stage?.status === "failed" ||
+	r.flags.length > 0 ||
+	r.runs.some((p) => failedState(p.state));
 
 const MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split(" ");
 
 /**
- * When ART built a bundle or image, by its NVR's timestamp, in UTC as ART
- * writes it: ...-3.17.6.202610060936.p2... and ...-3.17.6-202610060936.p2...
- * are "Oct 6 09:36"; "" without one.
+ * When ART built a bundle, image or FBC, by its NVR's timestamp, in UTC as
+ * ART writes it: ...-3.17.6.202610060936.p2... and ...-3.17.6-202610060936.p2...
+ * are "Oct 6 09:36", ...-fbc-3.18.2-20261013021425.ocp4.12 "Oct 13 02:14";
+ * "" without one.
  */
 export function bundleBuilt(nvr: string): string {
-	const t = nvr.match(/[.-](\d{4})(\d{2})(\d{2})(\d{2})(\d{2})\./);
+	const t = nvr.match(/[.-](\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(?:\d{2})?\./);
 	return t ? `${MONTHS[Number(t[2]) - 1]} ${Number(t[3])} ${t[4]}:${t[5]}` : "";
 }
 
@@ -449,38 +306,10 @@ const day = (iso: string) =>
 		day: "numeric",
 	});
 
-/** Whether the stage shipment holds an operator's FBCs, or only the stream. */
-const notStaged = (c: FBCCandidate, { operator, leftOut }: ShownOperator) =>
-	leftOut || c.source === "stream" || !hasFBC(operator);
-
-/**
- * Where an operator's FBCs are on stage, by their newest stage Releases: a
- * failed Release, one running, or on stage since the day the newest finished;
- * null when the stage shipment does not hold them.
- */
-export function stageText(
-	c: FBCCandidate,
-	s: ShownOperator,
-): StatusLine | null {
-	if (notStaged(c, s)) return null;
-	const states = releaseStates(s.operator);
-	if (states.includes("failed")) return { status: "failed", text: "Failed" };
-	if (states.some((st) => st !== "done"))
-		return { status: "running", text: "In progress" };
-	const done = [...s.operator.members, ...s.operator.conflicts]
-		.map((m) => m.release?.completion_time ?? "")
-		.filter(Boolean)
-		.sort();
-	return {
-		status: "done",
-		text: done.length > 0 ? day(done[done.length - 1]) : "On stage",
-	};
-}
-
-// Stage blockers the Stage step already words, as "not staged" or "?".
+// Stage blockers the FBC rows already show, as "Not staged" or "no FBC".
 const STAGE_CODES = ["not_staged", "missing_operator", "missing_ocp"];
 
-/** A verdict without the stage blockers the Stage step shows. */
+/** A verdict without the stage blockers the FBC rows show. */
 export const withoutStage = (v: Verdict): Verdict => ({
 	...v,
 	items: v.items.filter((i) => !STAGE_CODES.includes(i.code)),
@@ -501,12 +330,6 @@ export const decisions = (v: Verdict) =>
 				.filter((i) => i.level === "blocker" && !i.operator)
 				.map((i) => ({ ...i, action: blockerActions[i.code] ?? "" }))
 		: [];
-
-/** An operator row's text with nothing to act on: unstaged, it only waits. */
-export const readyText = (items: VerdictItem[]) =>
-	items.some((i) => i.code === "not_staged")
-		? "FBC built, awaiting stage"
-		: "Ready";
 
 /**
  * The verdict's headline; a shipped version's is the record of its prod
@@ -555,16 +378,6 @@ export function readingLine(r: ReadProgress): StatusLine | null {
 		text: `Reading ${reading.join(" · ")}${r.failed ? ` · ${r.failed} unreadable` : ""}`,
 	};
 }
-
-/**
- * A component named without what the page already says, its application and
- * product: quay-3-18-quay-clair is clair.
- */
-export const componentLabel = (name: string, app: string) =>
-	(name.startsWith(`${app}-`) ? name.slice(app.length + 1) : name).replace(
-		/^quay-/,
-		"",
-	);
 
 const CONTAINER = "-container-";
 

@@ -30,19 +30,6 @@ export function konfluxUrl(
 }
 
 /**
- * Sippy's page of a periodic job in the quay-X.Y release of a version
- * (3.18.2 or quay-v3.18.2); null without an X.Y.
- */
-export function sippyJobUrl(version: string, job: string): string | null {
-	const xy = version.match(/(\d+)\.(\d+)/);
-	if (!xy) return null;
-	const filters = JSON.stringify({
-		items: [{ columnField: "name", operatorValue: "equals", value: job }],
-	});
-	return `https://sippy.dptools.openshift.org/sippy-ng/jobs/quay-${xy[1]}.${xy[2]}?filters=${encodeURIComponent(filters)}`;
-}
-
-/**
  * Sippy's job runs of the quay-X.Y release of a version since an ISO time;
  * null without an X.Y or a time.
  */
