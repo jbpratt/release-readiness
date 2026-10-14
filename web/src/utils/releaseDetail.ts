@@ -817,10 +817,22 @@ export function issueSummary(issues: JiraIssue[]): string {
 	return `${issues.length} issue${issues.length === 1 ? "" : "s"}: ${types.join(", ")}`;
 }
 
+/** The backend's no-FBC reasons in release terms, each with what to do next. */
+const noFbcReasons: Record<string, string> = {
+	"no Konflux application":
+		"Its JIRA fixVersion maps to no Konflux application; check the fixVersion name.",
+	"not a concrete quay-vX.Y.Z version":
+		"Only Quay versions named quay-vX.Y.Z have FBC builds.",
+	"no release candidate yet":
+		"It shows here once ART builds a release candidate.",
+};
+
 /** The release candidate card's text when a version has no FBC, with the backend's reason. */
-export function noFbcText(reason?: string): string {
-	const text = "No FBC build or staged catalog found for this version.";
-	return reason
-		? `${text} ${reason.charAt(0).toUpperCase()}${reason.slice(1)}.`
-		: text;
+export function noFbcText(version: string, reason?: string): string {
+	const text = `No FBC build found for v${version}.`;
+	if (!reason) return text;
+	const why =
+		noFbcReasons[reason] ??
+		`${reason.charAt(0).toUpperCase()}${reason.slice(1)}.`;
+	return `${text} ${why}`;
 }

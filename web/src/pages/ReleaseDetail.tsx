@@ -177,9 +177,10 @@ export default function ReleaseDetail() {
 	if (loadingRelease && !release) {
 		return (
 			<PageSection>
-				<div style={{ textAlign: "center" }}>
-					<Spinner />
-				</div>
+				<EmptyState
+					icon={Spinner}
+					titleText={`Loading ${formatReleaseName(version!)}…`}
+				/>
 			</PageSection>
 		);
 	}
@@ -494,9 +495,9 @@ function BuildsCard({
 						konflux={konflux}
 					/>
 				) : data.shipped ? (
-					"Shipped; no FBC data."
+					`v${version} has shipped. No FBC build data is recorded for it.`
 				) : (
-					noFbcText(data.reason)
+					noFbcText(version, data.reason)
 				)}
 			</CardBody>
 		</Card>

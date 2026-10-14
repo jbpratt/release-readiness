@@ -76,9 +76,7 @@ export default function ReleasesOverview() {
 	if (loading && !overviews) {
 		return (
 			<PageSection>
-				<div style={{ textAlign: "center" }}>
-					<Spinner />
-				</div>
+				<EmptyState icon={Spinner} titleText="Loading releases…" />
 			</PageSection>
 		);
 	}
@@ -208,9 +206,14 @@ function ReleaseCard({
 		yellow: <ExclamationTriangleIcon />,
 	};
 
+	// A build time, so its local date, in the same format as the target date.
 	const lastBuild = latestBuild
-		? new Date(latestBuild).toLocaleDateString()
-		: "None";
+		? new Date(latestBuild).toLocaleDateString("en-US", {
+				month: "short",
+				day: "numeric",
+				year: "numeric",
+			})
+		: "No image snapshot yet";
 
 	const displayName = formatReleaseName(release.name);
 

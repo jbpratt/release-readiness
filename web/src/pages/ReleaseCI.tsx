@@ -5,6 +5,7 @@ import {
 	Card,
 	CardBody,
 	Checkbox,
+	EmptyState,
 	FormSelect,
 	FormSelectOption,
 	Label,
@@ -150,7 +151,11 @@ export default function ReleaseCI() {
 							runs. Try again in a moment.
 						</LoadError>
 					) : !data ? (
-						<Spinner size="lg" />
+						<EmptyState
+							variant="sm"
+							icon={Spinner}
+							titleText="Loading CI history…"
+						/>
 					) : shown.length === 0 ? (
 						<div style={muted}>No FBC builds to show.</div>
 					) : (

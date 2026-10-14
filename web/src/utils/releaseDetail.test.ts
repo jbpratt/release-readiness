@@ -1233,8 +1233,15 @@ test("issueSummary", () => {
 });
 
 test("noFbcText", () => {
-	const base = "No FBC build or staged catalog found for this version.";
-	assert.equal(noFbcText("no stage candidate"), `${base} No stage candidate.`);
-	assert.equal(noFbcText(""), base);
-	assert.equal(noFbcText(undefined), base);
+	const base = "No FBC build found for v3.0.0.";
+	assert.equal(
+		noFbcText("3.0.0", "not a concrete quay-vX.Y.Z version"),
+		`${base} Only Quay versions named quay-vX.Y.Z have FBC builds.`,
+	);
+	assert.equal(
+		noFbcText("3.0.0", "no stage candidate"),
+		`${base} No stage candidate.`,
+	);
+	assert.equal(noFbcText("3.0.0", ""), base);
+	assert.equal(noFbcText("3.0.0", undefined), base);
 });
