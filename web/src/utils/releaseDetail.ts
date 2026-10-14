@@ -6,6 +6,7 @@ import type {
 	JiraIssue,
 	KonfluxRelease,
 	OperatorFBC,
+	OperatorImage,
 	ReadProgress,
 	ReleaseCandidate,
 	ScanCounts,
@@ -212,7 +213,17 @@ export interface FbcRow {
 	stage: StatusLine | null;
 	flags: Flag[];
 	runs: RunPill[];
+	/** Its FBC's images when it holds its operator's head bundle; else none. */
+	images: OperatorImage[];
 }
+
+/** An operator's images, each once: opm can list the bundle image twice. */
+const uniqueImages = (o: OperatorFBC) =>
+	o.images.filter(
+		(i, k) =>
+			o.images.findIndex((x) => x.name === i.name && x.digest === i.digest) ===
+			k,
+	);
 
 /**
  * The candidate's FBCs by operator: a row per OCP version with its stage,
@@ -256,6 +267,7 @@ export function fbcGroups(
 							runs: j.runs.length,
 							equivalent,
 						})),
+					images: r.kind === "member" ? uniqueImages(o) : [],
 				};
 			}),
 		};

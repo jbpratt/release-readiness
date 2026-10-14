@@ -8,6 +8,7 @@ import type {
 	JiraIssue,
 	KonfluxRelease,
 	OperatorFBC,
+	OperatorImage,
 	ReleaseCandidate,
 	Verdict,
 	VerdictItem,
@@ -679,6 +680,18 @@ test("bundleBuilt: an operand NVR's stamp follows a dash, an FBC's has seconds",
 	assert.equal(bundleBuilt(""), "");
 });
 
+const image = (name: string, digest: string): OperatorImage => ({
+	name,
+	image: `registry.redhat.io/quay/${name}@${digest}`,
+	digest,
+	nvr: "",
+	commit: "",
+	build_url: "",
+	stage: false,
+	prod: false,
+	scan: null,
+});
+
 test("fbcGroups and needsAttention: a failed stage, a flag or a failed run", () => {
 	const head = bundle("202610061637");
 	const other = bundle("202610050101");
@@ -701,7 +714,15 @@ test("fbcGroups and needsAttention: a failed stage, a flag or a failed run", () 
 				ci: { exact: [job("failure")], equivalent: [job("success")] },
 			}),
 		],
-		{ conflicts: [fbcMember("4.14", other)], missing_ocp: ["4.15"] },
+		{
+			conflicts: [fbcMember("4.14", other)],
+			missing_ocp: ["4.15"],
+			images: [
+				image("", "sha256:b"),
+				image("", "sha256:b"),
+				image("quay", "sha256:q"),
+			],
+		},
 	);
 	const d: ReleaseCandidate = {
 		shipped: false,
@@ -745,6 +766,17 @@ test("fbcGroups and needsAttention: a failed stage, a flag or a failed run", () 
 		],
 	);
 	assert.equal(g.rows[0].runs[0].runs, 2);
+	// Only a head-bundle FBC carries the operator's images, each once.
+	assert.deepEqual(
+		g.rows.map((r) => r.images.map((i) => i.digest)),
+		[
+			["sha256:b", "sha256:q"],
+			["sha256:b", "sha256:q"],
+			[],
+			[],
+			["sha256:b", "sha256:q"],
+		],
+	);
 	assert.deepEqual(
 		g.rows.filter(needsAttention).map((r) => r.ocp),
 		["4.13", "4.14", "4.15", "4.16"],
