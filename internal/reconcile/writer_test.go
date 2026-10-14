@@ -19,32 +19,30 @@ type fakeJira struct {
 	comments      []jira.Comment
 	transitions   []jira.Transition
 	transitionErr error
-	issueErr      error
-	reads         int
+	commentErr    error
 	writes        []string
 }
 
 func newFakeJira(status string, targets ...string) *fakeJira {
 	return &fakeJira{
-		issue:       jira.WriteIssue{Key: "PROJQUAY-1", Project: "PROJQUAY", Type: "Bug", Status: status, TargetVersions: targets},
+		issue:       jira.WriteIssue{Project: "PROJQUAY", Status: status, TargetVersions: targets},
 		versions:    map[string]jira.VersionField{"quay-v3.18.2": {Name: "quay-v3.18.2"}},
-		transitions: []jira.Transition{{ID: "11", Name: "Back", To: "ON_QA"}, {ID: "31", Name: "Release", To: releasePending}},
+		transitions: []jira.Transition{{ID: "11", To: "ON_QA"}, {ID: "31", To: releasePending}},
 	}
 }
 
 func (f *fakeJira) GetIssue(context.Context, string) (jira.WriteIssue, error) {
-	f.reads++
 	i := f.issue
 	i.TargetVersions = slices.Clone(i.TargetVersions)
-	return i, f.issueErr
+	return i, nil
 }
 
 func (f *fakeJira) ListVersions(context.Context) (map[string]jira.VersionField, error) {
 	return f.versions, nil
 }
 
-func (f *fakeJira) GetEditMeta(context.Context, string) (jira.EditMeta, error) {
-	return jira.EditMeta{TargetVersion: true}, nil
+func (f *fakeJira) TargetVersionEditable(context.Context, string) (bool, error) {
+	return true, nil
 }
 
 func (f *fakeJira) GetTransitions(context.Context, string) ([]jira.Transition, error) {
@@ -70,10 +68,10 @@ func (f *fakeJira) ListComments(context.Context, string) ([]jira.Comment, error)
 	return f.comments, nil
 }
 
-func (f *fakeJira) AddComment(_ context.Context, key, body string) (string, error) {
+func (f *fakeJira) AddComment(_ context.Context, key, body string) error {
 	f.writes = append(f.writes, "comment "+key)
-	f.comments = append(f.comments, jira.Comment{ID: "c1", Body: body})
-	return "c1", nil
+	f.comments = append(f.comments, jira.Comment{Body: body})
+	return f.commentErr
 }
 
 var writeKey = ActionKey{FBCDigest: "sha256:f3", IssueKey: "PROJQUAY-1", Release: "r3"}
@@ -150,7 +148,7 @@ func TestWriterVersionMissing(t *testing.T) {
 
 func TestWriterMarkerPresent(t *testing.T) {
 	j := newFakeJira(releasePending, "quay-v3.18.2")
-	j.comments = []jira.Comment{{ID: "c9", Body: "Included.\n\nrelease-readiness FBC stamp sha256:f3 PROJQUAY-1\n"}}
+	j.comments = []jira.Comment{{Body: "Included.\n\nrelease-readiness FBC stamp sha256:f3 PROJQUAY-1\n"}}
 	w, store := newWriter(j)
 	applyPending(t, w)
 	if a := store.actions[writeKey]; len(j.writes) != 0 || a.Status != StatusApplied || a.CommentStep != "already" || a.VersionStep != "already" {
@@ -177,6 +175,20 @@ func TestWriterRetry(t *testing.T) {
 	a = store.actions[writeKey]
 	if a.Status != StatusApplied || a.Error != "" || a.TransitionStep != "transitioned" || a.Attempts != 2 {
 		t.Errorf("retry: action %+v; want applied on attempt 2", a)
+	}
+}
+
+// TestWriterLostReply is a comment that posts but whose reply is lost: the
+// marker keeps the retry from posting it twice.
+func TestWriterLostReply(t *testing.T) {
+	j := newFakeJira(releasePending, "quay-v3.18.2")
+	j.commentErr = errors.New("timeout")
+	w, store := newWriter(j)
+	applyPending(t, w)
+	j.commentErr = nil
+	applyPending(t, w)
+	if a := store.actions[writeKey]; len(j.comments) != 1 || a.Status != StatusApplied || a.CommentStep != "already" || a.Attempts != 2 {
+		t.Errorf("comments %d, action %+v; want one comment, applied on attempt 2", len(j.comments), a)
 	}
 }
 

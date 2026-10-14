@@ -16,12 +16,12 @@ import (
 type JiraWriter interface {
 	GetIssue(context.Context, string) (jira.WriteIssue, error)
 	ListVersions(context.Context) (map[string]jira.VersionField, error)
-	GetEditMeta(context.Context, string) (jira.EditMeta, error)
+	TargetVersionEditable(context.Context, string) (bool, error)
 	GetTransitions(context.Context, string) ([]jira.Transition, error)
 	EditTargetVersions(ctx context.Context, key, add, remove string) error
 	Transition(context.Context, string, string) error
 	ListComments(context.Context, string) ([]jira.Comment, error)
-	AddComment(context.Context, string, string) (string, error)
+	AddComment(context.Context, string, string) error
 }
 
 const (
@@ -137,11 +137,11 @@ func (w *Writer) version(ctx context.Context, a *Action) error {
 	case v.Released:
 		return skip(a, "target version "+a.DesiredTargetVersion+" released")
 	}
-	meta, err := w.jira.GetEditMeta(ctx, a.Key.IssueKey)
+	editable, err := w.jira.TargetVersionEditable(ctx, a.Key.IssueKey)
 	if err != nil {
 		return err
 	}
-	if !meta.TargetVersion {
+	if !editable {
 		return skip(a, "Target Version is not editable")
 	}
 	if slices.Contains(issue.TargetVersions, a.DesiredTargetVersion) {
@@ -217,7 +217,7 @@ func (w *Writer) comment(ctx context.Context, a *Action) error {
 		fmt.Fprintf(&b, "* %s/commit/%s (%s)\n", e.Repo, e.SHA, e.Component)
 	}
 	fmt.Fprintf(&b, "\n%s\n", marker)
-	if _, err := w.jira.AddComment(ctx, a.Key.IssueKey, b.String()); err != nil {
+	if err := w.jira.AddComment(ctx, a.Key.IssueKey, b.String()); err != nil {
 		return err
 	}
 	a.CommentStep = "added"

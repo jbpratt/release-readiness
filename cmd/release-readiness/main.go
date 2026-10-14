@@ -196,7 +196,7 @@ func main() {
 		default:
 			apiURL := cmp.Or(*jiraAPIURL, *jiraURL)
 			logger.Info("jira writer enabled", "api_url", apiURL)
-			writeClient := jira.NewWriteClient(jira.Config{BaseURL: apiURL, Email: *jiraWriteEmail, Token: *jiraWriteToken, Project: *jiraProject})
+			writeClient := jira.New(jira.Config{BaseURL: apiURL, Email: *jiraWriteEmail, Token: *jiraWriteToken, Project: *jiraProject})
 			reconciler.Writer = reconcile.NewWriter(writeClient, database, *jiraProject, logger.With("component", "jira-writer"))
 		}
 		wg.Go(func() { reconciler.Run(ctx, 10*time.Minute) })

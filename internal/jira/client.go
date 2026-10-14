@@ -230,7 +230,7 @@ func (c *Client) doGetWithRetry(ctx context.Context, reqURL string) ([]byte, err
 			}
 		}
 
-		body, err := c.doGet(ctx, reqURL)
+		body, err := c.do(ctx, http.MethodGet, reqURL, nil)
 		if err == nil {
 			return body, nil
 		}
@@ -252,26 +252,19 @@ func (c *Client) doGetWithRetry(ctx context.Context, reqURL string) ([]byte, err
 	return nil, fmt.Errorf("max retries exceeded for %s", reqURL)
 }
 
-// newRequest returns a JSON request authenticated with c's credential.
-func (c *Client) newRequest(ctx context.Context, method, reqURL string, body io.Reader) (*http.Request, error) {
-	req, err := http.NewRequestWithContext(ctx, method, reqURL, body)
+// do makes one request with c's credential and returns the body of a 2xx
+// response.
+func (c *Client) do(ctx context.Context, method, reqURL string, in io.Reader) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, method, reqURL, in)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Accept", "application/json")
-	if body != nil {
+	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	if c.token != "" {
 		req.SetBasicAuth(c.email, c.token)
-	}
-	return req, nil
-}
-
-func (c *Client) doGet(ctx context.Context, reqURL string) ([]byte, error) {
-	req, err := c.newRequest(ctx, http.MethodGet, reqURL, nil)
-	if err != nil {
-		return nil, err
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -294,7 +287,7 @@ func (c *Client) doGet(ctx context.Context, reqURL string) ([]byte, error) {
 		}
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		return nil, fmt.Errorf("JIRA API returned %d: %s", resp.StatusCode, string(body[:min(len(body), 200)]))
 	}
 
