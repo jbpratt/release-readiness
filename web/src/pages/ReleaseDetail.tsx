@@ -1244,7 +1244,7 @@ function ReleaseInputsButton({ children }: { children: ReactNode }) {
 	return (
 		<>
 			<Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
-				Release inputs
+				Review release command
 			</Button>
 			<Modal
 				isOpen={open}
@@ -1252,7 +1252,10 @@ function ReleaseInputsButton({ children }: { children: ReactNode }) {
 				aria-labelledby="release-inputs-title"
 				variant="large"
 			>
-				<ModalHeader title="Release inputs" labelId="release-inputs-title" />
+				<ModalHeader
+					title="Review release command"
+					labelId="release-inputs-title"
+				/>
 				<ModalBody tabIndex={0}>{children}</ModalBody>
 			</Modal>
 		</>
@@ -1281,7 +1284,7 @@ function ReleaseInputs({
 }) {
 	const pullspecs = fbcPullspecs(fbc);
 	return pullspecs ? (
-		<ClipboardCopy isReadOnly isCode>
+		<ClipboardCopy isReadOnly isCode isExpanded variant="expansion">
 			{tknCommand(fbcParams(app, version, pullspecs, bugs ?? [], dueDate))}
 		</ClipboardCopy>
 	) : (
