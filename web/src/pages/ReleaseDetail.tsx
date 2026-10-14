@@ -584,7 +584,7 @@ function Candidate({
 							<Th>OCP</Th>
 							<Th>Built (UTC)</Th>
 							<Th>Stage and CI</Th>
-							<Th screenReaderText="FBC sha" />
+							<Th screenReaderText="FBC" />
 						</Tr>
 					</Thead>
 					<Tbody>
@@ -617,16 +617,16 @@ function Candidate({
 										<Flags flags={r.flags} />
 									</Flex>
 								</Td>
-								<Td dataLabel="FBC sha" modifier="fitContent">
+								<Td dataLabel="FBC" modifier="fitContent">
 									{r.fbc && (
 										<Button
 											variant="plain"
 											size="sm"
 											icon={<CopyIcon />}
-											aria-label={`Copy the ${r.operator} OCP ${r.ocp} FBC sha`}
-											title={r.fbc.digest}
+											aria-label={`Copy the ${r.operator} OCP ${r.ocp} FBC pullspec`}
+											title={r.fbc.pullspec}
 											onClick={() =>
-												navigator.clipboard.writeText(r.fbc?.digest ?? "")
+												navigator.clipboard.writeText(r.fbc?.pullspec ?? "")
 											}
 										/>
 									)}
