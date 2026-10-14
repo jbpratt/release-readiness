@@ -44,7 +44,7 @@ For each successful STAGE Release of an ART-staged FBC Snapshot, in a stream `in
 
 ### FBC JIRA writer (off until `-jira-write`)
 
-After each reconcile pass, applies the proposed actions to their PROJQUAY issues, re-reading each issue before every step: replaces the stream's `quay-vX.Y.z` Target Version with the release's `quay-vX.Y.Z` (keeping every other Target Version, and skipping the issue when that version is missing, archived or released), moves a Verified issue to Release Pending (an issue already there, e.g. moved by release-tool, is never transitioned), then comments the FBC NVR, digest and commits once, found again by a marker. Each step's result is stored on the action, so a failed one is retried alone, up to 5 attempts. It stays off until `-jira-write` is true and its own credential (`-jira-write-email`, `-jira-write-token`), never the read one, is set; while `-jira-write-kill-file` exists no write is made. `-jira-write-dry-run` is a safety check: it makes every read and logs each write instead of making it.
+After each reconcile pass, applies the proposed actions to their PROJQUAY issues, re-reading each issue before every step: replaces the stream's `quay-vX.Y.z` Target Version with the release's `quay-vX.Y.Z` (keeping every other Target Version, and skipping the issue when that version is missing, archived or released), moves a Verified issue to Release Pending (an issue already there, e.g. moved by release-tool, is never transitioned), then comments the FBC NVR, digest and commits once, found again by a marker. Each step's result is stored on the action, so a failed one is retried alone, up to 5 attempts. It stays off until `-jira-write` is true and its own credential (`-jira-write-email`, `-jira-write-token`), never the read one, is set; revoking that token stops every write without touching the read sync.
 
 ### Sync status
 
@@ -93,9 +93,7 @@ cd web && npm install && npm run build
 | `-jira-project` | `JIRA_PROJECT` | `PROJQUAY` | JIRA project key |
 | `-jira-poll-interval` | — | `5m` | JIRA sync poll interval |
 | `-github-token` | `GITHUB_TOKEN` | — | Read-only GitHub token for the reconciler's commit range lookups (empty reads GitHub unauthenticated) |
-| `-jira-write` | `JIRA_WRITE` | `false` | Write the reconciler's proposed actions to JIRA; needs `-jira-write-email` and `-jira-write-token`, else stays off |
-| `-jira-write-dry-run` | `JIRA_WRITE_DRY_RUN` | `false` | With `-jira-write`, read JIRA and log each write instead of making it |
-| `-jira-write-kill-file` | `JIRA_WRITE_KILL_FILE` | — | Path whose existence stops every JIRA write, checked before each one |
+| `-jira-write` | `JIRA_WRITE` | `false` | Write the reconciler's proposed actions to JIRA when `true`; needs `-jira-write-email` and `-jira-write-token`, else stays off |
 | `-jira-write-email` | `JIRA_WRITE_EMAIL` | — | JIRA Cloud account email of the write credential |
 | `-jira-write-token` | `JIRA_WRITE_TOKEN` | — | JIRA Cloud API token of the write credential, separate from `-jira-token` |
 | `-stage-release-plan-pattern` | `STAGE_RELEASE_PLAN_PATTERN` | `^quay-advisory-stage-\d+-\d+$` | Regexp matching the Konflux ReleasePlan names whose successful Releases are image STAGE builds (empty selects no staged build) |

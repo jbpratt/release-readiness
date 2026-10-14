@@ -3,11 +3,8 @@ package reconcile
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
-	"os"
 	"path"
 	"slices"
 	"strings"
@@ -34,8 +31,6 @@ const (
 	maxAttempts = 5
 )
 
-var errKilled = errors.New("kill file present")
-
 // Writer applies proposed actions to Jira: it narrows the issue's stream
 // Target Version to the release, moves a Verified issue to Release Pending
 // and comments the FBC that includes the fix.
@@ -45,13 +40,6 @@ type Writer struct {
 	project string
 	logger  *slog.Logger
 	now     func() time.Time
-	// DryRun reads Jira but writes neither Jira nor the actions.
-	DryRun bool
-	// KillFile, while it exists, stops every Jira write.
-	KillFile string
-	// dryRan holds the actions a dry run went through: unsaved, they would
-	// otherwise be read from Jira again on every pass.
-	dryRan map[ActionKey]bool
 }
 
 func NewWriter(j JiraWriter, store ActionStore, project string, log *slog.Logger) *Writer {
@@ -77,13 +65,7 @@ func (w *Writer) ApplyPending(ctx context.Context) error {
 // completes, so a retry redoes only the steps not done. A failed Jira call
 // leaves a in error; only store errors are returned.
 func (w *Writer) Apply(ctx context.Context, a Action) error {
-	if a.Key.IssueKey == "" || a.Status != StatusProposed && a.Status != StatusError || w.dryRan[a.Key] {
-		return nil
-	}
-	// Checked before the attempt is counted, so a stop does not use up the
-	// attempts of an action in error.
-	if w.killed() {
-		w.logger.Warn("kill file present, Jira writes stopped", "file", w.KillFile, "issue", a.Key.IssueKey)
+	if a.Key.IssueKey == "" || a.Status != StatusProposed && a.Status != StatusError {
 		return nil
 	}
 	a.Attempts++
@@ -91,9 +73,6 @@ func (w *Writer) Apply(ctx context.Context, a Action) error {
 	for _, step := range []func(context.Context, *Action) error{w.version, w.transition, w.comment} {
 		err := step(ctx, &a)
 		switch {
-		case errors.Is(err, errKilled):
-			w.logger.Warn("kill file present, Jira writes stopped", "file", w.KillFile, "issue", a.Key.IssueKey)
-			return nil
 		case err != nil && ctx.Err() != nil:
 			return ctx.Err()
 		case err != nil:
@@ -177,10 +156,7 @@ func (w *Writer) version(ctx context.Context, a *Action) error {
 		a.VersionStep = "already"
 		return nil
 	}
-	stream := placeholder(a.DesiredTargetVersion)
-	if err := w.write(a, "replace Target Version "+stream+" with "+a.DesiredTargetVersion, func() error {
-		return w.jira.EditTargetVersions(ctx, a.Key.IssueKey, a.DesiredTargetVersion, stream)
-	}); err != nil {
+	if err := w.jira.EditTargetVersions(ctx, a.Key.IssueKey, a.DesiredTargetVersion, placeholder(a.DesiredTargetVersion)); err != nil {
 		return err
 	}
 	a.VersionStep = "edited"
@@ -214,9 +190,7 @@ func (w *Writer) transition(ctx context.Context, a *Action) error {
 		a.TransitionStep = "none offered from Verified"
 		return nil
 	}
-	if err := w.write(a, "transition to "+releasePending, func() error {
-		return w.jira.Transition(ctx, a.Key.IssueKey, ts[i].ID)
-	}); err != nil {
+	if err := w.jira.Transition(ctx, a.Key.IssueKey, ts[i].ID); err != nil {
 		return err
 	}
 	a.TransitionStep, a.StatusAfter = "transitioned", releasePending
@@ -251,47 +225,14 @@ func (w *Writer) comment(ctx context.Context, a *Action) error {
 		fmt.Fprintf(&b, "* %s/commit/%s (%s)\n", e.Repo, e.SHA, e.Component)
 	}
 	fmt.Fprintf(&b, "\n%s\n", a.CommentMarker)
-	var id string
-	if err := w.write(a, "comment", func() error {
-		id, err = w.jira.AddComment(ctx, a.Key.IssueKey, b.String())
-		return err
-	}); err != nil {
+	id, err := w.jira.AddComment(ctx, a.Key.IssueKey, b.String())
+	if err != nil {
 		return err
 	}
 	a.CommentID, a.CommentStep = id, "added"
 	return nil
 }
 
-// write makes a Jira write call, unless the kill file exists or this is a
-// dry run. A kill file that cannot be checked stops writes too.
-func (w *Writer) write(a *Action, what string, call func() error) error {
-	if w.killed() {
-		return errKilled
-	}
-	if w.DryRun {
-		w.logger.Info("dry run, would "+what, "issue", a.Key.IssueKey, "fbc", a.FBCNVR)
-		return nil
-	}
-	return call()
-}
-
-func (w *Writer) killed() bool {
-	if w.KillFile == "" {
-		return false
-	}
-	_, err := os.Stat(w.KillFile)
-	return !errors.Is(err, fs.ErrNotExist)
-}
-
 func (w *Writer) save(ctx context.Context, a Action) error {
-	if w.DryRun {
-		// A failed action is gone through too, so a failing read is tried
-		// and logged once per process.
-		if w.dryRan == nil {
-			w.dryRan = map[ActionKey]bool{}
-		}
-		w.dryRan[a.Key] = true
-		return nil
-	}
 	return w.store.UpsertAction(ctx, a)
 }

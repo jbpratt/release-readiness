@@ -58,9 +58,6 @@ Flags (env fallback in parentheses; defaults point at production services):
 - FBC JIRA writer, off until `-jira-write` (`JIRA_WRITE`) is true and
   `-jira-write-email` (`JIRA_WRITE_EMAIL`) and `-jira-write-token`
   (`JIRA_WRITE_TOKEN`), a credential separate from the read one, are set.
-  While `-jira-write-kill-file` (`JIRA_WRITE_KILL_FILE`) exists no write is
-  made; `-jira-write-dry-run` (`JIRA_WRITE_DRY_RUN`) is a safety check that
-  logs each write instead of making it.
 - `-art-build-history-url`, `-tekton-results-url`, `-catalog-url`: empty
   disables that source.
 - Prow: `-prow-jobs` (`PROW_JOBS`, `job_name=konflux_application[,...]`),

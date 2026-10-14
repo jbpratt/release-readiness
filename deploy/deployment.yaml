@@ -22,12 +22,9 @@ spec:
           image: quay.io/quay/release-readiness:latest
           env:
             # The FBC JIRA writer stays off until JIRA_WRITE is "true" and the
-            # jira-write secret holds its credential; creating the kill file
-            # stops every write.
+            # jira-write secret holds its credential.
             - name: JIRA_WRITE
               value: "false"
-            - name: JIRA_WRITE_KILL_FILE
-              value: /data/jira-write.stop
             - name: JIRA_WRITE_EMAIL
               valueFrom:
                 secretKeyRef:

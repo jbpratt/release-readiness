@@ -5,9 +5,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"os"
-	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -122,73 +119,6 @@ func TestWriterDisabled(t *testing.T) {
 	fx.run(t)
 	if len(j.writes) != 3 {
 		t.Errorf("writer on: writes %v; want edit, transition and comment", j.writes)
-	}
-}
-
-func TestWriterDryRun(t *testing.T) {
-	j := newFakeJira("Verified", "quay-v3.18.z")
-	w, store := newWriter(j)
-	before := store.actions[writeKey]
-	w.DryRun = true
-	applyPending(t, w)
-	if len(j.writes) != 0 || !reflect.DeepEqual(store.actions[writeKey], before) {
-		t.Errorf("dry run: writes %v, action %+v; want none and unchanged", j.writes, store.actions[writeKey])
-	}
-	reads := j.reads
-	applyPending(t, w)
-	if j.reads != reads {
-		t.Errorf("second dry run read the issue %d more times; want none", j.reads-reads)
-	}
-
-	// A failed read is tried once per process.
-	j = newFakeJira("Verified", "quay-v3.18.z")
-	j.issueErr = errors.New("JIRA API returned 500")
-	w, _ = newWriter(j)
-	w.DryRun = true
-	applyPending(t, w)
-	applyPending(t, w)
-	if j.reads != 1 {
-		t.Errorf("dry run with a failing read read the issue %d times; want 1", j.reads)
-	}
-}
-
-func TestWriterKillFile(t *testing.T) {
-	j := newFakeJira("Verified", "quay-v3.18.z")
-	w, store := newWriter(j)
-	w.KillFile = filepath.Join(t.TempDir(), "stop")
-	if err := os.WriteFile(w.KillFile, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	applyPending(t, w)
-	if a := store.actions[writeKey]; len(j.writes) != 0 || a.Status != StatusProposed {
-		t.Errorf("kill file: writes %v, action %+v; want none and still proposed", j.writes, a)
-	}
-}
-
-func TestWriterKillFileKeepsAttempts(t *testing.T) {
-	j := newFakeJira("Verified", "quay-v3.18.z")
-	j.transitionErr = errors.New("JIRA API returned 500")
-	w, store := newWriter(j)
-	applyPending(t, w)
-
-	w.KillFile = filepath.Join(t.TempDir(), "stop")
-	if err := os.WriteFile(w.KillFile, nil, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	for range maxAttempts {
-		applyPending(t, w)
-	}
-	if a := store.actions[writeKey]; a.Status != StatusError || a.Attempts != 1 {
-		t.Errorf("kill file: action %+v; want error on attempt 1", a)
-	}
-
-	if err := os.Remove(w.KillFile); err != nil {
-		t.Fatal(err)
-	}
-	j.transitionErr = nil
-	applyPending(t, w)
-	if a := store.actions[writeKey]; a.Status != StatusApplied || a.Attempts != 2 {
-		t.Errorf("kill file removed: action %+v; want applied on attempt 2", a)
 	}
 }
 
