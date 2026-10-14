@@ -609,8 +609,6 @@ function Candidate({
 			<Table
 				variant="compact"
 				aria-label="Operators"
-				className="rr-operators"
-				gridBreakPoint=""
 				style={{ marginTop: "1rem" }}
 			>
 				<Thead>
@@ -628,7 +626,7 @@ function Candidate({
 					return (
 						<Tbody key={op} isExpanded={open}>
 							<Tr>
-								<Td>
+								<Td dataLabel="Operator">
 									<Button
 										variant="link"
 										isInline
@@ -640,10 +638,10 @@ function Candidate({
 										{op}
 									</Button>
 								</Td>
-								<Td modifier="nowrap">
+								<Td dataLabel="Stage" modifier="nowrap">
 									{shipped ? "" : <StageCell stage={stage} />}
 								</Td>
-								<Td className="rr-needs">
+								<Td dataLabel="Needs action">
 									{checking ? (
 										<span style={muted}>Checking…</span>
 									) : actions.length > 0 ? (
