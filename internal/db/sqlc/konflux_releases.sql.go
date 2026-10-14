@@ -10,31 +10,40 @@ import (
 )
 
 const listKonfluxReleases = `-- name: ListKonfluxReleases :many
-SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, completion_time
-FROM konflux_releases
+SELECT kr.id, kr.name, kr.application, kr.snapshot, kr.release_plan, kr.released_status, kr.released_reason, kr.failed_task, kr.failed_step, kr.created_at, kr.completion_time, CAST(COALESCE(a.job_url, '') AS TEXT) AS job_url, CAST(COALESCE(a.advisory, '') AS TEXT) AS advisory
+FROM konflux_releases kr
+LEFT JOIN konflux_release_art a ON a.name = kr.name
 `
 
-func (q *Queries) ListKonfluxReleases(ctx context.Context) ([]KonfluxRelease, error) {
+type ListKonfluxReleasesRow struct {
+	KonfluxRelease KonfluxRelease
+	JobUrl         string
+	Advisory       string
+}
+
+func (q *Queries) ListKonfluxReleases(ctx context.Context) ([]ListKonfluxReleasesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listKonfluxReleases)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []KonfluxRelease
+	var items []ListKonfluxReleasesRow
 	for rows.Next() {
-		var i KonfluxRelease
+		var i ListKonfluxReleasesRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Application,
-			&i.Snapshot,
-			&i.ReleasePlan,
-			&i.ReleasedStatus,
-			&i.ReleasedReason,
-			&i.FailedTask,
-			&i.FailedStep,
-			&i.CreatedAt,
-			&i.CompletionTime,
+			&i.KonfluxRelease.ID,
+			&i.KonfluxRelease.Name,
+			&i.KonfluxRelease.Application,
+			&i.KonfluxRelease.Snapshot,
+			&i.KonfluxRelease.ReleasePlan,
+			&i.KonfluxRelease.ReleasedStatus,
+			&i.KonfluxRelease.ReleasedReason,
+			&i.KonfluxRelease.FailedTask,
+			&i.KonfluxRelease.FailedStep,
+			&i.KonfluxRelease.CreatedAt,
+			&i.KonfluxRelease.CompletionTime,
+			&i.JobUrl,
+			&i.Advisory,
 		); err != nil {
 			return nil, err
 		}
@@ -50,33 +59,42 @@ func (q *Queries) ListKonfluxReleases(ctx context.Context) ([]KonfluxRelease, er
 }
 
 const listKonfluxReleasesByApplication = `-- name: ListKonfluxReleasesByApplication :many
-SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, completion_time
-FROM konflux_releases
-WHERE application = ?
-ORDER BY created_at DESC, id DESC
+SELECT kr.id, kr.name, kr.application, kr.snapshot, kr.release_plan, kr.released_status, kr.released_reason, kr.failed_task, kr.failed_step, kr.created_at, kr.completion_time, CAST(COALESCE(a.job_url, '') AS TEXT) AS job_url, CAST(COALESCE(a.advisory, '') AS TEXT) AS advisory
+FROM konflux_releases kr
+LEFT JOIN konflux_release_art a ON a.name = kr.name
+WHERE kr.application = ?
+ORDER BY kr.created_at DESC, kr.id DESC
 `
 
-func (q *Queries) ListKonfluxReleasesByApplication(ctx context.Context, application string) ([]KonfluxRelease, error) {
+type ListKonfluxReleasesByApplicationRow struct {
+	KonfluxRelease KonfluxRelease
+	JobUrl         string
+	Advisory       string
+}
+
+func (q *Queries) ListKonfluxReleasesByApplication(ctx context.Context, application string) ([]ListKonfluxReleasesByApplicationRow, error) {
 	rows, err := q.db.QueryContext(ctx, listKonfluxReleasesByApplication, application)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []KonfluxRelease
+	var items []ListKonfluxReleasesByApplicationRow
 	for rows.Next() {
-		var i KonfluxRelease
+		var i ListKonfluxReleasesByApplicationRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Application,
-			&i.Snapshot,
-			&i.ReleasePlan,
-			&i.ReleasedStatus,
-			&i.ReleasedReason,
-			&i.FailedTask,
-			&i.FailedStep,
-			&i.CreatedAt,
-			&i.CompletionTime,
+			&i.KonfluxRelease.ID,
+			&i.KonfluxRelease.Name,
+			&i.KonfluxRelease.Application,
+			&i.KonfluxRelease.Snapshot,
+			&i.KonfluxRelease.ReleasePlan,
+			&i.KonfluxRelease.ReleasedStatus,
+			&i.KonfluxRelease.ReleasedReason,
+			&i.KonfluxRelease.FailedTask,
+			&i.KonfluxRelease.FailedStep,
+			&i.KonfluxRelease.CreatedAt,
+			&i.KonfluxRelease.CompletionTime,
+			&i.JobUrl,
+			&i.Advisory,
 		); err != nil {
 			return nil, err
 		}
@@ -169,5 +187,24 @@ func (q *Queries) UpsertKonfluxRelease(ctx context.Context, arg UpsertKonfluxRel
 		arg.CreatedAt,
 		arg.CompletionTime,
 	)
+	return err
+}
+
+const upsertKonfluxReleaseArt = `-- name: UpsertKonfluxReleaseArt :exec
+INSERT INTO konflux_release_art (name, job_url, advisory)
+VALUES (?, ?, ?)
+ON CONFLICT(name) DO UPDATE SET
+    job_url=excluded.job_url,
+    advisory=excluded.advisory
+`
+
+type UpsertKonfluxReleaseArtParams struct {
+	Name     string
+	JobUrl   string
+	Advisory string
+}
+
+func (q *Queries) UpsertKonfluxReleaseArt(ctx context.Context, arg UpsertKonfluxReleaseArtParams) error {
+	_, err := q.db.ExecContext(ctx, upsertKonfluxReleaseArt, arg.Name, arg.JobUrl, arg.Advisory)
 	return err
 }

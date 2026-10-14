@@ -109,6 +109,7 @@ func TestPrune(t *testing.T) {
 			"snapshot_components":   rows("SELECT substr(image_url, instr(image_url, ':') + 1) AS k FROM snapshot_components"),
 			"staged_snapshots":      rows("SELECT name AS k FROM staged_snapshots"),
 			"konflux_releases":      rows("SELECT name AS k FROM konflux_releases"),
+			"konflux_release_art":   rows("SELECT name AS k FROM konflux_release_art"),
 			"prow_runs":             rows("SELECT build_id AS k FROM prow_runs"),
 			"prow_run_images":       rows("SELECT build_id AS k FROM prow_run_images"),
 			"prow_install_failures": rows("SELECT build_id AS k FROM prow_install_failures"),
@@ -125,7 +126,7 @@ func TestPrune(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]int64{
-		"konflux_releases": 1, "snapshots": 1, "staged_snapshots": 1, "prow_runs": 2,
+		"konflux_releases": 1, "konflux_release_art": 1, "snapshots": 1, "staged_snapshots": 1, "prow_runs": 2,
 		"art_builds": 2, "image_scans": 2, "fbc_renders": 2, "fbc_related_images": 2,
 	}
 	if !maps.Equal(deleted, want) {
@@ -136,6 +137,7 @@ func TestPrune(t *testing.T) {
 		"snapshot_components":   "newest shipped staged young",
 		"staged_snapshots":      "staged",
 		"konflux_releases":      "failed-staged failed-young progressing succeeded",
+		"konflux_release_art":   "failed-staged failed-young progressing succeeded",
 		"prow_runs":             "2 3 5",
 		"prow_run_images":       "3",
 		"prow_install_failures": "",

@@ -19,6 +19,7 @@ func (d *DB) Prune(ctx context.Context, cutoff time.Time) (map[string]int64, err
 		fn    func() (int64, error)
 	}{
 		{"konflux_releases", func() (int64, error) { return q.PruneFailedReleases(ctx, c) }},
+		{"konflux_release_art", func() (int64, error) { return q.PruneOrphanKonfluxReleaseArt(ctx) }},
 		{"snapshots", func() (int64, error) { return q.PruneSnapshots(ctx, c) }},
 		{"staged_snapshots", func() (int64, error) { return q.PruneOrphanStagedSnapshots(ctx) }},
 		{"prow_runs", func() (int64, error) { return q.PruneProwRuns(ctx, c) }},

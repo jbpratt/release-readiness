@@ -20,10 +20,11 @@ WHERE ss.assembly = sqlc.arg(assembly) AND ss.kind = 'image' AND ss.env = 'stage
 ORDER BY kr.completion_time DESC, kr.created_at DESC, kr.name DESC;
 
 -- name: LatestProdImageRelease :one
-SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, completion_time
-FROM konflux_releases
-WHERE snapshot IN (SELECT name FROM staged_snapshots WHERE assembly = ? AND kind = 'image' AND env = 'prod')
-ORDER BY created_at DESC, id DESC
+SELECT sqlc.embed(kr), CAST(COALESCE(a.job_url, '') AS TEXT) AS job_url, CAST(COALESCE(a.advisory, '') AS TEXT) AS advisory
+FROM konflux_releases kr
+LEFT JOIN konflux_release_art a ON a.name = kr.name
+WHERE kr.snapshot IN (SELECT name FROM staged_snapshots WHERE assembly = ? AND kind = 'image' AND env = 'prod')
+ORDER BY kr.created_at DESC, kr.id DESC
 LIMIT 1;
 
 -- name: ListStagedFBCCatalogs :many

@@ -146,6 +146,7 @@ function OperatorPanel({ o, version }: { o: OperatorFBC; version: string }) {
 		.sort((a, b) => worst(a) - worst(b));
 	const others = images.filter((r) => !art.includes(r));
 	const problems = art.filter((r) => worst(r) < 2).length;
+	const ri = o.fbc_ri_stage.release;
 	return (
 		<Card isCompact>
 			<CardTitle>
@@ -166,6 +167,20 @@ function OperatorPanel({ o, version }: { o: OperatorFBC; version: string }) {
 				</Flex>
 				<div style={{ ...muted, fontSize: "0.85rem", fontWeight: "normal" }}>
 					Bundle built {bundleBuilt(o.head_bundle_nvr) || "unknown"} UTC
+					{ri?.job_url && (
+						<>
+							{" · "}
+							<ExtLink href={ri.job_url}>ART job</ExtLink>
+						</>
+					)}
+					{ri?.advisory && (
+						<>
+							{" · "}
+							<ExtLink href={ri.advisory}>
+								{ri.advisory.match(/[A-Z]+-\d{4}:\d+$/)?.[0] ?? "Advisory"}
+							</ExtLink>
+						</>
+					)}
 				</div>
 			</CardTitle>
 			<CardBody>

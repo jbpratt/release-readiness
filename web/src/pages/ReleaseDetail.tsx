@@ -627,6 +627,9 @@ function Candidate({
 											<span style={muted}>{r.fbc ? "Not staged" : "–"}</span>
 										)}
 										<Flags flags={r.flags} />
+										{r.fbc?.release?.job_url && (
+											<ExtLink href={r.fbc.release.job_url}>ART job</ExtLink>
+										)}
 									</Flex>
 								</Td>
 								<Td dataLabel="CI" modifier="nowrap">

@@ -221,6 +221,11 @@ func (s *Syncer) syncRelease(ctx context.Context, obj *unstructured.Unstructured
 	r.Snapshot, _, _ = unstructured.NestedString(obj.Object, "spec", "snapshot")
 	r.ReleasePlan, _, _ = unstructured.NestedString(obj.Object, "spec", "releasePlan")
 	r.CompletionTime = nestedTime(obj, "status", "completionTime")
+	r.JobURL = obj.GetAnnotations()["art.redhat.com/job-url"]
+	// Seen as {url, internal_url}; url is the public errata page.
+	if r.Advisory, _, _ = unstructured.NestedString(obj.Object, "status", "artifacts", "advisory"); r.Advisory == "" {
+		r.Advisory, _, _ = unstructured.NestedString(obj.Object, "status", "artifacts", "advisory", "url")
+	}
 
 	conditions, _, _ := unstructured.NestedSlice(obj.Object, "status", "conditions")
 	for _, c := range conditions {

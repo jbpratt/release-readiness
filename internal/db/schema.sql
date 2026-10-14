@@ -77,6 +77,13 @@ CREATE TABLE IF NOT EXISTS shipment_mrs (
     checked_at            TEXT NOT NULL
 );
 
+-- The ART job and advisory of a Konflux Release, by konflux_releases.name.
+CREATE TABLE IF NOT EXISTS konflux_release_art (
+    name     TEXT PRIMARY KEY,
+    job_url  TEXT NOT NULL DEFAULT '',
+    advisory TEXT NOT NULL DEFAULT ''
+);
+
 -- ART build history record behind a component image, keyed by its
 -- sha256:... digest. A resolved row is immutable; an unresolved one is retried.
 CREATE TABLE IF NOT EXISTS art_builds (

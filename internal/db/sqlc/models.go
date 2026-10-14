@@ -88,6 +88,12 @@ type KonfluxRelease struct {
 	CompletionTime string
 }
 
+type KonfluxReleaseArt struct {
+	Name     string
+	JobUrl   string
+	Advisory string
+}
+
 type ProwInstallFailure struct {
 	JobName string
 	BuildID string

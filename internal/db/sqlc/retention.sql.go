@@ -91,6 +91,19 @@ func (q *Queries) PruneOrphanFBCRelatedImages(ctx context.Context) (int64, error
 	return result.RowsAffected()
 }
 
+const pruneOrphanKonfluxReleaseArt = `-- name: PruneOrphanKonfluxReleaseArt :execrows
+DELETE FROM konflux_release_art
+WHERE name NOT IN (SELECT name FROM konflux_releases)
+`
+
+func (q *Queries) PruneOrphanKonfluxReleaseArt(ctx context.Context) (int64, error) {
+	result, err := q.db.ExecContext(ctx, pruneOrphanKonfluxReleaseArt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const pruneOrphanStagedSnapshots = `-- name: PruneOrphanStagedSnapshots :execrows
 DELETE FROM staged_snapshots
 WHERE name NOT IN (SELECT name FROM snapshots)

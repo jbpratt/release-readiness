@@ -12,11 +12,19 @@ ON CONFLICT(name) DO UPDATE SET
     created_at=excluded.created_at,
     completion_time=excluded.completion_time;
 
+-- name: UpsertKonfluxReleaseArt :exec
+INSERT INTO konflux_release_art (name, job_url, advisory)
+VALUES (?, ?, ?)
+ON CONFLICT(name) DO UPDATE SET
+    job_url=excluded.job_url,
+    advisory=excluded.advisory;
+
 -- name: ListKonfluxReleasesByApplication :many
-SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, completion_time
-FROM konflux_releases
-WHERE application = ?
-ORDER BY created_at DESC, id DESC;
+SELECT sqlc.embed(kr), CAST(COALESCE(a.job_url, '') AS TEXT) AS job_url, CAST(COALESCE(a.advisory, '') AS TEXT) AS advisory
+FROM konflux_releases kr
+LEFT JOIN konflux_release_art a ON a.name = kr.name
+WHERE kr.application = ?
+ORDER BY kr.created_at DESC, kr.id DESC;
 
 -- name: ListReleasedSnapshotImages :many
 -- The component images of each stored Snapshot a Release of the application names.
@@ -27,5 +35,6 @@ JOIN snapshot_components sc ON sc.snapshot_id = s.id
 WHERE kr.application = ?;
 
 -- name: ListKonfluxReleases :many
-SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, completion_time
-FROM konflux_releases;
+SELECT sqlc.embed(kr), CAST(COALESCE(a.job_url, '') AS TEXT) AS job_url, CAST(COALESCE(a.advisory, '') AS TEXT) AS advisory
+FROM konflux_releases kr
+LEFT JOIN konflux_release_art a ON a.name = kr.name;

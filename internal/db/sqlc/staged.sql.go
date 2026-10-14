@@ -10,28 +10,37 @@ import (
 )
 
 const latestProdImageRelease = `-- name: LatestProdImageRelease :one
-SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, completion_time
-FROM konflux_releases
-WHERE snapshot IN (SELECT name FROM staged_snapshots WHERE assembly = ? AND kind = 'image' AND env = 'prod')
-ORDER BY created_at DESC, id DESC
+SELECT kr.id, kr.name, kr.application, kr.snapshot, kr.release_plan, kr.released_status, kr.released_reason, kr.failed_task, kr.failed_step, kr.created_at, kr.completion_time, CAST(COALESCE(a.job_url, '') AS TEXT) AS job_url, CAST(COALESCE(a.advisory, '') AS TEXT) AS advisory
+FROM konflux_releases kr
+LEFT JOIN konflux_release_art a ON a.name = kr.name
+WHERE kr.snapshot IN (SELECT name FROM staged_snapshots WHERE assembly = ? AND kind = 'image' AND env = 'prod')
+ORDER BY kr.created_at DESC, kr.id DESC
 LIMIT 1
 `
 
-func (q *Queries) LatestProdImageRelease(ctx context.Context, assembly string) (KonfluxRelease, error) {
+type LatestProdImageReleaseRow struct {
+	KonfluxRelease KonfluxRelease
+	JobUrl         string
+	Advisory       string
+}
+
+func (q *Queries) LatestProdImageRelease(ctx context.Context, assembly string) (LatestProdImageReleaseRow, error) {
 	row := q.db.QueryRowContext(ctx, latestProdImageRelease, assembly)
-	var i KonfluxRelease
+	var i LatestProdImageReleaseRow
 	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Application,
-		&i.Snapshot,
-		&i.ReleasePlan,
-		&i.ReleasedStatus,
-		&i.ReleasedReason,
-		&i.FailedTask,
-		&i.FailedStep,
-		&i.CreatedAt,
-		&i.CompletionTime,
+		&i.KonfluxRelease.ID,
+		&i.KonfluxRelease.Name,
+		&i.KonfluxRelease.Application,
+		&i.KonfluxRelease.Snapshot,
+		&i.KonfluxRelease.ReleasePlan,
+		&i.KonfluxRelease.ReleasedStatus,
+		&i.KonfluxRelease.ReleasedReason,
+		&i.KonfluxRelease.FailedTask,
+		&i.KonfluxRelease.FailedStep,
+		&i.KonfluxRelease.CreatedAt,
+		&i.KonfluxRelease.CompletionTime,
+		&i.JobUrl,
+		&i.Advisory,
 	)
 	return i, err
 }

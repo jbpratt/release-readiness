@@ -179,6 +179,53 @@ func TestSyncReleaseFailedTask(t *testing.T) {
 	}
 }
 
+func TestSyncReleaseArt(t *testing.T) {
+	ctx := context.Background()
+	database, err := db.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+	created := time.Date(2026, 10, 8, 9, 0, 0, 0, time.UTC)
+	succeeded := map[string]any{"type": "Released", "status": "True", "reason": "Succeeded"}
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{snapshotGVR: "SnapshotList", releaseGVR: "ReleaseList"},
+		release("r-object", "quay-3-18", created, succeeded),
+		release("r-string", "quay-3-18", created.Add(time.Hour), succeeded),
+	)
+	s := NewSyncer(client, testNamespace, database, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	s.SyncOnce(ctx)
+
+	// The settled Releases, stored without either, gain them on the next pass.
+	const job = "https://art-jenkins.example/job/1"
+	const errata = "https://access.stage.redhat.com/errata/RHBA-2026:153498"
+	for name, advisory := range map[string]any{
+		"r-object": map[string]any{"url": errata, "internal_url": "https://errata.example/advisory/1"},
+		"r-string": errata,
+	} {
+		u, err := client.Resource(releaseGVR).Namespace(testNamespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		u.SetAnnotations(map[string]string{"art.redhat.com/job-url": job})
+		_ = unstructured.SetNestedField(u.Object, advisory, "status", "artifacts", "advisory")
+		if _, err := client.Resource(releaseGVR).Namespace(testNamespace).Update(ctx, u, metav1.UpdateOptions{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.SyncOnce(ctx)
+
+	got := releases(t, database, "quay-3-18")
+	if len(got) != 2 {
+		t.Fatalf("releases = %+v", got)
+	}
+	for _, r := range got {
+		if r.JobURL != job || r.Advisory != errata {
+			t.Errorf("%s: job_url %q advisory %q, want %q %q", r.Name, r.JobURL, r.Advisory, job, errata)
+		}
+	}
+}
+
 func TestSyncOnce(t *testing.T) {
 	ctx := context.Background()
 	database, err := db.Open(filepath.Join(t.TempDir(), "test.db"))

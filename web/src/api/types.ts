@@ -6,6 +6,9 @@ export interface KonfluxRelease {
 	failed_task?: string;
 	failed_step?: string;
 	completion_time?: string;
+	/** The ART job that made the Release, and its errata URL. */
+	job_url?: string;
+	advisory?: string;
 }
 
 /**

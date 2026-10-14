@@ -91,8 +91,8 @@ func (d *DB) StageReleases(ctx context.Context, release *model.ReleaseVersion, p
 	stream := "-" + m[2] + "-" + m[3]
 	var releases []model.StageRelease
 	for _, r := range rows {
-		if plans.MatchString(r.ReleasePlan) && strings.HasSuffix(r.ReleasePlan, stream) {
-			releases = append(releases, model.StageRelease{KonfluxRelease: toKonfluxRelease(r), Images: images[r.Snapshot]})
+		if kr := r.KonfluxRelease; plans.MatchString(kr.ReleasePlan) && strings.HasSuffix(kr.ReleasePlan, stream) {
+			releases = append(releases, model.StageRelease{KonfluxRelease: toKonfluxRelease(kr, r.JobUrl, r.Advisory), Images: images[kr.Snapshot]})
 		}
 	}
 	return releases, nil
@@ -120,9 +120,11 @@ func (d *DB) StagedFBCCatalogs(ctx context.Context, assembly, application string
 		_, _, ocp, _ := artbuild.ParseFBC(r.Nvr)
 		catalogs[i] = model.CandidateCatalog{State: "staged", Snapshot: r.SnapshotName, Component: r.Component, Pullspec: r.ImageUrl, NVR: r.Nvr, OCP: ocp}
 		// releases is newest first.
-		rank[i] = slices.IndexFunc(releases, func(kr dbsqlc.KonfluxRelease) bool { return kr.Snapshot == r.SnapshotName })
+		rank[i] = slices.IndexFunc(releases, func(kr dbsqlc.ListKonfluxReleasesByApplicationRow) bool {
+			return kr.KonfluxRelease.Snapshot == r.SnapshotName
+		})
 		if rank[i] >= 0 {
-			kr := toKonfluxRelease(releases[rank[i]])
+			kr := toKonfluxRelease(releases[rank[i]].KonfluxRelease, releases[rank[i]].JobUrl, releases[rank[i]].Advisory)
 			catalogs[i].Release, catalogs[i].ReleasePlan = &kr, kr.ReleasePlan
 		} else {
 			rank[i] = len(releases)
@@ -151,7 +153,7 @@ func (d *DB) LatestProdRelease(ctx context.Context, assembly string) (*model.Kon
 	if err != nil {
 		return nil, err
 	}
-	r := toKonfluxRelease(row)
+	r := toKonfluxRelease(row.KonfluxRelease, row.JobUrl, row.Advisory)
 	return &r, nil
 }
 
@@ -176,8 +178,10 @@ func (d *DB) StagedFBCMembers(ctx context.Context, assembly, application string)
 			ReadError: r.ReadError,
 		}
 		// releases is newest first.
-		if j := slices.IndexFunc(releases, func(kr dbsqlc.KonfluxRelease) bool { return kr.Snapshot == r.SnapshotName }); j >= 0 {
-			kr := toKonfluxRelease(releases[j])
+		if j := slices.IndexFunc(releases, func(kr dbsqlc.ListKonfluxReleasesByApplicationRow) bool {
+			return kr.KonfluxRelease.Snapshot == r.SnapshotName
+		}); j >= 0 {
+			kr := toKonfluxRelease(releases[j].KonfluxRelease, releases[j].JobUrl, releases[j].Advisory)
 			members[i].Release = &kr
 		}
 	}

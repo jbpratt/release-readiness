@@ -75,6 +75,9 @@ type KonfluxRelease struct {
 	FailedStep     string     `json:"failed_step,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
 	CompletionTime *time.Time `json:"completion_time,omitempty"`
+	// JobURL is the ART job that made the Release, Advisory its errata URL.
+	JobURL   string `json:"job_url,omitempty"`
+	Advisory string `json:"advisory,omitempty"`
 }
 
 // ShipmentMR is the ART shipment merge request of a Quay version in GitLab.

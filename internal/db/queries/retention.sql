@@ -4,6 +4,10 @@ DELETE FROM konflux_releases
 WHERE released_reason = 'Failed' AND created_at < sqlc.arg(cutoff)
   AND snapshot NOT IN (SELECT name FROM staged_snapshots);
 
+-- name: PruneOrphanKonfluxReleaseArt :execrows
+DELETE FROM konflux_release_art
+WHERE name NOT IN (SELECT name FROM konflux_releases);
+
 -- name: PruneSnapshots :execrows
 -- Keeps ART staged Snapshots, those a Release shipped, and the newest of each
 -- application. Components go by cascade.

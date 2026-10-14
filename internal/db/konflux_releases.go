@@ -9,7 +9,7 @@ import (
 )
 
 func (d *DB) UpsertKonfluxRelease(ctx context.Context, r *model.KonfluxRelease) error {
-	return d.queries().UpsertKonfluxRelease(ctx, dbsqlc.UpsertKonfluxReleaseParams{
+	err := d.queries().UpsertKonfluxRelease(ctx, dbsqlc.UpsertKonfluxReleaseParams{
 		Name:           r.Name,
 		Application:    r.Application,
 		Snapshot:       r.Snapshot,
@@ -21,6 +21,14 @@ func (d *DB) UpsertKonfluxRelease(ctx context.Context, r *model.KonfluxRelease) 
 		CreatedAt:      r.CreatedAt.UTC().Format(time.RFC3339),
 		CompletionTime: formatOptionalTime(r.CompletionTime),
 	})
+	if err != nil {
+		return err
+	}
+	return d.queries().UpsertKonfluxReleaseArt(ctx, dbsqlc.UpsertKonfluxReleaseArtParams{
+		Name:     r.Name,
+		JobUrl:   r.JobURL,
+		Advisory: r.Advisory,
+	})
 }
 
 // KonfluxReleases returns every stored Release by name.
@@ -31,12 +39,12 @@ func (d *DB) KonfluxReleases(ctx context.Context) (map[string]model.KonfluxRelea
 	}
 	m := make(map[string]model.KonfluxRelease, len(rows))
 	for _, r := range rows {
-		m[r.Name] = toKonfluxRelease(r)
+		m[r.KonfluxRelease.Name] = toKonfluxRelease(r.KonfluxRelease, r.JobUrl, r.Advisory)
 	}
 	return m, nil
 }
 
-func toKonfluxRelease(r dbsqlc.KonfluxRelease) model.KonfluxRelease {
+func toKonfluxRelease(r dbsqlc.KonfluxRelease, jobURL, advisory string) model.KonfluxRelease {
 	return model.KonfluxRelease{
 		Name:           r.Name,
 		Application:    r.Application,
@@ -48,5 +56,7 @@ func toKonfluxRelease(r dbsqlc.KonfluxRelease) model.KonfluxRelease {
 		FailedStep:     r.FailedStep,
 		CreatedAt:      parseTime(r.CreatedAt),
 		CompletionTime: parseOptionalTime(r.CompletionTime),
+		JobURL:         jobURL,
+		Advisory:       advisory,
 	}
 }
