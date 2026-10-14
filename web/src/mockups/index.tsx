@@ -1,8 +1,8 @@
+import type { ReactNode } from "react";
 import { Route, Routes } from "react-router-dom";
-import FbcCiTable from "./FbcCiTable";
 
 /** Design mockups on live data, served under /mockups/ in dev builds only. */
-const mockups = [{ path: "fbc-ci-b/:version", element: <FbcCiTable /> }];
+const mockups: { path: string; element: ReactNode }[] = [];
 
 export default function Mockups() {
 	return (
