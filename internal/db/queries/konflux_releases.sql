@@ -25,3 +25,7 @@ FROM konflux_releases kr
 JOIN snapshots s ON s.name = kr.snapshot AND s.application = kr.application
 JOIN snapshot_components sc ON sc.snapshot_id = s.id
 WHERE kr.application = ?;
+
+-- name: ListKonfluxReleases :many
+SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, completion_time
+FROM konflux_releases;

@@ -24,6 +24,19 @@ func (d *DB) SnapshotExistsByName(ctx context.Context, name string) (bool, error
 	return count > 0, nil
 }
 
+// SnapshotNames returns the names of every stored Snapshot.
+func (d *DB) SnapshotNames(ctx context.Context) (map[string]bool, error) {
+	names, err := d.queries().ListSnapshotNames(ctx)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]bool, len(names))
+	for _, n := range names {
+		m[n] = true
+	}
+	return m, nil
+}
+
 func (d *DB) CreateSnapshotComponent(ctx context.Context, snapshotID int64, component, imageURL string) error {
 	return d.queries().CreateSnapshotComponent(ctx, dbsqlc.CreateSnapshotComponentParams{
 		SnapshotID: snapshotID,

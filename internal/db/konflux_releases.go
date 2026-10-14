@@ -23,6 +23,19 @@ func (d *DB) UpsertKonfluxRelease(ctx context.Context, r *model.KonfluxRelease) 
 	})
 }
 
+// KonfluxReleases returns every stored Release by name.
+func (d *DB) KonfluxReleases(ctx context.Context) (map[string]model.KonfluxRelease, error) {
+	rows, err := d.queries().ListKonfluxReleases(ctx)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]model.KonfluxRelease, len(rows))
+	for _, r := range rows {
+		m[r.Name] = toKonfluxRelease(r)
+	}
+	return m, nil
+}
+
 func toKonfluxRelease(r dbsqlc.KonfluxRelease) model.KonfluxRelease {
 	return model.KonfluxRelease{
 		Name:           r.Name,

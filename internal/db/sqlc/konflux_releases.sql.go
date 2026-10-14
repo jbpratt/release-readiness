@@ -9,6 +9,46 @@ import (
 	"context"
 )
 
+const listKonfluxReleases = `-- name: ListKonfluxReleases :many
+SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, completion_time
+FROM konflux_releases
+`
+
+func (q *Queries) ListKonfluxReleases(ctx context.Context) ([]KonfluxRelease, error) {
+	rows, err := q.db.QueryContext(ctx, listKonfluxReleases)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []KonfluxRelease
+	for rows.Next() {
+		var i KonfluxRelease
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Application,
+			&i.Snapshot,
+			&i.ReleasePlan,
+			&i.ReleasedStatus,
+			&i.ReleasedReason,
+			&i.FailedTask,
+			&i.FailedStep,
+			&i.CreatedAt,
+			&i.CompletionTime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listKonfluxReleasesByApplication = `-- name: ListKonfluxReleasesByApplication :many
 SELECT id, name, application, snapshot, release_plan, released_status, released_reason, failed_task, failed_step, created_at, completion_time
 FROM konflux_releases

@@ -23,6 +23,22 @@ func (d *DB) UpsertStagedSnapshot(ctx context.Context, name, assembly, kind, env
 	})
 }
 
+// StagedSnapshot is the ART staging of a Snapshot, from its annotations.
+type StagedSnapshot struct{ Assembly, Kind, Env string }
+
+// StagedSnapshots returns every stored staging by Snapshot name.
+func (d *DB) StagedSnapshots(ctx context.Context) (map[string]StagedSnapshot, error) {
+	rows, err := d.queries().ListStagedSnapshots(ctx)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string]StagedSnapshot, len(rows))
+	for _, r := range rows {
+		m[r.Name] = StagedSnapshot{Assembly: r.Assembly, Kind: r.Kind, Env: r.Env}
+	}
+	return m, nil
+}
+
 var concreteVersion = regexp.MustCompile(`^quay-v((\d+)\.(\d+)\.\d+)$`)
 
 // SelectedStageBuild returns the newest image Snapshot staged for release's

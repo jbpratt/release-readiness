@@ -6,6 +6,9 @@ ON CONFLICT(name) DO UPDATE SET
     kind=excluded.kind,
     env=excluded.env;
 
+-- name: ListStagedSnapshots :many
+SELECT name, assembly, kind, env FROM staged_snapshots;
+
 -- name: ListSuccessfulStageReleases :many
 SELECT kr.release_plan, kr.completion_time, s.name AS snapshot_name
 FROM staged_snapshots ss

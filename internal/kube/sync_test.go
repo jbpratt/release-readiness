@@ -2,6 +2,7 @@ package kube
 
 import (
 	"context"
+	"database/sql"
 	"io"
 	"log/slog"
 	"net/http"
@@ -271,6 +272,96 @@ func TestSyncStagedSnapshots(t *testing.T) {
 	}
 	if got == nil || got.SnapshotName != "quay-stage-3-18-1-image" {
 		t.Errorf("selected = %+v, want quay-stage-3-18-1-image", got)
+	}
+}
+
+// TestSyncSkipsUnchanged counts each pass's writes: over the same objects,
+// only a Release still running is written again.
+func TestSyncSkipsUnchanged(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "test.db")
+	database, err := db.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = database.Close() })
+
+	created := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
+	staged := func(name, assembly string) *unstructured.Unstructured {
+		u := snapshot(name, "quay-3-18", created, component("quay", "quay.io/quay/quay@sha256:1"))
+		u.SetAnnotations(map[string]string{"art.redhat.com/assembly": assembly, "art.redhat.com/kind": "image", "art.redhat.com/env": "stage"})
+		return u
+	}
+	completed := func(u *unstructured.Unstructured) *unstructured.Unstructured {
+		_ = unstructured.SetNestedField(u.Object, created.Add(10*time.Minute).Format(time.RFC3339), "status", "completionTime")
+		return u
+	}
+	succeeded := map[string]any{"type": "Released", "status": "True", "reason": "Succeeded"}
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{snapshotGVR: "SnapshotList", releaseGVR: "ReleaseList"},
+		staged("snap-a", "3.18.1"),
+		staged("snap-b", "3.18.1"),
+		snapshot("snap-build", "quay-3-18", created),
+		completed(release("r-succeeded", "quay-3-18", created, succeeded)),
+		completed(release("r-failed", "quay-3-18", created, map[string]any{"type": "Released", "status": "False", "reason": "Failed"})),
+		release("r-progressing", "quay-3-18", created, map[string]any{"type": "Released", "status": "Unknown", "reason": "Progressing"}),
+	)
+	s := NewSyncer(client, testNamespace, database, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = raw.Close() })
+	if _, err := raw.Exec(`CREATE TABLE writes (w TEXT);
+CREATE TRIGGER w1 AFTER INSERT ON snapshots BEGIN INSERT INTO writes VALUES ('snapshots ' || NEW.name); END;
+CREATE TRIGGER w2 AFTER INSERT ON staged_snapshots BEGIN INSERT INTO writes VALUES ('staged_snapshots ' || NEW.name); END;
+CREATE TRIGGER w3 AFTER UPDATE ON staged_snapshots BEGIN INSERT INTO writes VALUES ('staged_snapshots ' || NEW.name); END;
+CREATE TRIGGER w4 AFTER INSERT ON konflux_releases BEGIN INSERT INTO writes VALUES ('konflux_releases ' || NEW.name); END;
+CREATE TRIGGER w5 AFTER UPDATE ON konflux_releases BEGIN INSERT INTO writes VALUES ('konflux_releases ' || NEW.name); END;`); err != nil {
+		t.Fatal(err)
+	}
+	pass := func(want ...string) {
+		t.Helper()
+		s.SyncOnce(ctx)
+		var got []string
+		rows, err := raw.Query(`DELETE FROM writes RETURNING w`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for rows.Next() {
+			var w string
+			_ = rows.Scan(&w)
+			got = append(got, w)
+		}
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
+		}
+		slices.Sort(got)
+		if !slices.Equal(got, want) {
+			t.Errorf("writes = %q, want %q", got, want)
+		}
+	}
+
+	pass("konflux_releases r-failed", "konflux_releases r-progressing", "konflux_releases r-succeeded",
+		"snapshots snap-a", "snapshots snap-b", "snapshots snap-build",
+		"staged_snapshots snap-a", "staged_snapshots snap-b")
+	pass("konflux_releases r-progressing")
+
+	// A retried Release succeeds, and ART restages a Snapshot.
+	if _, err := client.Resource(releaseGVR).Namespace(testNamespace).Update(ctx, completed(release("r-failed", "quay-3-18", created, succeeded)), metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.Resource(snapshotGVR).Namespace(testNamespace).Update(ctx, staged("snap-b", "3.18.2"), metav1.UpdateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	pass("konflux_releases r-failed", "konflux_releases r-progressing", "staged_snapshots snap-b")
+	stored, err := database.KonfluxReleases(ctx)
+	if err != nil || stored["r-failed"].ReleasedReason != "Succeeded" {
+		t.Errorf("r-failed = %+v, %v; want Succeeded", stored["r-failed"], err)
+	}
+	if st, err := database.StagedSnapshots(ctx); err != nil || st["snap-b"].Assembly != "3.18.2" {
+		t.Errorf("snap-b = %+v, %v; want assembly 3.18.2", st["snap-b"], err)
 	}
 }
 

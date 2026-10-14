@@ -272,6 +272,38 @@ func (q *Queries) ListStagedFBCMembers(ctx context.Context, arg ListStagedFBCMem
 	return items, nil
 }
 
+const listStagedSnapshots = `-- name: ListStagedSnapshots :many
+SELECT name, assembly, kind, env FROM staged_snapshots
+`
+
+func (q *Queries) ListStagedSnapshots(ctx context.Context) ([]StagedSnapshot, error) {
+	rows, err := q.db.QueryContext(ctx, listStagedSnapshots)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []StagedSnapshot
+	for rows.Next() {
+		var i StagedSnapshot
+		if err := rows.Scan(
+			&i.Name,
+			&i.Assembly,
+			&i.Kind,
+			&i.Env,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSuccessfulStageReleases = `-- name: ListSuccessfulStageReleases :many
 SELECT kr.release_plan, kr.completion_time, s.name AS snapshot_name
 FROM staged_snapshots ss

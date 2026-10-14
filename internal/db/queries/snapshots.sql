@@ -32,3 +32,6 @@ LEFT JOIN art_builds a ON a.state = 'resolved'
 WHERE s.application = ? AND s.name NOT LIKE 'fbc-ri-%'
   AND NOT EXISTS (SELECT 1 FROM staged_snapshots ss WHERE ss.name = s.name)
 ORDER BY s.created_at DESC, s.name DESC, sc.component;
+
+-- name: ListSnapshotNames :many
+SELECT name FROM snapshots;
