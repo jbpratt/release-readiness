@@ -34,6 +34,9 @@ import { ART_PIPELINES_HEALTH_URL } from "./utils/links";
 const ReleasesOverview = lazy(() => import("./pages/ReleasesOverview"));
 const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
 const ReleaseCI = lazy(() => import("./pages/ReleaseCI"));
+// Dev builds only: the condition is false in a production build, so the
+// mockups chunk is never emitted.
+const Mockups = import.meta.env.DEV ? lazy(() => import("./mockups")) : null;
 
 const glossary: [string, string][] = [
 	[
@@ -189,6 +192,7 @@ export default function App() {
 								path="/releases/:version/snapshots"
 								element={<Navigate to=".." relative="path" replace />}
 							/>
+							{Mockups && <Route path="/mockups/*" element={<Mockups />} />}
 						</Routes>
 					</Suspense>
 				</ErrorBoundary>

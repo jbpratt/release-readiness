@@ -32,7 +32,7 @@ export default defineConfig({
 		allowedHosts: ["workstation"],
 		proxy: {
 			"/api": {
-				target: "http://localhost:8088",
+				target: process.env.RR_API_TARGET ?? "http://localhost:8088",
 				changeOrigin: true,
 			},
 		},

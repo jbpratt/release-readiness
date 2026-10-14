@@ -1,6 +1,6 @@
 r"""Full-page screenshots and card text of release-readiness pages.
 
-usage: python3 dev/shots.py [--route GLOB=FILE]... <base-url> <out-dir> <path>...
+usage: python3 dev/shots.py [--route GLOB=FILE]... [--width PX]... <base-url> <out-dir> <path>...
 
 Prerequisite: pip install --user playwright && python3 -m playwright install chromium
 
@@ -41,9 +41,9 @@ def route(spec):
     return glob, lambda r: r.fulfill(status=200, content_type="application/json", body=body)
 
 
-def shoot(browser, url, png, routes):
+def shoot(browser, url, png, routes, width):
     """Save url's whole page to png and print its console errors and cards; return why it did not load, or None."""
-    with browser.new_context(viewport={"width": 1440, "height": 1000}, locale="en-US",
+    with browser.new_context(viewport={"width": width, "height": 1000}, locale="en-US",
                              timezone_id="America/New_York") as ctx:
         for glob, handler in routes:
             ctx.route(glob, handler)
@@ -61,7 +61,7 @@ def shoot(browser, url, png, routes):
             grow = page.evaluate(GROW)
             if grow <= 0:
                 break
-            page.set_viewport_size({"width": 1440, "height": page.viewport_size["height"] + grow})
+            page.set_viewport_size({"width": width, "height": page.viewport_size["height"] + grow})
             page.wait_for_timeout(500)
         page.screenshot(path=png)
         x_overflow = page.evaluate("() => document.documentElement.scrollWidth - document.documentElement.clientWidth")
@@ -77,18 +77,25 @@ def main():
     ap.add_argument("--route", action="append", default=[], type=route, metavar="GLOB=FILE",
                     help="answer requests matching GLOB with FILE as a 200 application/json response, "
                          "to render a state the live data lacks (a pick or re-run response saved with curl | jq)")
+    ap.add_argument("--width", action="append", type=int, metavar="PX",
+                    help="viewport width, repeatable (default 1440); with more than one, "
+                         "each file name ends in -PX")
     ap.add_argument("base", metavar="base-url")
     ap.add_argument("out", metavar="out-dir")
     ap.add_argument("paths", metavar="path", nargs="+")
     args = ap.parse_args()
+    widths = args.width or [1440]
     failed = False
     with sync_playwright() as p, p.chromium.launch() as browser:
         for path in args.paths:
             name = re.sub(r"[/?=&]", "_", path).strip("_") or "overview"
-            err = shoot(browser, args.base.rstrip("/") + path, os.path.join(args.out, name + ".png"), args.route)
-            if err:
-                print(f"{path}: {err}", file=sys.stderr)
-                failed = True
+            for width in widths:
+                suffix = f"-{width}" if len(widths) > 1 else ""
+                png = os.path.join(args.out, name + suffix + ".png")
+                err = shoot(browser, args.base.rstrip("/") + path, png, args.route, width)
+                if err:
+                    print(f"{path} at {width}px: {err}", file=sys.stderr)
+                    failed = True
     return 1 if failed else 0
 
 

@@ -18,6 +18,7 @@ import {
 	ToolbarContent,
 	ToolbarItem,
 } from "@patternfly/react-core";
+import type { CSSProperties } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { getReleaseCI } from "../api/client";
 import LoadError from "../components/LoadError";
@@ -25,10 +26,10 @@ import { useCachedFetch } from "../hooks/useCachedFetch";
 import { formatReleaseName } from "../utils/links";
 import { compareVersions, jobLabels } from "../utils/releaseDetail";
 
-const external = { target: "_blank", rel: "noopener noreferrer" };
-const muted = { color: "var(--pf-t--global--text--color--subtle)" };
+export const external = { target: "_blank", rel: "noopener noreferrer" };
+export const muted = { color: "var(--pf-t--global--text--color--subtle)" };
 
-const when = (iso: string) =>
+export const when = (iso: string) =>
 	new Date(iso).toLocaleString(undefined, {
 		month: "short",
 		day: "numeric",
@@ -37,18 +38,17 @@ const when = (iso: string) =>
 		hourCycle: "h23",
 	});
 
-const states = {
+export const states = {
 	candidate: ["Candidate", "blue"],
 	staged: ["Staged", "teal"],
 	shipped: ["Shipped", "green"],
 } as const;
 
 /**
- * A version's FBC builds, newest first, each with the CI runs that installed
- * from it: each job opens in Sippy and each run in Prow. The operator and OCP
- * filters and whether builds without runs show are query parameters.
+ * The route version's FBC builds, the operator, OCP and all-builds filters
+ * kept in query parameters, and the builds those filters show.
  */
-export default function ReleaseCI() {
+export function useReleaseCI() {
 	const { version } = useParams<{ version: string }>();
 	const [params, setParams] = useSearchParams();
 	const { data, loading, error, refetch } = useCachedFetch(
@@ -80,20 +80,99 @@ export default function ReleaseCI() {
 			(!ocp || b.ocp === ocp) &&
 			(all || b.runs.length > 0),
 	);
+	return {
+		version: version!,
+		data,
+		loading,
+		error,
+		refetch,
+		operator,
+		ocp,
+		all,
+		set,
+		operators,
+		ocps,
+		label: (job: string) => labels[jobs.indexOf(job)],
+		shown,
+	};
+}
+
+export function CIBreadcrumb({ version }: { version: string }) {
+	return (
+		<Breadcrumb style={{ marginBottom: "1rem" }}>
+			<BreadcrumbItem>
+				<Link to="/">Releases</Link>
+			</BreadcrumbItem>
+			<BreadcrumbItem>
+				<Link to={`/releases/${version}`}>{formatReleaseName(version)}</Link>
+			</BreadcrumbItem>
+			<BreadcrumbHeading>FBC CI history</BreadcrumbHeading>
+		</Breadcrumb>
+	);
+}
+
+export function CIFilters({
+	ci,
+	allLabel,
+	style,
+}: {
+	ci: ReturnType<typeof useReleaseCI>;
+	allLabel: string;
+	style?: CSSProperties;
+}) {
+	return (
+		<Toolbar style={style}>
+			<ToolbarContent>
+				<ToolbarItem>
+					<FormSelect
+						value={ci.operator}
+						onChange={(_e, v) => ci.set("operator", v)}
+						aria-label="Operator"
+					>
+						<FormSelectOption value="" label="All operators" />
+						{ci.operators.map((o) => (
+							<FormSelectOption key={o} value={o} label={o} />
+						))}
+					</FormSelect>
+				</ToolbarItem>
+				<ToolbarItem>
+					<FormSelect
+						value={ci.ocp}
+						onChange={(_e, v) => ci.set("ocp", v)}
+						aria-label="OCP version"
+						style={{ width: "12rem" }}
+					>
+						<FormSelectOption value="" label="All OCP versions" />
+						{ci.ocps.map((o) => (
+							<FormSelectOption key={o} value={o} label={`OCP ${o}`} />
+						))}
+					</FormSelect>
+				</ToolbarItem>
+				<ToolbarItem alignSelf="center">
+					<Checkbox
+						id="all"
+						label={allLabel}
+						isChecked={ci.all}
+						onChange={(_e, v) => ci.set("all", v ? "1" : "")}
+					/>
+				</ToolbarItem>
+			</ToolbarContent>
+		</Toolbar>
+	);
+}
+
+/**
+ * A version's FBC builds, newest first, each with the CI runs that installed
+ * from it: each job opens in Sippy and each run in Prow. The operator and OCP
+ * filters and whether builds without runs show are query parameters.
+ */
+export default function ReleaseCI() {
+	const ci = useReleaseCI();
+	const { version, data, loading, error, refetch, shown, label } = ci;
 
 	return (
 		<PageSection>
-			<Breadcrumb style={{ marginBottom: "1rem" }}>
-				<BreadcrumbItem>
-					<Link to="/">Releases</Link>
-				</BreadcrumbItem>
-				<BreadcrumbItem>
-					<Link to=".." relative="path">
-						{formatReleaseName(version!)}
-					</Link>
-				</BreadcrumbItem>
-				<BreadcrumbHeading>FBC CI history</BreadcrumbHeading>
-			</Breadcrumb>
+			<CIBreadcrumb version={version} />
 			<Card isCompact>
 				<CardBody>
 					<Title headingLevel="h1" size="lg">
@@ -102,43 +181,7 @@ export default function ReleaseCI() {
 					<div style={muted}>
 						Runs before 2026-10-09 23:49Z carry no catalog digest.
 					</div>
-					<Toolbar>
-						<ToolbarContent>
-							<ToolbarItem>
-								<FormSelect
-									value={operator}
-									onChange={(_e, v) => set("operator", v)}
-									aria-label="Operator"
-								>
-									<FormSelectOption value="" label="All operators" />
-									{operators.map((o) => (
-										<FormSelectOption key={o} value={o} label={o} />
-									))}
-								</FormSelect>
-							</ToolbarItem>
-							<ToolbarItem>
-								<FormSelect
-									value={ocp}
-									onChange={(_e, v) => set("ocp", v)}
-									aria-label="OCP version"
-									style={{ width: "12rem" }}
-								>
-									<FormSelectOption value="" label="All OCP versions" />
-									{ocps.map((o) => (
-										<FormSelectOption key={o} value={o} label={`OCP ${o}`} />
-									))}
-								</FormSelect>
-							</ToolbarItem>
-							<ToolbarItem alignSelf="center">
-								<Checkbox
-									id="all"
-									label="Show FBCs without runs"
-									isChecked={all}
-									onChange={(_e, v) => set("all", v ? "1" : "")}
-								/>
-							</ToolbarItem>
-						</ToolbarContent>
-					</Toolbar>
+					<CIFilters ci={ci} allLabel="Show FBCs without runs" />
 					{!data && loading ? (
 						<Spinner size="lg" />
 					) : error ? (
@@ -179,7 +222,7 @@ export default function ReleaseCI() {
 											{b.runs.map((r) => (
 												<ListItem key={r.prow_url}>
 													<a href={r.sippy_url} title={r.job} {...external}>
-														{labels[jobs.indexOf(r.job)]}
+														{label(r.job)}
 													</a>{" "}
 													{r.state}{" "}
 													<a href={r.prow_url} style={muted} {...external}>
