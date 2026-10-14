@@ -6,13 +6,9 @@ import (
 	"time"
 )
 
-// Prune deletes what is older than cutoff and not kept, and returns the rows
-// deleted by table. It keeps ART staged Snapshots and their Releases,
-// Snapshots a Succeeded Release shipped, the newest Snapshot of each
-// application, Releases that did not fail, the newest Prow run of each job,
-// and the cached digests these reference. JIRA, ART history and sync
-// status are never pruned. Each statement commits on its own, so no write
-// lock is held for the whole prune.
+// Prune deletes what is older than cutoff and not kept by the rules in
+// queries/retention.sql, and returns the rows deleted by table. Each
+// statement commits on its own, so no write lock is held for the whole prune.
 func (d *DB) Prune(ctx context.Context, cutoff time.Time) (map[string]int64, error) {
 	c := cutoff.UTC().Format(time.RFC3339)
 	q := d.queries()

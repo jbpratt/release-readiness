@@ -181,25 +181,21 @@ func main() {
 	if *retention > 0 {
 		logger.Info("retention enabled", "retention", *retention)
 		retentionStatus := status.Track("retention", 24*time.Hour)
-		prune := func() {
-			deleted, err := database.Prune(ctx, time.Now().Add(-*retention))
-			if err != nil {
-				logger.Error("prune", "component", "retention", "deleted", deleted, "error", err)
-			} else {
-				logger.Info("pruned", "component", "retention", "deleted", deleted)
-			}
-			retentionStatus.Report(err)
-		}
 		wg.Go(func() {
-			prune()
 			ticker := time.NewTicker(24 * time.Hour)
 			defer ticker.Stop()
 			for {
+				deleted, err := database.Prune(ctx, time.Now().Add(-*retention))
+				if err != nil {
+					logger.Error("prune", "component", "retention", "deleted", deleted, "error", err)
+				} else {
+					logger.Info("pruned", "component", "retention", "deleted", deleted)
+				}
+				retentionStatus.Report(err)
 				select {
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					prune()
 				}
 			}
 		})

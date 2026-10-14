@@ -122,7 +122,7 @@ func TestListProwRunsByApplicationImages(t *testing.T) {
 	}
 	for i := range runs {
 		started := at.Add(time.Duration(i) * time.Hour)
-		runs[i].State, runs[i].StartedAt, runs[i].ArtifactState, runs[i].FetchedAt = "success", &started, prow.ArtifactPresent, at
+		runs[i].StartedAt = &started
 		if err := d.UpsertProwRun(ctx, &runs[i]); err != nil {
 			t.Fatal(err)
 		}
