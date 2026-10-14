@@ -267,6 +267,45 @@ func (q *Queries) ListArtHistoryScanDays(ctx context.Context, arg ListArtHistory
 	return items, nil
 }
 
+const listArtHistoryWithoutSource = `-- name: ListArtHistoryWithoutSource :many
+SELECT h.record_id, h.nvr, h.pullspec
+FROM art_history_records h
+LEFT JOIN art_source_repos s ON s.record_id = h.record_id
+WHERE s.record_id IS NULL
+ORDER BY h.start_time DESC, h.record_id
+LIMIT ?
+`
+
+type ListArtHistoryWithoutSourceRow struct {
+	RecordID string
+	Nvr      string
+	Pullspec string
+}
+
+// Stored records never checked for a source repo, newest first.
+func (q *Queries) ListArtHistoryWithoutSource(ctx context.Context, limit int64) ([]ListArtHistoryWithoutSourceRow, error) {
+	rows, err := q.db.QueryContext(ctx, listArtHistoryWithoutSource, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtHistoryWithoutSourceRow
+	for rows.Next() {
+		var i ListArtHistoryWithoutSourceRow
+		if err := rows.Scan(&i.RecordID, &i.Nvr, &i.Pullspec); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listResolvedArtBuilds = `-- name: ListResolvedArtBuilds :many
 SELECT digest, state, nvr, record_id, checked_at
 FROM art_builds
@@ -426,5 +465,24 @@ func (q *Queries) UpsertArtHistoryScanDay(ctx context.Context, arg UpsertArtHist
 		arg.Day,
 		arg.CheckedAt,
 	)
+	return err
+}
+
+const upsertArtSourceRepo = `-- name: UpsertArtSourceRepo :exec
+INSERT INTO art_source_repos (record_id, name, source_repo)
+VALUES (?, ?, ?)
+ON CONFLICT(record_id) DO UPDATE SET
+    name = excluded.name,
+    source_repo = excluded.source_repo
+`
+
+type UpsertArtSourceRepoParams struct {
+	RecordID   string
+	Name       string
+	SourceRepo string
+}
+
+func (q *Queries) UpsertArtSourceRepo(ctx context.Context, arg UpsertArtSourceRepoParams) error {
+	_, err := q.db.ExecContext(ctx, upsertArtSourceRepo, arg.RecordID, arg.Name, arg.SourceRepo)
 	return err
 }

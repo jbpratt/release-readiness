@@ -35,8 +35,11 @@ type record struct {
 	NVR           string `json:"nvr"`
 	RecordID      string `json:"record_id"`
 	ImagePullspec string `json:"image_pullspec"`
-	// Commitish is the source commit ART built from.
-	Commitish string `json:"commitish"`
+	Name          string `json:"name"`
+	// Commitish is the source commit ART built from, in SourceRepo, its
+	// public repository ("" when the record names none).
+	Commitish  string `json:"commitish"`
+	SourceRepo string `json:"source_repo"`
 	// BuildPipelineURL is the build PipelineRun's Konflux UI page.
 	BuildPipelineURL string `json:"build_pipeline_url"`
 	// BundleNVRs is, for an FBC image, the operator bundles its catalog holds.

@@ -1,0 +1,23 @@
+{
+  "streams": ["3.16", "3.17", "3.18"],
+  "baseline": {
+    "selection": "latest-successful-staged-fbc-at-first-run",
+    "scope": "stream-operator-ocp-slot",
+    "persist": true
+  },
+  "components": [
+    {"name":"quay-quay","sourceRepo":"https://github.com/quay/quay","branch":"redhat-{stream}"},
+    {"name":"quay-clair","sourceRepo":"https://github.com/quay/clair","branches":{"3.16":"release-4.8","3.17":"release-4.9","3.18":"release-4.9"}},
+    {"name":"quay-builder","sourceRepo":"https://github.com/quay/quay-builder","branch":"redhat-{stream}"},
+    {"name":"quay-builder-qemu","sourceRepo":"https://github.com/quay/quay-builder-qemu","branch":"redhat-{stream}"},
+    {"name":"quay-operator","sourceRepo":"https://github.com/quay/quay-operator","branch":"redhat-{stream}"},
+    {"name":"quay-operator-bundle","sourceRepo":"https://github.com/quay/quay-operator","branch":"redhat-{stream}"},
+    {"name":"quay-operator-fbc","sourceRepo":"https://github.com/quay/quay-operator","branch":"redhat-{stream}"},
+    {"name":"quay-bridge-operator","sourceRepo":"https://github.com/quay/quay-bridge-operator","branch":"redhat-{stream}"},
+    {"name":"quay-bridge-operator-bundle","sourceRepo":"https://github.com/quay/quay-bridge-operator","branch":"redhat-{stream}"},
+    {"name":"quay-bridge-operator-fbc","sourceRepo":"https://github.com/quay/quay-bridge-operator","branch":"redhat-{stream}"},
+    {"name":"container-security-operator","sourceRepo":"https://github.com/quay/container-security-operator","branch":"redhat-{stream}"},
+    {"name":"quay-container-security-operator-bundle","sourceRepo":"https://github.com/quay/container-security-operator","branch":"redhat-{stream}"},
+    {"name":"container-security-operator-fbc","sourceRepo":"https://github.com/quay/container-security-operator","branch":"redhat-{stream}"}
+  ]
+}
