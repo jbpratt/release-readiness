@@ -1,4 +1,5 @@
 import {
+	Alert,
 	Breadcrumb,
 	BreadcrumbHeading,
 	BreadcrumbItem,
@@ -9,6 +10,7 @@ import {
 	ClipboardCopy,
 	EmptyState,
 	EmptyStateBody,
+	ExpandableSection,
 	Flex,
 	FlexItem,
 	FormSelect,
@@ -54,6 +56,7 @@ import type {
 	Verdict,
 	VerdictItem,
 } from "../api/types";
+import { Blockers } from "../components/Blockers";
 import LoadError from "../components/LoadError";
 import {
 	ExtLink,
@@ -67,6 +70,7 @@ import { Status } from "../components/Status";
 import { SyncProblems, useSyncStatus } from "../components/SyncStatusWarning";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
+import { type Blocker, blockers, splitBlockers } from "../utils/blockers";
 import { days, due } from "../utils/format";
 import {
 	formatReleaseName,
@@ -207,6 +211,9 @@ export default function ReleaseDetail() {
 				loading={candidate.loading}
 				onRetry={candidate.refetch}
 				version={xyz}
+				blockers={
+					candidate.data && blockers(candidate.data, release.name, app, config)
+				}
 				konflux={konfluxUrl(
 					config?.konflux_ui_url ?? "",
 					config?.konflux_namespace ?? "",
@@ -373,6 +380,7 @@ function BuildsCard({
 	loading,
 	onRetry,
 	version,
+	blockers,
 	konflux,
 	inputs,
 }: {
@@ -382,6 +390,8 @@ function BuildsCard({
 	onRetry: () => void;
 	/** The version's X.Y.Z. */
 	version: string;
+	/** The verdict's items as blockers to act on. */
+	blockers?: Blocker[];
 	/** The version's application in the Konflux UI. */
 	konflux: string | null;
 	/** The release command button, beside the verdict. */
@@ -411,6 +421,7 @@ function BuildsCard({
 						data={data}
 						fbc={fbc}
 						version={version}
+						blockers={blockers ?? []}
 						konflux={konflux}
 						inputs={inputs}
 					/>
@@ -433,12 +444,14 @@ function Candidate({
 	data,
 	fbc,
 	version,
+	blockers,
 	konflux,
 	inputs,
 }: {
 	data: ReleaseCandidate;
 	fbc: FBCCandidate;
 	version: string;
+	blockers: Blocker[];
 	konflux: string | null;
 	inputs?: ReactNode;
 }) {
@@ -469,6 +482,7 @@ function Candidate({
 	const read = readingLine(data.reading);
 	const prod = data.candidate?.prod;
 	const prodLine = prod && releaseLine(prod);
+	const notReady = data.verdict.state === "not_ready";
 	return (
 		<>
 			<Flex
@@ -476,11 +490,15 @@ function Candidate({
 				alignItems={{ default: "alignItemsFlexStart" }}
 				gap={{ default: "gapSm" }}
 			>
-				<FlexItem>
-					<VerdictHeader
-						verdict={data.verdict}
-						prod={data.candidate?.prod ?? null}
-					/>
+				<FlexItem flex={notReady ? { default: "flex_1" } : undefined}>
+					{notReady ? (
+						<NotReady verdict={data.verdict} blockers={blockers} />
+					) : (
+						<VerdictHeader
+							verdict={data.verdict}
+							prod={data.candidate?.prod ?? null}
+						/>
+					)}
 					{read && (
 						<div style={line}>
 							<Status status={read.status}>{read.text}</Status>
@@ -494,7 +512,7 @@ function Candidate({
 				</FlexItem>
 				{inputs && <FlexItem>{inputs}</FlexItem>}
 			</Flex>
-			{entries.length > 0 && (
+			{!notReady && entries.length > 0 && (
 				<List style={line}>
 					{entries.map((e) => (
 						<ListItem key={`${e.level} ${e.text}`}>
@@ -504,7 +522,6 @@ function Candidate({
 								</Label>
 							</Tooltip>
 							{e.on && ` ${e.on}`}
-							{e.action && <span style={muted}> · Next: {e.action}</span>}
 						</ListItem>
 					))}
 				</List>
@@ -788,6 +805,46 @@ function VerdictHeader({
 		<Status status={head.status}>
 			<strong>{text}</strong> <DataFreshness />
 		</Status>
+	);
+}
+
+/** A not ready verdict: its blockers in an Alert, then its warnings and notes. */
+function NotReady({
+	verdict,
+	blockers,
+}: {
+	verdict: Verdict;
+	blockers: Blocker[];
+}) {
+	const [open, setOpen] = useState(false);
+	const { blocking, rest } = splitBlockers(blockers);
+	return (
+		<>
+			<Alert
+				variant="danger"
+				isInline
+				title={
+					<>
+						{verdictLine(verdict).text}{" "}
+						<span style={{ fontWeight: "normal" }}>
+							<DataFreshness />
+						</span>
+					</>
+				}
+			>
+				{blocking.length > 0 && <Blockers groups={blocking} />}
+			</Alert>
+			{rest.length > 0 && (
+				<ExpandableSection
+					style={line}
+					toggleText={`${rest.length} warning${rest.length === 1 ? "" : "s"} and notes`}
+					isExpanded={open}
+					onToggle={(_e, v) => setOpen(v)}
+				>
+					<Blockers groups={rest} />
+				</ExpandableSection>
+			)}
+		</>
 	);
 }
 

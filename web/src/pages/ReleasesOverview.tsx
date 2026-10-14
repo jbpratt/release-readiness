@@ -13,7 +13,9 @@ import {
 	Gallery,
 	Label,
 	PageSection,
+	Popover,
 	Spinner,
+	Stack,
 	Switch,
 	Title,
 	ToggleGroup,
@@ -25,25 +27,33 @@ import {
 } from "@patternfly/react-core";
 import { ListIcon, ThIcon } from "@patternfly/react-icons";
 import { Link, useSearchParams } from "react-router-dom";
-import { listReleasesOverview } from "../api/client";
+import { getCandidate, listReleasesOverview } from "../api/client";
 import type {
 	IssueSummary,
 	ReadinessResponse,
 	ReleaseVersion,
 	ShipmentMR,
 } from "../api/types";
+import { Blockers } from "../components/Blockers";
 import LoadError from "../components/LoadError";
 import { external } from "../components/OperatorImages";
 import { mrLink } from "../components/ShipmentLabels";
+import { Status } from "../components/Status";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
+import { blockers, splitBlockers } from "../utils/blockers";
 import { day } from "../utils/format";
 import { formatReleaseName, jiraIssueUrl } from "../utils/links";
+import { verdictLine } from "../utils/releaseDetail";
 import { cardStatus, shipmentChip, shipmentText } from "../utils/shipment";
 
 type ViewMode = "compact" | "expanded";
 
 const muted = { color: "var(--pf-t--global--text--color--subtle)" };
+
+// A blockers popover's one width: one set before its blockers load keeps it
+// beside its label, as Popper does not re-place it when it grows.
+const popoverWidth = "min(40rem, calc(100vw - 4rem))";
 
 export default function ReleasesOverview() {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -227,6 +237,7 @@ function ReleaseCard({
 		: "No image snapshot yet";
 
 	const displayName = formatReleaseName(release.name);
+	const releasePath = `/releases/${encodeURIComponent(release.name)}`;
 
 	const ticket =
 		release.release_ticket_key && jiraBaseUrl ? (
@@ -251,12 +262,49 @@ function ReleaseCard({
 				>
 					<FlexItem>
 						<Title headingLevel="h2" size="md">
-							<Link to={`/releases/${encodeURIComponent(release.name)}`}>
-								{displayName}
-							</Link>
+							<Link to={releasePath}>{displayName}</Link>
 						</Title>
 					</FlexItem>
-					{status && (
+					{status && readinessSignal.signal !== "green" && (
+						<FlexItem>
+							<Popover
+								aria-label={`Why ${displayName} is not shipped`}
+								position="bottom-start"
+								flipBehavior={[
+									"bottom-start",
+									"bottom-end",
+									"top-start",
+									"top-end",
+								]}
+								minWidth={popoverWidth}
+								maxWidth={popoverWidth}
+								bodyContent={<CardBlockers release={release} />}
+								footerContent={
+									<>
+										<Link to={releasePath}>View release</Link>
+										{status.link && shipmentMR && (
+											<>
+												{" · "}
+												<a href={shipmentMR.web_url} {...external}>
+													Open shipment MR
+												</a>
+											</>
+										)}
+									</>
+								}
+							>
+								{/* onClick renders the Label as a button, so it takes focus, Enter and Space; the Popover toggles itself. */}
+								<Label
+									status={status.status}
+									isCompact
+									onClick={() => undefined}
+								>
+									{status.text}
+								</Label>
+							</Popover>
+						</FlexItem>
+					)}
+					{status && readinessSignal.signal === "green" && (
 						<FlexItem>
 							<Label
 								status={status.status}
@@ -355,5 +403,48 @@ function ReleaseCard({
 				)}
 			</CardBody>
 		</Card>
+	);
+}
+
+/**
+ * A release's verdict and grouped blockers, fetched when first shown: the
+ * overview carries no verdict items.
+ */
+function CardBlockers({ release }: { release: ReleaseVersion }) {
+	const config = useConfig();
+	const { data, error, refetch } = useCachedFetch(
+		`candidate:${release.name}`,
+		() => getCandidate(release.name),
+	);
+	if (!data) {
+		return error ? (
+			<LoadError
+				variant="xs"
+				title="Could not load the blockers"
+				onRetry={refetch}
+			>
+				The server did not return this release's candidate.
+			</LoadError>
+		) : (
+			<Spinner size="md" aria-label="Loading blockers" />
+		);
+	}
+	const head = verdictLine(data.verdict);
+	const { blocking, rest } = splitBlockers(
+		blockers(data, release.name, release.konflux_application ?? "", config),
+	);
+	return (
+		<Stack hasGutter>
+			<Status status={head.status}>
+				<strong>{head.text}</strong>
+			</Status>
+			{blocking.length > 0 && <Blockers groups={blocking} />}
+			{rest.length > 0 && (
+				<Title headingLevel="h4" size="md">
+					Warnings and notes
+				</Title>
+			)}
+			{rest.length > 0 && <Blockers groups={rest} />}
+		</Stack>
 	);
 }

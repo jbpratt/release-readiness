@@ -310,11 +310,6 @@ const day = (iso: string) =>
 		day: "numeric",
 	});
 
-// The next action on a blocker on the whole release, by its code.
-const blockerActions: Record<string, string> = {
-	not_staged: "Stage the candidate",
-};
-
 /**
  * A line of the verdict's list: a level's items of one code. text is a whole
  * release item's own, else the code in a word or two.
@@ -325,8 +320,6 @@ export interface VerdictEntry {
 	count: number;
 	/** What its items are on: "quay-operator OCP 4.14, 4.15"; "" on the whole release. */
 	on: string;
-	/** The next action, "" without one. */
-	action: string;
 	/** Each item's text and owner. */
 	tip: string[];
 }
@@ -350,7 +343,6 @@ export function verdictEntries(v: Verdict): VerdictEntry[] {
 			text: i.operator ? (actionWords[i.code] ?? i.text) : i.text,
 			count: 0,
 			on: "",
-			action: blockerActions[i.code] ?? "",
 			tip: [],
 			ocps: new Map<string, string[]>(),
 		};

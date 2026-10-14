@@ -500,17 +500,16 @@ test("verdictEntries: the headline counts every listed blocker (3.16.7)", () => 
 	};
 	const entries = verdictEntries(v);
 	assert.deepEqual(
-		entries.map((e) => [e.level, e.text, e.count, e.on, e.action]),
+		entries.map((e) => [e.level, e.text, e.count, e.on]),
 		[
-			["blocker", "Not in a stage shipment", 1, "", "Stage the candidate"],
+			["blocker", "Not in a stage shipment", 1, ""],
 			[
 				"blocker",
 				"Mixed bundles",
 				2,
 				"quay-operator; container-security-operator",
-				"",
 			],
-			["info", "Newer build", 1, "quay-operator", ""],
+			["info", "Newer build", 1, "quay-operator"],
 		],
 	);
 	assert.deepEqual(entries[0].tip, [

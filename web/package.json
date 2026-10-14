@@ -8,7 +8,7 @@
 		"lint:fix": "biome check --write .",
 		"dev": "vite",
 		"build": "tsc -b && vite build",
-		"test": "node --test src/utils/format.test.ts src/utils/links.test.ts src/utils/releaseDetail.test.ts src/utils/shipment.test.ts"
+		"test": "node --test src/utils/blockers.test.ts src/utils/format.test.ts src/utils/links.test.ts src/utils/releaseDetail.test.ts src/utils/shipment.test.ts"
 	},
 	"dependencies": {
 		"@patternfly/react-core": "^6.0.0",

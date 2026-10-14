@@ -524,7 +524,6 @@ function Candidate({
 								</Label>
 							</Tooltip>
 							{e.on && ` ${e.on}`}
-							{e.action && <span style={muted}> · Next: {e.action}</span>}
 						</ListItem>
 					))}
 				</List>
