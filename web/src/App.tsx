@@ -79,8 +79,10 @@ function getInitialTheme(): Theme {
 
 function AppLayout({ children }: { children: React.ReactNode }) {
 	const [theme, setTheme] = useState<Theme>(getInitialTheme);
-	// The release page's freshness line is its one place for sync state.
+	// The release list's and release page's freshness lines are their one
+	// place for sync state.
 	const releasePage = useMatch("/releases/:version");
+	const home = useMatch("/");
 
 	useEffect(() => {
 		const root = document.documentElement;
@@ -118,7 +120,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 				<Toolbar>
 					<ToolbarContent>
 						<ToolbarItem align={{ default: "alignEnd" }}>
-							{!releasePage && <SyncStatusWarning />}
+							{!releasePage && !home && <SyncStatusWarning />}
 						</ToolbarItem>
 						<ToolbarItem>
 							<Button

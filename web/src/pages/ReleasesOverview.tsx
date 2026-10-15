@@ -1,82 +1,73 @@
 import {
 	Button,
-	Card,
-	CardBody,
-	CardTitle,
-	DescriptionList,
-	DescriptionListDescription,
-	DescriptionListGroup,
-	DescriptionListTerm,
 	EmptyState,
 	EmptyStateActions,
 	EmptyStateBody,
 	EmptyStateFooter,
 	Flex,
-	FlexItem,
-	Gallery,
+	Icon,
 	Label,
 	PageSection,
 	Popover,
 	Spinner,
-	Stack,
 	Switch,
 	Title,
-	Toolbar,
-	ToolbarContent,
-	ToolbarItem,
+	Tooltip,
 } from "@patternfly/react-core";
-import { CubesIcon } from "@patternfly/react-icons";
+import {
+	CheckCircleIcon,
+	CubesIcon,
+	ExclamationTriangleIcon,
+	InfoCircleIcon,
+	TimesCircleIcon,
+} from "@patternfly/react-icons";
+import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
+import type { ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getCandidate, listReleasesOverview } from "../api/client";
-import type {
-	IssueSummary,
-	ReadinessResponse,
-	ReleaseVersion,
-	ShipmentMR,
-} from "../api/types";
-import { Blockers } from "../components/Blockers";
+import type { ReleaseCandidate, ReleaseOverview } from "../api/types";
 import LoadError, { Loading } from "../components/LoadError";
-import { external } from "../components/OperatorImages";
-import { mrLink } from "../components/ShipmentLabels";
-import { Status } from "../components/Status";
+import { ExtLink, external } from "../components/OperatorImages";
+import { ShipmentLabels } from "../components/ShipmentLabels";
+import { SyncProblems, useSyncStatus } from "../components/SyncStatusWarning";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
-import { blockers, splitBlockers } from "../utils/blockers";
-import { SHOW_CVES } from "../utils/features";
-import { day } from "../utils/format";
+import { blockers } from "../utils/blockers";
+import {
+	candidateSummary,
+	cellProblem,
+	streamFbc,
+	type Tone,
+} from "../utils/fbcMatrix";
+import { days, due } from "../utils/format";
 import { formatReleaseName, jiraIssueUrl } from "../utils/links";
-import { verdictLine } from "../utils/releaseDetail";
-import { cardStatus, shipmentChip, shipmentText } from "../utils/shipment";
+import {
+	fbcGroups,
+	freshnessLine,
+	verdictEntries,
+} from "../utils/releaseDetail";
 
 const muted = { color: "var(--pf-t--global--text--color--subtle)" };
+const dash = <span style={muted}>–</span>;
 
-// A blockers popover's one width: one set before its blockers load keeps it
-// beside its label, as Popper does not re-place it when it grows.
-const popoverWidth = "min(40rem, calc(100vw - 4rem))";
+const releasePath = (name: string) => `/releases/${encodeURIComponent(name)}`;
 
 export default function ReleasesOverview() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const showAll = searchParams.get("all") === "1";
-
-	const config = useConfig();
+	const setShowAll = (on: boolean) =>
+		setSearchParams((prev) => {
+			const next = new URLSearchParams(prev);
+			if (on) next.set("all", "1");
+			else next.delete("all");
+			return next;
+		});
 
 	const {
 		data: overviews,
 		error,
 		refetch,
 	} = useCachedFetch("releasesOverview", listReleasesOverview);
-
-	const setParam = (key: string, value: string) => {
-		setSearchParams((prev) => {
-			const next = new URLSearchParams(prev);
-			if (value) {
-				next.set(key, value);
-			} else {
-				next.delete(key);
-			}
-			return next;
-		});
-	};
 
 	if (!overviews && !error) {
 		return (
@@ -89,6 +80,7 @@ export default function ReleasesOverview() {
 	if (!overviews) {
 		return (
 			<PageSection>
+				<Freshness />
 				<LoadError title="Could not load releases" onRetry={refetch}>
 					The server did not return the release list. Try again in a moment.
 				</LoadError>
@@ -96,7 +88,7 @@ export default function ReleasesOverview() {
 		);
 	}
 
-	const overviewList = [...(overviews ?? [])].sort((a, b) =>
+	const overviewList = [...overviews].sort((a, b) =>
 		b.release.name.localeCompare(a.release.name, undefined, { numeric: true }),
 	);
 	// Only the next z-release of each stream, unless every version is asked for.
@@ -107,6 +99,7 @@ export default function ReleasesOverview() {
 	if (overviewList.length === 0) {
 		return (
 			<PageSection>
+				<Freshness />
 				<EmptyState
 					icon={CubesIcon}
 					titleText="No releases yet"
@@ -129,28 +122,24 @@ export default function ReleasesOverview() {
 
 	return (
 		<PageSection>
-			<Title
-				headingLevel="h1"
-				size="lg"
-				style={{ marginBottom: "var(--pf-t--global--spacer--md)" }}
+			<Flex
+				justifyContent={{ default: "justifyContentSpaceBetween" }}
+				alignItems={{ default: "alignItemsFlexEnd" }}
+				style={{ marginBottom: "1rem" }}
 			>
-				Releases
-			</Title>
-			<Toolbar>
-				<ToolbarContent alignItems="center">
-					<ToolbarItem>
-						<Switch
-							id="show-all-versions"
-							label="Show all versions"
-							isChecked={showAll}
-							onChange={(_e, checked) => setParam("all", checked ? "1" : "")}
-						/>
-					</ToolbarItem>
-					{!showAll && (
-						<ToolbarItem style={muted}>Next version in each stream</ToolbarItem>
-					)}
-				</ToolbarContent>
-			</Toolbar>
+				<div>
+					<Title headingLevel="h1" size="2xl">
+						Releases
+					</Title>
+					<Freshness />
+				</div>
+				<Switch
+					id="show-all-versions"
+					label="Show all versions"
+					isChecked={showAll}
+					onChange={(_e, on) => setShowAll(on)}
+				/>
+			</Flex>
 
 			{visible.length === 0 ? (
 				<EmptyState
@@ -160,254 +149,249 @@ export default function ReleasesOverview() {
 				>
 					<EmptyStateFooter>
 						<EmptyStateActions>
-							<Button variant="primary" onClick={() => setParam("all", "1")}>
+							<Button variant="primary" onClick={() => setShowAll(true)}>
 								Show all versions
 							</Button>
 						</EmptyStateActions>
 					</EmptyStateFooter>
 				</EmptyState>
 			) : (
-				<Gallery component="ul" hasGutter minWidths={{ default: "300px" }}>
-					{visible.map((ov) => (
-						<ReleaseCard
-							key={ov.release.name}
-							release={ov.release}
-							issueSummary={ov.issue_summary}
-							readinessSignal={ov.readiness}
-							latestBuild={ov.latest_build}
-							shipmentMR={ov.shipment_mr}
-							jiraBaseUrl={config?.jira_base_url}
-						/>
-					))}
-				</Gallery>
+				<Table aria-label="Releases" variant="compact" gridBreakPoint="grid-md">
+					<Thead>
+						<Tr>
+							<Th>Release</Th>
+							<Th>Target</Th>
+							<Th>Release candidate</Th>
+							<Th>Shipment</Th>
+							<Th>Ticket</Th>
+							<Th>Assignee</Th>
+						</Tr>
+					</Thead>
+					<Tbody>
+						{visible.map((ov) => (
+							<ReleaseRow key={ov.release.name} ov={ov} />
+						))}
+					</Tbody>
+				</Table>
 			)}
 		</PageSection>
 	);
 }
 
-function ReleaseCard({
-	release,
-	issueSummary,
-	readinessSignal,
-	latestBuild,
-	shipmentMR,
-	jiraBaseUrl,
-}: {
-	release: ReleaseVersion;
-	issueSummary?: IssueSummary;
-	readinessSignal: ReadinessResponse;
-	latestBuild?: string;
-	shipmentMR: ShipmentMR | null;
-	jiraBaseUrl?: string;
-}) {
-	const target = release.due_date ?? release.release_date;
-	const targetDate = target && day(target);
-
-	const status = cardStatus(readinessSignal, shipmentMR);
-	// The readiness message the header label does not carry, shown as text.
-	const readiness =
-		readinessSignal.signal && status?.text !== readinessSignal.message
-			? readinessSignal.message
-			: undefined;
-	const shipment = shipmentMR && (
-		<>
-			<a href={shipmentMR.web_url} {...external}>
-				MR !{shipmentMR.iid}
-			</a>
-			{" · "}
-			{shipmentText(shipmentMR, readinessSignal.signal === "green")}
-		</>
-	);
-
-	// A build time, so its local date, in the same format as the target date.
-	const lastBuild = latestBuild
-		? new Date(latestBuild).toLocaleDateString("en-US", {
-				month: "short",
-				day: "numeric",
-				year: "numeric",
-			})
-		: "No image snapshot yet";
-	// The status label or the Readiness row already says there is none.
-	const showSnapshot = readinessSignal.message !== lastBuild;
-
-	const displayName = formatReleaseName(release.name);
-	const releasePath = `/releases/${encodeURIComponent(release.name)}`;
-
-	const ticket =
-		release.release_ticket_key && jiraBaseUrl ? (
-			<a
-				href={jiraIssueUrl(release.release_ticket_key, jiraBaseUrl)}
-				target="_blank"
-				rel="noopener noreferrer"
-				style={{ textDecoration: "none" }}
-			>
-				{release.release_ticket_key}
-			</a>
-		) : (
-			release.release_ticket_key
-		);
-
+/** The list's one place for freshness, as the release page has it. */
+function Freshness() {
+	const status = useSyncStatus();
+	const line = status && freshnessLine(status);
 	return (
-		<Card component="li" isCompact>
-			<CardTitle>
-				<Flex
-					justifyContent={{ default: "justifyContentSpaceBetween" }}
-					alignItems={{ default: "alignItemsCenter" }}
+		<Flex
+			gap={{ default: "gapSm", md: "gapMd" }}
+			alignItems={{ default: "alignItemsCenter" }}
+			style={{
+				...muted,
+				fontSize: "var(--pf-t--global--font--size--sm)",
+				marginTop: "0.25rem",
+			}}
+		>
+			{line?.updated && <span>{line.updated}</span>}
+			{line?.stale && (
+				<Popover
+					headerContent="Sync problems"
+					bodyContent={<SyncProblems problems={line.problems} />}
 				>
-					<FlexItem>
-						<Title headingLevel="h2" size="md">
-							<Link to={releasePath}>{displayName}</Link>
-						</Title>
-					</FlexItem>
-					{status && readinessSignal.signal !== "green" && (
-						<FlexItem>
-							<Popover
-								aria-label={`Why ${displayName} is not shipped`}
-								position="bottom-start"
-								flipBehavior={[
-									"bottom-start",
-									"bottom-end",
-									"top-start",
-									"top-end",
-								]}
-								minWidth={popoverWidth}
-								maxWidth={popoverWidth}
-								bodyContent={<CardBlockers release={release} />}
-								footerContent={
-									<>
-										<Link to={releasePath}>View release</Link>
-										{status.link && shipmentMR && (
-											<>
-												{" · "}
-												<a href={shipmentMR.web_url} {...external}>
-													Open shipment MR
-												</a>
-											</>
-										)}
-									</>
-								}
-							>
-								{/* onClick renders the Label as a button, so it takes focus, Enter and Space; the Popover toggles itself. */}
-								<Label
-									status={status.status}
-									isCompact
-									onClick={() => undefined}
-								>
-									{status.text}
-								</Label>
-							</Popover>
-						</FlexItem>
-					)}
-					{status && readinessSignal.signal === "green" && (
-						<FlexItem>
-							<Label
-								status={status.status}
-								isCompact
-								render={
-									status.link && shipmentMR
-										? mrLink(shipmentMR, shipmentChip(shipmentMR).tooltip)
-										: undefined
-								}
-							>
-								{status.text}
-							</Label>
-						</FlexItem>
-					)}
-				</Flex>
-			</CardTitle>
-			<CardBody>
-				<DescriptionList isCompact isHorizontal>
-					{targetDate && (
-						<DescriptionListGroup>
-							<DescriptionListTerm>Target</DescriptionListTerm>
-							<DescriptionListDescription>
-								{targetDate}
-							</DescriptionListDescription>
-						</DescriptionListGroup>
-					)}
-					{showSnapshot && (
-						<DescriptionListGroup>
-							<DescriptionListTerm>Image snapshot</DescriptionListTerm>
-							<DescriptionListDescription>
-								{lastBuild}
-							</DescriptionListDescription>
-						</DescriptionListGroup>
-					)}
-					{release.release_ticket_key && (
-						<DescriptionListGroup>
-							<DescriptionListTerm>Ticket</DescriptionListTerm>
-							<DescriptionListDescription>{ticket}</DescriptionListDescription>
-						</DescriptionListGroup>
-					)}
-					{shipment && (
-						<DescriptionListGroup>
-							<DescriptionListTerm>Shipment</DescriptionListTerm>
-							<DescriptionListDescription>
-								{shipment}
-							</DescriptionListDescription>
-						</DescriptionListGroup>
-					)}
-					{readiness && (
-						<DescriptionListGroup>
-							<DescriptionListTerm>Readiness</DescriptionListTerm>
-							<DescriptionListDescription>
-								{readiness}
-							</DescriptionListDescription>
-						</DescriptionListGroup>
-					)}
-					{SHOW_CVES && issueSummary && issueSummary.cves > 0 && (
-						<DescriptionListGroup>
-							<DescriptionListTerm>CVE tickets</DescriptionListTerm>
-							<DescriptionListDescription>
-								{issueSummary.cves}
-							</DescriptionListDescription>
-						</DescriptionListGroup>
-					)}
-				</DescriptionList>
-			</CardBody>
-		</Card>
+					<Button
+						variant="link"
+						isInline
+						size="sm"
+						icon={
+							<Icon status="warning" isInline>
+								<ExclamationTriangleIcon />
+							</Icon>
+						}
+						style={{ fontSize: "inherit" }}
+					>
+						{line.stale}
+					</Button>
+				</Popover>
+			)}
+		</Flex>
 	);
 }
 
-/**
- * A release's verdict and grouped blockers, fetched when first shown: the
- * overview carries no verdict items.
- */
-function CardBlockers({ release }: { release: ReleaseVersion }) {
+/** One release's facts in a row, its candidate read from the release page's API. */
+function ReleaseRow({ ov }: { ov: ReleaseOverview }) {
 	const config = useConfig();
-	const { data, error, refetch } = useCachedFetch(
-		`candidate:${release.name}`,
-		() => getCandidate(release.name),
+	const r = ov.release;
+	const candidate = useCachedFetch(`candidate:${r.name}`, () =>
+		getCandidate(r.name),
 	);
-	if (!data) {
+	const shipped = candidate.data?.shipped ?? r.released;
+	const target = r.due_date ?? r.release_date;
+	const dueDate = target ? due(target, shipped) : undefined;
+	const ticket = r.release_ticket_key;
+	const verdict = candidate.data?.verdict;
+	const blockerCount =
+		verdict?.state === "not_ready"
+			? verdictEntries(verdict)
+					.filter((e) => e.level === "blocker")
+					.reduce((n, e) => n + e.count, 0)
+			: 0;
+	const flag =
+		dueDate?.kind === "past"
+			? "Past due"
+			: dueDate?.kind === "soon"
+				? dueDate.days === 0
+					? "Due today"
+					: `Due in ${days(dueDate.days)}`
+				: null;
+	return (
+		<Tr>
+			<Td dataLabel="Release">
+				<Link to={releasePath(r.name)} style={{ fontWeight: 600 }}>
+					{formatReleaseName(r.name)}
+				</Link>
+				{/* What blocks it, for screen readers only: no visible verdict. */}
+				<span role="status" className="pf-v6-screen-reader">
+					{blockerCount > 0 &&
+						`${formatReleaseName(r.name)}: ${blockerCount} blocker${blockerCount === 1 ? "" : "s"}`}
+				</span>
+			</Td>
+			<Td dataLabel="Target">
+				<span style={{ whiteSpace: "nowrap" }}>
+					{dueDate?.date ?? <span style={muted}>TBD</span>}
+					{flag && (
+						<Label status="warning" isCompact style={{ marginLeft: "0.5rem" }}>
+							{flag}
+						</Label>
+					)}
+				</span>
+			</Td>
+			<Td dataLabel="Release candidate">
+				<CandidateCell ov={ov} data={candidate.data} error={candidate.error} />
+			</Td>
+			<Td dataLabel="Shipment">
+				{ov.shipment_mr ? (
+					<ShipmentLabels mr={ov.shipment_mr} shipped={shipped} />
+				) : (
+					dash
+				)}
+			</Td>
+			<Td dataLabel="Ticket">
+				{ticket ? (
+					<ExtLink
+						href={jiraIssueUrl(
+							ticket,
+							config?.jira_base_url || "https://redhat.atlassian.net",
+						)}
+						icon
+					>
+						{ticket}
+					</ExtLink>
+				) : (
+					dash
+				)}
+			</Td>
+			<Td dataLabel="Assignee">
+				{r.release_ticket_assignee || <span style={muted}>Unassigned</span>}
+			</Td>
+		</Tr>
+	);
+}
+
+const toneIcons: Record<Tone, ReactNode> = {
+	danger: (
+		<Icon status="danger">
+			<TimesCircleIcon />
+		</Icon>
+	),
+	warning: (
+		<Icon status="warning">
+			<ExclamationTriangleIcon />
+		</Icon>
+	),
+	info: (
+		<Icon status="info">
+			<InfoCircleIcon />
+		</Icon>
+	),
+	running: <Icon isInProgress />,
+	success: (
+		<Icon status="success">
+			<CheckCircleIcon />
+		</Icon>
+	),
+};
+
+// The icon's tone in words: the link's text is all a screen reader gets.
+const severityWords: Partial<Record<Tone, string>> = {
+	danger: "Blocked: ",
+	warning: "Warning: ",
+};
+
+/**
+ * The candidate as one icon and a few words linking the release page: its
+ * first blocker or warning, else how many of its FBCs are green.
+ */
+function CandidateCell({
+	ov,
+	data,
+	error,
+}: {
+	ov: ReleaseOverview;
+	data?: ReleaseCandidate;
+	error?: Error;
+}) {
+	const config = useConfig();
+	if (!data)
 		return error ? (
-			<LoadError
-				variant="xs"
-				title="Could not load the blockers"
-				onRetry={refetch}
-			>
-				The server did not return this release's candidate.
-			</LoadError>
+			<span style={muted}>Could not load</span>
 		) : (
-			<Spinner size="md" aria-label="Loading blockers" />
+			<Spinner size="sm" aria-label="Loading the release candidate" />
 		);
-	}
-	const head = verdictLine(data.verdict);
-	const { blocking, rest } = splitBlockers(
-		blockers(data, release.name, release.konflux_application ?? "", config),
+	const fbc = data.fbc_candidate;
+	if (!fbc)
+		return data.reason === "not a concrete quay-vX.Y.Z version" ? (
+			<Tooltip content="Only Quay versions have FBC builds">
+				{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows its tooltip. */}
+				<span tabIndex={0} style={muted}>
+					<span aria-hidden="true">–</span>
+					<span className="pf-v6-screen-reader">Not expected</span>
+				</span>
+			</Tooltip>
+		) : (
+			<span style={muted}>No FBCs yet</span>
+		);
+	const staged = fbc.source !== "stream";
+	const cells = fbcGroups(data).flatMap((g) =>
+		g.rows.map((row) => {
+			const stream = row.fbc ? null : streamFbc(data.fbc_stream, row);
+			return { row, stream, problem: cellProblem(row, staged, stream) };
+		}),
+	);
+	const s = candidateSummary(
+		cells,
+		blockers(
+			data,
+			ov.release.name,
+			ov.release.konflux_application ?? "",
+			config,
+		),
 	);
 	return (
-		<Stack hasGutter>
-			<Status status={head.status}>
-				<strong>{head.text}</strong>
-			</Status>
-			{blocking.length > 0 && <Blockers groups={blocking} />}
-			{rest.length > 0 && (
-				<Title headingLevel="h4" size="md">
-					Warnings and notes
-				</Title>
-			)}
-			{rest.length > 0 && <Blockers groups={rest} />}
-		</Stack>
+		<span
+			style={{ display: "inline-flex", gap: "0.5rem", alignItems: "center" }}
+		>
+			{toneIcons[s.tone]}
+			<Tooltip content={s.all}>
+				<Link to={releasePath(ov.release.name)}>
+					{severityWords[s.tone] && (
+						<span className="pf-v6-screen-reader">{severityWords[s.tone]}</span>
+					)}
+					{s.words}
+					{s.more && (
+						<span style={{ whiteSpace: "nowrap" }}>{`\u00a0${s.more}`}</span>
+					)}
+				</Link>
+			</Tooltip>
+		</span>
 	);
 }

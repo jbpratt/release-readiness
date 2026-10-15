@@ -1,4 +1,5 @@
 import type { FBCCandidate, FBCMember } from "../api/types.ts";
+import type { Blocker } from "./blockers.ts";
 import { type FbcRow, runResult, type StatusLine } from "./releaseDetail.ts";
 
 /** What keeps an FBC's cell from green, with its status. */
@@ -58,4 +59,57 @@ export function cellProblem(
 	if (r.runs.some((p) => runResult(p.state).status === "failed"))
 		return "CI failed";
 	return null;
+}
+
+/** A candidate's one signal on the release list, worst first. */
+export type Tone = "danger" | "warning" | "running" | "info" | "success";
+
+const levelTones = {
+	blocker: "danger",
+	warning: "warning",
+	info: "info",
+} satisfies Record<Blocker["level"], Tone>;
+
+/**
+ * A candidate as one tone and a few words: the worst of its FBC cells, by
+ * the release page's cell rules, and its items; its first blocker or warning
+ * and "+N" for more kinds, else how many of its FBCs are green.
+ */
+export function candidateSummary(
+	cells: Cell[],
+	bs: Blocker[],
+): { tone: Tone; words: string; more: string; all: string } {
+	const cellTones = cells.map(({ row, problem }): Tone => {
+		const status = problem && PROBLEMS[problem].status;
+		const levels = bs
+			.filter((b) => b.operator === row.operator && b.ocps.includes(row.ocp))
+			.map((b) => b.level);
+		if (!row.fbc || status === "failed" || levels.includes("blocker"))
+			return "danger";
+		if (status === "running") return "running";
+		if (status === "warning" || levels.includes("warning")) return "warning";
+		return levels.includes("info") ? "info" : "success";
+	});
+	const tones = [...cellTones, ...bs.map((b) => levelTones[b.level])];
+	const tone =
+		(["danger", "warning", "running", "info"] as const).find((t) =>
+			tones.includes(t),
+		) ?? "success";
+	const good = `${cellTones.filter((t) => t === "success").length} of ${cells.length} FBCs`;
+	const kinds = [
+		...new Set(
+			[
+				...bs.filter((b) => b.level === "blocker"),
+				...bs.filter((b) => b.level === "warning"),
+			].map((b) => b.what),
+		),
+	];
+	if (kinds.length === 0)
+		return { tone, words: good, more: "", all: `${good} good` };
+	return {
+		tone,
+		words: kinds[0],
+		more: kinds.length > 1 ? `+${kinds.length - 1}` : "",
+		all: kinds.join("; "),
+	};
 }

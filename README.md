@@ -48,7 +48,7 @@ After each reconcile pass, applies the proposed actions to their PROJQUAY issues
 
 ### Sync status
 
-`/api/v1/sync-status` lists as `problems` each enabled sync (`konflux`, `jira`, `art-builds`, `art-history`, `fbc-render`, `reconcile`, `catalog`, `prow`, `image-scans`, `shipment-mrs`) whose last pass failed or that has had no success within 3 poll intervals (at least 10 minutes), and as `sources` every enabled sync with its `last_success`, null before its first success; the header shows a warning icon while any problems exist, except on a release page, whose freshness line shows them (image-scans only while CVEs are shown).
+`/api/v1/sync-status` lists as `problems` each enabled sync (`konflux`, `jira`, `art-builds`, `art-history`, `fbc-render`, `reconcile`, `catalog`, `prow`, `image-scans`, `shipment-mrs`) whose last pass failed or that has had no success within 3 poll intervals (at least 10 minutes), and as `sources` every enabled sync with its `last_success`, null before its first success; the header shows a warning icon while any problems exist, except on the release list and a release page, whose freshness lines show them (image-scans only while CVEs are shown).
 
 ## Release view
 

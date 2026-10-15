@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { FBCCandidate } from "../api/types.ts";
-import { cellProblem, streamFbc } from "./fbcMatrix.ts";
+import type { Blocker } from "./blockers.ts";
+import { candidateSummary, cellProblem, streamFbc } from "./fbcMatrix.ts";
 import type { FbcRow } from "./releaseDetail.ts";
 
 const row = (operator: string, ocp: string, over: Partial<FbcRow> = {}) =>
@@ -91,4 +92,76 @@ test("cellProblem: staging comes before CI", () => {
 		cellProblem(row("quay-operator", "4.14", { runs: [failedRun] }), true),
 		"CI failed",
 	);
+});
+
+const cell = (r: FbcRow) => ({
+	row: r,
+	stream: null,
+	problem: cellProblem(r, true),
+});
+
+const item = (
+	level: Blocker["level"],
+	what: string,
+	operator = "",
+	ocps: string[] = [],
+) => ({ level, what, operator, ocps }) as Blocker;
+
+test("candidateSummary: all green counts its FBCs", () => {
+	const cells = [
+		cell(row("quay-operator", "4.14")),
+		cell(row("quay-operator", "4.15")),
+	];
+	assert.deepEqual(candidateSummary(cells, []), {
+		tone: "success",
+		words: "2 of 2 FBCs",
+		more: "",
+		all: "2 of 2 FBCs good",
+	});
+});
+
+test("candidateSummary: blockers lead, one per kind, warnings after", () => {
+	const cells = [cell(row("quay-operator", "4.14"))];
+	const bs = [
+		item("warning", "Newer build not on stage"),
+		item("blocker", "Not staged"),
+		item("blocker", "Not staged"),
+		item("info", "Note"),
+	];
+	assert.deepEqual(candidateSummary(cells, bs), {
+		tone: "danger",
+		words: "Not staged",
+		more: "+1",
+		all: "Not staged; Newer build not on stage",
+	});
+});
+
+test("candidateSummary: a missing FBC is red, an info item is not green", () => {
+	const cells = [
+		cell(row("quay-operator", "4.12", { fbc: null, stage: null })),
+		cell(row("quay-operator", "4.14")),
+		cell(row("quay-operator", "4.15")),
+	];
+	const s = candidateSummary(cells, [
+		item("info", "Note", "quay-operator", ["4.15"]),
+	]);
+	assert.equal(s.tone, "danger");
+	assert.equal(s.words, "1 of 3 FBCs");
+	assert.equal(
+		candidateSummary(cells.slice(2), [
+			item("info", "Note", "quay-operator", ["4.15"]),
+		]).tone,
+		"info",
+	);
+});
+
+test("candidateSummary: a warning cell outranks a staging one", () => {
+	const staging = cell(
+		row("quay-operator", "4.14", {
+			stage: { status: "running", text: "Staging" },
+		}),
+	);
+	const unstaged = cell(row("quay-operator", "4.15", { stage: null }));
+	assert.equal(candidateSummary([staging], []).tone, "running");
+	assert.equal(candidateSummary([staging, unstaged], []).tone, "warning");
 });
