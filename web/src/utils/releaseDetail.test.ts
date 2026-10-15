@@ -897,24 +897,15 @@ test("freshnessLine", () => {
 	const sources = [
 		{ source: "art-builds", last_success: ago(2) },
 		{ source: "art-history", last_success: ago(7) },
-		{ source: "jira", last_success: ago(90) },
 		{ source: "konflux", last_success: ago(1) },
+		{ source: "fbc-render", last_success: null },
 	];
-	// Jira never feeds the verdict, so neither its age nor its failure shows.
+	// A source on its first pass has no age yet.
 	assert.deepEqual(freshnessLine({ problems: [], sources }), {
-		text: "Refreshed 7 minutes ago",
+		updated: "Updated 7 minutes ago",
+		stale: null,
 		problems: [],
 	});
-	const jira = {
-		source: "jira",
-		message: "boom",
-		since: ago(5),
-		last_success: ago(90),
-	};
-	assert.equal(
-		freshnessLine({ problems: [jira], sources })?.text,
-		"Refreshed 7 minutes ago",
-	);
 
 	const failing = {
 		source: "art-history",
@@ -923,38 +914,28 @@ test("freshnessLine", () => {
 		last_success: ago(7),
 	};
 	const stale = {
-		source: "konflux",
+		source: "shipment-mrs",
 		message: "no successful sync in 10m0s",
 		since: null,
 		last_success: null,
 	};
+	// CVE scans are hidden, so their problem is too.
+	const scans = { ...stale, source: "image-scans" };
+	// A stale source's age is left out of the page's.
 	assert.deepEqual(
-		freshnessLine({ problems: [failing, jira, stale], sources }),
+		freshnessLine({ problems: [failing, stale, scans], sources }),
 		{
-			text: "Stale: 2 sources",
+			updated: "Updated 2 minutes ago",
+			stale: "Stale: ART build history, Shipment MRs",
 			problems: [failing, stale],
 		},
 	);
-	assert.equal(
-		freshnessLine({ problems: [stale], sources })?.text,
-		"Stale: Konflux releases",
-	);
 
-	// A source on its first pass, or none tracked, says nothing.
-	assert.equal(
-		freshnessLine({
-			problems: [],
-			sources: [...sources, { source: "fbc-render", last_success: null }],
-		}),
-		null,
-	);
-	assert.equal(
-		freshnessLine({
-			problems: [],
-			sources: sources.filter((f) => f.source === "jira"),
-		}),
-		null,
-	);
+	assert.deepEqual(freshnessLine({ problems: [], sources: [] }), {
+		updated: null,
+		stale: null,
+		problems: [],
+	});
 });
 
 test("noFbcText", () => {

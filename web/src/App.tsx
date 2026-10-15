@@ -30,6 +30,7 @@ import {
 	Route,
 	Routes,
 	useLocation,
+	useMatch,
 } from "react-router-dom";
 import "@patternfly/react-core/dist/styles/base.css";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -78,6 +79,8 @@ function getInitialTheme(): Theme {
 
 function AppLayout({ children }: { children: React.ReactNode }) {
 	const [theme, setTheme] = useState<Theme>(getInitialTheme);
+	// The release page's freshness line is its one place for sync state.
+	const releasePage = useMatch("/releases/:version");
 
 	useEffect(() => {
 		const root = document.documentElement;
@@ -115,7 +118,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 				<Toolbar>
 					<ToolbarContent>
 						<ToolbarItem align={{ default: "alignEnd" }}>
-							<SyncStatusWarning />
+							{!releasePage && <SyncStatusWarning />}
 						</ToolbarItem>
 						<ToolbarItem>
 							<Button

@@ -684,18 +684,6 @@ const rank = (f: Flag) =>
 /** An image's worst issue's rank, 0 for danger; 3 without one. */
 export const worst = (r: ReleaseImage) => Math.min(3, ...r.issues.map(rank));
 
-// The syncs the candidate verdict reads (handlers_candidate.go): konflux its
-// Snapshots and Releases, art-builds their images' NVRs, art-history the
-// stream's FBC builds and scanned days, fbc-render the FBC reads, catalog
-// whether the version shipped. Jira and Prow never gate it.
-const VERDICT_SOURCES = [
-	"art-builds",
-	"art-history",
-	"catalog",
-	"fbc-render",
-	"konflux",
-];
-
 // Sync source ids as the page names them.
 export const SOURCE_NAMES: Record<string, string> = {
 	konflux: "Konflux releases",
@@ -712,33 +700,33 @@ export const SOURCE_NAMES: Record<string, string> = {
 };
 
 /**
- * How fresh the verdict's data is: its failing or stale syncs, if any, else
- * when the least recent of them last succeeded. Null while one has yet to
- * succeed or none is tracked.
+ * How current the page's data is: when the least recent source not stale
+ * last succeeded, and the stale ones by name. CVE scans count only while
+ * shown.
  */
-export function freshnessLine(
-	s: SyncStatus,
-): { text: string; problems: SyncProblem[] } | null {
-	const problems = s.problems.filter((p) => VERDICT_SOURCES.includes(p.source));
-	if (problems.length > 0) {
-		const what =
-			problems.length === 1
-				? (SOURCE_NAMES[problems[0].source] ?? problems[0].source)
-				: `${problems.length} sources`;
-		return { text: `Stale: ${what}`, problems };
-	}
+export function freshnessLine(s: SyncStatus): {
+	updated: string | null;
+	stale: string | null;
+	problems: SyncProblem[];
+} {
+	const shown = (x: { source: string }) =>
+		SHOW_CVES || x.source !== "image-scans";
+	const problems = s.problems.filter(shown);
+	const bad = new Set(problems.map((p) => p.source));
 	const last = s.sources
-		.filter((f) => VERDICT_SOURCES.includes(f.source))
-		.map((f) => f.last_success);
-	if (last.length === 0 || last.includes(null)) return null;
-	return { text: `Refreshed ${oldest(last)}`, problems };
-}
-
-/** The oldest of times, relative, or "never" if one is null. */
-function oldest(times: (string | null)[]): string {
-	if (times.includes(null)) return "never";
-	const t = Math.min(...times.map((t) => Date.parse(t!)));
-	return relative(new Date(t).toISOString());
+		.filter((f) => shown(f) && !bad.has(f.source))
+		.flatMap((f) => (f.last_success ? [Date.parse(f.last_success)] : []));
+	return {
+		updated:
+			last.length > 0
+				? `Updated ${relative(new Date(Math.min(...last)).toISOString())}`
+				: null,
+		stale:
+			problems.length > 0
+				? `Stale: ${problems.map((p) => SOURCE_NAMES[p.source] ?? p.source).join(", ")}`
+				: null,
+		problems,
+	};
 }
 
 /** The backend's no-FBC reasons in release terms, each with what to do next. */

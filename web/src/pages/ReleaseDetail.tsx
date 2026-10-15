@@ -1,23 +1,26 @@
 import {
-	Alert,
 	Breadcrumb,
-	BreadcrumbHeading,
 	BreadcrumbItem,
 	Button,
 	Card,
 	CardBody,
+	CardHeader,
 	CardTitle,
 	ClipboardCopy,
+	DescriptionList,
+	DescriptionListDescription,
+	DescriptionListGroup,
+	DescriptionListTerm,
+	Dropdown,
+	DropdownItem,
+	DropdownList,
 	EmptyState,
 	EmptyStateBody,
-	ExpandableSection,
 	Flex,
 	FlexItem,
 	Icon,
 	Label,
-	type LabelProps,
-	List,
-	ListItem,
+	MenuToggle,
 	Modal,
 	ModalBody,
 	ModalHeader,
@@ -25,49 +28,59 @@ import {
 	Popover,
 	type PopoverProps,
 	Spinner,
-	Toolbar,
-	ToolbarContent,
-	ToolbarGroup,
-	ToolbarItem,
+	Title,
 	Tooltip,
 } from "@patternfly/react-core";
-import { CheckCircleIcon, ExternalLinkAltIcon } from "@patternfly/react-icons";
+import {
+	CheckCircleIcon,
+	ExclamationTriangleIcon,
+	ExternalLinkAltIcon,
+	InfoCircleIcon,
+	TimesCircleIcon,
+} from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import {
 	type CSSProperties,
 	type ReactNode,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, type To, useParams, useSearchParams } from "react-router-dom";
 import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
 import type {
 	DashboardConfig,
 	FBCCandidate,
+	FBCMember,
 	JiraIssue,
-	KonfluxRelease,
 	ReleaseCandidate,
 	ReleaseVersion,
 	ShipmentMR,
-	Verdict,
-	VerdictItem,
 } from "../api/types";
-import { Blockers } from "../components/Blockers";
 import LoadError, { Loading, ReleaseNotFound } from "../components/LoadError";
 import {
 	ExtLink,
 	external,
+	type Issue,
+	IssueNotes,
+	LEVELS,
 	muted,
 	OperatorImages,
+	ORDER,
 } from "../components/OperatorImages";
 import { ShipmentLabels } from "../components/ShipmentLabels";
 import { Status } from "../components/Status";
 import { SyncProblems, useSyncStatus } from "../components/SyncStatusWarning";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
-import { type Blocker, blockers, splitBlockers } from "../utils/blockers";
-import { type Cell, cellProblem, headline, PROBLEMS } from "../utils/fbcMatrix";
+import { type Blocker, blockers } from "../utils/blockers";
+import {
+	type Cell,
+	cellProblem,
+	PROBLEMS,
+	streamFbc,
+} from "../utils/fbcMatrix";
 import { days, due } from "../utils/format";
 import {
 	formatReleaseName,
@@ -79,6 +92,7 @@ import {
 } from "../utils/links";
 import {
 	bundleBuilt,
+	candidateOperators,
 	compareVersions,
 	type FbcRow,
 	fbcGroups,
@@ -92,20 +106,29 @@ import {
 	releaseLine,
 	runResult,
 	tknCommand,
-	verdictEntries,
 	verdictLine,
 } from "../utils/releaseDetail";
 
-/** A date and time to the minute, local unless timeZone: "Oct 9, 21:48". */
-const when = (iso: string, timeZone?: string) =>
-	new Date(iso).toLocaleString(undefined, {
-		month: "short",
-		day: "numeric",
-		hour: "2-digit",
-		minute: "2-digit",
-		hourCycle: "h23",
-		timeZone,
+/** A verdict item where it applies: a matrix cell, an operator's card, or neither. */
+type Placed = Issue & { cell?: string; card?: string };
+
+/**
+ * Each verdict item at its source: the matrix cells of the OCP versions it
+ * names, else its operator's image card, else the whole candidate.
+ */
+function placeIssues(d: ReleaseCandidate, bs: Blocker[]): Placed[] {
+	const cells = new Set(fbcGroups(d).flatMap((g) => g.rows.map(cellKey)));
+	const cards = new Set(candidateOperators(d).map((o) => o.operator));
+	return d.verdict.items.flatMap((item, k) => {
+		const b = bs[k];
+		const keys = b.ocps
+			.map((o) => `${b.operator}@${o}`)
+			.filter((c) => cells.has(c));
+		if (keys.length > 0) return keys.map((cell) => ({ item, b, cell }));
+		if (cards.has(b.operator)) return [{ item, b, card: b.operator }];
+		return [{ item, b }];
 	});
+}
 
 export default function ReleaseDetail() {
 	const { version } = useParams<{ version: string }>();
@@ -165,12 +188,25 @@ export default function ReleaseDetail() {
 	const xyz = release.name.replace(/^[a-z]+-v/, "");
 	const fbc = candidate.data?.fbc_candidate;
 	const pullspecs = fbc && fbcPullspecs(fbc);
+	const issues =
+		candidate.data &&
+		placeIssues(
+			candidate.data,
+			blockers(candidate.data, release.name, app, config),
+		);
 
 	return (
 		<PageSection>
 			<DetailBreadcrumb name={release.name} />
 
-			<ReleaseStatusCard
+			<div style={{ marginBottom: "1rem" }}>
+				<Title headingLevel="h1" size="2xl">
+					{formatReleaseName(release.name)}
+				</Title>
+				<Freshness data={candidate.data} />
+			</div>
+
+			<ReleaseFacts
 				release={release}
 				shipped={candidate.data?.shipped ?? release.released}
 				shipmentMR={release.shipment_mr}
@@ -182,9 +218,7 @@ export default function ReleaseDetail() {
 				error={candidate.error}
 				onRetry={candidate.refetch}
 				version={xyz}
-				blockers={
-					candidate.data && blockers(candidate.data, release.name, app, config)
-				}
+				issues={issues ?? []}
 				konflux={konfluxUrl(
 					config?.konflux_ui_url ?? "",
 					config?.konflux_namespace ?? "",
@@ -211,7 +245,11 @@ export default function ReleaseDetail() {
 			/>
 
 			{candidate.data?.fbc_candidate && (
-				<OperatorImages d={candidate.data} version={xyz} />
+				<OperatorImages
+					d={candidate.data}
+					version={xyz}
+					issues={(op) => (issues ?? []).filter((i) => i.card === op)}
+				/>
 			)}
 
 			<TicketsCard
@@ -232,16 +270,72 @@ function DetailBreadcrumb({ name }: { name: string }) {
 			<BreadcrumbItem>
 				<Link to="/">Releases</Link>
 			</BreadcrumbItem>
-			<BreadcrumbHeading>{formatReleaseName(name)}</BreadcrumbHeading>
+			<BreadcrumbItem isActive>{formatReleaseName(name)}</BreadcrumbItem>
 		</Breadcrumb>
 	);
 }
 
-/** The target date, flagged while unshipped once past or within 3 days, the ticket and its assignee. */
-function ReleaseStatusCard({
+/**
+ * How current the page's data is: when its sources last synced, the stale
+ * ones (a popover with their problems), FBC reads and a prod Release still
+ * in flight.
+ */
+function Freshness({ data }: { data?: ReleaseCandidate }) {
+	const status = useSyncStatus();
+	const line = status && freshnessLine(status);
+	const read = data && readingLine(data.reading);
+	const prod = data?.candidate?.prod;
+	const prodLine = prod && releaseLine(prod);
+	return (
+		<Flex
+			gap={{ default: "gapSm", md: "gapMd" }}
+			alignItems={{ default: "alignItemsCenter" }}
+			style={{
+				...muted,
+				fontSize: "var(--pf-t--global--font--size--sm)",
+				marginTop: "0.25rem",
+			}}
+		>
+			{line?.updated && <span>{line.updated}</span>}
+			{line?.stale && (
+				<Popover
+					headerContent="Sync problems"
+					bodyContent={<SyncProblems problems={line.problems} />}
+				>
+					<Button
+						variant="link"
+						isInline
+						size="sm"
+						icon={
+							<Icon status="warning" isInline>
+								<ExclamationTriangleIcon />
+							</Icon>
+						}
+						style={{ fontSize: "inherit" }}
+					>
+						{line.stale}
+					</Button>
+				</Popover>
+			)}
+			{read && <Status status={read.status}>{read.text}</Status>}
+			{prodLine && prodLine.status !== "done" && (
+				<span title={prod.name}>
+					<Status status={prodLine.status}>Prod: {prodLine.text}</Status>
+				</span>
+			)}
+		</Flex>
+	);
+}
+
+/**
+ * The target date, flagged while unshipped once past or within 3 days, the
+ * ticket, its assignee and the shipment MR: the release's facts in the page
+ * header.
+ */
+function ReleaseFacts({
 	release,
 	shipped,
-	shipmentMR,
+	shipmentMR: mr,
 	jiraBaseUrl,
 }: {
 	release: ReleaseVersion;
@@ -253,62 +347,61 @@ function ReleaseStatusCard({
 	const target = release.due_date ?? release.release_date;
 	const dueDate = target ? due(target, shipped) : undefined;
 	return (
-		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<CardBody>
-				<Flex justifyContent={{ default: "justifyContentSpaceEvenly" }}>
-					<FlexItem style={{ textAlign: "center" }}>
-						<div className="rr-label">Target</div>
-						<div>
-							{dueDate?.date ?? "TBD"}
-							{dueDate?.kind === "past" && (
-								<Label
-									status="danger"
-									isCompact
-									style={{ marginLeft: "0.5rem" }}
-								>
-									Past due
-								</Label>
-							)}
-							{dueDate?.kind === "soon" && (
-								<Label
-									status="warning"
-									isCompact
-									style={{ marginLeft: "0.5rem" }}
-								>
-									{dueDate.days === 0
-										? "Due today"
-										: `Due in ${days(dueDate.days)}`}
-								</Label>
-							)}
-						</div>
-					</FlexItem>
-					{ticket && (
-						<FlexItem style={{ textAlign: "center" }}>
-							<div className="rr-label">Ticket</div>
-							<a
-								href={jiraIssueUrl(
-									ticket,
-									jiraBaseUrl || "https://redhat.atlassian.net",
-								)}
-								{...external}
-							>
-								{ticket}
-							</a>
-						</FlexItem>
+		<DescriptionList
+			isCompact
+			isAutoFit
+			autoFitMinModifier={{ default: "8rem", lg: "12rem" }}
+			style={{ marginBottom: "1.5rem" }}
+		>
+			<DescriptionListGroup>
+				<DescriptionListTerm>Target</DescriptionListTerm>
+				<DescriptionListDescription>
+					{dueDate?.date ?? "TBD"}
+					{dueDate?.kind === "past" && (
+						<Label status="warning" isCompact style={{ marginLeft: "0.5rem" }}>
+							Past due
+						</Label>
 					)}
-					<FlexItem style={{ textAlign: "center" }}>
-						<div className="rr-label">Assignee</div>
-						<div>{release.release_ticket_assignee || "Unassigned"}</div>
-					</FlexItem>
-					{shipmentMR && (
-						<FlexItem style={{ textAlign: "center" }}>
-							<div className="rr-label">Shipment</div>
-							<ShipmentLabels mr={shipmentMR} shipped={shipped} />
-						</FlexItem>
+					{dueDate?.kind === "soon" && (
+						<Label status="warning" isCompact style={{ marginLeft: "0.5rem" }}>
+							{dueDate.days === 0
+								? "Due today"
+								: `Due in ${days(dueDate.days)}`}
+						</Label>
 					)}
-				</Flex>
-			</CardBody>
-		</Card>
+				</DescriptionListDescription>
+			</DescriptionListGroup>
+			{ticket && (
+				<DescriptionListGroup>
+					<DescriptionListTerm>Ticket</DescriptionListTerm>
+					<DescriptionListDescription>
+						<ExtLink
+							href={jiraIssueUrl(
+								ticket,
+								jiraBaseUrl || "https://redhat.atlassian.net",
+							)}
+							icon
+						>
+							{ticket}
+						</ExtLink>
+					</DescriptionListDescription>
+				</DescriptionListGroup>
+			)}
+			<DescriptionListGroup>
+				<DescriptionListTerm>Assignee</DescriptionListTerm>
+				<DescriptionListDescription>
+					{release.release_ticket_assignee || "Unassigned"}
+				</DescriptionListDescription>
+			</DescriptionListGroup>
+			{mr && (
+				<DescriptionListGroup>
+					<DescriptionListTerm>Shipment</DescriptionListTerm>
+					<DescriptionListDescription>
+						<ShipmentLabels mr={mr} shipped={shipped} />
+					</DescriptionListDescription>
+				</DescriptionListGroup>
+			)}
+		</DescriptionList>
 	);
 }
 
@@ -352,15 +445,17 @@ function LinkedCardTitle({
 }
 
 /**
- * The version's release candidate, its operator FBCs, or why it has none; a
- * shipped version's is labeled, with nothing to release.
+ * The version's release candidate as its FBC matrix, or why it has none; a
+ * shipped version's is labeled, with nothing to release. Its blockers are
+ * shown where they apply (whole-candidate ones above the matrix, the rest at
+ * their cells and image cards) and announced to screen readers.
  */
 function BuildsCard({
 	data,
 	error,
 	onRetry,
 	version,
-	blockers,
+	issues,
 	konflux,
 	inputs,
 }: {
@@ -369,20 +464,50 @@ function BuildsCard({
 	onRetry: () => void;
 	/** The version's X.Y.Z. */
 	version: string;
-	/** The verdict's items as blockers to act on. */
-	blockers?: Blocker[];
+	issues: Placed[];
 	/** The version's application in the Konflux UI. */
 	konflux: string | null;
-	/** The release command button, beside the verdict. */
+	/** The release command button. */
 	inputs?: ReactNode;
 }) {
+	const [params] = useSearchParams();
 	const fbc = data?.fbc_candidate;
 	return (
-		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<LinkedCardTitle href={fbc ? null : konflux} link="Konflux">
-				Release candidate
-			</LinkedCardTitle>
+		<Card style={{ marginBottom: "1.5rem" }}>
+			<CardHeader
+				actions={{
+					actions: (
+						<Flex gap={{ default: "gapSm" }}>
+							{inputs}
+							<OpenIn
+								items={[
+									{
+										text: "CI history",
+										to: { pathname: "ci", search: params.toString() },
+									},
+									{
+										text: "Sippy",
+										href: fbc ? sippyRunsUrl(version, fbcsBuilt(fbc)) : null,
+									},
+									{ text: "Konflux", href: konflux },
+								]}
+							/>
+						</Flex>
+					),
+					hasNoOffset: true,
+				}}
+			>
+				<CardTitle>
+					<Title headingLevel="h2" size="xl">
+						Release candidate
+					</Title>
+				</CardTitle>
+			</CardHeader>
 			<CardBody>
+				<div role="status" className="pf-v6-screen-reader">
+					{data?.verdict.state === "not_ready" &&
+						verdictLine(data.verdict).text}
+				</div>
 				{!data && !error ? (
 					<Spinner size="md" aria-label="Loading the release candidate" />
 				) : !data ? (
@@ -394,14 +519,7 @@ function BuildsCard({
 						Its builds, CI, and release status are unavailable right now.
 					</LoadError>
 				) : fbc ? (
-					<Candidate
-						data={data}
-						fbc={fbc}
-						version={version}
-						blockers={blockers ?? []}
-						konflux={konflux}
-						inputs={inputs}
-					/>
+					<FbcMatrix data={data} fbc={fbc} issues={issues} />
 				) : data.shipped ? (
 					`v${version} has shipped. No FBC build data is recorded for it.`
 				) : (
@@ -413,103 +531,59 @@ function BuildsCard({
 }
 
 /**
- * The FBC candidate: its verdict, a failed or running prod Release and the
- * verdict's items, beside the release command; then its FBCs as a matrix.
+ * The places to open the candidate in, behind one toggle. An item with an
+ * href opens it in a new tab, one with a to is a router link, and one with
+ * neither is left out.
  */
-function Candidate({
-	data,
-	fbc,
-	version,
-	blockers,
-	konflux,
-	inputs,
+function OpenIn({
+	items,
 }: {
-	data: ReleaseCandidate;
-	fbc: FBCCandidate;
-	version: string;
-	blockers: Blocker[];
-	konflux: string | null;
-	inputs?: ReactNode;
+	items: { text: string; href?: string | null; to?: To }[];
 }) {
-	const [params] = useSearchParams();
-	const entries = verdictEntries(data.verdict);
-	const read = readingLine(data.reading);
-	const prod = data.candidate?.prod;
-	const prodLine = prod && releaseLine(prod);
-	const notReady = data.verdict.state === "not_ready";
+	const [open, setOpen] = useState(false);
 	return (
-		<>
-			<Flex
-				justifyContent={{ default: "justifyContentSpaceBetween" }}
-				alignItems={{ default: "alignItemsFlexStart" }}
-				gap={{ default: "gapSm" }}
-			>
-				<FlexItem flex={notReady ? { default: "flex_1" } : undefined}>
-					{notReady ? (
-						<NotReady verdict={data.verdict} blockers={blockers} />
-					) : (
-						<VerdictHeader
-							verdict={data.verdict}
-							prod={data.candidate?.prod ?? null}
-						/>
-					)}
-					{read && (
-						<div style={line}>
-							<Status status={read.status}>{read.text}</Status>
-						</div>
-					)}
-					{prodLine && prodLine.status !== "done" && (
-						<div style={line} title={prod.name}>
-							<Status status={prodLine.status}>Prod: {prodLine.text}</Status>
-						</div>
-					)}
-				</FlexItem>
-				{inputs && <FlexItem>{inputs}</FlexItem>}
-			</Flex>
-			{!notReady && entries.length > 0 && (
-				<List style={line}>
-					{entries.map((e) => (
-						<ListItem key={`${e.level} ${e.text}`}>
-							<Tooltip content={e.tip.map((t) => <div key={t}>{t}</div>)}>
-								<Label isCompact tabIndex={0} status={levelStatus[e.level]}>
-									{e.count > 1 ? `${e.text} (${e.count})` : e.text}
-								</Label>
-							</Tooltip>
-							{e.on && ` ${e.on}`}
-						</ListItem>
-					))}
-				</List>
+		<Dropdown
+			isOpen={open}
+			onSelect={() => setOpen(false)}
+			onOpenChange={setOpen}
+			popperProps={{ position: "right" }}
+			toggle={(ref) => (
+				<MenuToggle
+					ref={ref}
+					variant="secondary"
+					size="sm"
+					isExpanded={open}
+					onClick={() => setOpen(!open)}
+				>
+					Open in
+				</MenuToggle>
 			)}
-			<Toolbar style={{ marginTop: "1rem", paddingBlock: 0 }}>
-				<ToolbarContent>
-					<ToolbarGroup align={{ default: "alignEnd" }}>
-						<ToolbarItem>
-							<Button
-								component={(p) => (
-									<Link
-										{...p}
-										to={{ pathname: "ci", search: params.toString() }}
-									/>
-								)}
-								variant="link"
-								size="sm"
+		>
+			<DropdownList>
+				{items
+					.filter((i) => i.href || i.to)
+					.map(({ text, href, to }) =>
+						href ? (
+							<DropdownItem key={text} to={href} {...external}>
+								{text} {/* PF's own external icon shows only on hover. */}
+								<ExternalLinkAltIcon
+									style={{
+										marginInlineStart: "0.25rem",
+										color: "var(--pf-t--global--icon--color--subtle)",
+									}}
+								/>
+							</DropdownItem>
+						) : (
+							<DropdownItem
+								key={text}
+								component={(p) => <Link {...p} to={to ?? ""} />}
 							>
-								CI history
-							</Button>
-						</ToolbarItem>
-						<ToolbarItem>
-							<OutLink href={sippyRunsUrl(version, fbcsBuilt(fbc))}>
-								Sippy
-							</OutLink>
-						</ToolbarItem>
-						<ToolbarItem>
-							<OutLink href={konflux}>Konflux</OutLink>
-						</ToolbarItem>
-					</ToolbarGroup>
-				</ToolbarContent>
-			</Toolbar>
-			<FbcMatrix data={data} />
-		</>
+								{text}
+							</DropdownItem>
+						),
+					)}
+			</DropdownList>
+		</Dropdown>
 	);
 }
 
@@ -538,19 +612,34 @@ const cellKey = (r: FbcRow) => `${r.operator}@${r.ocp}`;
 
 /**
  * The candidate's FBCs, operators down and OCP versions across (swapped at
- * phone width so nothing scrolls sideways), under a headline naming their
- * gaps. ?cell=<operator>@<ocp> opens that FBC's detail.
+ * phone width so nothing scrolls sideways), under the items about the whole
+ * candidate. ?cell=<operator>@<ocp> opens that FBC's detail.
  */
-function FbcMatrix({ data }: { data: ReleaseCandidate }) {
+function FbcMatrix({
+	data,
+	fbc,
+	issues,
+}: {
+	data: ReleaseCandidate;
+	fbc: FBCCandidate;
+	issues: Placed[];
+}) {
 	const narrow = useNarrow();
 	const [params, setParams] = useSearchParams();
-	const staged = data.fbc_candidate?.source !== "stream";
+	const staged = fbc.source !== "stream";
 	const groups = fbcGroups(data);
 	const rows = groups.flatMap((g) => g.rows);
 	const cells = new Map<string, Cell>(
-		rows.map((r) => [cellKey(r), { row: r, problem: cellProblem(r, staged) }]),
+		rows.map((r) => {
+			const stream = r.fbc ? null : streamFbc(data.fbc_stream, r);
+			return [
+				cellKey(r),
+				{ row: r, stream, problem: cellProblem(r, staged, stream) },
+			];
+		}),
 	);
-	const head = headline([...cells.values()], staged);
+	const whole = issues.filter((i) => !i.cell && !i.card);
+	const unstaged = !staged && !whole.some((i) => i.item.code === "not_staged");
 	const operators = groups.map((g) => g.operator);
 	const ocps = [...new Set(rows.map((r) => r.ocp))].sort(compareVersions);
 	const across = narrow ? operators : ocps;
@@ -570,36 +659,24 @@ function FbcMatrix({ data }: { data: ReleaseCandidate }) {
 		);
 	return (
 		<>
-			<div style={{ display: "grid", gap: "0.25rem", marginTop: "1rem" }}>
-				{head.gaps.length === 0 ? (
-					<Status status="done">
-						<strong>{head.count}</strong>
-					</Status>
-				) : (
-					<>
-						{head.gaps.map((g) => (
-							<Status key={g.text} status={g.status}>
-								<strong>{g.text}</strong>
-							</Status>
-						))}
-						<span style={muted}>{head.count}</span>
-					</>
-				)}
-				{!staged && (
-					<span style={muted}>No stage shipment holds these FBCs yet.</span>
-				)}
-			</div>
+			{(unstaged || whole.length > 0) && (
+				<div style={{ display: "grid", gap: "0.5rem", marginBottom: "0.5rem" }}>
+					{unstaged && (
+						<span style={muted}>No stage shipment holds these FBCs yet.</span>
+					)}
+					{whole.length > 0 && <IssueNotes issues={whole} />}
+				</div>
+			)}
 			<table
 				aria-label="FBCs by operator and OCP version"
 				style={{
-					marginTop: "1rem",
 					borderCollapse: "collapse",
 					width: "100%",
 					tableLayout: "fixed",
 				}}
 			>
 				<colgroup>
-					<col style={{ width: narrow ? "3rem" : "13rem" }} />
+					<col style={{ width: narrow ? "3rem" : "15rem" }} />
 				</colgroup>
 				<thead>
 					<tr>
@@ -626,13 +703,15 @@ function FbcMatrix({ data }: { data: ReleaseCandidate }) {
 							</th>
 							{across.map((a, i) => {
 								const c = at(d, a);
+								const key = c && cellKey(c.row);
 								return (
-									<td key={a} style={{ textAlign: "center", padding: "2px 0" }}>
-										{c ? (
+									<td key={a} style={{ textAlign: "center", padding: "4px" }}>
+										{c && key ? (
 											<MatrixCell
 												cell={c}
+												issues={issues.filter((x) => x.cell === key)}
 												green={staged ? "built and staged" : "built"}
-												open={picked === cellKey(c.row)}
+												open={picked === key}
 												position={
 													i === 0
 														? "bottom-start"
@@ -640,16 +719,19 @@ function FbcMatrix({ data }: { data: ReleaseCandidate }) {
 															? "bottom-end"
 															: "bottom"
 												}
-												onOpen={() => select(cellKey(c.row))}
+												onOpen={() => select(key)}
 												onClose={() => select(null)}
 											/>
 										) : (
-											<span
-												style={muted}
-												title="This operator has no FBC for this OCP version"
-											>
-												–
-											</span>
+											<Tooltip content="This operator has no FBC for this OCP version">
+												{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows its tooltip to keyboard users. */}
+												<span style={muted} tabIndex={0}>
+													<span aria-hidden="true">–</span>
+													<span className="pf-v6-screen-reader">
+														Not expected
+													</span>
+												</span>
+											</Tooltip>
 										)}
 									</td>
 								);
@@ -665,19 +747,47 @@ function FbcMatrix({ data }: { data: ReleaseCandidate }) {
 const rule = "1px solid var(--pf-t--global--border--color--default)";
 
 const axisLabel: CSSProperties = {
-	padding: "0.4rem 0",
+	padding: "0.75rem 0",
 	textAlign: "center",
-	fontSize: "var(--pf-t--global--font--size--sm)",
+	fontSize: "var(--pf-t--global--font--size--md)",
 	fontWeight: "var(--pf-t--global--font--weight--body--bold)",
 	whiteSpace: "nowrap",
 };
 
+/** A matrix cell's one icon, the size of the check, by tone. */
+const cellIcons = {
+	danger: (
+		<Icon status="danger" size="xl">
+			<TimesCircleIcon />
+		</Icon>
+	),
+	warning: (
+		<Icon status="warning" size="xl">
+			<ExclamationTriangleIcon />
+		</Icon>
+	),
+	info: (
+		<Icon status="info" size="xl">
+			<InfoCircleIcon />
+		</Icon>
+	),
+	running: <Icon size="xl" isInProgress />,
+	success: (
+		<Icon status="success" size="xl">
+			<CheckCircleIcon />
+		</Icon>
+	),
+};
+
 /**
- * One FBC: a check when green, else its problem's icon and words; a click
- * opens its detail. An edge column's detail opens inward to stay on screen.
+ * One FBC as one icon: a check when green, a red X when it is missing or
+ * fails or a blocker is about it, else its problem's or item's icon; the
+ * words are in its tooltip and name. A click opens its detail, led by the
+ * items about it. An edge column's detail opens inward to stay on screen.
  */
 function MatrixCell({
-	cell: { row, problem },
+	cell: { row, stream, problem },
+	issues,
 	green,
 	open,
 	position,
@@ -685,64 +795,86 @@ function MatrixCell({
 	onClose,
 }: {
 	cell: Cell;
+	issues: Issue[];
 	green: string;
 	open: boolean;
 	position: PopoverProps["position"];
 	onOpen: () => void;
 	onClose: () => void;
 }) {
+	const ref = useRef<HTMLButtonElement>(null);
+	const first = ORDER.flatMap(
+		(l) => issues.find((i) => i.item.level === l) ?? [],
+	)[0];
+	const top = first?.item.level;
+	const status = problem && PROBLEMS[problem].status;
+	const tone: keyof typeof cellIcons =
+		!row.fbc || status === "failed" || top === "blocker"
+			? "danger"
+			: status === "running"
+				? "running"
+				: status === "warning" || top === "warning"
+					? "warning"
+					: top === "info"
+						? "info"
+						: "success";
+	const said = problem
+		? problem[0].toUpperCase() + problem.slice(1)
+		: first
+			? `${LEVELS[first.item.level].word}: ${first.b.what}`
+			: green;
 	return (
-		<Popover
-			isVisible={open}
-			shouldOpen={onOpen}
-			shouldClose={onClose}
-			position={position}
-			maxWidth="min(28rem, calc(100vw - 6.5rem))"
-			aria-label={`${row.operator} OCP ${row.ocp}`}
-			headerContent={`${row.operator} · OCP ${row.ocp}`}
-			bodyContent={<FbcDetail row={row} />}
-		>
-			<Button
-				variant="plain"
-				size="sm"
-				isClicked={open}
-				aria-label={`${row.operator} OCP ${row.ocp}: ${problem ?? green}`}
-				style={{ width: "100%", whiteSpace: "nowrap" }}
+		<>
+			{tone !== "success" && <Tooltip content={said} triggerRef={ref} />}
+			<Popover
+				isVisible={open}
+				shouldOpen={onOpen}
+				shouldClose={onClose}
+				position={position}
+				maxWidth="min(28rem, calc(100vw - 6.5rem))"
+				aria-label={`${row.operator} OCP ${row.ocp}`}
+				headerContent={`${row.operator} · OCP ${row.ocp}`}
+				bodyContent={
+					<div style={{ display: "grid", gap: "0.75rem" }}>
+						{issues.length > 0 && <IssueNotes issues={issues} />}
+						<FbcDetail row={row} stream={stream} />
+					</div>
+				}
 			>
-				<span
-					style={{
-						display: "inline-flex",
-						justifyContent: "center",
-						fontSize: "var(--pf-t--global--font--size--sm)",
-						color: "var(--pf-t--global--text--color--regular)",
-					}}
+				<Button
+					ref={ref}
+					variant="plain"
+					aria-label={`${row.operator} OCP ${row.ocp}: ${said}`}
+					aria-haspopup="dialog"
+					aria-expanded={open}
+					style={{ width: "100%", minHeight: "2.75rem" }}
 				>
-					{problem ? (
-						<Status status={PROBLEMS[problem].status}>{problem}</Status>
-					) : (
-						<Icon status="success">
-							<CheckCircleIcon />
-						</Icon>
-					)}
-				</span>
-			</Button>
-		</Popover>
+					{cellIcons[tone]}
+				</Button>
+			</Popover>
+		</>
 	);
 }
 
-/** One FBC, check by check; each row says what is absent when it is. */
-function FbcDetail({ row }: { row: FbcRow }) {
-	const f = row.fbc;
-	const unread = row.flags.find((x) => x.text === "can't read");
-	const older = row.flags.find((x) => x.text.startsWith("holds an older"));
-	const bundle = row.images.find((i) => i.nvr === f?.head_bundle_nvr);
-	const release = f?.release;
-	const none = (text: string) => <span style={muted}>{text}</span>;
-	const notYet = (
-		<Label isCompact variant="outline">
-			not in API yet
-		</Label>
+/** An X and the check it fails. */
+function Failed({ children }: { children: ReactNode }) {
+	return (
+		<Flex gap={{ default: "gapSm" }}>
+			<Icon status="danger" isInline>
+				<TimesCircleIcon />
+			</Icon>
+			<span>{children}</span>
+		</Flex>
 	);
+}
+
+/**
+ * One FBC, check by check; each row says what is absent when it is. Without
+ * one, only the check it fails: Built, or Staged under the stream's build.
+ */
+function FbcDetail({ row, stream }: { row: FbcRow; stream: FBCMember | null }) {
+	const f = row.fbc;
+	const built = f ?? stream;
 	return (
 		<dl
 			style={{
@@ -753,40 +885,56 @@ function FbcDetail({ row }: { row: FbcRow }) {
 			}}
 		>
 			<DetailLine label="Built">
-				{!f ? (
-					<Status status="failed">Not built</Status>
-				) : !f.nvr ? (
+				{!built ? (
+					<Failed>Not built</Failed>
+				) : !built.nvr ? (
 					<Status status="warning">
 						ART has no build record for this image
 					</Status>
 				) : (
 					<>
-						{bundleBuilt(f.nvr) || "Built"} UTC ·{" "}
-						<ExtLink href={f.build_url || null} title={f.nvr}>
+						{bundleBuilt(built.nvr) || "Built"} UTC ·{" "}
+						<ExtLink href={built.build_url || null} title={built.nvr}>
 							ART build
 						</ExtLink>
 					</>
 				)}
 			</DetailLine>
+			{!f ? (
+				stream && (
+					<DetailLine label="Staged">
+						<Failed>Not staged</Failed>
+					</DetailLine>
+				)
+			) : (
+				<FbcChecks row={row} f={f} />
+			)}
+		</dl>
+	);
+}
+
+/** A built FBC's checks after Built. */
+function FbcChecks({ row, f }: { row: FbcRow; f: FBCMember }) {
+	const unread = row.flags.find((x) => x.text === "can't read");
+	const older = row.flags.find((x) => x.text.startsWith("holds an older"));
+	const bundle = row.images.find((i) => i.nvr === f.head_bundle_nvr);
+	const release = f.release;
+	const none = (text: string) => <span style={muted}>{text}</span>;
+	return (
+		<>
 			<DetailLine label="Image">
-				{f ? (
-					<ClipboardCopy
-						isReadOnly
-						variant="inline-compact"
-						truncation
-						hoverTip="Copy the pullspec"
-						clickTip="Copied"
-					>
-						{f.pullspec}
-					</ClipboardCopy>
-				) : (
-					none("No image")
-				)}
+				<ClipboardCopy
+					isReadOnly
+					variant="inline-compact"
+					truncation
+					hoverTip="Copy the pullspec"
+					clickTip="Copied"
+				>
+					{f.pullspec}
+				</ClipboardCopy>
 			</DetailLine>
 			<DetailLine label="Bundle">
-				{!f ? (
-					none("No bundle")
-				) : unread ? (
+				{unread ? (
 					<Status status="failed">
 						Could not read this FBC: {unread.title ?? "no detail"}
 					</Status>
@@ -814,20 +962,10 @@ function FbcDetail({ row }: { row: FbcRow }) {
 				{row.stage ? (
 					<Status status={row.stage.status}>
 						{row.stage.text}
-						{release && (
-							<div style={muted}>
-								{release.name}
-								{release.job_url && (
-									<>
-										{" · "}
-										<ExtLink href={release.job_url}>ART job</ExtLink>
-									</>
-								)}
-							</div>
-						)}
+						{release && <div style={muted}>{release.name}</div>}
 					</Status>
 				) : (
-					none(f ? "Not in a stage release" : "Nothing to stage")
+					none("Not in a stage release")
 				)}
 			</DetailLine>
 			<DetailLine label="CI">
@@ -856,9 +994,7 @@ function FbcDetail({ row }: { row: FbcRow }) {
 							);
 						})}
 			</DetailLine>
-			<DetailLine label="Enterprise Contract">{notYet}</DetailLine>
-			<DetailLine label="CVE scan">{notYet}</DetailLine>
-		</dl>
+		</>
 	);
 }
 
@@ -876,118 +1012,6 @@ function DetailLine({
 				{children}
 			</dd>
 		</>
-	);
-}
-
-/** A small link button opening href in a new tab, hidden without an href. */
-function OutLink({
-	href,
-	children,
-}: {
-	href: string | null;
-	children: ReactNode;
-}) {
-	return (
-		href && (
-			<Button
-				component="a"
-				variant="link"
-				size="sm"
-				href={href}
-				{...external}
-				icon={<ExternalLinkAltIcon />}
-				iconPosition="end"
-			>
-				{children}
-			</Button>
-		)
-	);
-}
-
-const levelStatus: Record<VerdictItem["level"], LabelProps["status"]> = {
-	blocker: "danger",
-	warning: "warning",
-	info: "info",
-};
-
-/** Whether the version can ship; a shipped version's is its prod Release. */
-function VerdictHeader({
-	verdict,
-	prod,
-}: {
-	verdict: Verdict;
-	prod: KonfluxRelease | null;
-}) {
-	const head = verdictLine(verdict);
-	const text =
-		verdict.state === "shipped" && prod?.completion_time
-			? `Shipped ${when(prod.completion_time, "UTC")} UTC`
-			: head.text;
-	return (
-		<Status status={head.status}>
-			<strong>{text}</strong> <DataFreshness />
-		</Status>
-	);
-}
-
-/** A not ready verdict: its blockers in an Alert, then its warnings and notes. */
-function NotReady({
-	verdict,
-	blockers,
-}: {
-	verdict: Verdict;
-	blockers: Blocker[];
-}) {
-	const [open, setOpen] = useState(false);
-	const { blocking, rest } = splitBlockers(blockers);
-	return (
-		<>
-			<Alert
-				variant="danger"
-				isInline
-				isExpandable={blocking.length > 0}
-				title={
-					<>
-						{verdictLine(verdict).text}{" "}
-						<span style={{ fontWeight: "normal" }}>
-							<DataFreshness />
-						</span>
-					</>
-				}
-			>
-				{blocking.length > 0 && <Blockers groups={blocking} />}
-			</Alert>
-			{rest.length > 0 && (
-				<ExpandableSection
-					style={line}
-					toggleText={`${rest.length} warning${rest.length === 1 ? "" : "s"} and notes`}
-					isExpanded={open}
-					onToggle={(_e, v) => setOpen(v)}
-				>
-					<Blockers groups={rest} />
-				</ExpandableSection>
-			)}
-		</>
-	);
-}
-
-/** How fresh the verdict's data is; a stale label opens its sync problems. */
-function DataFreshness() {
-	const status = useSyncStatus();
-	const line = status && freshnessLine(status);
-	if (!line) return null;
-	if (line.problems.length === 0)
-		return <span style={muted}>· {line.text}</span>;
-	return (
-		<Popover
-			headerContent="Sync problems"
-			bodyContent={<SyncProblems problems={line.problems} />}
-		>
-			{/* The Popover opens on click; onClick makes the Label a focusable button. */}
-			<Label isCompact variant="outline" status="warning" onClick={() => {}}>
-				{line.text}
-			</Label>
-		</Popover>
 	);
 }
 
@@ -1041,8 +1065,6 @@ function ReleaseInputs({
 		</ClipboardCopy>
 	);
 }
-
-const line = { marginTop: "0.5rem" };
 
 /**
  * The version's fixVersion issues but its release ticket, shown atop the
