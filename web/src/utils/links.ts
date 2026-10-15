@@ -64,3 +64,24 @@ export function formatReleaseName(name: string): string {
 /** ART pipeline health view for the Quay tenant (needs an artc2023 browser login). */
 export const ART_PIPELINES_HEALTH_URL =
 	"https://art-pipelines-ui-art-pipelines-ui.apps.artc2023.pc3z.p1.openshiftapps.com/#/health?namespace=art-quay-tenant";
+
+// The GitHub repo ART builds each image label from (its build record's
+// source_repo); a bundle's label is "<operator> bundle".
+const SOURCE_REPOS: Record<string, string> = {
+	"quay-rhel9": "quay/quay",
+	"clair-rhel9": "quay/clair",
+	"quay-rhel9-operator": "quay/quay-operator",
+	"quay-builder-rhel9": "quay/quay-builder",
+	"quay-builder-qemu-rhcos-rhel8": "quay/quay-builder-qemu",
+	"quay-container-security-rhel9-operator": "quay/container-security-operator",
+	"quay-bridge-rhel9-operator": "quay/quay-bridge-operator",
+	"quay-operator bundle": "quay/quay-operator",
+	"container-security-operator bundle": "quay/container-security-operator",
+	"quay-bridge-operator bundle": "quay/quay-bridge-operator",
+};
+
+/** An image's commit in its GitHub repo; null for an unknown label or no sha. */
+export function commitUrl(label: string, sha: string): string | null {
+	const repo = SOURCE_REPOS[label];
+	return repo && sha ? `https://github.com/${repo}/commit/${sha}` : null;
+}

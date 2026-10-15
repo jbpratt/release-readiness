@@ -14,6 +14,7 @@ import type {
 	ReleaseCandidate,
 } from "../api/types";
 import { SHOW_CVES } from "../utils/features";
+import { commitUrl } from "../utils/links";
 import {
 	bundleBuilt,
 	candidateOperators,
@@ -203,9 +204,12 @@ function OperatorPanel({ o, version }: { o: OperatorFBC; version: string }) {
 								style={{ fontSize: "0.85rem", marginTop: "0.125rem" }}
 							>
 								<BuiltCell image={r.image} />
-								<code style={muted} title={r.image.commit}>
-									{r.image.commit.slice(0, 7)}
-								</code>
+								<ExtLink
+									href={commitUrl(r.label, r.image.commit)}
+									title={r.image.commit}
+								>
+									<code style={muted}>{r.image.commit.slice(0, 7)}</code>
+								</ExtLink>
 								{SHOW_CVES && <CveCell image={r.image} />}
 								<Flags flags={r.issues} />
 							</Flex>

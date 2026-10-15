@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+	commitUrl,
 	formatReleaseName,
 	jiraIssueUrl,
 	jiraSearchUrl,
@@ -76,4 +77,14 @@ test("sippyRunsUrl", () => {
 	);
 	assert.equal(sippyRunsUrl("3.18.2", ""), null);
 	assert.equal(sippyRunsUrl("next", "2026-10-12T20:10:07Z"), null);
+});
+
+test("commitUrl", () => {
+	const sha = "117e757e6abd2729d6ab4cfa93a2af674d47e1e4";
+	assert.equal(
+		commitUrl("quay-operator bundle", sha),
+		`https://github.com/quay/quay-operator/commit/${sha}`,
+	);
+	assert.equal(commitUrl("redis-7", sha), null);
+	assert.equal(commitUrl("quay-rhel9", ""), null);
 });

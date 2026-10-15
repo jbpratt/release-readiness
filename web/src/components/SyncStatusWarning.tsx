@@ -11,6 +11,7 @@ import { useEffect } from "react";
 import { getSyncStatus } from "../api/client";
 import type { SyncProblem } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
+import { SHOW_CVES } from "../utils/features";
 import { relative } from "../utils/format";
 import { SOURCE_NAMES } from "../utils/releaseDetail";
 
@@ -80,7 +81,10 @@ export function SyncProblems({ problems }: { problems: SyncProblem[] }) {
 }
 
 export default function SyncStatusWarning() {
-	const problems = useSyncStatus()?.problems ?? [];
+	// A CVE scan problem would point at displays that are hidden.
+	const problems = (useSyncStatus()?.problems ?? []).filter(
+		(p) => SHOW_CVES || p.source !== "image-scans",
+	);
 	if (problems.length === 0) return null;
 
 	const label = `${problems.length} sync problem${problems.length === 1 ? "" : "s"}`;
