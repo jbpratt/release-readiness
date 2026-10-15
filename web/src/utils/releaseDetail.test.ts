@@ -950,9 +950,13 @@ test("freshnessLine", () => {
 	assert.deepEqual(
 		freshnessLine({ problems: [failing, jira, stale], sources }),
 		{
-			text: "Data may be stale: art-history failing, konflux stale, last success never",
+			text: "Stale: 2 sources",
 			problems: [failing, stale],
 		},
+	);
+	assert.equal(
+		freshnessLine({ problems: [stale], sources })?.text,
+		"Stale: konflux",
 	);
 
 	// A source on its first pass, or none tracked, says nothing.

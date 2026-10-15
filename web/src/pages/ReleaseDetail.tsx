@@ -15,7 +15,6 @@ import {
 	FlexItem,
 	FormSelect,
 	FormSelectOption,
-	Icon,
 	Label,
 	type LabelProps,
 	List,
@@ -782,12 +781,6 @@ function RunSummary({ runs }: { runs: RunPill[] }) {
 	);
 }
 
-const warningIcon = (
-	<Icon status="warning" isInline>
-		<ExclamationTriangleIcon />
-	</Icon>
-);
-
 /** Whether the version can ship; a shipped version's is its prod Release. */
 function VerdictHeader({
 	verdict,
@@ -849,7 +842,7 @@ function NotReady({
 	);
 }
 
-/** How fresh the verdict's data is; a stale line opens its sync problems. */
+/** How fresh the verdict's data is; a stale label opens its sync problems. */
 function DataFreshness() {
 	const status = useSyncStatus();
 	const line = status && freshnessLine(status);
@@ -861,9 +854,10 @@ function DataFreshness() {
 			headerContent="Sync problems"
 			bodyContent={<SyncProblems problems={line.problems} />}
 		>
-			<Button variant="link" isInline icon={warningIcon}>
+			{/* The Popover opens on click; onClick makes the Label a focusable button. */}
+			<Label isCompact variant="outline" status="warning" onClick={() => {}}>
 				{line.text}
-			</Button>
+			</Label>
 		</Popover>
 	);
 }

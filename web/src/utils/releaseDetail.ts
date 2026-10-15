@@ -699,16 +699,9 @@ export function freshnessLine(
 ): { text: string; problems: SyncProblem[] } | null {
 	const problems = s.problems.filter((p) => VERDICT_SOURCES.includes(p.source));
 	if (problems.length > 0) {
-		// Failing sources carry since; stale ones do not.
-		const failing = problems.filter((p) => p.since).map((p) => p.source);
-		const stale = problems.filter((p) => !p.since).map((p) => p.source);
-		const what = [];
-		if (failing.length) what.push(`${failing.join(", ")} failing`);
-		if (stale.length) what.push(`${stale.join(", ")} stale`);
-		return {
-			text: `Data may be stale: ${what.join(", ")}, last success ${oldest(problems.map((p) => p.last_success))}`,
-			problems,
-		};
+		const what =
+			problems.length === 1 ? problems[0].source : `${problems.length} sources`;
+		return { text: `Stale: ${what}`, problems };
 	}
 	const last = s.sources
 		.filter((f) => VERDICT_SOURCES.includes(f.source))

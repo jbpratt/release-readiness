@@ -31,7 +31,23 @@ export function useSyncStatus() {
 	return data;
 }
 
-/** Each problem: its message, since when it fails, and its last success. */
+// What each sync feeds, so a problem says what it may have left out of date.
+const AFFECTS: Record<string, string> = {
+	konflux: "snapshots, releases, stage/prod status",
+	"art-builds": "builds",
+	"art-history": "builds",
+	"fbc-render": "FBC bundles",
+	catalog: "shipped versions",
+	jira: "tickets",
+	"image-scans": "CVE scans",
+	prow: "CI runs",
+	"shipment-mrs": "shipment MRs",
+};
+
+/**
+ * Each problem: its message, since when it fails, its last success, and what
+ * it affects.
+ */
 export function SyncProblems({ problems }: { problems: SyncProblem[] }) {
 	return (
 		<Stack hasGutter>
@@ -45,6 +61,9 @@ export function SyncProblems({ problems }: { problems: SyncProblem[] }) {
 							{p.since && `since ${relative(p.since)} · `}
 							last success {p.last_success ? relative(p.last_success) : "never"}
 						</Content>
+						{AFFECTS[p.source] && (
+							<Content component="p">Affects: {AFFECTS[p.source]}</Content>
+						)}
 						{/* Failing sources carry since; stale ones do not. */}
 						{!p.since && (
 							<Content component="p">
