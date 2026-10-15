@@ -13,8 +13,7 @@ import {
 	ExpandableSection,
 	Flex,
 	FlexItem,
-	FormSelect,
-	FormSelectOption,
+	Icon,
 	Label,
 	type LabelProps,
 	List,
@@ -24,18 +23,23 @@ import {
 	ModalHeader,
 	PageSection,
 	Popover,
+	type PopoverProps,
 	Spinner,
-	ToggleGroup,
-	ToggleGroupItem,
 	Toolbar,
 	ToolbarContent,
 	ToolbarGroup,
 	ToolbarItem,
 	Tooltip,
 } from "@patternfly/react-core";
-import { CopyIcon, ExternalLinkAltIcon } from "@patternfly/react-icons";
+import { CheckCircleIcon, ExternalLinkAltIcon } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
-import { type ReactNode, useMemo, useState } from "react";
+import {
+	type CSSProperties,
+	type ReactNode,
+	useEffect,
+	useMemo,
+	useState,
+} from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
 import type {
@@ -54,7 +58,6 @@ import LoadError, { Loading, ReleaseNotFound } from "../components/LoadError";
 import {
 	ExtLink,
 	external,
-	Flags,
 	muted,
 	OperatorImages,
 } from "../components/OperatorImages";
@@ -64,6 +67,7 @@ import { SyncProblems, useSyncStatus } from "../components/SyncStatusWarning";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
 import { type Blocker, blockers, splitBlockers } from "../utils/blockers";
+import { type Cell, cellProblem, headline, PROBLEMS } from "../utils/fbcMatrix";
 import { days, due } from "../utils/format";
 import {
 	formatReleaseName,
@@ -76,19 +80,17 @@ import {
 import {
 	bundleBuilt,
 	compareVersions,
+	type FbcRow,
 	fbcGroups,
 	fbcParams,
 	fbcPullspecs,
 	fbcsBuilt,
 	freshnessLine,
-	jobLabel,
-	needsAttention,
 	noFbcText,
-	type RunPill,
+	nvrLabel,
 	readingLine,
 	releaseLine,
 	runResult,
-	type StatusLine,
 	tknCommand,
 	verdictEntries,
 	verdictLine,
@@ -412,8 +414,7 @@ function BuildsCard({
 
 /**
  * The FBC candidate: its verdict, a failed or running prod Release and the
- * verdict's items, beside the release command; then its FBCs needing
- * attention, or all of them, each with its build, stage and CI.
+ * verdict's items, beside the release command; then its FBCs as a matrix.
  */
 function Candidate({
 	data,
@@ -430,29 +431,7 @@ function Candidate({
 	konflux: string | null;
 	inputs?: ReactNode;
 }) {
-	const groups = fbcGroups(data);
-	const allRows = groups.flatMap((g) => g.rows);
-	const [params, setParams] = useSearchParams();
-	const operator = params.get("operator") ?? "";
-	const ocp = params.get("ocp") ?? "";
-	const set = (key: string, value: string) =>
-		setParams(
-			(prev) => {
-				const next = new URLSearchParams(prev);
-				if (value) next.set(key, value);
-				else next.delete(key);
-				return next;
-			},
-			{ replace: true },
-		);
-	const operators = [...new Set(allRows.map((r) => r.operator))].sort();
-	const ocps = [...new Set(allRows.map((r) => r.ocp))].sort(compareVersions);
-	const rows = allRows.filter(
-		(r) => (!operator || r.operator === operator) && (!ocp || r.ocp === ocp),
-	);
-	const attention = rows.filter(needsAttention);
-	const [all, setAll] = useState(false);
-	const shown = all ? rows : attention;
+	const [params] = useSearchParams();
 	const entries = verdictEntries(data.verdict);
 	const read = readingLine(data.reading);
 	const prod = data.candidate?.prod;
@@ -503,45 +482,6 @@ function Candidate({
 			)}
 			<Toolbar style={{ marginTop: "1rem", paddingBlock: 0 }}>
 				<ToolbarContent>
-					<ToolbarItem>
-						<FormSelect
-							value={operator}
-							onChange={(_e, v) => set("operator", v)}
-							aria-label="Operator"
-						>
-							<FormSelectOption value="" label="All operators" />
-							{operators.map((o) => (
-								<FormSelectOption key={o} value={o} label={o} />
-							))}
-						</FormSelect>
-					</ToolbarItem>
-					<ToolbarItem>
-						<FormSelect
-							value={ocp}
-							onChange={(_e, v) => set("ocp", v)}
-							aria-label="OCP version"
-							style={{ width: "12rem" }}
-						>
-							<FormSelectOption value="" label="All OCP versions" />
-							{ocps.map((o) => (
-								<FormSelectOption key={o} value={o} label={`OCP ${o}`} />
-							))}
-						</FormSelect>
-					</ToolbarItem>
-					<ToolbarItem>
-						<ToggleGroup isCompact aria-label="FBCs shown">
-							<ToggleGroupItem
-								text={`Rows needing attention (${attention.length})`}
-								isSelected={!all}
-								onChange={() => setAll(false)}
-							/>
-							<ToggleGroupItem
-								text={`All (${rows.length})`}
-								isSelected={all}
-								onChange={() => setAll(true)}
-							/>
-						</ToggleGroup>
-					</ToolbarItem>
 					<ToolbarGroup align={{ default: "alignEnd" }}>
 						<ToolbarItem>
 							<Button
@@ -568,88 +508,373 @@ function Candidate({
 					</ToolbarGroup>
 				</ToolbarContent>
 			</Toolbar>
-			{shown.length === 0 ? (
-				<EmptyState
-					variant="xs"
-					headingLevel="h4"
-					titleText={
-						rows.length === 0 && (operator || ocp)
-							? "No FBC matches the filters"
-							: all
-								? "No FBCs"
-								: "No FBC needs attention"
-					}
-				/>
-			) : (
-				<Table variant="compact" aria-label="Candidate FBCs">
-					<Thead>
-						<Tr>
-							<Th>Operator</Th>
-							<Th>OCP</Th>
-							<Th>Built (UTC)</Th>
-							<Th>Stage</Th>
-							<Th>CI</Th>
-							<Th screenReaderText="FBC" />
-						</Tr>
-					</Thead>
-					<Tbody>
-						{shown.map((r) => (
-							<Tr key={`${r.operator} ${r.ocp} ${r.fbc?.digest ?? ""}`}>
-								<Td dataLabel="Operator">{r.operator}</Td>
-								<Td dataLabel="OCP" modifier="nowrap">
-									{r.ocp}
-								</Td>
-								<Td dataLabel="Built (UTC)" modifier="nowrap">
-									{r.fbc ? (
-										<ExtLink href={r.fbc.build_url || null} title={r.fbc.nvr}>
-											{bundleBuilt(r.fbc.nvr) || r.fbc.nvr || "unresolved"}
-										</ExtLink>
-									) : (
-										<span style={muted}>–</span>
-									)}
-								</Td>
-								<Td dataLabel="Stage">
-									<Flex
-										gap={{ default: "gapMd" }}
-										alignItems={{ default: "alignItemsCenter" }}
-									>
-										{r.stage ? (
-											<Status status={r.stage.status}>{r.stage.text}</Status>
-										) : (
-											<span style={muted}>{r.fbc ? "Not staged" : "–"}</span>
-										)}
-										<Flags flags={r.flags} />
-										{r.fbc?.release?.job_url && (
-											<ExtLink href={r.fbc.release.job_url}>ART job</ExtLink>
-										)}
-									</Flex>
-								</Td>
-								<Td dataLabel="CI" modifier="nowrap">
-									{r.runs.length === 0 ? (
-										<span style={muted}>No runs</span>
-									) : (
-										<RunSummary runs={r.runs} />
-									)}
-								</Td>
-								<Td dataLabel="FBC" modifier="fitContent">
-									{r.fbc && (
-										<Button
-											variant="plain"
-											size="sm"
-											icon={<CopyIcon />}
-											aria-label={`Copy the ${r.operator} OCP ${r.ocp} FBC pullspec`}
-											title={r.fbc.pullspec}
-											onClick={() =>
-												navigator.clipboard.writeText(r.fbc?.pullspec ?? "")
-											}
-										/>
-									)}
-								</Td>
-							</Tr>
+			<FbcMatrix data={data} />
+		</>
+	);
+}
+
+// Phone width, where the matrix turns on its side.
+const narrowQuery = "(max-width: 768px)";
+
+function useNarrow() {
+	const [narrow, setNarrow] = useState(() => matchMedia(narrowQuery).matches);
+	useEffect(() => {
+		const m = matchMedia(narrowQuery);
+		const on = () => setNarrow(m.matches);
+		m.addEventListener("change", on);
+		return () => m.removeEventListener("change", on);
+	}, []);
+	return narrow;
+}
+
+/** Operators as a phone-width column header names them. */
+const shortNames: Record<string, string> = {
+	"quay-operator": "Quay",
+	"container-security-operator": "CSO",
+	"quay-bridge-operator": "QBO",
+};
+
+const cellKey = (r: FbcRow) => `${r.operator}@${r.ocp}`;
+
+/**
+ * The candidate's FBCs, operators down and OCP versions across (swapped at
+ * phone width so nothing scrolls sideways), under a headline naming their
+ * gaps. ?cell=<operator>@<ocp> opens that FBC's detail.
+ */
+function FbcMatrix({ data }: { data: ReleaseCandidate }) {
+	const narrow = useNarrow();
+	const [params, setParams] = useSearchParams();
+	const staged = data.fbc_candidate?.source !== "stream";
+	const groups = fbcGroups(data);
+	const rows = groups.flatMap((g) => g.rows);
+	const cells = new Map<string, Cell>(
+		rows.map((r) => [cellKey(r), { row: r, problem: cellProblem(r, staged) }]),
+	);
+	const head = headline([...cells.values()], staged);
+	const operators = groups.map((g) => g.operator);
+	const ocps = [...new Set(rows.map((r) => r.ocp))].sort(compareVersions);
+	const across = narrow ? operators : ocps;
+	const down = narrow ? ocps : operators;
+	const at = (d: string, a: string) =>
+		cells.get(narrow ? `${a}@${d}` : `${d}@${a}`);
+	const picked = params.get("cell");
+	const select = (key: string | null) =>
+		setParams(
+			(prev) => {
+				const next = new URLSearchParams(prev);
+				if (key) next.set("cell", key);
+				else next.delete("cell");
+				return next;
+			},
+			{ replace: true },
+		);
+	return (
+		<>
+			<div style={{ display: "grid", gap: "0.25rem", marginTop: "1rem" }}>
+				{head.gaps.length === 0 ? (
+					<Status status="done">
+						<strong>{head.count}</strong>
+					</Status>
+				) : (
+					<>
+						{head.gaps.map((g) => (
+							<Status key={g.text} status={g.status}>
+								<strong>{g.text}</strong>
+							</Status>
 						))}
-					</Tbody>
-				</Table>
-			)}
+						<span style={muted}>{head.count}</span>
+					</>
+				)}
+				{!staged && (
+					<span style={muted}>No stage shipment holds these FBCs yet.</span>
+				)}
+			</div>
+			<table
+				aria-label="FBCs by operator and OCP version"
+				style={{
+					marginTop: "1rem",
+					borderCollapse: "collapse",
+					width: "100%",
+					tableLayout: "fixed",
+				}}
+			>
+				<colgroup>
+					<col style={{ width: narrow ? "3rem" : "13rem" }} />
+				</colgroup>
+				<thead>
+					<tr>
+						<td style={{ ...axisLabel, ...muted, textAlign: "start" }}>
+							{narrow ? "OCP" : "OCP version"}
+						</td>
+						{across.map((a) => (
+							<th
+								key={a}
+								scope="col"
+								style={axisLabel}
+								title={narrow ? a : undefined}
+							>
+								{narrow ? (shortNames[a] ?? a) : a}
+							</th>
+						))}
+					</tr>
+				</thead>
+				<tbody>
+					{down.map((d) => (
+						<tr key={d} style={{ borderTop: rule }}>
+							<th scope="row" style={{ ...axisLabel, textAlign: "start" }}>
+								{d}
+							</th>
+							{across.map((a, i) => {
+								const c = at(d, a);
+								return (
+									<td key={a} style={{ textAlign: "center", padding: "2px 0" }}>
+										{c ? (
+											<MatrixCell
+												cell={c}
+												green={staged ? "built and staged" : "built"}
+												open={picked === cellKey(c.row)}
+												position={
+													i === 0
+														? "bottom-start"
+														: i === across.length - 1
+															? "bottom-end"
+															: "bottom"
+												}
+												onOpen={() => select(cellKey(c.row))}
+												onClose={() => select(null)}
+											/>
+										) : (
+											<span
+												style={muted}
+												title="This operator has no FBC for this OCP version"
+											>
+												–
+											</span>
+										)}
+									</td>
+								);
+							})}
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</>
+	);
+}
+
+const rule = "1px solid var(--pf-t--global--border--color--default)";
+
+const axisLabel: CSSProperties = {
+	padding: "0.4rem 0",
+	textAlign: "center",
+	fontSize: "var(--pf-t--global--font--size--sm)",
+	fontWeight: "var(--pf-t--global--font--weight--body--bold)",
+	whiteSpace: "nowrap",
+};
+
+/**
+ * One FBC: a check when green, else its problem's icon and words; a click
+ * opens its detail. An edge column's detail opens inward to stay on screen.
+ */
+function MatrixCell({
+	cell: { row, problem },
+	green,
+	open,
+	position,
+	onOpen,
+	onClose,
+}: {
+	cell: Cell;
+	green: string;
+	open: boolean;
+	position: PopoverProps["position"];
+	onOpen: () => void;
+	onClose: () => void;
+}) {
+	return (
+		<Popover
+			isVisible={open}
+			shouldOpen={onOpen}
+			shouldClose={onClose}
+			position={position}
+			maxWidth="min(28rem, calc(100vw - 6.5rem))"
+			aria-label={`${row.operator} OCP ${row.ocp}`}
+			headerContent={`${row.operator} · OCP ${row.ocp}`}
+			bodyContent={<FbcDetail row={row} />}
+		>
+			<Button
+				variant="plain"
+				size="sm"
+				isClicked={open}
+				aria-label={`${row.operator} OCP ${row.ocp}: ${problem ?? green}`}
+				style={{ width: "100%", whiteSpace: "nowrap" }}
+			>
+				<span
+					style={{
+						display: "inline-flex",
+						justifyContent: "center",
+						fontSize: "var(--pf-t--global--font--size--sm)",
+						color: "var(--pf-t--global--text--color--regular)",
+					}}
+				>
+					{problem ? (
+						<Status status={PROBLEMS[problem].status}>{problem}</Status>
+					) : (
+						<Icon status="success">
+							<CheckCircleIcon />
+						</Icon>
+					)}
+				</span>
+			</Button>
+		</Popover>
+	);
+}
+
+/** One FBC, check by check; each row says what is absent when it is. */
+function FbcDetail({ row }: { row: FbcRow }) {
+	const f = row.fbc;
+	const unread = row.flags.find((x) => x.text === "can't read");
+	const older = row.flags.find((x) => x.text.startsWith("holds an older"));
+	const bundle = row.images.find((i) => i.nvr === f?.head_bundle_nvr);
+	const release = f?.release;
+	const none = (text: string) => <span style={muted}>{text}</span>;
+	const notYet = (
+		<Label isCompact variant="outline">
+			not in API yet
+		</Label>
+	);
+	return (
+		<dl
+			style={{
+				display: "grid",
+				gridTemplateColumns: "max-content minmax(0, 1fr)",
+				gap: "0.4rem 1rem",
+				margin: 0,
+			}}
+		>
+			<DetailLine label="Built">
+				{!f ? (
+					<Status status="failed">Not built</Status>
+				) : !f.nvr ? (
+					<Status status="warning">
+						ART has no build record for this image
+					</Status>
+				) : (
+					<>
+						{bundleBuilt(f.nvr) || "Built"} UTC ·{" "}
+						<ExtLink href={f.build_url || null} title={f.nvr}>
+							ART build
+						</ExtLink>
+					</>
+				)}
+			</DetailLine>
+			<DetailLine label="Image">
+				{f ? (
+					<ClipboardCopy
+						isReadOnly
+						variant="inline-compact"
+						truncation
+						hoverTip="Copy the pullspec"
+						clickTip="Copied"
+					>
+						{f.pullspec}
+					</ClipboardCopy>
+				) : (
+					none("No image")
+				)}
+			</DetailLine>
+			<DetailLine label="Bundle">
+				{!f ? (
+					none("No bundle")
+				) : unread ? (
+					<Status status="failed">
+						Could not read this FBC: {unread.title ?? "no detail"}
+					</Status>
+				) : older ? (
+					<Status status="warning">
+						Lists an older operator bundle than the other OCP versions (
+						{older.text.replace(/^holds an older bundle \((.*)\)$/, "$1")})
+					</Status>
+				) : f.head_bundle_nvr ? (
+					<>
+						Lists the release's operator bundle,{" "}
+						{bundle?.commit ? (
+							<span title={f.head_bundle_nvr}>
+								commit <code>{bundle.commit.slice(0, 7)}</code>
+							</span>
+						) : (
+							nvrLabel(f.head_bundle_nvr)
+						)}
+					</>
+				) : (
+					none("Not resolved yet")
+				)}
+			</DetailLine>
+			<DetailLine label="Staged">
+				{row.stage ? (
+					<Status status={row.stage.status}>
+						{row.stage.text}
+						{release && (
+							<div style={muted}>
+								{release.name}
+								{release.job_url && (
+									<>
+										{" · "}
+										<ExtLink href={release.job_url}>ART job</ExtLink>
+									</>
+								)}
+							</div>
+						)}
+					</Status>
+				) : (
+					none(f ? "Not in a stage release" : "Nothing to stage")
+				)}
+			</DetailLine>
+			<DetailLine label="CI">
+				{row.runs.length === 0
+					? none("No runs")
+					: row.runs.map((p) => {
+							const r = runResult(p.state);
+							const link = (
+								<ExtLink href={p.prow_url || null}>
+									{p.equivalent ? "≈ " : ""}
+									{p.job}
+								</ExtLink>
+							);
+							return (
+								<div key={`${p.job} ${p.equivalent}`}>
+									{r.status ? (
+										<Status status={r.status}>
+											{r.text}: {link}
+										</Status>
+									) : (
+										<>
+											{r.text}: {link}
+										</>
+									)}
+								</div>
+							);
+						})}
+			</DetailLine>
+			<DetailLine label="Enterprise Contract">{notYet}</DetailLine>
+			<DetailLine label="CVE scan">{notYet}</DetailLine>
+		</dl>
+	);
+}
+
+function DetailLine({
+	label,
+	children,
+}: {
+	label: string;
+	children: ReactNode;
+}) {
+	return (
+		<>
+			<dt style={muted}>{label}</dt>
+			<dd style={{ margin: 0, minWidth: 0, overflowWrap: "anywhere" }}>
+				{children}
+			</dd>
 		</>
 	);
 }
@@ -684,76 +909,6 @@ const levelStatus: Record<VerdictItem["level"], LabelProps["status"]> = {
 	warning: "warning",
 	info: "info",
 };
-
-/** A run result's place when counted, worst first. */
-const severity = (s?: StatusLine["status"]) =>
-	s === "failed" ? 0 : s === "running" ? 1 : s === "done" ? 3 : 2;
-
-/**
- * An FBC row's CI: its jobs counted by result, worst first, opening a list of
- * the jobs, each linking to its newest run in Prow. A run on another FBC of
- * the same bundle is marked "≈".
- */
-function RunSummary({ runs }: { runs: RunPill[] }) {
-	const counts: (ReturnType<typeof runResult> & { n: number })[] = [];
-	for (const p of runs) {
-		const r = runResult(p.state);
-		const c = counts.find((c) => c.text === r.text);
-		if (c) c.n++;
-		else counts.push({ ...r, n: 1 });
-	}
-	counts.sort((a, b) => severity(a.status) - severity(b.status));
-	const summary = counts
-		.map((c) => `${c.n} ${c.text.toLowerCase()}`)
-		.join(" · ");
-	return (
-		<Popover
-			headerContent={`${runs.length} CI jobs`}
-			bodyContent={
-				<List isPlain>
-					{runs.map((p) => {
-						const r = runResult(p.state);
-						const job = (
-							<>
-								{p.equivalent && "≈ "}
-								{jobLabel(p.job)}
-							</>
-						);
-						return (
-							<ListItem key={`${p.job} ${p.equivalent}`}>
-								<a
-									href={p.prow_url}
-									aria-label={`${jobLabel(p.job)} ${r.text}`}
-									title={[
-										`${p.job}: ${r.text}`,
-										`Started ${when(p.started_at)}`,
-										p.install_failed && "Install failed",
-										p.runs > 1 && `Newest of ${p.runs} runs`,
-										p.equivalent &&
-											"Ran on another FBC with the same bundle; its channel graph can differ.",
-									]
-										.filter(Boolean)
-										.join("\n")}
-									{...external}
-								>
-									{r.status ? <Status status={r.status}>{job}</Status> : job}
-								</a>
-							</ListItem>
-						);
-					})}
-				</List>
-			}
-		>
-			<Button variant="link" isInline>
-				{counts[0].status ? (
-					<Status status={counts[0].status}>{summary}</Status>
-				) : (
-					summary
-				)}
-			</Button>
-		</Popover>
-	);
-}
 
 /** Whether the version can ship; a shipped version's is its prod Release. */
 function VerdictHeader({
