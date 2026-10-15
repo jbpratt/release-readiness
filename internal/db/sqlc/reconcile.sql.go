@@ -7,6 +7,7 @@ package dbsqlc
 
 import (
 	"context"
+	"strings"
 )
 
 const firstIncludedReconcileAction = `-- name: FirstIncludedReconcileAction :one
@@ -123,6 +124,53 @@ type InsertReconcileRunParams struct {
 func (q *Queries) InsertReconcileRun(ctx context.Context, arg InsertReconcileRunParams) error {
 	_, err := q.db.ExecContext(ctx, insertReconcileRun, arg.ReleaseName, arg.FbcDigest)
 	return err
+}
+
+const listArtRecordsByDigest = `-- name: ListArtRecordsByDigest :many
+SELECT digest, nvr, record_id
+FROM art_history_records
+WHERE digest IN (/*SLICE:digests*/?)
+ORDER BY digest, start_time DESC, nvr DESC, record_id
+`
+
+type ListArtRecordsByDigestRow struct {
+	Digest   string
+	Nvr      string
+	RecordID string
+}
+
+// The ART records of digests, newest first per digest.
+func (q *Queries) ListArtRecordsByDigest(ctx context.Context, digests []string) ([]ListArtRecordsByDigestRow, error) {
+	query := listArtRecordsByDigest
+	var queryParams []interface{}
+	if len(digests) > 0 {
+		for _, v := range digests {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:digests*/?", strings.Repeat(",?", len(digests))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:digests*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListArtRecordsByDigestRow
+	for rows.Next() {
+		var i ListArtRecordsByDigestRow
+		if err := rows.Scan(&i.Digest, &i.Nvr, &i.RecordID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listFBCMemberDigests = `-- name: ListFBCMemberDigests :many

@@ -101,3 +101,10 @@ SELECT CAST(EXISTS (SELECT 1 FROM reconcile_runs WHERE release_name = ? AND fbc_
 INSERT INTO reconcile_runs (release_name, fbc_digest)
 VALUES (?, ?)
 ON CONFLICT(release_name, fbc_digest) DO NOTHING;
+
+-- name: ListArtRecordsByDigest :many
+-- The ART records of digests, newest first per digest.
+SELECT digest, nvr, record_id
+FROM art_history_records
+WHERE digest IN (sqlc.slice('digests'))
+ORDER BY digest, start_time DESC, nvr DESC, record_id;

@@ -45,6 +45,11 @@ type Source struct {
 	Name, SourceRepo, Commitish string
 }
 
+// ARTRecord is an ART build history record of an image digest.
+type ARTRecord struct {
+	Digest, NVR, RecordID string
+}
+
 // Baseline is the first FBC a stream/operator/OCP slot was reconciled from.
 type Baseline struct {
 	Stream, Operator, OCP, FBCDigest string
@@ -57,6 +62,9 @@ type Store interface {
 	// FBCMemberDigests returns the digests of the FBC's head bundle, its
 	// related images and the FBC itself.
 	FBCMemberDigests(ctx context.Context, fbcDigest string) ([]string, error)
+	// ARTRecords returns the ART records of digests, newest first per
+	// digest.
+	ARTRecords(ctx context.Context, digests []string) ([]ARTRecord, error)
 	// SourcesByDigest returns the records of an image digest that have a
 	// source repo.
 	SourcesByDigest(context.Context, string) ([]Source, error)

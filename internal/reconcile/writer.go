@@ -2,13 +2,13 @@ package reconcile
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"path"
 	"slices"
 	"strings"
 
+	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/jira"
 )
 
@@ -31,17 +31,20 @@ const (
 )
 
 // Writer applies proposed actions to Jira: it narrows the issue's stream
-// Target Version to the release, moves a Verified issue to Release Pending
-// and comments the FBC that includes the fix.
+// Target Version to the release, moves a MODIFIED, ON_QA or Verified issue
+// to Release Pending and comments the ART builds of the FBC and of the quay
+// image in it.
 type Writer struct {
 	jira    JiraWriter
 	store   Store
 	project string
-	logger  *slog.Logger
+	// artURL is the ART build history service the comment links to.
+	artURL string
+	logger *slog.Logger
 }
 
-func NewWriter(j JiraWriter, store Store, project string, log *slog.Logger) *Writer {
-	return &Writer{jira: j, store: store, project: project, logger: log}
+func NewWriter(j JiraWriter, store Store, project, artURL string, log *slog.Logger) *Writer {
+	return &Writer{jira: j, store: store, project: project, artURL: artURL, logger: log}
 }
 
 // ApplyPending applies every pending action. Only store errors fail it.
@@ -152,8 +155,9 @@ func (w *Writer) version(ctx context.Context, a *Action) error {
 	return nil
 }
 
-// transition moves a Verified issue to Release Pending. Release-tool makes
-// the same move, so an issue already there is left as it is.
+// transition moves a MODIFIED, ON_QA or Verified issue to Release Pending,
+// by a direct transition only. Release-tool makes the same move, so an issue
+// already there is left as it is; any other status is left for triage.
 func (w *Writer) transition(ctx context.Context, a *Action) error {
 	if a.TransitionStep != "" {
 		return nil
@@ -162,11 +166,12 @@ func (w *Writer) transition(ctx context.Context, a *Action) error {
 	if !ok {
 		return err
 	}
-	if issue.Status == releasePending {
+	switch issue.Status {
+	case releasePending:
 		a.TransitionStep = "already"
 		return nil
-	}
-	if issue.Status != "Verified" {
+	case "MODIFIED", "ON_QA", "Verified":
+	default:
 		a.TransitionStep = "none from " + issue.Status
 		return nil
 	}
@@ -176,8 +181,7 @@ func (w *Writer) transition(ctx context.Context, a *Action) error {
 	}
 	i := slices.IndexFunc(ts, func(t jira.Transition) bool { return t.To == releasePending })
 	if i < 0 {
-		a.TransitionStep = "none offered from Verified"
-		return nil
+		return fmt.Errorf("no transition to %s from %s", releasePending, issue.Status)
 	}
 	if err := w.jira.Transition(ctx, a.Key.IssueKey, ts[i].ID); err != nil {
 		return err
@@ -186,8 +190,13 @@ func (w *Writer) transition(ctx context.Context, a *Action) error {
 	return nil
 }
 
-// comment says on the issue which FBC includes its fix, once: a comment
-// carrying the marker is never posted again.
+// quayName is the ART name of the quay image, its NVR less version and
+// release.
+const quayName = "quay-quay-container"
+
+// comment links the ART builds of the FBC and of the quay image in it, once:
+// a comment carrying the FBC build link, or the marker of the earlier comment
+// text, is never posted again.
 func (w *Writer) comment(ctx context.Context, a *Action) error {
 	if a.CommentStep != "" {
 		return nil
@@ -195,30 +204,56 @@ func (w *Writer) comment(ctx context.Context, a *Action) error {
 	if _, ok, err := w.issue(ctx, a); !ok {
 		return err
 	}
-	marker := fmt.Sprintf("release-readiness FBC stamp %s %s", a.Key.FBCDigest, a.Key.IssueKey)
 	comments, err := w.jira.ListComments(ctx, a.Key.IssueKey)
 	if err != nil {
 		return err
 	}
+	marker := fmt.Sprintf("release-readiness FBC stamp %s %s", a.Key.FBCDigest, a.Key.IssueKey)
 	if slices.ContainsFunc(comments, func(c jira.Comment) bool { return strings.Contains(c.Body, marker) }) {
 		a.CommentStep = "already"
 		return nil
 	}
-	var ev []evidence
-	if err := json.Unmarshal([]byte(a.EvidenceJSON), &ev); err != nil {
-		return fmt.Errorf("evidence: %w", err)
+	digests, err := w.store.FBCMemberDigests(ctx, a.Key.FBCDigest)
+	if err != nil {
+		return err
 	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "The fix is included in FBC %s (%s), staged for %s by Konflux Release %s.\n\nCommits:\n", a.FBCNVR, a.Key.FBCDigest, a.DesiredTargetVersion, a.Key.Release)
-	for _, e := range ev {
-		fmt.Fprintf(&b, "* %s/commit/%s (%s)\n", e.Repo, e.SHA, e.Component)
+	records, err := w.store.ARTRecords(ctx, digests)
+	if err != nil {
+		return err
 	}
-	fmt.Fprintf(&b, "\n%s\n", marker)
-	if err := w.jira.AddComment(ctx, a.Key.IssueKey, b.String()); err != nil {
+	fbc := slices.IndexFunc(records, func(r ARTRecord) bool { return r.Digest == a.Key.FBCDigest })
+	if fbc < 0 {
+		return fmt.Errorf("no ART record of FBC %s", a.Key.FBCDigest)
+	}
+	quay := slices.IndexFunc(records, func(r ARTRecord) bool { return nvrName(r.NVR) == quayName })
+	if quay < 0 {
+		return fmt.Errorf("no ART record of %s in FBC %s", quayName, a.Key.FBCDigest)
+	}
+	fbcURL := artbuild.PageURL(w.artURL, records[fbc].NVR, records[fbc].RecordID)
+	if slices.ContainsFunc(comments, func(c jira.Comment) bool { return strings.Contains(c.Body, fbcURL) }) {
+		a.CommentStep = "already"
+		return nil
+	}
+	quayURL := artbuild.PageURL(w.artURL, records[quay].NVR, records[quay].RecordID)
+	body := fmt.Sprintf("This fix is staged for %s. [FBC build|%s] [quay build|%s]", a.DesiredTargetVersion, fbcURL, quayURL)
+	if err := w.jira.AddComment(ctx, a.Key.IssueKey, body); err != nil {
 		return err
 	}
 	a.CommentStep = "added"
 	return nil
+}
+
+// nvrName returns the name of an NVR, "" when it has no version and release.
+func nvrName(nvr string) string {
+	i := strings.LastIndex(nvr, "-")
+	if i < 0 {
+		return ""
+	}
+	j := strings.LastIndex(nvr[:i], "-")
+	if j < 0 {
+		return ""
+	}
+	return nvr[:j]
 }
 
 func (w *Writer) save(ctx context.Context, a Action) error {

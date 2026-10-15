@@ -49,6 +49,14 @@ func TestProvenanceStore(t *testing.T) {
 	if got, err := d.SourcesByDigest(ctx, "sha256:aaaa"); err != nil || len(got) != 1 || got[0] != qo {
 		t.Errorf("sources of sha256:aaaa: %+v, %v; want only %+v", got, err, qo)
 	}
+	wantRecords := []reconcile.ARTRecord{
+		{Digest: "sha256:aaaa", NVR: "base-1", RecordID: "rec-base"},
+		{Digest: "sha256:aaaa", NVR: "qo-1", RecordID: "rec-qo"},
+		{Digest: "sha256:bbbb", NVR: "new-1", RecordID: "rec-new"},
+	}
+	if got, err := d.ARTRecords(ctx, []string{"sha256:bbbb", "sha256:aaaa"}); err != nil || !slices.Equal(got, wantRecords) {
+		t.Errorf("ART records: %+v, %v; want %+v", got, err, wantRecords)
+	}
 	for digest, want := range map[string][2]bool{"sha256:aaaa": {true, false}, "sha256:bbbb": {true, true}, "sha256:cccc": {false, false}} {
 		if stored, unchecked, err := d.SourceState(ctx, digest); err != nil || [2]bool{stored, unchecked} != want {
 			t.Errorf("source state of %s: %v, %v, %v; want %v", digest, stored, unchecked, err, want)

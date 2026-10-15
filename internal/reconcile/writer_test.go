@@ -6,7 +6,6 @@ import (
 	"io"
 	"log/slog"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/quay/release-readiness/internal/jira"
@@ -76,10 +75,26 @@ func (f *fakeJira) AddComment(_ context.Context, key, body string) error {
 
 var writeKey = ActionKey{FBCDigest: "sha256:f3", IssueKey: "PROJQUAY-1", Release: "r3"}
 
+const artBase = "https://art-build-history-art-build-history.apps.artc2023.pc3z.p1.openshiftapps.com"
+
+// addRecords stores the ART records of PROJQUAY-13437's FBC and quay image as
+// those of fbcDigest and its member quayDigest.
+func addRecords(store *fakeStore, fbcDigest, quayDigest string) {
+	store.members[fbcDigest] = []string{quayDigest, fbcDigest}
+	store.records[fbcDigest] = []ARTRecord{{Digest: fbcDigest, NVR: "quay-operator-fbc-3.17.6-20261013001348.ocp4.17", RecordID: "f1a90dd2-d988-875b-07ae-a39919d5e837"}}
+	store.records[quayDigest] = []ARTRecord{
+		{Digest: quayDigest, NVR: "quay-quay-container-security-operator-container-3.17.6-1.el9", RecordID: "other"},
+		{Digest: quayDigest, NVR: "quay-quay-container-3.17.6-202610092311.p2.gb60532b.assembly.stream.el9", RecordID: "3a7f2b70-c546-f188-cdae-95adfc79aa78"},
+	}
+}
+
+const fbcURL = artBase + "/build?nvr=quay-operator-fbc-3.17.6-20261013001348.ocp4.17&record_id=f1a90dd2-d988-875b-07ae-a39919d5e837"
+
 // newWriter returns a writer of j over a store holding one proposed action
 // for PROJQUAY-1.
 func newWriter(j *fakeJira) (*Writer, *fakeStore) {
 	store := newFakeStore()
+	addRecords(store, writeKey.FBCDigest, "sha256:quay3")
 	store.actions[writeKey] = Action{
 		Key:                  writeKey,
 		Assembly:             "3.18.2",
@@ -88,7 +103,7 @@ func newWriter(j *fakeJira) (*Writer, *fakeStore) {
 		DesiredTargetVersion: "quay-v3.18.2",
 		Status:               StatusProposed,
 	}
-	return NewWriter(j, store, "PROJQUAY", slog.New(slog.NewTextHandler(io.Discard, nil))), store
+	return NewWriter(j, store, "PROJQUAY", artBase, slog.New(slog.NewTextHandler(io.Discard, nil))), store
 }
 
 func applyPending(t *testing.T, w *Writer) {
@@ -110,7 +125,8 @@ func TestWriterDisabled(t *testing.T) {
 		t.Errorf("writer off: writes %v; want none", j.writes)
 	}
 
-	fx.sync.Writer = NewWriter(j, fx.store, "PROJQUAY", slog.New(slog.NewTextHandler(io.Discard, nil)))
+	addRecords(fx.store, "sha256:f2", "sha256:quay-"+sha(2))
+	fx.sync.Writer = NewWriter(j, fx.store, "PROJQUAY", artBase, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	fx.run(t)
 	if len(j.writes) != 3 {
 		t.Errorf("writer on: writes %v; want edit, transition and comment", j.writes)
@@ -128,11 +144,58 @@ func TestWriterAlreadyReleasePending(t *testing.T) {
 	if a.Status != StatusApplied || a.VersionStep != "edited" || a.TransitionStep != "already" || a.CommentStep != "added" || a.Attempts != 1 {
 		t.Errorf("action %+v; want applied without a transition", a)
 	}
-	body := j.comments[0].Body
-	for _, s := range []string{a.FBCNVR, "sha256:f3", "https://github.com/quay/quay/commit/" + sha(3), "release-readiness FBC stamp sha256:f3 PROJQUAY-1"} {
-		if !strings.Contains(body, s) {
-			t.Errorf("comment %q lacks %q", body, s)
-		}
+}
+
+func TestWriterTransition(t *testing.T) {
+	for status, step := range map[string]string{
+		"MODIFIED": "transitioned",
+		"ON_QA":    "transitioned",
+		"Verified": "transitioned",
+		"POST":     "none from POST",
+		"New":      "none from New",
+	} {
+		t.Run(status, func(t *testing.T) {
+			j := newFakeJira(status, "quay-v3.18.2")
+			w, store := newWriter(j)
+			applyPending(t, w)
+			var want []string
+			if step == "transitioned" {
+				want = []string{"transition PROJQUAY-1 31"}
+			}
+			want = append(want, "comment PROJQUAY-1")
+			if a := store.actions[writeKey]; !slices.Equal(j.writes, want) || a.Status != StatusApplied || a.TransitionStep != step {
+				t.Errorf("writes %v, action %+v; want writes %v, transition step %q", j.writes, a, want, step)
+			}
+		})
+	}
+}
+
+// TestWriterComment is the approved comment, on PROJQUAY-13437's values.
+func TestWriterComment(t *testing.T) {
+	j := newFakeJira(releasePending, "quay-v3.17.6")
+	j.versions["quay-v3.17.6"] = jira.VersionField{Name: "quay-v3.17.6"}
+	w, store := newWriter(j)
+	a := store.actions[writeKey]
+	a.DesiredTargetVersion = "quay-v3.17.6"
+	store.actions[writeKey] = a
+	applyPending(t, w)
+	want := "This fix is staged for quay-v3.17.6. [FBC build|https://art-build-history-art-build-history.apps.artc2023.pc3z.p1.openshiftapps.com/build?nvr=quay-operator-fbc-3.17.6-20261013001348.ocp4.17&record_id=f1a90dd2-d988-875b-07ae-a39919d5e837] [quay build|https://art-build-history-art-build-history.apps.artc2023.pc3z.p1.openshiftapps.com/build?nvr=quay-quay-container-3.17.6-202610092311.p2.gb60532b.assembly.stream.el9&record_id=3a7f2b70-c546-f188-cdae-95adfc79aa78]"
+	if len(j.comments) != 1 || j.comments[0].Body != want {
+		t.Errorf("comments %+v; want one %q", j.comments, want)
+	}
+}
+
+func TestWriterMissingRecord(t *testing.T) {
+	for name, digest := range map[string]string{"fbc": writeKey.FBCDigest, "quay": "sha256:quay3"} {
+		t.Run(name, func(t *testing.T) {
+			j := newFakeJira(releasePending, "quay-v3.18.2")
+			w, store := newWriter(j)
+			delete(store.records, digest)
+			applyPending(t, w)
+			if a := store.actions[writeKey]; len(j.writes) != 0 || a.Status != StatusError || a.CommentStep != "" {
+				t.Errorf("writes %v, action %+v; want none and error", j.writes, a)
+			}
+		})
 	}
 }
 
@@ -146,13 +209,20 @@ func TestWriterVersionMissing(t *testing.T) {
 	}
 }
 
-func TestWriterMarkerPresent(t *testing.T) {
-	j := newFakeJira(releasePending, "quay-v3.18.2")
-	j.comments = []jira.Comment{{Body: "Included.\n\nrelease-readiness FBC stamp sha256:f3 PROJQUAY-1\n"}}
-	w, store := newWriter(j)
-	applyPending(t, w)
-	if a := store.actions[writeKey]; len(j.writes) != 0 || a.Status != StatusApplied || a.CommentStep != "already" || a.VersionStep != "already" {
-		t.Errorf("writes %v, action %+v; want none", j.writes, a)
+func TestWriterCommentPresent(t *testing.T) {
+	for name, body := range map[string]string{
+		"fbc link":      "This fix is staged for quay-v3.18.2. [FBC build|" + fbcURL + "]",
+		"legacy marker": "Included.\n\nrelease-readiness FBC stamp sha256:f3 PROJQUAY-1\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			j := newFakeJira(releasePending, "quay-v3.18.2")
+			j.comments = []jira.Comment{{Body: body}}
+			w, store := newWriter(j)
+			applyPending(t, w)
+			if a := store.actions[writeKey]; len(j.writes) != 0 || a.Status != StatusApplied || a.CommentStep != "already" || a.VersionStep != "already" {
+				t.Errorf("writes %v, action %+v; want none", j.writes, a)
+			}
+		})
 	}
 }
 
@@ -210,16 +280,11 @@ func TestWriterGuards(t *testing.T) {
 				return a.Status == StatusSkipped && a.SkipReason == "Target Version [quay-v3.17.z] has neither quay-v3.18.z nor quay-v3.18.2"
 			},
 		},
-		"not verified": {
-			jira:   func(j *fakeJira) { j.issue.Status = "In Progress" },
-			writes: []string{"edit PROJQUAY-1 +quay-v3.18.2 -quay-v3.18.z", "comment PROJQUAY-1"},
-			check:  func(a Action) bool { return a.Status == StatusApplied && a.TransitionStep == "none from In Progress" },
-		},
 		"release pending not offered": {
 			jira:   func(j *fakeJira) { j.transitions = j.transitions[:1] },
-			writes: []string{"edit PROJQUAY-1 +quay-v3.18.2 -quay-v3.18.z", "comment PROJQUAY-1"},
+			writes: []string{"edit PROJQUAY-1 +quay-v3.18.2 -quay-v3.18.z"},
 			check: func(a Action) bool {
-				return a.Status == StatusApplied && a.TransitionStep == "none offered from Verified"
+				return a.Status == StatusError && a.Error == "no transition to Release Pending from Verified" && a.TransitionStep == "" && a.CommentStep == ""
 			},
 		},
 	} {

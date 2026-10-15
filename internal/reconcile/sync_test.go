@@ -18,6 +18,7 @@ import (
 type fakeStore struct {
 	fbcs      []StageFBC
 	members   map[string][]string
+	records   map[string][]ARTRecord
 	sources   map[string][]Source
 	unchecked map[string]bool
 	baselines map[slot]Baseline
@@ -28,6 +29,7 @@ type fakeStore struct {
 func newFakeStore() *fakeStore {
 	return &fakeStore{
 		members:   map[string][]string{},
+		records:   map[string][]ARTRecord{},
 		sources:   map[string][]Source{},
 		unchecked: map[string]bool{},
 		baselines: map[slot]Baseline{},
@@ -38,6 +40,14 @@ func newFakeStore() *fakeStore {
 
 func (f *fakeStore) SourcesByDigest(_ context.Context, digest string) ([]Source, error) {
 	return f.sources[digest], nil
+}
+
+func (f *fakeStore) ARTRecords(_ context.Context, digests []string) ([]ARTRecord, error) {
+	var records []ARTRecord
+	for _, d := range digests {
+		records = append(records, f.records[d]...)
+	}
+	return records, nil
 }
 
 func (f *fakeStore) SourceState(_ context.Context, digest string) (bool, bool, error) {

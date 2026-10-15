@@ -24,6 +24,18 @@ func (d *DB) SourcesByDigest(ctx context.Context, digest string) ([]reconcile.So
 	return sources, nil
 }
 
+func (d *DB) ARTRecords(ctx context.Context, digests []string) ([]reconcile.ARTRecord, error) {
+	rows, err := d.queries().ListArtRecordsByDigest(ctx, digests)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]reconcile.ARTRecord, len(rows))
+	for i, r := range rows {
+		records[i] = reconcile.ARTRecord{Digest: r.Digest, NVR: r.Nvr, RecordID: r.RecordID}
+	}
+	return records, nil
+}
+
 func (d *DB) SourceState(ctx context.Context, digest string) (stored, unchecked bool, err error) {
 	r, err := d.queries().GetDigestSourceState(ctx, digest)
 	return r.HasRecord, r.HasUnchecked, err
