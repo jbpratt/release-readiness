@@ -192,6 +192,7 @@ function OperatorPanel({ o, version }: { o: OperatorFBC; version: string }) {
 				{art.map((r) => {
 					const icon = icons[worst(r)];
 					const label = <strong>{r.label}</strong>;
+					const href = commitUrl(r.label, r.image.commit);
 					return (
 						<div
 							key={r.image.digest}
@@ -204,11 +205,11 @@ function OperatorPanel({ o, version }: { o: OperatorFBC; version: string }) {
 								style={{ fontSize: "0.85rem", marginTop: "0.125rem" }}
 							>
 								<BuiltCell image={r.image} />
-								<ExtLink
-									href={commitUrl(r.label, r.image.commit)}
-									title={r.image.commit}
-								>
-									<code style={muted}>{r.image.commit.slice(0, 7)}</code>
+								<ExtLink href={href} title={r.image.commit}>
+									{/* muted only when unlinked, so a link takes the link colour */}
+									<code style={href ? undefined : muted}>
+										{r.image.commit.slice(0, 7)}
+									</code>
 								</ExtLink>
 								{SHOW_CVES && <CveCell image={r.image} />}
 								<Flags flags={r.issues} />
