@@ -93,7 +93,6 @@ import {
 	readingLine,
 	releaseLine,
 	type StatusLine,
-	splitTickets,
 	tknCommand,
 	verdictEntries,
 	verdictLine,
@@ -917,7 +916,7 @@ function TicketsCard({
 	config?: DashboardConfig;
 	ticketKey?: string;
 }) {
-	const { work } = splitTickets(issues ?? [], ticketKey);
+	const work = (issues ?? []).filter((i) => i.key !== ticketKey);
 	const hasIssues = work.length > 0;
 	const jira = config?.jira_project
 		? jiraSearchUrl(

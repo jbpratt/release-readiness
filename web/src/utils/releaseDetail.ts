@@ -3,7 +3,6 @@ import type {
 	FBCCandidate,
 	FBCMember,
 	ImageScan,
-	JiraIssue,
 	KonfluxRelease,
 	OperatorFBC,
 	OperatorImage,
@@ -481,14 +480,6 @@ export function releaseLine(r: KonfluxRelease): StatusLine {
 	return { status: "running", text: "Release in progress" };
 }
 
-/** A Release in a word or two: when it was released, else failed or in progress. */
-export function releaseWord(r: KonfluxRelease): string {
-	const { status } = releaseLine(r);
-	if (status === "failed") return "Failed";
-	if (status === "running") return "In progress";
-	return r.completion_time ? relative(r.completion_time) : "Released";
-}
-
 // What each verdict item code asks for, in a word or two.
 const actionWords: Record<string, string> = {
 	missing_operator: "Not staged",
@@ -552,11 +543,6 @@ export const SEVERITY_COLORS = {
 	low: "yellow",
 	unknown: "grey",
 } as const;
-
-export const BASES: Record<ScanCounts["basis"], string> = {
-	scanner_arch_findings: "Counted per architecture",
-	unique_cves: "Unique CVEs across architectures",
-};
 
 /**
  * A scanned image's cell: a label per severity with fixable CVEs. The no-fix
@@ -734,11 +720,6 @@ function oldest(times: (string | null)[]): string {
 	if (times.includes(null)) return "never";
 	const t = Math.min(...times.map((t) => Date.parse(t!)));
 	return relative(new Date(t).toISOString());
-}
-
-/** A version's fixVersion issues without its release ticket. */
-export function splitTickets(issues: JiraIssue[], ticketKey?: string) {
-	return { work: issues.filter((i) => i.key !== ticketKey) };
 }
 
 /** The backend's no-FBC reasons in release terms, each with what to do next. */

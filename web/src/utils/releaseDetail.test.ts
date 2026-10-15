@@ -5,7 +5,6 @@ import type {
 	FBCCandidate,
 	FBCMember,
 	ImageScan,
-	JiraIssue,
 	KonfluxRelease,
 	OperatorFBC,
 	OperatorImage,
@@ -33,13 +32,11 @@ import {
 	readingLine,
 	releaseImages,
 	releaseLine,
-	releaseWord,
 	rowChips,
 	scanCell,
 	shownOperators,
 	slotItem,
 	slotRows,
-	splitTickets,
 	tknCommand,
 	verdictEntries,
 	verdictLine,
@@ -168,18 +165,6 @@ test("releaseLine", () => {
 		),
 		{ status: "done", text: "Released" },
 	);
-	assert.equal(releaseWord(release({ released_status: "True" })), "Released");
-	assert.match(
-		releaseWord(
-			release({
-				released_status: "True",
-				completion_time: new Date(Date.now() - 2 * 86_400_000).toISOString(),
-			}),
-		),
-		/2 days ago/,
-	);
-	assert.equal(releaseWord(release({ released_reason: "Failed" })), "Failed");
-	assert.equal(releaseWord(release({})), "In progress");
 });
 
 test("artGroup: the application's X.Y dotted", () => {
@@ -236,10 +221,8 @@ const fbcMember = (
 	nvr: `quay-operator-fbc-3.17.6-20261012000000.ocp${ocp}`,
 	build_url: "",
 	head_bundle_nvr: head,
-	snapshot: "",
 	release: null,
 	ci: { exact: [], equivalent: [] },
-	staged: 0,
 	...m,
 });
 
@@ -251,26 +234,18 @@ const operatorFBC = (
 ): OperatorFBC => ({
 	operator,
 	head_bundle_nvr: head,
-	channel: "stable-3.17",
-	head_csv: "",
-	coverage: { members: members.length, slots: members.length },
 	members,
 	missing_ocp: [],
 	conflicts: [],
 	fbc_ri_stage: { state: "none", release: null },
-	image_check: { state: "absent", snapshot: "", bundle_nvr: "" },
 	images: [],
-	compare: [],
-	stage: { staged: 0, total: 0 },
 	...o,
 });
 
 const fbcCandidate = (c: Partial<FBCCandidate>): FBCCandidate => ({
 	source: "stage_snapshots",
 	state: "complete",
-	errors: [],
 	operators: [],
-	unknown: [],
 	pullspecs: [],
 	...c,
 });
@@ -282,10 +257,7 @@ test("stream only, no stage (3.16): pullspecs from the stream", () => {
 	const c = fbcCandidate({
 		source: "stream",
 		operators: ["quay-operator", "container-security-operator"].map((o) =>
-			operatorFBC(o, head, members, {
-				channel: "stable-3.16",
-				head_csv: "quay-operator.v3.99.0-dev",
-			}),
+			operatorFBC(o, head, members),
 		),
 		pullspecs: [members[0].pullspec, members[1].pullspec],
 	});
@@ -305,20 +277,14 @@ test("missing operator (3.17.6): CSO and QBO not in stage show the stream's FBCs
 		"quay-operator",
 		head,
 		["4.12", "4.13", "4.14"].map((v) =>
-			fbcMember(v, head, { snapshot: "s", release: released }),
+			fbcMember(v, head, { release: released }),
 		),
 	);
 	const cso = operatorFBC("container-security-operator", "", [], {
 		missing_ocp: ["4.14", "4.12"],
-		coverage: { members: 0, slots: 2 },
 	});
-	const errors = [
-		"container-security-operator is not in stage",
-		"quay-bridge-operator is not in stage",
-	];
 	const c = fbcCandidate({
 		state: "incomplete",
-		errors,
 		operators: [qo, cso, operatorFBC("quay-bridge-operator", "", [])],
 	});
 	const streamCSO = operatorFBC(
@@ -367,14 +333,10 @@ test("mixed slots (CSO 7 on ...0313, 2 on ...1613): inconsistent, the others in 
 		["4.19", "4.20"].map((v) => fbcMember(v, head)),
 		{
 			conflicts: all.slice(0, 7).map((v) => fbcMember(v, other)),
-			coverage: { members: 2, slots: 9 },
 		},
 	);
 	const c = fbcCandidate({
 		state: "inconsistent",
-		errors: [
-			"container-security-operator heads more than one bundle across its OCP versions",
-		],
 		operators: [cso],
 		pullspecs: ["x"],
 	});
@@ -582,8 +544,7 @@ test("rowChips: exceptions only, per row", () => {
 		kind: "member" as const,
 		fbc: fbcMember("4.14", head, m),
 	});
-	assert.deepEqual(chips(member({ release: ok, staged: 1 })), []);
-	assert.deepEqual(chips(member({ release: ok, staged: 3 })), []);
+	assert.deepEqual(chips(member({ release: ok })), []);
 	assert.deepEqual(chips(member({ release: failed })), []);
 	const held = {
 		ocp: "4.21",
@@ -642,7 +603,6 @@ test("record mode: no prompts, only facts", () => {
 				kind: "other",
 				fbc: fbcMember("4.14", bundle("202610121613"), {
 					release: failed,
-					staged: 2,
 				}),
 			},
 			{ shipped: true, unreadable: "x" },
@@ -701,7 +661,6 @@ const image = (name: string, digest: string): OperatorImage => ({
 	commit: "",
 	build_url: "",
 	stage: false,
-	prod: false,
 	scan: null,
 });
 
@@ -741,11 +700,8 @@ test("fbcGroups and needsAttention: a failed stage, a flag or a failed run", () 
 		shipped: false,
 		candidate: null,
 		reason: "",
-		catalogs: null,
-		unshipped_builds: null,
 		fbc_candidate: fbcCandidate({ operators: [qo] }),
 		fbc_stream: null,
-		ci_history: null,
 		verdict: {
 			state: "not_ready",
 			items: [
@@ -974,23 +930,6 @@ test("freshnessLine", () => {
 		}),
 		null,
 	);
-});
-
-const issue = (key: string, issue_type: string): JiraIssue => ({
-	key,
-	issue_type,
-	summary: "",
-	link: "",
-});
-
-test("splitTickets", () => {
-	const issues = [issue("PROJQUAY-1", "Bug"), issue("PROJQUAY-2", "Task")];
-	assert.deepEqual(splitTickets(issues, "PROJQUAY-2"), {
-		work: [issues[0]],
-	});
-	assert.deepEqual(splitTickets(issues, undefined), {
-		work: issues,
-	});
 });
 
 test("noFbcText", () => {

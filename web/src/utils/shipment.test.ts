@@ -18,8 +18,6 @@ function mr(over: Partial<ShipmentMR> = {}): ShipmentMR {
 		stage: "open",
 		pipeline_failed: false,
 		needs_approval: false,
-		head_pipeline_status: "success",
-		updated_at: "2026-10-14T00:00:00Z",
 		source: "pointer",
 		...over,
 	};
