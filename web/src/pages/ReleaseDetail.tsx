@@ -823,6 +823,7 @@ function NotReady({
 			<Alert
 				variant="danger"
 				isInline
+				isExpandable={blocking.length > 0}
 				title={
 					<>
 						{verdictLine(verdict).text}{" "}
