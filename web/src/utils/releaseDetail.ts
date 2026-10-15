@@ -2,6 +2,7 @@ import type {
 	CIRun,
 	FBCCandidate,
 	FBCMember,
+	FBCTags,
 	ImageScan,
 	KonfluxRelease,
 	OperatorFBC,
@@ -71,6 +72,36 @@ export const fbcPullspecs = (c: FBCCandidate): string | null =>
 	c.state === "complete" && c.pullspecs.length > 0
 		? c.pullspecs.join(",")
 		: null;
+
+/** release-from-fbc's fbc-pullspecs from ART's tags, with what to tell. */
+export interface TagList {
+	/** The pullspecs, comma-separated; null while there is an error. */
+	value: string | null;
+	count: number;
+	errors: string[];
+	warnings: string[];
+}
+
+/**
+ * The tag pullspecs of a version's FBCs. A slot with no tag, no tag at all,
+ * or a pullspec that is a digest, not a tag, is an error and offers no list,
+ * as a partial list must not be released.
+ */
+export function fbcTagList(t: FBCTags): TagList {
+	const errors = [...t.errors];
+	if (errors.length === 0 && t.pullspecs.length === 0) {
+		errors.push("ART has no FBC tags for this version");
+	}
+	for (const p of t.pullspecs) {
+		if (p.includes("@")) errors.push(`${p} is a digest, not a tag`);
+	}
+	return {
+		value: errors.length > 0 ? null : t.pullspecs.join(","),
+		count: t.pullspecs.length,
+		errors,
+		warnings: t.warnings,
+	};
+}
 
 /** Compares dot-separated versions numerically: OCP 4.9 is lower than 4.12. */
 export function compareVersions(a: string, b: string): number {

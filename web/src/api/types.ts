@@ -79,6 +79,38 @@ export interface FBCCandidate {
 }
 
 /**
+ * The tag ART published an operator's FBC for an OCP version under, the
+ * newest multi-arch one. match says whether its digest is staged_digest, the
+ * one RR staged for the slot: "unknown" when RR knows none.
+ */
+export interface FBCTag {
+	operator: string;
+	ocp: string;
+	tag: string;
+	/** repository:tag, which release-from-fbc takes as an fbc-pullspec. */
+	pullspec: string;
+	digest: string;
+	staged_digest: string;
+	staged_nvr: string;
+	match: "match" | "mismatch" | "unknown";
+}
+
+/**
+ * A version's operator FBC tags in ART's public repository, one per slot of
+ * its candidate (source "candidate"), else of the OCP versions its stream
+ * targets ("ocp-build-data"). pullspecs is empty while errors, the slots with
+ * no tag, is not; warnings are the tags that are not the staged candidate.
+ */
+export interface FBCTags {
+	repository: string;
+	source: "candidate" | "ocp-build-data";
+	pullspecs: string[];
+	tags: FBCTag[];
+	errors: string[];
+	warnings: string[];
+}
+
+/**
  * One operator's FBCs, keyed by the bundle heading its newest FBC's release
  * channel ("" for none): members are on that bundle, conflicts are not.
  */

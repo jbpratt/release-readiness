@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/quay/release-readiness/internal/artfbc"
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
 	"github.com/quay/release-readiness/internal/syncstatus"
@@ -28,6 +29,9 @@ type Server struct {
 	// KonfluxUIURL and KonfluxNamespace locate the Konflux UI pages the web
 	// links to; an empty URL links none.
 	KonfluxUIURL, KonfluxNamespace string
+	// ArtFBC looks up the tags ART publishes its FBC images under; nil turns
+	// the lookup off.
+	ArtFBC *artfbc.Client
 }
 
 // New builds the server. A nil shipped leaves JIRA's released flag as the only

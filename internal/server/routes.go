@@ -19,6 +19,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/releases/{version}", s.handleGetRelease)
 	mux.HandleFunc("GET /api/v1/releases/{version}/issues", s.handleListReleaseIssues)
 	mux.HandleFunc("GET /api/v1/releases/{version}/candidate", s.handleGetCandidate)
+	mux.HandleFunc("GET /api/v1/releases/{version}/fbc-tags", s.handleGetFBCTags)
 	mux.HandleFunc("GET /api/v1/releases/{version}/ci", s.handleGetReleaseCI)
 
 	// SPA — serve React app from embedded dist/

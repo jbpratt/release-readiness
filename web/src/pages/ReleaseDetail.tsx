@@ -62,7 +62,12 @@ import {
 	useState,
 } from "react";
 import { Link, type To, useParams, useSearchParams } from "react-router-dom";
-import { getCandidate, getRelease, listReleaseIssues } from "../api/client";
+import {
+	getCandidate,
+	getFBCTags,
+	getRelease,
+	listReleaseIssues,
+} from "../api/client";
 import type {
 	DashboardConfig,
 	FBCCandidate,
@@ -114,6 +119,7 @@ import {
 	fbcParams,
 	fbcPullspecs,
 	fbcsBuilt,
+	fbcTagList,
 	freshnessLine,
 	issueLists,
 	type LeftOut,
@@ -248,8 +254,8 @@ export default function ReleaseDetail() {
 						<ReleaseInputsButton>
 							<ReleaseInputs
 								app={app}
+								release={release.name}
 								version={xyz}
-								pullspecs={pullspecs}
 								issues={tickets}
 								issuesError={ticketsError}
 								onRetry={refetchTickets}
@@ -1134,13 +1140,14 @@ function InputField({
 
 /**
  * release-from-fbc's inputs for its one release-wide run, to copy into the
- * ART pipelines UI form: RR starts no run. The dry-run tkn command, built
- * from the same values, is folded away below.
+ * ART pipelines UI form: RR starts no run. The FBC pullspecs are ART's tags,
+ * which the server looks up in its public repository when the dialog opens.
+ * The dry-run tkn command, built from the same values, is folded away below.
  */
 function ReleaseInputs({
 	app,
+	release,
 	version,
-	pullspecs,
 	issues,
 	issuesError,
 	onRetry,
@@ -1150,10 +1157,10 @@ function ReleaseInputs({
 	dueDate,
 }: {
 	app: string;
+	/** The release's name, quay-vX.Y.Z. */
+	release: string;
 	/** The version's X.Y.Z. */
 	version: string;
-	/** The candidate's fbc-pullspecs. */
-	pullspecs: string;
 	/** The version's issues; undefined while unknown. */
 	issues?: JiraIssue[];
 	issuesError?: Error;
@@ -1168,8 +1175,13 @@ function ReleaseInputs({
 	const jiraSync = useSyncStatus()?.sources.find((s) => s.source === "jira");
 	const lists = issueLists(issues, ticketKey);
 	const keys = lists?.keys ?? [];
-	const params = fbcParams(app, version, pullspecs, keys, dueDate);
-	const catalogs = pullspecs.split(",").length;
+	const fetched = useCachedFetch(
+		`fbc-tags:${release}`,
+		() => getFBCTags(release),
+		30_000,
+	);
+	const tags = fetched.data && fbcTagList(fetched.data);
+	const params = fbcParams(app, version, tags?.value ?? "", keys, dueDate);
 
 	// The Jira field's text and its note, by what is known of the issues.
 	let jiraText: ReactNode;
@@ -1189,6 +1201,26 @@ function ReleaseInputs({
 		jiraText = "Loading issues…";
 	} else if (keys.length === 0) {
 		jiraText = `No issue of ${version} is in ${RELEASE_PENDING}`;
+	}
+
+	// The FBC field's text and its note, by what is known of the tags.
+	let tagText: ReactNode;
+	if (!tags && fetched.error) {
+		tagText = (
+			<Alert
+				isInline
+				isPlain
+				variant="danger"
+				title="Could not load ART's tags"
+				actionLinks={
+					<AlertActionLink onClick={fetched.refetch}>Retry</AlertActionLink>
+				}
+			/>
+		);
+	} else if (!tags) {
+		tagText = "Loading tags from ART…";
+	} else if (!tags.value) {
+		tagText = "Not offered until every FBC has a tag";
 	}
 
 	return (
@@ -1233,10 +1265,23 @@ function ReleaseInputs({
 				)}
 				<InputField
 					name="fbc-pullspecs"
-					label={`FBC pullspecs (${catalogs})`}
-					value={pullspecs}
+					label={`FBC pullspecs${tags?.value ? ` (${tags.count})` : ""}`}
+					value={tags?.value ?? undefined}
+					text={tagText}
 					list
+					help={
+						tags?.value && (
+							<>
+								The newest multi-arch tag of each FBC in ART's public{" "}
+								<code>{fetched.data?.repository}</code>.
+							</>
+						)
+					}
 				/>
+				{tags && tags.errors.length > 0 && <TagErrors errors={tags.errors} />}
+				{tags && tags.warnings.length > 0 && (
+					<TagWarnings warnings={tags.warnings} />
+				)}
 			</Form>
 			<ExpandableSection
 				style={line}
@@ -1244,10 +1289,10 @@ function ReleaseInputs({
 				isExpanded={tknOpen}
 				onToggle={(_e, v) => setTknOpen(v)}
 			>
-				{jiraEnabled && !lists ? (
+				{(jiraEnabled && !lists) || !tags?.value ? (
 					<span style={muted}>
-						The tkn command waits for the issues, so it never lacks jira-bugs
-						unseen.
+						The tkn command waits for the issues and the FBC tags, so it never
+						lacks jira-bugs or fbc-pullspecs unseen.
 					</span>
 				) : (
 					<ClipboardCopy isReadOnly isCode isExpanded variant="expansion">
@@ -1256,6 +1301,40 @@ function ReleaseInputs({
 				)}
 			</ExpandableSection>
 		</>
+	);
+}
+
+/** The FBC slots ART has no tag for, which hold the pullspecs back. */
+function TagErrors({ errors }: { errors: string[] }) {
+	return (
+		<Alert
+			isInline
+			variant="danger"
+			title="No FBC pullspecs: ART's tags are incomplete"
+		>
+			<List isPlain>
+				{errors.map((e) => (
+					<ListItem key={e}>{e}</ListItem>
+				))}
+			</List>
+		</Alert>
+	);
+}
+
+/** The tags that are not the FBC RR staged; the pullspecs are still shown. */
+function TagWarnings({ warnings }: { warnings: string[] }) {
+	return (
+		<Alert
+			isInline
+			variant="warning"
+			title={`${warnings.length} FBC tag${warnings.length === 1 ? " differs" : "s differ"} from the staged candidate`}
+		>
+			<List isPlain>
+				{warnings.map((w) => (
+					<ListItem key={w}>{w}</ListItem>
+				))}
+			</List>
+		</Alert>
 	);
 }
 

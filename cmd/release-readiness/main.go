@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/transport"
 
 	"github.com/quay/release-readiness/internal/artbuild"
+	"github.com/quay/release-readiness/internal/artfbc"
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
 	"github.com/quay/release-readiness/internal/fbc"
@@ -52,6 +53,9 @@ func main() {
 
 	// ART build history flags
 	artURL := flag.String("art-build-history-url", "https://art-build-history-art-build-history.apps.artc2023.pc3z.p1.openshiftapps.com", "ART build history service URL (empty disables ART build links)")
+
+	// ART FBC tag flags
+	artFBCQuayURL := flag.String("art-fbc-quay-url", artfbc.DefaultQuayURL, "Quay URL to list the tags of ART's public ocp-art-tenant/art-fbc repository from, unauthenticated, for the release inputs (empty disables)")
 
 	// Tekton Results flags
 	resultsURL := flag.String("tekton-results-url", "https://tekton-results-tekton-results.apps.kflux-ocp-p01.7ayg.p1.openshiftapps.com", "Tekton Results API URL to read the CVE scans of candidate images from with the Konflux credential (empty disables)")
@@ -255,6 +259,11 @@ func main() {
 	srv.StageReleasePlanPattern = stagePlans
 	srv.KonfluxUIURL = *konfluxUIURL
 	srv.KonfluxNamespace = *namespace
+
+	if *artFBCQuayURL != "" {
+		logger.Info("art fbc tag lookup enabled", "url", *artFBCQuayURL, "build_data_url", *buildDataURL)
+		srv.ArtFBC = artfbc.NewClient(*artFBCQuayURL, *buildDataURL, &http.Client{Timeout: 30 * time.Second})
+	}
 
 	if *gitlabURL != "" {
 		logger.Info("shipment MR sync enabled", "url", *gitlabURL, "project", *shipmentProject, "token", *gitlabToken != "", "interval", *gitlabPollInterval)

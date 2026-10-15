@@ -4,6 +4,8 @@ import type {
 	CIJob,
 	FBCCandidate,
 	FBCMember,
+	FBCTag,
+	FBCTags,
 	ImageScan,
 	KonfluxRelease,
 	OperatorFBC,
@@ -20,6 +22,7 @@ import {
 	fbcParams,
 	fbcPullspecs,
 	fbcsBuilt,
+	fbcTagList,
 	fixableLabels,
 	freshnessLine,
 	issueLists,
@@ -1036,4 +1039,85 @@ test("noFbcText", () => {
 	);
 	assert.equal(noFbcText("3.0.0", ""), base);
 	assert.equal(noFbcText("3.0.0", undefined), base);
+});
+
+const REPO = "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc";
+
+const fbcTag = (
+	operator: string,
+	ocp: string,
+	match: FBCTag["match"] = "match",
+): FBCTag => {
+	const tag = `${operator}-fbc-3.18.2-20261015132328.ocp${ocp}`;
+	return {
+		operator,
+		ocp,
+		tag,
+		pullspec: `${REPO}:${tag}`,
+		digest: "sha256:a",
+		staged_digest: match === "unknown" ? "" : "sha256:b",
+		staged_nvr: "",
+		match,
+	};
+};
+
+const fbcTags = (tags: FBCTag[], over: Partial<FBCTags> = {}): FBCTags => ({
+	repository: REPO,
+	source: "candidate",
+	pullspecs: tags.map((t) => t.pullspec),
+	tags,
+	errors: [],
+	warnings: [],
+	...over,
+});
+
+test("fbcTagList: the tag pullspecs, comma-separated and counted", () => {
+	const list = fbcTagList(
+		fbcTags([fbcTag("quay-operator", "4.14"), fbcTag("quay-operator", "4.16")]),
+	);
+	assert.deepEqual(list, {
+		value: `${REPO}:quay-operator-fbc-3.18.2-20261015132328.ocp4.14,${REPO}:quay-operator-fbc-3.18.2-20261015132328.ocp4.16`,
+		count: 2,
+		errors: [],
+		warnings: [],
+	});
+});
+
+test("fbcTagList: a missing OCP version is an error and offers no list", () => {
+	const errors = [`quay-operator OCP 4.16: no tag in ${REPO}`];
+	const list = fbcTagList(
+		fbcTags([fbcTag("quay-operator", "4.14")], { errors, pullspecs: [] }),
+	);
+	assert.equal(list.value, null);
+	assert.deepEqual(list.errors, errors);
+	// Even if the server sent pullspecs with errors, they are not offered.
+	assert.equal(
+		fbcTagList(fbcTags([fbcTag("quay-operator", "4.14")], { errors })).value,
+		null,
+	);
+});
+
+test("fbcTagList: a digest mismatch is a warning and the list is still offered", () => {
+	const warnings = [
+		"quay-operator OCP 4.14: ART has a newer build than the staged candidate: tag t is sha256:a, the staged candidate is sha256:b",
+	];
+	const list = fbcTagList(
+		fbcTags([fbcTag("quay-operator", "4.14", "mismatch")], { warnings }),
+	);
+	assert.deepEqual(list.warnings, warnings);
+	assert.equal(list.count, 1);
+	assert.ok(list.value?.includes(":quay-operator-fbc-3.18.2-"));
+});
+
+test("fbcTagList: no tags at all, and a digest pullspec, are errors", () => {
+	const none = fbcTagList(fbcTags([]));
+	assert.equal(none.value, null);
+	assert.equal(none.errors.length, 1);
+	const digest = fbcTagList(
+		fbcTags([fbcTag("quay-operator", "4.14")], {
+			pullspecs: [`${REPO}@sha256:${"a".repeat(64)}`],
+		}),
+	);
+	assert.equal(digest.value, null);
+	assert.match(digest.errors[0], /not a tag/);
 });
