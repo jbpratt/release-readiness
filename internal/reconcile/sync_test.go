@@ -237,6 +237,15 @@ func TestRunOnce(t *testing.T) {
 	if len(fx.commits.calls) != 0 || !reflect.DeepEqual(fx.store.actions, before) {
 		t.Errorf("rerun: fetches %v, actions changed %v", fx.commits.calls, !reflect.DeepEqual(fx.store.actions, before))
 	}
+
+	// Each proposed action is logged once; the skipped one is not.
+	logs := fx.logs.String()
+	if n := strings.Count(logs, "msg=proposed "); n != 2 {
+		t.Errorf("logged %d proposed actions; want 2:\n%s", n, logs)
+	}
+	if want := "msg=proposed issue=PROJQUAY-1 fbc=" + f3.FBCNVR + " release=r3 target_version_add=quay-v3.18.2 target_version_remove=quay-v3.18.z"; !strings.Contains(logs, want) {
+		t.Errorf("logs lack %q:\n%s", want, logs)
+	}
 }
 
 func TestRunOnceUncertain(t *testing.T) {

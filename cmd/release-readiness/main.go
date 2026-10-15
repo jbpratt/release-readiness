@@ -191,6 +191,7 @@ func main() {
 		reconciler.Status = status.Track("reconcile", 10*time.Minute)
 		switch {
 		case !*jiraWrite:
+			logger.Info("jira writer off; proposed actions are logged only")
 		case *jiraWriteEmail == "" || *jiraWriteToken == "":
 			logger.Error("-jira-write without -jira-write-email and -jira-write-token, jira writer disabled")
 		default:

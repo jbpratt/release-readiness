@@ -478,9 +478,10 @@ func (s *Sync) uncertain(f StageFBC, reasons ...string) {
 }
 
 // record stores f's actions and marks it done in one transaction, so a
-// restart neither repeats nor loses it.
+// restart neither repeats nor loses it, then logs what each proposed action
+// would write: with the writer off, the log is the only place it shows.
 func (s *Sync) record(ctx context.Context, f StageFBC, actions []Action) error {
-	return s.tx(ctx, func(st Store) error {
+	err := s.tx(ctx, func(st Store) error {
 		for _, a := range actions {
 			if err := st.UpsertAction(ctx, a); err != nil {
 				return err
@@ -488,6 +489,17 @@ func (s *Sync) record(ctx context.Context, f StageFBC, actions []Action) error {
 		}
 		return st.MarkRun(ctx, f.Release, f.FBCDigest)
 	})
+	if err != nil {
+		return err
+	}
+	for _, a := range actions {
+		if a.Status == StatusProposed {
+			s.logger.Info("proposed", "issue", a.Key.IssueKey, "fbc", a.FBCNVR, "release", a.Key.Release,
+				"target_version_add", a.DesiredTargetVersion, "target_version_remove", placeholder(a.DesiredTargetVersion),
+				"transition", "Verified -> "+releasePending+", when Verified", "comment", "FBC stamp")
+		}
+	}
+	return nil
 }
 
 func (s *Sync) tx(ctx context.Context, fn func(Store) error) error {
