@@ -32,7 +32,25 @@ func Open(path string) (*DB, error) {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("migrate: exec schema: %w", err)
 	}
+	if err := addJiraIssueStatus(sqlDB); err != nil {
+		_ = sqlDB.Close()
+		return nil, fmt.Errorf("migrate: add jira_issues.status: %w", err)
+	}
 	return &DB{conn: sqlDB, dbtx: sqlDB}, nil
+}
+
+// addJiraIssueStatus adds the status column to a jira_issues table created
+// before it existed, which CREATE TABLE IF NOT EXISTS leaves unchanged.
+func addJiraIssueStatus(sqlDB *sql.DB) error {
+	var n int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('jira_issues') WHERE name = 'status'`).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return nil
+	}
+	_, err := sqlDB.Exec(`ALTER TABLE jira_issues ADD COLUMN status TEXT NOT NULL DEFAULT ''`)
+	return err
 }
 
 func (d *DB) Close() error {

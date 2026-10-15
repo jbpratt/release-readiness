@@ -133,7 +133,8 @@ generated headers and in `.github/workflows/sqlc.yaml`, and commit
 
 `db.Open` executes `schema.sql` on every open. Every statement is
 `CREATE ... IF NOT EXISTS`, with no `ALTER` path: changing an existing table
-needs a fresh DB file.
+needs a fresh DB file. The one exception: `db.Open` adds `jira_issues.status`
+to a DB from before it.
 
 ## Gotchas
 
@@ -148,8 +149,6 @@ needs a fresh DB file.
   Tekton Results `results` and `records`.
 - The SQLite DB is persisted on the PVC. Delete the old DB file when upgrading
   across the move to the Kubernetes source.
-- `jira_issues.status` was added with no `ALTER` path: a `dashboard.db` from
-  before it must be deleted on upgrade, or the issues query fails.
 
 ## Conventions
 
