@@ -8,6 +8,7 @@ type JiraIssueRecord struct {
 	Summary    string `json:"summary"`
 	FixVersion string `json:"-"`
 	IssueType  string `json:"issue_type"`
+	Status     string `json:"status"`
 	Link       string `json:"link"`
 }
 

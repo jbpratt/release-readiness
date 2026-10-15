@@ -13,6 +13,12 @@ export function ticketsJql(project: string, version: string): string {
 	return `project=${project} AND "Target Version"="${version}"`;
 }
 
+/** The ART pipelines UI's page of the pipeline that builds layered products. */
+export function artPipelineUrl(ns: string): string {
+	const q = encodeURIComponent(ns);
+	return `https://art-pipelines-ui-art-pipelines-ui.apps.artc2023.pc3z.p1.openshiftapps.com/#/pipeline/${q}/build-layered-products?namespace=${q}`;
+}
+
 /**
  * Konflux UI page of an application, or of one of its Snapshots or Releases;
  * null without a base URL, namespace or application.

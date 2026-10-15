@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+	artPipelineUrl,
 	commitUrl,
 	formatReleaseName,
 	jiraIssueUrl,
@@ -62,6 +63,13 @@ test("ticketsJql", () => {
 	assert.equal(
 		ticketsJql("PROJQUAY", "quay-v3.18.1"),
 		'project=PROJQUAY AND "Target Version"="quay-v3.18.1"',
+	);
+});
+
+test("artPipelineUrl", () => {
+	assert.equal(
+		artPipelineUrl("art-quay-tenant"),
+		"https://art-pipelines-ui-art-pipelines-ui.apps.artc2023.pc3z.p1.openshiftapps.com/#/pipeline/art-quay-tenant/build-layered-products?namespace=art-quay-tenant",
 	);
 });
 

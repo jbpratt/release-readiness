@@ -1,4 +1,6 @@
 import {
+	Alert,
+	AlertActionLink,
 	Breadcrumb,
 	BreadcrumbItem,
 	Button,
@@ -16,10 +18,20 @@ import {
 	DropdownList,
 	EmptyState,
 	EmptyStateBody,
+	ExpandableSection,
 	Flex,
 	FlexItem,
+	Form,
+	FormGroup,
+	FormHelperText,
+	HelperText,
+	HelperTextItem,
 	Icon,
+	InputGroup,
+	InputGroupItem,
 	Label,
+	List,
+	ListItem,
 	MenuToggle,
 	Modal,
 	ModalBody,
@@ -28,11 +40,13 @@ import {
 	Popover,
 	type PopoverProps,
 	Spinner,
+	TextInput,
 	Title,
 	Tooltip,
 } from "@patternfly/react-core";
 import {
 	CheckCircleIcon,
+	CopyIcon,
 	ExclamationTriangleIcon,
 	ExternalLinkAltIcon,
 	InfoCircleIcon,
@@ -81,8 +95,9 @@ import {
 	PROBLEMS,
 	streamFbc,
 } from "../utils/fbcMatrix";
-import { days, due } from "../utils/format";
+import { days, due, relative } from "../utils/format";
 import {
+	artPipelineUrl,
 	formatReleaseName,
 	jiraIssueUrl,
 	jiraSearchUrl,
@@ -100,8 +115,11 @@ import {
 	fbcPullspecs,
 	fbcsBuilt,
 	freshnessLine,
+	issueLists,
+	type LeftOut,
 	noFbcText,
 	nvrLabel,
+	RELEASE_PENDING,
 	readingLine,
 	releaseLine,
 	runResult,
@@ -232,11 +250,12 @@ export default function ReleaseDetail() {
 								app={app}
 								version={xyz}
 								pullspecs={pullspecs}
-								bugs={
-									config?.jira_enabled === false
-										? undefined
-										: tickets?.map((t) => t.key)
-								}
+								issues={tickets}
+								issuesError={ticketsError}
+								onRetry={refetchTickets}
+								jiraEnabled={config?.jira_enabled !== false}
+								ticketKey={release.release_ticket_key}
+								namespace={config?.konflux_namespace || "art-quay-tenant"}
 								dueDate={release.due_date}
 							/>
 						</ReleaseInputsButton>
@@ -1021,7 +1040,7 @@ function ReleaseInputsButton({ children }: { children: ReactNode }) {
 	return (
 		<>
 			<Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
-				Review release command
+				Release inputs
 			</Button>
 			<Modal
 				isOpen={open}
@@ -1029,10 +1048,7 @@ function ReleaseInputsButton({ children }: { children: ReactNode }) {
 				aria-labelledby="release-inputs-title"
 				variant="large"
 			>
-				<ModalHeader
-					title="Review release command"
-					labelId="release-inputs-title"
-				/>
+				<ModalHeader title="Release inputs" labelId="release-inputs-title" />
 				<ModalBody tabIndex={0}>{children}</ModalBody>
 			</Modal>
 		</>
@@ -1040,14 +1056,97 @@ function ReleaseInputsButton({ children }: { children: ReactNode }) {
 }
 
 /**
- * release-from-fbc's dry-run tkn command for its one release-wide run, to
- * review and run by hand: RR starts no run.
+ * One release-from-fbc parameter in a read-only field with its own copy
+ * button. Without a value, text says why and the copy button is disabled, so
+ * a missing value is never copied unseen.
+ */
+function InputField({
+	name,
+	label,
+	value,
+	text,
+	list,
+	help,
+}: {
+	/** The parameter's name in the pipeline. */
+	name: string;
+	label: string;
+	value?: string;
+	/** What the field reads without a value. */
+	text?: ReactNode;
+	/** A comma-separated list: shown whole, not in one line. */
+	list?: boolean;
+	help?: ReactNode;
+}) {
+	return (
+		<FormGroup
+			label={
+				<>
+					{label} <code style={muted}>{name}</code>
+				</>
+			}
+			fieldId={`release-input-${name}`}
+		>
+			{value ? (
+				<ClipboardCopy
+					id={`release-input-${name}`}
+					isReadOnly
+					isCode
+					isExpanded={list}
+					variant={list ? "expansion" : undefined}
+					hoverTip="Copy"
+					clickTip="Copied"
+				>
+					{value}
+				</ClipboardCopy>
+			) : (
+				<InputGroup>
+					<InputGroupItem isFill>
+						<TextInput
+							id={`release-input-${name}`}
+							readOnly
+							value=""
+							placeholder={typeof text === "string" ? text : undefined}
+							aria-label={label}
+						/>
+					</InputGroupItem>
+					<InputGroupItem>
+						<Button
+							variant="control"
+							isDisabled
+							aria-label={`Copy ${label}`}
+							icon={<CopyIcon />}
+						/>
+					</InputGroupItem>
+				</InputGroup>
+			)}
+			{!value && typeof text !== "string" && text}
+			{help && (
+				<FormHelperText>
+					<HelperText>
+						<HelperTextItem>{help}</HelperTextItem>
+					</HelperText>
+				</FormHelperText>
+			)}
+		</FormGroup>
+	);
+}
+
+/**
+ * release-from-fbc's inputs for its one release-wide run, to copy into the
+ * ART pipelines UI form: RR starts no run. The dry-run tkn command, built
+ * from the same values, is folded away below.
  */
 function ReleaseInputs({
 	app,
 	version,
 	pullspecs,
-	bugs,
+	issues,
+	issuesError,
+	onRetry,
+	jiraEnabled,
+	ticketKey,
+	namespace,
 	dueDate,
 }: {
 	app: string;
@@ -1055,16 +1154,135 @@ function ReleaseInputs({
 	version: string;
 	/** The candidate's fbc-pullspecs. */
 	pullspecs: string;
-	/** The version's ticket keys; undefined while unknown. */
-	bugs?: string[];
+	/** The version's issues; undefined while unknown. */
+	issues?: JiraIssue[];
+	issuesError?: Error;
+	onRetry: () => void;
+	jiraEnabled: boolean;
+	/** The release ticket's key, which is no advisory issue. */
+	ticketKey?: string;
+	namespace: string;
 	dueDate?: string;
 }) {
+	const [tknOpen, setTknOpen] = useState(false);
+	const jiraSync = useSyncStatus()?.sources.find((s) => s.source === "jira");
+	const lists = issueLists(issues, ticketKey);
+	const keys = lists?.keys ?? [];
+	const params = fbcParams(app, version, pullspecs, keys, dueDate);
+	const catalogs = pullspecs.split(",").length;
+
+	// The Jira field's text and its note, by what is known of the issues.
+	let jiraText: ReactNode;
+	if (!jiraEnabled) {
+		jiraText = "Jira sync is off: add the issues by hand";
+	} else if (!lists && issuesError) {
+		jiraText = (
+			<Alert
+				isInline
+				isPlain
+				variant="danger"
+				title="Could not load the issues"
+				actionLinks={<AlertActionLink onClick={onRetry}>Retry</AlertActionLink>}
+			/>
+		);
+	} else if (!lists) {
+		jiraText = "Loading issues…";
+	} else if (keys.length === 0) {
+		jiraText = `No issue of ${version} is in ${RELEASE_PENDING}`;
+	}
+
 	return (
-		<ClipboardCopy isReadOnly isCode isExpanded variant="expansion">
-			{tknCommand(fbcParams(app, version, pullspecs, bugs ?? [], dueDate))}
-		</ClipboardCopy>
+		<>
+			<p>
+				Paste these into the release-from-fbc form of the ART pipelines UI (dry
+				run). RR starts no run.{" "}
+				<ExtLink href={artPipelineUrl(namespace)}>
+					Open ART pipelines UI
+				</ExtLink>
+			</p>
+			<Form style={line}>
+				<InputField name="group" label="Group" value={params.group} />
+				<InputField name="assembly" label="Assembly" value={params.assembly} />
+				<InputField
+					name="target-release-date"
+					label="Target release date"
+					value={params["target-release-date"]}
+					text="The release ticket has no due date"
+				/>
+				<InputField name="dry-run" label="Dry run" value={params["dry-run"]} />
+				<InputField
+					name="jira-bugs"
+					label={`Jira issues${lists ? ` (${keys.length})` : ""}`}
+					value={keys.join(",")}
+					text={jiraText}
+					list
+					help={
+						jiraEnabled && (
+							<>
+								Only issues in {RELEASE_PENDING}, as of the last Jira sync
+								{jiraSync?.last_success
+									? ` ${relative(jiraSync.last_success)}`
+									: ": unknown time"}
+								. An issue moved since is not yet here.
+							</>
+						)
+					}
+				/>
+				{lists && lists.leftOut.length > 0 && (
+					<LeftOutIssues groups={lists.leftOut} />
+				)}
+				<InputField
+					name="fbc-pullspecs"
+					label={`FBC pullspecs (${catalogs})`}
+					value={pullspecs}
+					list
+				/>
+			</Form>
+			<ExpandableSection
+				style={line}
+				toggleText="tkn command (alternative)"
+				isExpanded={tknOpen}
+				onToggle={(_e, v) => setTknOpen(v)}
+			>
+				{jiraEnabled && !lists ? (
+					<span style={muted}>
+						The tkn command waits for the issues, so it never lacks jira-bugs
+						unseen.
+					</span>
+				) : (
+					<ClipboardCopy isReadOnly isCode isExpanded variant="expansion">
+						{tknCommand(params)}
+					</ClipboardCopy>
+				)}
+			</ExpandableSection>
+		</>
 	);
 }
+
+/** The release's issues not in jira-bugs, by status, as a warning. */
+function LeftOutIssues({ groups }: { groups: LeftOut[] }) {
+	const total = groups.reduce((n, g) => n + g.keys.length, 0);
+	return (
+		<Alert
+			isInline
+			variant="warning"
+			title={`${total} issue${total === 1 ? "" : "s"} left out: not in ${RELEASE_PENDING}`}
+		>
+			<List isPlain>
+				{groups.map((g) => (
+					<ListItem key={g.status}>
+						<strong>
+							{g.status} ({g.keys.length})
+						</strong>
+						: {g.keys.join(", ")}
+					</ListItem>
+				))}
+			</List>
+		</Alert>
+	);
+}
+
+const line = { marginTop: "0.5rem" };
 
 /**
  * The version's fixVersion issues but its release ticket, shown atop the

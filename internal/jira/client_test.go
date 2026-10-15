@@ -17,11 +17,12 @@ func TestSearchIssues(t *testing.T) {
 			Fields: IssueFields{
 				Summary:   "Fix auth bug",
 				IssueType: TypeField{Name: "Bug"},
+				Status:    TypeField{Name: "Release Pending"},
 			},
 		},
 	}
 
-	var capturedJQL string
+	var capturedJQL, capturedFields string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/rest/api/3/search/jql" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
@@ -29,6 +30,7 @@ func TestSearchIssues(t *testing.T) {
 			return
 		}
 		capturedJQL = r.URL.Query().Get("jql")
+		capturedFields = r.URL.Query().Get("fields")
 
 		// Check Basic Auth header
 		wantAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("test@example.com:test-token"))
@@ -64,6 +66,12 @@ func TestSearchIssues(t *testing.T) {
 	}
 	if result[0].Fields.IssueType.Name != "Bug" {
 		t.Errorf("issue type: got %q, want Bug", result[0].Fields.IssueType.Name)
+	}
+	if result[0].Fields.Status.Name != "Release Pending" {
+		t.Errorf("status: got %q, want Release Pending", result[0].Fields.Status.Name)
+	}
+	if capturedFields != "summary,issuetype,status" {
+		t.Errorf("fields: got %q, want summary,issuetype,status", capturedFields)
 	}
 	wantJQL := `project=PROJQUAY AND "Target Version"="3.16.2"`
 	if capturedJQL != wantJQL {

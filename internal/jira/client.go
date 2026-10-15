@@ -61,6 +61,7 @@ type IssueFields struct {
 	Summary   string     `json:"summary"`
 	Assignee  *UserField `json:"assignee"`
 	IssueType TypeField  `json:"issuetype"`
+	Status    TypeField  `json:"status"`
 	DueDate   string     `json:"duedate"`
 }
 
@@ -167,7 +168,7 @@ func (c *Client) DiscoverActiveReleases(ctx context.Context) ([]ActiveRelease, e
 // It handles pagination automatically and respects rate limits.
 func (c *Client) SearchIssues(ctx context.Context, fixVersion string) ([]Issue, error) {
 	jql := fmt.Sprintf(`project=%s AND "Target Version"="%s"`, c.project, fixVersion)
-	return c.search(ctx, jql, "summary,issuetype", "search issues")
+	return c.search(ctx, jql, "summary,issuetype,status", "search issues")
 }
 
 // search returns every issue jql matches, with fields, page by page. A

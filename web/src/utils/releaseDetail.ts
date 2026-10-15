@@ -539,6 +539,62 @@ export function fbcParams(
 	return params;
 }
 
+/** The Jira status release-from-fbc's advisory takes issues in. */
+export const RELEASE_PENDING = "Release Pending";
+
+/** An issue key's number: PROJQUAY-12348 is 12348. */
+const keyNumber = (key: string) => Number(key.slice(key.lastIndexOf("-") + 1));
+
+/** Issue keys by number, so PROJQUAY-9 comes before PROJQUAY-10. */
+const byKeyNumber = (a: string, b: string) =>
+	keyNumber(a) - keyNumber(b) || a.localeCompare(b);
+
+/** The issues release-from-fbc leaves out of the advisory, per status. */
+export interface LeftOut {
+	status: string;
+	keys: string[];
+}
+
+/** A release's issues split for release-from-fbc's jira-bugs. */
+export interface IssueLists {
+	/** The release's Release Pending issues, by key number, each once. */
+	keys: string[];
+	/** The other issues by status, the largest group first; the release ticket is no issue. */
+	leftOut: LeftOut[];
+}
+
+/**
+ * Splits issues for jira-bugs: only Release Pending ones go in, the release
+ * ticket is no advisory issue, and the rest are listed by status so none
+ * vanishes silently. Undefined while issues is, still loading.
+ */
+export function issueLists(
+	issues: { key: string; status: string }[] | undefined,
+	ticketKey?: string,
+): IssueLists | undefined {
+	if (!issues) return undefined;
+	const keys = new Set<string>();
+	const others = new Map<string, Set<string>>();
+	for (const { key, status } of issues) {
+		if (key === ticketKey) continue;
+		if (status === RELEASE_PENDING) {
+			keys.add(key);
+			continue;
+		}
+		const name = status || "No status";
+		others.set(name, (others.get(name) ?? new Set()).add(key));
+	}
+	return {
+		keys: [...keys].sort(byKeyNumber),
+		leftOut: [...others]
+			.map(([status, set]) => ({ status, keys: [...set].sort(byKeyNumber) }))
+			.sort(
+				(a, b) =>
+					b.keys.length - a.keys.length || a.status.localeCompare(b.status),
+			),
+	};
+}
+
 /** The tkn command that starts release-from-fbc with params. */
 export const tknCommand = (params: Record<string, string>) =>
 	[

@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS jira_issues (
     summary     TEXT NOT NULL DEFAULT '',
     fix_version TEXT NOT NULL DEFAULT '',
     issue_type  TEXT NOT NULL DEFAULT '',
+    status      TEXT NOT NULL DEFAULT '',
     link        TEXT NOT NULL DEFAULT ''
 );
 

@@ -216,6 +216,8 @@ export interface JiraIssue {
 	key: string;
 	summary: string;
 	issue_type: string;
+	/** The Jira status as of the last JIRA sync: "Release Pending". */
+	status: string;
 	link: string;
 }
 

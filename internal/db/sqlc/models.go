@@ -77,6 +77,7 @@ type JiraIssue struct {
 	Summary    string
 	FixVersion string
 	IssueType  string
+	Status     string
 	Link       string
 }
 

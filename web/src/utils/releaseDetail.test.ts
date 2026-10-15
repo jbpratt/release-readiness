@@ -22,6 +22,7 @@ import {
 	fbcsBuilt,
 	fixableLabels,
 	freshnessLine,
+	issueLists,
 	jobLabel,
 	jobLabels,
 	jobShortName,
@@ -195,6 +196,78 @@ test("fbcParams and tknCommand: 3.17.6 with and without optional params", () => 
 	assert.equal(
 		tknCommand(fbcParams("quay-3-17", "3.17.6", fbc, [])),
 		`tkn pipeline start release-from-fbc -n art-quay-tenant --use-param-defaults -p 'group=quay-3.17' -p 'assembly=3.17.6' -p 'fbc-pullspecs=${fbc}' -p 'dry-run=true'`,
+	);
+});
+
+const issue = (key: string, status: string) => ({ key, status });
+
+test("issueLists: only Release Pending, by key number, each once", () => {
+	const lists = issueLists([
+		issue("PROJQUAY-12348", "Release Pending"),
+		issue("PROJQUAY-9", "Release Pending"),
+		issue("PROJQUAY-100", "Release Pending"),
+		issue("PROJQUAY-9", "Release Pending"),
+	]);
+	assert.deepEqual(lists?.keys, [
+		"PROJQUAY-9",
+		"PROJQUAY-100",
+		"PROJQUAY-12348",
+	]);
+	// The exact format for the pipeline's text field: commas, nothing else.
+	assert.equal(lists?.keys.join(","), "PROJQUAY-9,PROJQUAY-100,PROJQUAY-12348");
+	assert.deepEqual(lists?.leftOut, []);
+});
+
+test("issueLists: the release ticket is no advisory issue, even Release Pending", () => {
+	const lists = issueLists(
+		[
+			issue("PROJQUAY-1", "Release Pending"),
+			issue("PROJQUAY-2", "Release Pending"),
+			issue("PROJQUAY-3", "In Progress"),
+		],
+		"PROJQUAY-2",
+	);
+	assert.deepEqual(lists?.keys, ["PROJQUAY-1"]);
+	// Nor does it show as left out: the Tickets card hides it too.
+	assert.deepEqual(lists?.leftOut, [
+		{ status: "In Progress", keys: ["PROJQUAY-3"] },
+	]);
+});
+
+test("issueLists: left-out issues by status, the largest group first", () => {
+	const lists = issueLists([
+		issue("PROJQUAY-5", "Closed"),
+		issue("PROJQUAY-30", "Verified"),
+		issue("PROJQUAY-4", "Closed"),
+		issue("PROJQUAY-7", "ON_QA"),
+		issue("PROJQUAY-8", ""),
+		issue("PROJQUAY-6", "Closed"),
+		issue("PROJQUAY-20", "Verified"),
+		issue("PROJQUAY-20", "Verified"),
+	]);
+	assert.deepEqual(lists?.keys, []);
+	assert.deepEqual(lists?.leftOut, [
+		{ status: "Closed", keys: ["PROJQUAY-4", "PROJQUAY-5", "PROJQUAY-6"] },
+		{ status: "Verified", keys: ["PROJQUAY-20", "PROJQUAY-30"] },
+		{ status: "No status", keys: ["PROJQUAY-8"] },
+		{ status: "ON_QA", keys: ["PROJQUAY-7"] },
+	]);
+});
+
+test("issueLists: undefined while the issues load, empty lists with none", () => {
+	assert.equal(issueLists(undefined, "PROJQUAY-2"), undefined);
+	assert.deepEqual(issueLists([]), { keys: [], leftOut: [] });
+});
+
+test("tknCommand: carries the Release Pending issues only", () => {
+	const lists = issueLists([
+		issue("PROJQUAY-10", "Release Pending"),
+		issue("PROJQUAY-9", "Release Pending"),
+		issue("PROJQUAY-11", "Verified"),
+	]);
+	assert.match(
+		tknCommand(fbcParams("quay-3-18", "3.18.1", "a,b", lists?.keys ?? [])),
+		/-p 'jira-bugs=PROJQUAY-9,PROJQUAY-10' -p 'dry-run=true'$/,
 	);
 });
 

@@ -152,7 +152,7 @@ func TestListReleaseIssues(t *testing.T) {
 	for _, i := range []model.JiraIssueRecord{
 		{Key: "PROJQUAY-2", FixVersion: "quay-v3.18.1"},
 		{Key: "PROJQUAY-3", FixVersion: "quay-v3.18.2"},
-		{Key: "PROJQUAY-1", FixVersion: "quay-v3.18.1"},
+		{Key: "PROJQUAY-1", FixVersion: "quay-v3.18.1", Status: "Release Pending"},
 	} {
 		if err := srv.db.UpsertJiraIssue(t.Context(), &i); err != nil {
 			t.Fatal(err)
@@ -163,6 +163,9 @@ func TestListReleaseIssues(t *testing.T) {
 	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/issues", http.StatusOK, &got)
 	if len(got) != 2 || got[0].Key != "PROJQUAY-1" || got[1].Key != "PROJQUAY-2" {
 		t.Errorf("3.18.1 issues = %+v, want PROJQUAY-1, PROJQUAY-2", got)
+	}
+	if got[0].Status != "Release Pending" {
+		t.Errorf("PROJQUAY-1 status = %q, want Release Pending", got[0].Status)
 	}
 
 	var none json.RawMessage

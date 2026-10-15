@@ -147,6 +147,8 @@ needs a fresh DB file.
   Tekton Results `results` and `records`.
 - The SQLite DB is persisted on the PVC. Delete the old DB file when upgrading
   across the move to the Kubernetes source.
+- `jira_issues.status` was added with no `ALTER` path: a `dashboard.db` from
+  before it must be deleted on upgrade, or the issues query fails.
 
 ## Conventions
 

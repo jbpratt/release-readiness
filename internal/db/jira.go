@@ -14,13 +14,14 @@ func (d *DB) UpsertJiraIssue(ctx context.Context, issue *model.JiraIssueRecord) 
 		Summary:    issue.Summary,
 		FixVersion: issue.FixVersion,
 		IssueType:  issue.IssueType,
+		Status:     issue.Status,
 		Link:       issue.Link,
 	})
 }
 
 // ListJiraIssues returns issues for a fixVersion.
 func (d *DB) ListJiraIssues(ctx context.Context, fixVersion string) ([]model.JiraIssueRecord, error) {
-	query := `SELECT key, summary, fix_version, issue_type, link
+	query := `SELECT key, summary, fix_version, issue_type, status, link
 		FROM jira_issues WHERE fix_version = ? ORDER BY key`
 
 	rows, err := d.dbtx.QueryContext(ctx, query, fixVersion)
@@ -32,7 +33,7 @@ func (d *DB) ListJiraIssues(ctx context.Context, fixVersion string) ([]model.Jir
 	var issues []model.JiraIssueRecord
 	for rows.Next() {
 		var i model.JiraIssueRecord
-		if err := rows.Scan(&i.Key, &i.Summary, &i.FixVersion, &i.IssueType, &i.Link); err != nil {
+		if err := rows.Scan(&i.Key, &i.Summary, &i.FixVersion, &i.IssueType, &i.Status, &i.Link); err != nil {
 			return nil, err
 		}
 		issues = append(issues, i)

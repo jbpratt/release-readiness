@@ -164,6 +164,7 @@ func (s *Syncer) syncVersion(ctx context.Context, fixVersion string) error {
 				Summary:    issue.Fields.Summary,
 				FixVersion: fixVersion,
 				IssueType:  issue.Fields.IssueType.Name,
+				Status:     issue.Fields.Status.Name,
 				Link:       jiraURL,
 			}
 
