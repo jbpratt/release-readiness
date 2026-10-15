@@ -21,14 +21,11 @@ import {
 	Stack,
 	Switch,
 	Title,
-	ToggleGroup,
-	ToggleGroupItem,
 	Toolbar,
 	ToolbarContent,
-	ToolbarGroup,
 	ToolbarItem,
 } from "@patternfly/react-core";
-import { CubesIcon, ListIcon, ThIcon } from "@patternfly/react-icons";
+import { CubesIcon } from "@patternfly/react-icons";
 import { Link, useSearchParams } from "react-router-dom";
 import { getCandidate, listReleasesOverview } from "../api/client";
 import type {
@@ -51,8 +48,6 @@ import { formatReleaseName, jiraIssueUrl } from "../utils/links";
 import { verdictLine } from "../utils/releaseDetail";
 import { cardStatus, shipmentChip, shipmentText } from "../utils/shipment";
 
-type ViewMode = "compact" | "expanded";
-
 const muted = { color: "var(--pf-t--global--text--color--subtle)" };
 
 // A blockers popover's one width: one set before its blockers load keeps it
@@ -61,7 +56,6 @@ const popoverWidth = "min(40rem, calc(100vw - 4rem))";
 
 export default function ReleasesOverview() {
 	const [searchParams, setSearchParams] = useSearchParams();
-	const viewMode = (searchParams.get("view") ?? "compact") as ViewMode;
 	const showAll = searchParams.get("all") === "1";
 
 	const config = useConfig();
@@ -75,7 +69,7 @@ export default function ReleasesOverview() {
 	const setParam = (key: string, value: string) => {
 		setSearchParams((prev) => {
 			const next = new URLSearchParams(prev);
-			if (value && value !== "compact") {
+			if (value) {
 				next.set(key, value);
 			} else {
 				next.delete(key);
@@ -133,8 +127,6 @@ export default function ReleasesOverview() {
 		);
 	}
 
-	const galleryMinWidth = viewMode === "compact" ? "300px" : "400px";
-
 	return (
 		<PageSection>
 			<Title
@@ -157,24 +149,6 @@ export default function ReleasesOverview() {
 					{!showAll && (
 						<ToolbarItem style={muted}>Next version in each stream</ToolbarItem>
 					)}
-					<ToolbarGroup align={{ default: "alignEnd" }}>
-						<ToolbarItem>
-							<ToggleGroup aria-label="View mode">
-								<ToggleGroupItem
-									icon={<ListIcon />}
-									aria-label="Compact view"
-									isSelected={viewMode === "compact"}
-									onChange={() => setParam("view", "compact")}
-								/>
-								<ToggleGroupItem
-									icon={<ThIcon />}
-									aria-label="Expanded view"
-									isSelected={viewMode === "expanded"}
-									onChange={() => setParam("view", "expanded")}
-								/>
-							</ToggleGroup>
-						</ToolbarItem>
-					</ToolbarGroup>
 				</ToolbarContent>
 			</Toolbar>
 
@@ -193,11 +167,7 @@ export default function ReleasesOverview() {
 					</EmptyStateFooter>
 				</EmptyState>
 			) : (
-				<Gallery
-					component="ul"
-					hasGutter
-					minWidths={{ default: galleryMinWidth }}
-				>
+				<Gallery component="ul" hasGutter minWidths={{ default: "300px" }}>
 					{visible.map((ov) => (
 						<ReleaseCard
 							key={ov.release.name}
@@ -206,7 +176,6 @@ export default function ReleasesOverview() {
 							readinessSignal={ov.readiness}
 							latestBuild={ov.latest_build}
 							shipmentMR={ov.shipment_mr}
-							viewMode={viewMode}
 							jiraBaseUrl={config?.jira_base_url}
 						/>
 					))}
@@ -222,7 +191,6 @@ function ReleaseCard({
 	readinessSignal,
 	latestBuild,
 	shipmentMR,
-	viewMode,
 	jiraBaseUrl,
 }: {
 	release: ReleaseVersion;
@@ -230,7 +198,6 @@ function ReleaseCard({
 	readinessSignal: ReadinessResponse;
 	latestBuild?: string;
 	shipmentMR: ShipmentMR | null;
-	viewMode: ViewMode;
 	jiraBaseUrl?: string;
 }) {
 	const target = release.due_date ?? release.release_date;
@@ -349,89 +316,54 @@ function ReleaseCard({
 				</Flex>
 			</CardTitle>
 			<CardBody>
-				{viewMode === "compact" ? (
-					<DescriptionList isCompact isHorizontal>
-						{targetDate && (
-							<DescriptionListGroup>
-								<DescriptionListTerm>Target</DescriptionListTerm>
-								<DescriptionListDescription>
-									{targetDate}
-								</DescriptionListDescription>
-							</DescriptionListGroup>
-						)}
-						{showSnapshot && (
-							<DescriptionListGroup>
-								<DescriptionListTerm>Image snapshot</DescriptionListTerm>
-								<DescriptionListDescription>
-									{lastBuild}
-								</DescriptionListDescription>
-							</DescriptionListGroup>
-						)}
-						{release.release_ticket_key && (
-							<DescriptionListGroup>
-								<DescriptionListTerm>Ticket</DescriptionListTerm>
-								<DescriptionListDescription>
-									{ticket}
-								</DescriptionListDescription>
-							</DescriptionListGroup>
-						)}
-						{shipment && (
-							<DescriptionListGroup>
-								<DescriptionListTerm>Shipment</DescriptionListTerm>
-								<DescriptionListDescription>
-									{shipment}
-								</DescriptionListDescription>
-							</DescriptionListGroup>
-						)}
-						{readiness && (
-							<DescriptionListGroup>
-								<DescriptionListTerm>Readiness</DescriptionListTerm>
-								<DescriptionListDescription>
-									{readiness}
-								</DescriptionListDescription>
-							</DescriptionListGroup>
-						)}
-					</DescriptionList>
-				) : (
-					<Flex justifyContent={{ default: "justifyContentSpaceBetween" }}>
-						{targetDate && (
-							<FlexItem>
-								<span className="rr-label">Target</span>
-								<div>{targetDate}</div>
-							</FlexItem>
-						)}
-						{release.release_ticket_key && (
-							<FlexItem>
-								<span className="rr-label">Ticket</span>
-								<div>{ticket}</div>
-							</FlexItem>
-						)}
-						{showSnapshot && (
-							<FlexItem>
-								<span className="rr-label">Image snapshot</span>
-								<div>{lastBuild}</div>
-							</FlexItem>
-						)}
-						{shipment && (
-							<FlexItem>
-								<span className="rr-label">Shipment</span>
-								<div>{shipment}</div>
-							</FlexItem>
-						)}
-						{readiness && (
-							<FlexItem>
-								<span className="rr-label">Readiness</span>
-								<div>{readiness}</div>
-							</FlexItem>
-						)}
-						{SHOW_CVES && issueSummary && issueSummary.cves > 0 && (
-							<FlexItem>
-								<span className="rr-label">CVE tickets</span>
-								<div>{issueSummary.cves}</div>
-							</FlexItem>
-						)}
-					</Flex>
-				)}
+				<DescriptionList isCompact isHorizontal>
+					{targetDate && (
+						<DescriptionListGroup>
+							<DescriptionListTerm>Target</DescriptionListTerm>
+							<DescriptionListDescription>
+								{targetDate}
+							</DescriptionListDescription>
+						</DescriptionListGroup>
+					)}
+					{showSnapshot && (
+						<DescriptionListGroup>
+							<DescriptionListTerm>Image snapshot</DescriptionListTerm>
+							<DescriptionListDescription>
+								{lastBuild}
+							</DescriptionListDescription>
+						</DescriptionListGroup>
+					)}
+					{release.release_ticket_key && (
+						<DescriptionListGroup>
+							<DescriptionListTerm>Ticket</DescriptionListTerm>
+							<DescriptionListDescription>{ticket}</DescriptionListDescription>
+						</DescriptionListGroup>
+					)}
+					{shipment && (
+						<DescriptionListGroup>
+							<DescriptionListTerm>Shipment</DescriptionListTerm>
+							<DescriptionListDescription>
+								{shipment}
+							</DescriptionListDescription>
+						</DescriptionListGroup>
+					)}
+					{readiness && (
+						<DescriptionListGroup>
+							<DescriptionListTerm>Readiness</DescriptionListTerm>
+							<DescriptionListDescription>
+								{readiness}
+							</DescriptionListDescription>
+						</DescriptionListGroup>
+					)}
+					{SHOW_CVES && issueSummary && issueSummary.cves > 0 && (
+						<DescriptionListGroup>
+							<DescriptionListTerm>CVE tickets</DescriptionListTerm>
+							<DescriptionListDescription>
+								{issueSummary.cves}
+							</DescriptionListDescription>
+						</DescriptionListGroup>
+					)}
+				</DescriptionList>
 			</CardBody>
 		</Card>
 	);
