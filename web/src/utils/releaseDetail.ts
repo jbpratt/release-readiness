@@ -155,7 +155,8 @@ export const slotItem = (
 
 /** A chip on an FBC row, flagging an exception. */
 export interface Chip {
-	color: "red" | "orange" | "grey";
+	/** Its PF Label status; none for a note that is not a problem. */
+	status?: "danger" | "warning";
 	text: string;
 	title?: string;
 }
@@ -170,9 +171,9 @@ export function rowChips(
 ): Chip[] {
 	const chips: Chip[] = [];
 	if (shipped) return chips;
-	if (r.kind === "missing") chips.push({ color: "red", text: "no FBC" });
+	if (r.kind === "missing") chips.push({ status: "danger", text: "no FBC" });
 	if (unreadable)
-		chips.push({ color: "red", text: "can't read", title: unreadable });
+		chips.push({ status: "danger", text: "can't read", title: unreadable });
 	return chips;
 }
 
@@ -199,6 +200,24 @@ export type RunPill = CIRun & {
 	/** It installed another FBC of this OCP version on the same bundle. */
 	equivalent: boolean;
 };
+
+const runResults: Record<string, [StatusLine["status"] | undefined, string]> = {
+	success: ["done", "Passed"],
+	failure: ["failed", "Failed"],
+	error: ["failed", "Error"],
+	pending: ["running", "Running"],
+	triggered: ["running", "Pending"],
+	aborted: [undefined, "Aborted"],
+};
+
+/** A Prow run state as its Status and word; an unknown one has no status. */
+export function runResult(state: string): {
+	status?: StatusLine["status"];
+	text: string;
+} {
+	const [status, text] = runResults[state] ?? [undefined, state];
+	return { status, text };
+}
 
 /** An exception on an FBC row; otherBundle's links its FBC's build. */
 export type Flag = Chip & { href?: string | null };
@@ -245,7 +264,7 @@ export function fbcGroups(
 					unreadable: slotItem(items, "read_failed", o.operator, r.ocp)?.text,
 				});
 				const held = otherBundle(r);
-				if (held) flags.push({ color: "orange", ...held });
+				if (held) flags.push({ status: "warning", ...held });
 				return {
 					operator: o.operator,
 					ocp: r.ocp,
@@ -555,21 +574,21 @@ export const fixableLabels = ({ fixable }: ScanCounts) =>
 	}));
 
 /**
- * The CVEs cell of a candidate image without counts: its text, colour and
+ * The CVEs cell of a candidate image without counts: its text, status and
  * link. A pending or unread scan is a muted dash.
  */
 export function scanCell(scan: ImageScan | null): {
 	text: string;
-	color: "orange" | "grey";
+	status?: "warning";
 	url?: string;
 } {
 	switch (scan?.state) {
 		case "scan_failed":
-			return { text: "scan failed", color: "orange", url: scan.url };
+			return { text: "scan failed", status: "warning", url: scan.url };
 		case "not_scanned":
-			return { text: "not scanned", color: "grey", url: scan.url };
+			return { text: "not scanned", url: scan.url };
 		default:
-			return { text: "-", color: "grey" };
+			return { text: "-" };
 	}
 }
 
@@ -637,33 +656,33 @@ function imageIssues({ image: i, repos }: ReleaseImage, version: string) {
 	const off = repos.filter((r) => !r.startsWith("registry.redhat.io/"));
 	if (off.length > 0)
 		issues.push({
-			color: "red",
+			status: "danger",
 			text: "not registry.redhat.io",
 			title: off.join("\n"),
 		});
 	if (!i.nvr) return issues;
-	if (!i.stage) issues.push({ color: "red", text: "not on stage" });
+	if (!i.stage) issues.push({ status: "danger", text: "not on stage" });
 	const built = nvrVersion(i.nvr);
 	if (built && built !== version)
-		issues.push({ color: "orange", text: `${built} build`, title: i.nvr });
+		issues.push({ status: "warning", text: `${built} build`, title: i.nvr });
 	if (!SHOW_CVES) return issues;
 	const fixable = i.scan?.counts?.fixable;
 	if (fixable && fixable.critical + fixable.high > 0)
 		issues.push({
-			color: "red",
+			status: "danger",
 			text: `${fixable.critical + fixable.high} fixable critical/high`,
 		});
-	else if (!i.scan) issues.push({ color: "grey", text: "scan pending" });
+	else if (!i.scan) issues.push({ text: "scan pending" });
 	else if (i.scan.state !== "scanned")
 		issues.push({ ...scanCell(i.scan), title: i.scan.url });
 	return issues;
 }
 
-const ranks = { red: 0, orange: 1, grey: 2 };
+const rank = (f: Flag) =>
+	f.status === "danger" ? 0 : f.status === "warning" ? 1 : 2;
 
-/** An image's worst issue's rank, 0 for red; 3 without one. */
-export const worst = (r: ReleaseImage) =>
-	Math.min(3, ...r.issues.map((f) => ranks[f.color]));
+/** An image's worst issue's rank, 0 for danger; 3 without one. */
+export const worst = (r: ReleaseImage) => Math.min(3, ...r.issues.map(rank));
 
 // The syncs the candidate verdict reads (handlers_candidate.go): konflux its
 // Snapshots and Releases, art-builds their images' NVRs, art-history the

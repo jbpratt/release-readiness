@@ -33,12 +33,7 @@ import {
 	ToolbarItem,
 	Tooltip,
 } from "@patternfly/react-core";
-import {
-	CopyIcon,
-	ExclamationCircleIcon,
-	ExclamationTriangleIcon,
-	ExternalLinkAltIcon,
-} from "@patternfly/react-icons";
+import { CopyIcon, ExternalLinkAltIcon } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { type ReactNode, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -92,6 +87,7 @@ import {
 	type RunPill,
 	readingLine,
 	releaseLine,
+	runResult,
 	type StatusLine,
 	tknCommand,
 	verdictEntries,
@@ -264,8 +260,7 @@ function ReleaseStatusCard({
 							{dueDate?.date ?? "TBD"}
 							{dueDate?.kind === "past" && (
 								<Label
-									color="red"
-									icon={<ExclamationCircleIcon />}
+									status="danger"
 									isCompact
 									style={{ marginLeft: "0.5rem" }}
 								>
@@ -274,8 +269,7 @@ function ReleaseStatusCard({
 							)}
 							{dueDate?.kind === "soon" && (
 								<Label
-									color="yellow"
-									icon={<ExclamationTriangleIcon />}
+									status="warning"
 									isCompact
 									style={{ marginLeft: "0.5rem" }}
 								>
@@ -691,23 +685,9 @@ const levelStatus: Record<VerdictItem["level"], LabelProps["status"]> = {
 	info: "info",
 };
 
-const runStatus: Record<string, StatusLine["status"]> = {
-	success: "done",
-	failure: "failed",
-	error: "failed",
-	pending: "running",
-};
-const runStatusOf = (p: RunPill) => runStatus[p.state] ?? "warning";
-
-/** Run results as counted, worst first. */
-const runWords: [StatusLine["status"], string][] = [
-	["failed", "failed"],
-	["running", "running"],
-	["warning", "other"],
-	["done", "passed"],
-];
-const runWordOf = (p: RunPill) =>
-	runWords.find(([s]) => s === runStatusOf(p))?.[1];
+/** A run result's place when counted, worst first. */
+const severity = (s?: StatusLine["status"]) =>
+	s === "failed" ? 0 : s === "running" ? 1 : s === "done" ? 3 : 2;
 
 /**
  * An FBC row's CI: its jobs counted by result, worst first, opening a list of
@@ -715,49 +695,61 @@ const runWordOf = (p: RunPill) =>
  * the same bundle is marked "≈".
  */
 function RunSummary({ runs }: { runs: RunPill[] }) {
-	const counts = runWords
-		.map(([s, word]) => ({
-			s,
-			word,
-			n: runs.filter((p) => runStatusOf(p) === s).length,
-		}))
-		.filter((c) => c.n > 0);
+	const counts: (ReturnType<typeof runResult> & { n: number })[] = [];
+	for (const p of runs) {
+		const r = runResult(p.state);
+		const c = counts.find((c) => c.text === r.text);
+		if (c) c.n++;
+		else counts.push({ ...r, n: 1 });
+	}
+	counts.sort((a, b) => severity(a.status) - severity(b.status));
+	const summary = counts
+		.map((c) => `${c.n} ${c.text.toLowerCase()}`)
+		.join(" · ");
 	return (
 		<Popover
 			headerContent={`${runs.length} CI jobs`}
 			bodyContent={
 				<List isPlain>
-					{runs.map((p) => (
-						<ListItem key={`${p.job} ${p.equivalent}`}>
-							<a
-								href={p.prow_url}
-								aria-label={`${jobLabel(p.job)} ${runWordOf(p)}`}
-								title={[
-									`${p.job}: ${runWordOf(p)}`,
-									`Started ${when(p.started_at)}`,
-									p.install_failed && "Install failed",
-									p.runs > 1 && `Newest of ${p.runs} runs`,
-									p.equivalent &&
-										"Ran on another FBC with the same bundle; its channel graph can differ.",
-								]
-									.filter(Boolean)
-									.join("\n")}
-								{...external}
-							>
-								<Status status={runStatusOf(p)}>
-									{p.equivalent && "≈ "}
-									{jobLabel(p.job)}
-								</Status>
-							</a>
-						</ListItem>
-					))}
+					{runs.map((p) => {
+						const r = runResult(p.state);
+						const job = (
+							<>
+								{p.equivalent && "≈ "}
+								{jobLabel(p.job)}
+							</>
+						);
+						return (
+							<ListItem key={`${p.job} ${p.equivalent}`}>
+								<a
+									href={p.prow_url}
+									aria-label={`${jobLabel(p.job)} ${r.text}`}
+									title={[
+										`${p.job}: ${r.text}`,
+										`Started ${when(p.started_at)}`,
+										p.install_failed && "Install failed",
+										p.runs > 1 && `Newest of ${p.runs} runs`,
+										p.equivalent &&
+											"Ran on another FBC with the same bundle; its channel graph can differ.",
+									]
+										.filter(Boolean)
+										.join("\n")}
+									{...external}
+								>
+									{r.status ? <Status status={r.status}>{job}</Status> : job}
+								</a>
+							</ListItem>
+						);
+					})}
 				</List>
 			}
 		>
 			<Button variant="link" isInline>
-				<Status status={counts[0].s}>
-					{counts.map((c) => `${c.n} ${c.word}`).join(" · ")}
-				</Status>
+				{counts[0].status ? (
+					<Status status={counts[0].status}>{summary}</Status>
+				) : (
+					summary
+				)}
 			</Button>
 		</Popover>
 	);

@@ -21,9 +21,10 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { getReleaseCI } from "../api/client";
 import type { FBCBuild, FBCRun } from "../api/types";
 import LoadError, { Loading, ReleaseNotFound } from "../components/LoadError";
+import { Status } from "../components/Status";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { formatReleaseName } from "../utils/links";
-import { compareVersions, jobLabels } from "../utils/releaseDetail";
+import { compareVersions, jobLabels, runResult } from "../utils/releaseDetail";
 
 const external = { target: "_blank", rel: "noopener noreferrer" };
 const muted = { color: "var(--pf-t--global--text--color--subtle)" };
@@ -150,21 +151,9 @@ function CIFilters({ ci }: { ci: ReturnType<typeof useReleaseCI> }) {
 	);
 }
 
-const runStates: Record<string, [string, "green" | "red" | "blue" | "grey"]> = {
-	success: ["Passed", "green"],
-	failure: ["Failed", "red"],
-	error: ["Error", "red"],
-	pending: ["Running", "blue"],
-	aborted: ["Aborted", "grey"],
-};
-
 function RunState({ state }: { state: string }) {
-	const [text, color] = runStates[state] ?? [state, "grey"];
-	return (
-		<Label isCompact color={color}>
-			{text}
-		</Label>
-	);
+	const { status, text } = runResult(state);
+	return status ? <Status status={status}>{text}</Status> : text;
 }
 
 /**
@@ -286,10 +275,7 @@ export default function ReleaseCI() {
 										<span style={muted}>No runs</span>
 									)}
 								</Td>
-								<Td dataLabel="Result">
-									{/* A div, so the stacked layout does not stretch the Label. */}
-									<div>{r && <RunState state={r.state} />}</div>
-								</Td>
+								<Td dataLabel="Result">{r && <RunState state={r.state} />}</Td>
 								<Td dataLabel="Started">
 									{r && (
 										<a href={r.prow_url} {...external}>

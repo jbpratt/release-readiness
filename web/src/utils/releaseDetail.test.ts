@@ -33,6 +33,7 @@ import {
 	releaseImages,
 	releaseLine,
 	rowChips,
+	runResult,
 	scanCell,
 	shownOperators,
 	slotItem,
@@ -586,7 +587,7 @@ test("rowChips: exceptions only, per row", () => {
 		"4.20",
 	)?.text;
 	assert.deepEqual(rowChips(unread, { shipped: false, unreadable: why }), [
-		{ color: "red", text: "can't read", title: items[0].text },
+		{ status: "danger", text: "can't read", title: items[0].text },
 	]);
 });
 
@@ -767,7 +768,7 @@ test("fbcGroups and needsAttention: a failed stage, a flag or a failed run", () 
 		},
 	});
 	assert.deepEqual(read.rows[0].flags, [
-		{ color: "red", text: "can't read", title: unreadable },
+		{ status: "danger", text: "can't read", title: unreadable },
 	]);
 	assert.deepEqual(fbcGroups({ ...d, fbc_candidate: null }), []);
 });
@@ -793,17 +794,22 @@ test("releaseImages and worst: each digest once, with its issues", () => {
 		images.map((r) => [
 			r.label,
 			r.operators,
-			r.issues.map((f) => f.text),
+			r.issues.map((f) => [f.text, f.status]),
 			worst(r),
 		]),
 		[
 			[
 				"quay-rhel9",
 				["quay-operator", "container-security-operator"],
-				["3.18.1 build"],
+				[["3.18.1 build", "warning"]],
 				1,
 			],
-			["postgresql-15", ["quay-operator"], ["not registry.redhat.io"], 0],
+			[
+				"postgresql-15",
+				["quay-operator"],
+				[["not registry.redhat.io", "danger"]],
+				0,
+			],
 		],
 	);
 });
@@ -851,19 +857,38 @@ test("scanCell", () => {
 	});
 	assert.deepEqual(scanCell(scan({ state: "scan_failed" })), {
 		text: "scan failed",
-		color: "orange",
+		status: "warning",
 		url: "https://konflux.example/plr",
 	});
 	assert.deepEqual(scanCell(scan({ state: "not_scanned" })), {
 		text: "not scanned",
-		color: "grey",
 		url: "https://konflux.example/plr",
 	});
-	assert.deepEqual(scanCell(scan({ state: "pending" })), {
-		text: "-",
-		color: "grey",
-	});
-	assert.deepEqual(scanCell(null), { text: "-", color: "grey" });
+	assert.deepEqual(scanCell(scan({ state: "pending" })), { text: "-" });
+	assert.deepEqual(scanCell(null), { text: "-" });
+});
+
+test("runResult", () => {
+	assert.deepEqual(
+		[
+			"success",
+			"failure",
+			"error",
+			"pending",
+			"triggered",
+			"aborted",
+			"bogus",
+		].map(runResult),
+		[
+			{ status: "done", text: "Passed" },
+			{ status: "failed", text: "Failed" },
+			{ status: "failed", text: "Error" },
+			{ status: "running", text: "Running" },
+			{ status: "running", text: "Pending" },
+			{ status: undefined, text: "Aborted" },
+			{ status: undefined, text: "bogus" },
+		],
+	);
 });
 
 test("freshnessLine", () => {

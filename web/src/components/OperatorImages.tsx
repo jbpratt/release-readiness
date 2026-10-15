@@ -55,7 +55,7 @@ export function Flags({ flags }: { flags: Flag[] }) {
 		<Label
 			key={f.text}
 			isCompact
-			color={f.color}
+			status={f.status}
 			render={
 				f.href
 					? ({ className, content, componentRef }) => (
@@ -140,7 +140,7 @@ export function OperatorImages({
 	);
 }
 
-const icons = ["failed", "warning", "running", "done"] as const;
+const icons = ["failed", "warning", undefined, "done"] as const;
 
 const divider = "1px solid var(--pf-t--global--border--color--default)";
 
@@ -167,7 +167,9 @@ function OperatorPanel({ o, version }: { o: OperatorFBC; version: string }) {
 					{problems.length > 0 && (
 						<Label
 							isCompact
-							color={problems.some((r) => worst(r) === 0) ? "red" : "orange"}
+							status={
+								problems.some((r) => worst(r) === 0) ? "danger" : "warning"
+							}
 						>
 							{problems.length} to check
 						</Label>
@@ -186,28 +188,30 @@ function OperatorPanel({ o, version }: { o: OperatorFBC; version: string }) {
 				)}
 			</CardTitle>
 			<CardBody>
-				{art.map((r) => (
-					<div
-						key={r.image.digest}
-						style={{ padding: "0.375rem 0", borderTop: divider }}
-					>
-						<Status status={icons[worst(r)]}>
-							<strong>{r.label}</strong>
-						</Status>
-						<Flex
-							gap={{ default: "gapSm" }}
-							alignItems={{ default: "alignItemsCenter" }}
-							style={{ fontSize: "0.85rem", marginTop: "0.125rem" }}
+				{art.map((r) => {
+					const icon = icons[worst(r)];
+					const label = <strong>{r.label}</strong>;
+					return (
+						<div
+							key={r.image.digest}
+							style={{ padding: "0.375rem 0", borderTop: divider }}
 						>
-							<BuiltCell image={r.image} />
-							<code style={muted} title={r.image.commit}>
-								{r.image.commit.slice(0, 7)}
-							</code>
-							{SHOW_CVES && <CveCell image={r.image} />}
-							<Flags flags={r.issues} />
-						</Flex>
-					</div>
-				))}
+							{icon ? <Status status={icon}>{label}</Status> : label}
+							<Flex
+								gap={{ default: "gapSm" }}
+								alignItems={{ default: "alignItemsCenter" }}
+								style={{ fontSize: "0.85rem", marginTop: "0.125rem" }}
+							>
+								<BuiltCell image={r.image} />
+								<code style={muted} title={r.image.commit}>
+									{r.image.commit.slice(0, 7)}
+								</code>
+								{SHOW_CVES && <CveCell image={r.image} />}
+								<Flags flags={r.issues} />
+							</Flex>
+						</div>
+					);
+				})}
 				{others.length > 0 && (
 					<div
 						style={{
