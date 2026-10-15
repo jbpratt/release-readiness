@@ -931,6 +931,19 @@ test("freshnessLine", () => {
 		},
 	);
 
+	// The daily prune and the Jira writer feed no page, so their age is not the page's.
+	assert.deepEqual(
+		freshnessLine({
+			problems: [],
+			sources: [
+				...sources,
+				{ source: "retention", last_success: ago(20 * 60) },
+				{ source: "reconcile", last_success: ago(30) },
+			],
+		}),
+		{ updated: "Updated 7 minutes ago", stale: null, problems: [] },
+	);
+
 	assert.deepEqual(freshnessLine({ problems: [], sources: [] }), {
 		updated: null,
 		stale: null,

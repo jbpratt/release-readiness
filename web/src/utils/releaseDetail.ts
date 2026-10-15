@@ -699,10 +699,13 @@ export const SOURCE_NAMES: Record<string, string> = {
 	retention: "Retention",
 };
 
+// Sources no page reads: the daily prune and the FBC Jira writer.
+const NON_DATA = new Set(["retention", "reconcile"]);
+
 /**
- * How current the page's data is: when the least recent source not stale
- * last succeeded, and the stale ones by name. CVE scans count only while
- * shown.
+ * How current the page's data is: when the least recent data source not
+ * stale last succeeded, and the stale ones by name. CVE scans count only
+ * while shown.
  */
 export function freshnessLine(s: SyncStatus): {
 	updated: string | null;
@@ -714,7 +717,7 @@ export function freshnessLine(s: SyncStatus): {
 	const problems = s.problems.filter(shown);
 	const bad = new Set(problems.map((p) => p.source));
 	const last = s.sources
-		.filter((f) => shown(f) && !bad.has(f.source))
+		.filter((f) => shown(f) && !bad.has(f.source) && !NON_DATA.has(f.source))
 		.flatMap((f) => (f.last_success ? [Date.parse(f.last_success)] : []));
 	return {
 		updated:
