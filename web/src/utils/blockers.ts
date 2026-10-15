@@ -32,7 +32,7 @@ export type BlockerGroup = Blocker & { count: number };
 
 // What blocks, by code, in a few words.
 const titles: Record<string, string> = {
-	not_staged: "Not in a stage shipment",
+	not_staged: "Not staged",
 	missing_operator: "Operator not staged",
 	missing_ocp: "OCP versions not staged",
 	csv_mismatch: "FBCs ship the wrong version",

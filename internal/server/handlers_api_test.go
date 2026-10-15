@@ -304,8 +304,8 @@ func TestReleasesOverviewReadiness(t *testing.T) {
 		return overviews[0].Readiness
 	}
 
-	if got := getReadiness(); got.Signal != "yellow" || got.Message != "No build snapshots yet" {
-		t.Errorf("without snapshot: got %+v, want yellow/No build snapshots yet", got)
+	if got := getReadiness(); got.Signal != "yellow" || got.Message != "No image snapshot yet" {
+		t.Errorf("without snapshot: got %+v, want yellow/No image snapshot yet", got)
 	}
 
 	seedSnapshot(t, srv, "quay-3-16", "quay-3-16-snap-1", time.Now(), "quay-3-16-quay")
@@ -378,7 +378,7 @@ func TestReleasesOverviewLatestBuild(t *testing.T) {
 	if lb := got["quay-v3.18.1"].LatestBuild; lb == nil || !lb.Equal(mustTime(t, "2026-10-10T01:48:34Z")) {
 		t.Errorf("3.18.1 latest_build = %v, want its newest build's", lb)
 	}
-	if ov := got["quay-v3.18.2"]; ov.LatestBuild != nil || ov.Readiness.Message != "No build snapshots yet" {
+	if ov := got["quay-v3.18.2"]; ov.LatestBuild != nil || ov.Readiness.Message != "No image snapshot yet" {
 		t.Errorf("3.18.2 latest_build = %v, readiness %+v; want none", ov.LatestBuild, ov.Readiness)
 	}
 

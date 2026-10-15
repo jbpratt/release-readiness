@@ -12,6 +12,7 @@ import { getSyncStatus } from "../api/client";
 import type { SyncProblem } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { relative } from "../utils/format";
+import { SOURCE_NAMES } from "../utils/releaseDetail";
 
 const POLL_MS = 60_000;
 
@@ -55,7 +56,7 @@ export function SyncProblems({ problems }: { problems: SyncProblem[] }) {
 				<StackItem key={p.source}>
 					<Content>
 						<Content component="p">
-							<strong>{p.source}</strong>: {p.message}
+							<strong>{SOURCE_NAMES[p.source] ?? p.source}</strong>: {p.message}
 						</Content>
 						<Content component="small">
 							{p.since && `since ${relative(p.since)} · `}
@@ -90,14 +91,13 @@ export default function SyncStatusWarning() {
 		>
 			<Button
 				variant="plain"
-				aria-label={label}
 				icon={
 					<Icon status="warning">
 						<ExclamationTriangleIcon />
 					</Icon>
 				}
 			>
-				{problems.length}
+				{label}
 			</Button>
 		</Popover>
 	);

@@ -7,7 +7,7 @@ const stageText: Record<ShipmentMR["stage"], string> = {
 	open: "Shipment MR open",
 	stage_released: "Stage released",
 	prod_released: "Prod released",
-	shipped: "Shipped",
+	shipped: "Shipment MR: shipped",
 	closed: "Shipment MR closed",
 };
 
@@ -40,15 +40,17 @@ export function shipmentFlags(mr: ShipmentMR): string[] {
 
 /**
  * A version's one shipment MR label, linking the MR. Once the version
- * shipped it reads Shipped, whatever the MR's stage: ART can merge it after
- * the release.
+ * shipped it reads "Shipment MR: shipped", whatever the MR's stage: ART can
+ * merge it after the release.
  */
 export function shipmentLabel(
 	mr: ShipmentMR,
 	shipped: boolean,
 ): { text: string; status: Status; tooltip: string } {
 	const chip = shipmentChip(mr);
-	return shipped ? { ...chip, text: "Shipped", status: "success" } : chip;
+	return shipped
+		? { ...chip, text: "Shipment MR: shipped", status: "success" }
+		: chip;
 }
 
 /**

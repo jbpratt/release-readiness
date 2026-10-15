@@ -555,7 +555,7 @@ function Candidate({
 					<ToolbarItem>
 						<ToggleGroup isCompact aria-label="FBCs shown">
 							<ToggleGroupItem
-								text={`Needs attention (${attention.length})`}
+								text={`Rows needing attention (${attention.length})`}
 								isSelected={!all}
 								onChange={() => setAll(false)}
 							/>
@@ -955,7 +955,7 @@ function TicketsCard({
 				) : !issues ? (
 					<Spinner size="md" />
 				) : config?.jira_enabled === false ? (
-					"Jira sync off."
+					"No tickets stored for this version; Jira sync is off."
 				) : (
 					<EmptyState
 						variant="xs"

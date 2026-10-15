@@ -42,9 +42,9 @@ test("shipmentChip stages", () => {
 		tooltip: "!948 · Prod released",
 	});
 	assert.deepEqual(shipmentChip(mr({ stage: "shipped", state: "merged" })), {
-		text: "Shipped",
+		text: "Shipment MR: shipped",
 		status: "success",
-		tooltip: "!948 · Shipped",
+		tooltip: "!948 · Shipment MR: shipped",
 	});
 	assert.deepEqual(shipmentChip(mr({ stage: "closed", state: "closed" })), {
 		text: "Shipment MR closed",
@@ -76,11 +76,15 @@ test("shipmentFlags", () => {
 	);
 });
 
-test("shipmentLabel of a shipped version reads Shipped", () => {
+test("shipmentLabel of a shipped version reads Shipment MR: shipped", () => {
 	// ART can merge the MR after the release ships.
 	assert.deepEqual(
 		shipmentLabel(mr({ stage: "prod_released", needs_approval: true }), true),
-		{ text: "Shipped", status: "success", tooltip: "!948 · Prod released" },
+		{
+			text: "Shipment MR: shipped",
+			status: "success",
+			tooltip: "!948 · Prod released",
+		},
 	);
 	assert.equal(shipmentLabel(mr(), false).text, "Shipment MR open");
 });
@@ -112,7 +116,7 @@ test("cardStatus of a shipped version is one success label linking the MR", () =
 test("cardStatus picks the most severe of readiness and the MR", () => {
 	assert.deepEqual(
 		cardStatus(
-			{ signal: "yellow", message: "No build snapshots yet" },
+			{ signal: "yellow", message: "No image snapshot yet" },
 			mr({
 				stage: "stage_released",
 				pipeline_failed: true,

@@ -592,7 +592,7 @@ test("rowChips: exceptions only, per row", () => {
 	};
 	assert.deepEqual(chips(held), []);
 	assert.deepEqual(otherBundle(held), {
-		text: "holds bundle Oct 12 16:13",
+		text: "holds an older bundle (Oct 12 16:13)",
 		title: other,
 		href: "https://art/builds/1",
 	});
@@ -765,7 +765,7 @@ test("fbcGroups and needsAttention: a failed stage, a flag or a failed run", () 
 		[
 			["4.12", "Staged Oct 7", []],
 			["4.13", "Stage failed", []],
-			["4.14", null, ["holds bundle Oct 5 01:01"]],
+			["4.14", null, ["holds an older bundle (Oct 5 01:01)"]],
 			["4.15", null, ["no FBC"]],
 			["4.16", "Staged Oct 7", []],
 		],
@@ -956,7 +956,7 @@ test("freshnessLine", () => {
 	);
 	assert.equal(
 		freshnessLine({ problems: [stale], sources })?.text,
-		"Stale: konflux",
+		"Stale: Konflux releases",
 	);
 
 	// A source on its first pass, or none tracked, says nothing.

@@ -116,7 +116,7 @@ export default function ReleasesOverview() {
 						No releases found
 					</Title>
 					<EmptyStateBody>
-						No active releases discovered from JIRA. Ensure the JIRA sync is
+						No active releases discovered from Jira. Ensure the Jira sync is
 						configured and release tickets with component
 						&quot;-area/release&quot; exist.
 					</EmptyStateBody>
@@ -236,6 +236,8 @@ function ReleaseCard({
 				year: "numeric",
 			})
 		: "No image snapshot yet";
+	// The status label or the Readiness row already says there is none.
+	const showSnapshot = readinessSignal.message !== lastBuild;
 
 	const displayName = formatReleaseName(release.name);
 	const releasePath = `/releases/${encodeURIComponent(release.name)}`;
@@ -333,12 +335,14 @@ function ReleaseCard({
 								</DescriptionListDescription>
 							</DescriptionListGroup>
 						)}
-						<DescriptionListGroup>
-							<DescriptionListTerm>Image snapshot</DescriptionListTerm>
-							<DescriptionListDescription>
-								{lastBuild}
-							</DescriptionListDescription>
-						</DescriptionListGroup>
+						{showSnapshot && (
+							<DescriptionListGroup>
+								<DescriptionListTerm>Image snapshot</DescriptionListTerm>
+								<DescriptionListDescription>
+									{lastBuild}
+								</DescriptionListDescription>
+							</DescriptionListGroup>
+						)}
 						{release.release_ticket_key && (
 							<DescriptionListGroup>
 								<DescriptionListTerm>Ticket</DescriptionListTerm>
@@ -378,10 +382,12 @@ function ReleaseCard({
 								<div>{ticket}</div>
 							</FlexItem>
 						)}
-						<FlexItem>
-							<span className="rr-label">Image snapshot</span>
-							<div>{lastBuild}</div>
-						</FlexItem>
+						{showSnapshot && (
+							<FlexItem>
+								<span className="rr-label">Image snapshot</span>
+								<div>{lastBuild}</div>
+							</FlexItem>
+						)}
 						{shipment && (
 							<FlexItem>
 								<span className="rr-label">Shipment</span>
@@ -396,7 +402,7 @@ function ReleaseCard({
 						)}
 						{SHOW_CVES && issueSummary && issueSummary.cves > 0 && (
 							<FlexItem>
-								<span className="rr-label">CVEs</span>
+								<span className="rr-label">CVE tickets</span>
 								<div>{issueSummary.cves}</div>
 							</FlexItem>
 						)}

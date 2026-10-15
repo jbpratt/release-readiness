@@ -248,7 +248,7 @@ func computeReadiness(release *model.ReleaseVersion, hasSnapshot, catalogShipped
 		message = "Past due date"
 	} else if tracked && !hasSnapshot {
 		signal = "yellow"
-		message = "No build snapshots yet"
+		message = "No image snapshot yet"
 	} else if release.DueDate != nil && daysUntil <= 3 {
 		signal = "yellow"
 		switch daysUntil {

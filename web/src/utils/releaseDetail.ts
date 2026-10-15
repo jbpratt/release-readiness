@@ -187,7 +187,7 @@ export function otherBundle(
 	const nvr = r.kind === "other" ? r.fbc?.head_bundle_nvr : "";
 	if (!nvr) return null;
 	return {
-		text: `holds bundle ${bundleBuilt(nvr) || nvrLabel(nvr)}`,
+		text: `holds an older bundle (${bundleBuilt(nvr) || nvrLabel(nvr)})`,
 		title: nvr,
 		href: r.fbc?.build_url || null,
 	};
@@ -691,6 +691,21 @@ const VERDICT_SOURCES = [
 	"konflux",
 ];
 
+// Sync source ids as the page names them.
+export const SOURCE_NAMES: Record<string, string> = {
+	konflux: "Konflux releases",
+	"art-builds": "ART builds",
+	"art-history": "ART build history",
+	"fbc-render": "FBC reads",
+	jira: "Jira",
+	catalog: "Catalog",
+	prow: "Prow",
+	"shipment-mrs": "Shipment MRs",
+	"image-scans": "Image scans",
+	reconcile: "FBC Jira reconcile",
+	retention: "Retention",
+};
+
 /**
  * How fresh the verdict's data is: its failing or stale syncs, if any, else
  * when the least recent of them last succeeded. Null while one has yet to
@@ -702,7 +717,9 @@ export function freshnessLine(
 	const problems = s.problems.filter((p) => VERDICT_SOURCES.includes(p.source));
 	if (problems.length > 0) {
 		const what =
-			problems.length === 1 ? problems[0].source : `${problems.length} sources`;
+			problems.length === 1
+				? (SOURCE_NAMES[problems[0].source] ?? problems[0].source)
+				: `${problems.length} sources`;
 		return { text: `Stale: ${what}`, problems };
 	}
 	const last = s.sources
@@ -727,7 +744,7 @@ export function splitTickets(issues: JiraIssue[], ticketKey?: string) {
 /** The backend's no-FBC reasons in release terms, each with what to do next. */
 const noFbcReasons: Record<string, string> = {
 	"no Konflux application":
-		"Its JIRA fixVersion maps to no Konflux application; check the fixVersion name.",
+		"Its Jira fixVersion maps to no Konflux application; check the fixVersion name.",
 	"not a concrete quay-vX.Y.Z version":
 		"Only Quay versions named quay-vX.Y.Z have FBC builds.",
 	"no release candidate yet":
