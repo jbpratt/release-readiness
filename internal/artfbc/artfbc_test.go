@@ -50,7 +50,7 @@ func newFakeQuay(t *testing.T, tags []quayTag) *fakeQuay {
 				}
 			}
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"tags":%s,"page":1,"has_additional":false}`, mustJSON(t, match))
+			_, _ = fmt.Fprintf(w, `{"tags":%s,"page":1,"has_additional":false}`, mustJSON(t, match))
 			return
 		}
 		f.requests.Add(1)
@@ -73,7 +73,7 @@ func newFakeQuay(t *testing.T, tags []quayTag) *fakeQuay {
 		from := min((page-1)*limit, len(match))
 		to := min(from+limit, len(match))
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"tags":%s,"page":%d,"has_additional":%t}`, mustJSON(t, match[from:to]), page, to < len(match))
+		_, _ = fmt.Fprintf(w, `{"tags":%s,"page":%d,"has_additional":%t}`, mustJSON(t, match[from:to]), page, to < len(match))
 	})
 	mux.HandleFunc("/quay-3.18/group.yml", func(w http.ResponseWriter, r *http.Request) {
 		data, err := os.ReadFile("testdata/group.yml")
