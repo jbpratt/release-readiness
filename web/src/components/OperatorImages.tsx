@@ -5,6 +5,7 @@ import {
 	Flex,
 	Gallery,
 	Label,
+	Title,
 } from "@patternfly/react-core";
 import type { ReactNode } from "react";
 import type {
@@ -119,16 +120,23 @@ export function OperatorImages({
 	/** The version's X.Y.Z. */
 	version: string;
 }) {
+	const operators = candidateOperators(d);
+	if (operators.length === 0) return null;
 	return (
-		<Gallery
-			hasGutter
-			minWidths={{ default: "100%", lg: "24rem" }}
-			style={{ marginBottom: "1rem" }}
-		>
-			{candidateOperators(d).map((o) => (
-				<OperatorPanel key={o.operator} o={o} version={version} />
-			))}
-		</Gallery>
+		<>
+			<Title headingLevel="h2" size="lg" style={{ marginBottom: "0.5rem" }}>
+				Images in the candidate's bundles
+			</Title>
+			<Gallery
+				hasGutter
+				minWidths={{ default: "100%", lg: "24rem" }}
+				style={{ marginBottom: "1rem" }}
+			>
+				{operators.map((o) => (
+					<OperatorPanel key={o.operator} o={o} version={version} />
+				))}
+			</Gallery>
+		</>
 	);
 }
 
@@ -146,7 +154,7 @@ function OperatorPanel({ o, version }: { o: OperatorFBC; version: string }) {
 		.filter((r) => r.image.nvr || r.issues.length > 0)
 		.sort((a, b) => worst(a) - worst(b));
 	const others = images.filter((r) => !art.includes(r));
-	const problems = art.filter((r) => worst(r) < 2).length;
+	const problems = art.filter((r) => worst(r) < 2);
 	const ri = o.fbc_ri_stage.release;
 	return (
 		<Card isCompact>
@@ -156,9 +164,12 @@ function OperatorPanel({ o, version }: { o: OperatorFBC; version: string }) {
 					alignItems={{ default: "alignItemsCenter" }}
 				>
 					<span>{o.operator}</span>
-					{problems > 0 && (
-						<Label isCompact color="red">
-							{problems} to check
+					{problems.length > 0 && (
+						<Label
+							isCompact
+							color={problems.some((r) => worst(r) === 0) ? "red" : "orange"}
+						>
+							{problems.length} to check
 						</Label>
 					)}
 				</Flex>
