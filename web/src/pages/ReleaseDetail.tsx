@@ -9,6 +9,7 @@ import {
 	CardTitle,
 	ClipboardCopy,
 	EmptyState,
+	EmptyStateBody,
 	ExpandableSection,
 	Flex,
 	FlexItem,
@@ -219,6 +220,7 @@ export default function ReleaseDetail() {
 			<TicketsCard
 				issues={tickets}
 				error={ticketsError}
+				onRetry={refetchTickets}
 				version={version!}
 				config={config}
 				ticketKey={release.release_ticket_key}
@@ -903,12 +905,14 @@ const line = { marginTop: "0.5rem" };
 function TicketsCard({
 	issues,
 	error,
+	onRetry,
 	version,
 	config,
 	ticketKey,
 }: {
 	issues?: JiraIssue[];
 	error?: Error;
+	onRetry: () => void;
 	version: string;
 	config?: DashboardConfig;
 	ticketKey?: string;
@@ -932,11 +936,25 @@ function TicketsCard({
 				{hasIssues ? (
 					<IssuesTable issues={work} />
 				) : error ? (
-					error.message
+					<LoadError
+						variant="xs"
+						title="Could not load tickets"
+						onRetry={onRetry}
+					>
+						The fixVersion issues for this release are unavailable right now.
+					</LoadError>
 				) : !issues ? (
 					<Spinner size="md" aria-label="Loading tickets" />
 				) : config?.jira_enabled === false ? (
-					"No tickets stored for this version; Jira sync is off."
+					<EmptyState
+						variant="xs"
+						headingLevel="h4"
+						titleText="Jira sync is off"
+					>
+						<EmptyStateBody>
+							No tickets are stored for this version.
+						</EmptyStateBody>
+					</EmptyState>
 				) : (
 					<EmptyState
 						variant="xs"
@@ -949,9 +967,12 @@ function TicketsCard({
 	);
 }
 
+const ticketLimit = 20;
+
 function IssuesTable({ issues }: { issues: JiraIssue[] }) {
 	// Type, the second column, is the only sortable one.
 	const [direction, setDirection] = useState<"asc" | "desc">();
+	const [showAll, setShowAll] = useState(false);
 
 	const sortedIssues = useMemo(() => {
 		if (!direction) return issues;
@@ -961,39 +982,57 @@ function IssuesTable({ issues }: { issues: JiraIssue[] }) {
 		});
 	}, [issues, direction]);
 
+	const shown = showAll ? sortedIssues : sortedIssues.slice(0, ticketLimit);
+
 	return (
-		<Table variant="compact" style={{ tableLayout: "auto" }}>
-			<Thead>
-				<Tr>
-					<Th style={{ whiteSpace: "nowrap" }}>Key</Th>
-					<Th
-						sort={{
-							sortBy: { index: direction && 1, direction },
-							onSort: (_event, _index, d) => setDirection(d),
-							columnIndex: 1,
-						}}
-						modifier="fitContent"
-					>
-						Type
-					</Th>
-					<Th>Summary</Th>
-				</Tr>
-			</Thead>
-			<Tbody>
-				{sortedIssues.map((issue) => (
-					<Tr key={issue.key}>
-						<Td style={{ whiteSpace: "nowrap" }}>
-							<a href={issue.link} {...external}>
-								{issue.key}
-							</a>
-						</Td>
-						<Td style={{ whiteSpace: "nowrap" }}>{issue.issue_type}</Td>
-						<Td style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
-							{issue.summary}
-						</Td>
+		<>
+			<Table
+				aria-label="Tickets"
+				variant="compact"
+				style={{ tableLayout: "auto" }}
+			>
+				<Thead>
+					<Tr>
+						<Th style={{ whiteSpace: "nowrap" }}>Key</Th>
+						<Th
+							sort={{
+								sortBy: { index: direction && 1, direction },
+								onSort: (_event, _index, d) => setDirection(d),
+								columnIndex: 1,
+							}}
+							modifier="fitContent"
+						>
+							Type
+						</Th>
+						<Th>Summary</Th>
 					</Tr>
-				))}
-			</Tbody>
-		</Table>
+				</Thead>
+				<Tbody>
+					{shown.map((issue) => (
+						<Tr key={issue.key}>
+							<Td dataLabel="Key" style={{ whiteSpace: "nowrap" }}>
+								<a href={issue.link} {...external}>
+									{issue.key}
+								</a>
+							</Td>
+							<Td dataLabel="Type" style={{ whiteSpace: "nowrap" }}>
+								{issue.issue_type}
+							</Td>
+							<Td
+								dataLabel="Summary"
+								style={{ whiteSpace: "normal", wordBreak: "break-word" }}
+							>
+								{issue.summary}
+							</Td>
+						</Tr>
+					))}
+				</Tbody>
+			</Table>
+			{issues.length > ticketLimit && (
+				<Button variant="link" onClick={() => setShowAll(!showAll)}>
+					{showAll ? "Show fewer" : `Show all ${issues.length} tickets`}
+				</Button>
+			)}
+		</>
 	);
 }
