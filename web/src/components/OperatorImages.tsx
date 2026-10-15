@@ -12,6 +12,7 @@ import type {
 	OperatorImage,
 	ReleaseCandidate,
 } from "../api/types";
+import { SHOW_CVES } from "../utils/features";
 import {
 	bundleBuilt,
 	candidateOperators,
@@ -191,8 +192,7 @@ function OperatorPanel({ o, version }: { o: OperatorFBC; version: string }) {
 							<code style={muted} title={r.image.commit}>
 								{r.image.commit.slice(0, 7)}
 							</code>
-							{/* CVE column hidden until pulls to the scan results exist; re-enable then. */}
-							{/* <CveCell image={r.image} /> */}
+							{SHOW_CVES && <CveCell image={r.image} />}
 							<Flags flags={r.issues} />
 						</Flex>
 					</div>

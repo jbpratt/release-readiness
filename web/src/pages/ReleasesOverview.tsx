@@ -42,6 +42,7 @@ import { Status } from "../components/Status";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
 import { blockers, splitBlockers } from "../utils/blockers";
+import { SHOW_CVES } from "../utils/features";
 import { day } from "../utils/format";
 import { formatReleaseName, jiraIssueUrl } from "../utils/links";
 import { verdictLine } from "../utils/releaseDetail";
@@ -393,7 +394,7 @@ function ReleaseCard({
 								<div>{readiness}</div>
 							</FlexItem>
 						)}
-						{issueSummary && issueSummary.cves > 0 && (
+						{SHOW_CVES && issueSummary && issueSummary.cves > 0 && (
 							<FlexItem>
 								<span className="rr-label">CVEs</span>
 								<div>{issueSummary.cves}</div>

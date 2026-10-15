@@ -844,7 +844,7 @@ test("releaseImages and worst: each digest once, with its issues", () => {
 			[
 				"quay-rhel9",
 				["quay-operator", "container-security-operator"],
-				["3.18.1 build", "scan pending"],
+				["3.18.1 build"],
 				1,
 			],
 			["postgresql-15", ["quay-operator"], ["not registry.redhat.io"], 0],

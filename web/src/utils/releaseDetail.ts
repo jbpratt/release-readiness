@@ -15,6 +15,7 @@ import type {
 	Verdict,
 	VerdictItem,
 } from "../api/types";
+import { SHOW_CVES } from "./features.ts";
 import { relative } from "./format.ts";
 
 // A "-nightly" segment, at the end or before a suffix like "-fips".
@@ -642,8 +643,8 @@ export function releaseImages(
 
 /**
  * An image's issues: a pullspec off registry.redhat.io; for one ART built, not
- * on stage, built as another version, or its scan unread or with fixable
- * critical or high CVEs.
+ * on stage, built as another version, or with SHOW_CVES its scan unread or
+ * with fixable critical or high CVEs.
  */
 function imageIssues({ image: i, repos }: ReleaseImage, version: string) {
 	const issues: Flag[] = [];
@@ -659,6 +660,7 @@ function imageIssues({ image: i, repos }: ReleaseImage, version: string) {
 	const built = nvrVersion(i.nvr);
 	if (built && built !== version)
 		issues.push({ color: "orange", text: `${built} build`, title: i.nvr });
+	if (!SHOW_CVES) return issues;
 	const fixable = i.scan?.counts?.fixable;
 	if (fixable && fixable.critical + fixable.high > 0)
 		issues.push({
