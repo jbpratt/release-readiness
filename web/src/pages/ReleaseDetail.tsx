@@ -9,7 +9,6 @@ import {
 	CardTitle,
 	ClipboardCopy,
 	EmptyState,
-	EmptyStateBody,
 	ExpandableSection,
 	Flex,
 	FlexItem,
@@ -25,7 +24,6 @@ import {
 	PageSection,
 	Popover,
 	Spinner,
-	Title,
 	ToggleGroup,
 	ToggleGroupItem,
 	Toolbar,
@@ -56,7 +54,7 @@ import type {
 	VerdictItem,
 } from "../api/types";
 import { Blockers } from "../components/Blockers";
-import LoadError from "../components/LoadError";
+import LoadError, { Loading, ReleaseNotFound } from "../components/LoadError";
 import {
 	ExtLink,
 	external,
@@ -117,7 +115,6 @@ export default function ReleaseDetail() {
 
 	const {
 		data: release,
-		loading: loadingRelease,
 		error: releaseError,
 		refetch: refetchRelease,
 	} = useCachedFetch(`release:${version}`, () => getRelease(version!));
@@ -130,13 +127,10 @@ export default function ReleaseDetail() {
 		getCandidate(version!),
 	);
 
-	if (loadingRelease && !release) {
+	if (!release && !releaseError) {
 		return (
 			<PageSection>
-				<EmptyState
-					icon={Spinner}
-					titleText={`Loading ${formatReleaseName(version!)}…`}
-				/>
+				<Loading title={`Loading ${formatReleaseName(version!)}…`} />
 			</PageSection>
 		);
 	}
@@ -163,19 +157,12 @@ export default function ReleaseDetail() {
 	if (!release) {
 		return (
 			<PageSection>
-				<EmptyState>
-					<Title headingLevel="h2" size="lg">
-						Release not found
-					</Title>
-					<EmptyStateBody>
-						No data found for release &quot;{version}&quot;.
-					</EmptyStateBody>
-				</EmptyState>
+				<DetailBreadcrumb name={version!} />
+				<ReleaseNotFound version={version!} />
 			</PageSection>
 		);
 	}
 
-	const displayName = formatReleaseName(release.name);
 	const app = release.konflux_application ?? "";
 	const xyz = release.name.replace(/^[a-z]+-v/, "");
 	const fbc = candidate.data?.fbc_candidate;
@@ -183,19 +170,7 @@ export default function ReleaseDetail() {
 
 	return (
 		<PageSection>
-			<Flex
-				alignItems={{ default: "alignItemsCenter" }}
-				style={{ marginBottom: "1rem" }}
-			>
-				<FlexItem>
-					<Breadcrumb>
-						<BreadcrumbItem>
-							<Link to="/">Releases</Link>
-						</BreadcrumbItem>
-						<BreadcrumbHeading>{displayName}</BreadcrumbHeading>
-					</Breadcrumb>
-				</FlexItem>
-			</Flex>
+			<DetailBreadcrumb name={release.name} />
 
 			<ReleaseStatusCard
 				release={release}
@@ -207,7 +182,6 @@ export default function ReleaseDetail() {
 			<BuildsCard
 				data={candidate.data}
 				error={candidate.error}
-				loading={candidate.loading}
 				onRetry={candidate.refetch}
 				version={xyz}
 				blockers={
@@ -250,6 +224,17 @@ export default function ReleaseDetail() {
 				ticketKey={release.release_ticket_key}
 			/>
 		</PageSection>
+	);
+}
+
+function DetailBreadcrumb({ name }: { name: string }) {
+	return (
+		<Breadcrumb style={{ marginBottom: "1rem" }}>
+			<BreadcrumbItem>
+				<Link to="/">Releases</Link>
+			</BreadcrumbItem>
+			<BreadcrumbHeading>{formatReleaseName(name)}</BreadcrumbHeading>
+		</Breadcrumb>
 	);
 }
 
@@ -376,7 +361,6 @@ function LinkedCardTitle({
 function BuildsCard({
 	data,
 	error,
-	loading,
 	onRetry,
 	version,
 	blockers,
@@ -385,7 +369,6 @@ function BuildsCard({
 }: {
 	data?: ReleaseCandidate;
 	error?: Error;
-	loading: boolean;
 	onRetry: () => void;
 	/** The version's X.Y.Z. */
 	version: string;
@@ -403,9 +386,9 @@ function BuildsCard({
 				Release candidate
 			</LinkedCardTitle>
 			<CardBody>
-				{!data && loading ? (
-					<Spinner size="md" />
-				) : error ? (
+				{!data && !error ? (
+					<Spinner size="md" aria-label="Loading the release candidate" />
+				) : !data ? (
 					<LoadError
 						variant="xs"
 						title="Could not load the release candidate"
@@ -413,8 +396,6 @@ function BuildsCard({
 					>
 						Its builds, CI, and release status are unavailable right now.
 					</LoadError>
-				) : !data ? (
-					<Spinner size="md" />
 				) : fbc ? (
 					<Candidate
 						data={data}
@@ -953,7 +934,7 @@ function TicketsCard({
 				) : error ? (
 					error.message
 				) : !issues ? (
-					<Spinner size="md" />
+					<Spinner size="md" aria-label="Loading tickets" />
 				) : config?.jira_enabled === false ? (
 					"No tickets stored for this version; Jira sync is off."
 				) : (

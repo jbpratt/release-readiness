@@ -4,9 +4,10 @@ import {
 	EmptyStateActions,
 	EmptyStateBody,
 	EmptyStateFooter,
-	Title,
 } from "@patternfly/react-core";
+import { ExclamationCircleIcon } from "@patternfly/react-icons";
 import { Component } from "react";
+import { Link } from "react-router-dom";
 
 interface Props {
 	children: React.ReactNode;
@@ -26,19 +27,22 @@ export default class ErrorBoundary extends Component<Props, State> {
 	render() {
 		if (this.state.error) {
 			return (
-				<EmptyState>
-					<Title headingLevel="h2" size="lg">
-						Something went wrong
-					</Title>
+				<EmptyState
+					status="danger"
+					icon={ExclamationCircleIcon}
+					titleText="Something went wrong"
+					headingLevel="h2"
+				>
 					<EmptyStateBody>{this.state.error.message}</EmptyStateBody>
 					<EmptyStateFooter>
 						<EmptyStateActions>
 							<Button
 								variant="primary"
-								onClick={() => this.setState({ error: null })}
+								onClick={() => window.location.reload()}
 							>
-								Try again
+								Reload
 							</Button>
+							<Link to="/">Releases</Link>
 						</EmptyStateActions>
 					</EmptyStateFooter>
 				</EmptyState>

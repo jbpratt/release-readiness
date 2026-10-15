@@ -1,4 +1,5 @@
 import {
+	Button,
 	Card,
 	CardBody,
 	CardTitle,
@@ -7,7 +8,9 @@ import {
 	DescriptionListGroup,
 	DescriptionListTerm,
 	EmptyState,
+	EmptyStateActions,
 	EmptyStateBody,
+	EmptyStateFooter,
 	Flex,
 	FlexItem,
 	Gallery,
@@ -25,7 +28,7 @@ import {
 	ToolbarGroup,
 	ToolbarItem,
 } from "@patternfly/react-core";
-import { ListIcon, ThIcon } from "@patternfly/react-icons";
+import { CubesIcon, ListIcon, ThIcon } from "@patternfly/react-icons";
 import { Link, useSearchParams } from "react-router-dom";
 import { getCandidate, listReleasesOverview } from "../api/client";
 import type {
@@ -35,7 +38,7 @@ import type {
 	ShipmentMR,
 } from "../api/types";
 import { Blockers } from "../components/Blockers";
-import LoadError from "../components/LoadError";
+import LoadError, { Loading } from "../components/LoadError";
 import { external } from "../components/OperatorImages";
 import { mrLink } from "../components/ShipmentLabels";
 import { Status } from "../components/Status";
@@ -65,7 +68,6 @@ export default function ReleasesOverview() {
 
 	const {
 		data: overviews,
-		loading,
 		error,
 		refetch,
 	} = useCachedFetch("releasesOverview", listReleasesOverview);
@@ -82,15 +84,15 @@ export default function ReleasesOverview() {
 		});
 	};
 
-	if (loading && !overviews) {
+	if (!overviews && !error) {
 		return (
 			<PageSection>
-				<EmptyState icon={Spinner} titleText="Loading releases…" />
+				<Loading title="Loading releases…" />
 			</PageSection>
 		);
 	}
 
-	if (!overviews && error) {
+	if (!overviews) {
 		return (
 			<PageSection>
 				<LoadError title="Could not load releases" onRetry={refetch}>
@@ -111,15 +113,21 @@ export default function ReleasesOverview() {
 	if (overviewList.length === 0) {
 		return (
 			<PageSection>
-				<EmptyState>
-					<Title headingLevel="h2" size="lg">
-						No releases found
-					</Title>
+				<EmptyState
+					icon={CubesIcon}
+					titleText="No releases yet"
+					headingLevel="h2"
+				>
 					<EmptyStateBody>
-						No active releases discovered from Jira. Ensure the Jira sync is
-						configured and release tickets with component
-						&quot;-area/release&quot; exist.
+						Releases appear once the Jira sync finds them.
 					</EmptyStateBody>
+					<EmptyStateFooter>
+						<EmptyStateActions>
+							<a href="/api/v1/sync-status" {...external}>
+								Sync status
+							</a>
+						</EmptyStateActions>
+					</EmptyStateFooter>
 				</EmptyState>
 			</PageSection>
 		);
@@ -170,24 +178,40 @@ export default function ReleasesOverview() {
 				</ToolbarContent>
 			</Toolbar>
 
-			<Gallery
-				component="ul"
-				hasGutter
-				minWidths={{ default: galleryMinWidth }}
-			>
-				{visible.map((ov) => (
-					<ReleaseCard
-						key={ov.release.name}
-						release={ov.release}
-						issueSummary={ov.issue_summary}
-						readinessSignal={ov.readiness}
-						latestBuild={ov.latest_build}
-						shipmentMR={ov.shipment_mr}
-						viewMode={viewMode}
-						jiraBaseUrl={config?.jira_base_url}
-					/>
-				))}
-			</Gallery>
+			{visible.length === 0 ? (
+				<EmptyState
+					icon={CubesIcon}
+					titleText="No next version in any stream"
+					headingLevel="h2"
+				>
+					<EmptyStateFooter>
+						<EmptyStateActions>
+							<Button variant="primary" onClick={() => setParam("all", "1")}>
+								Show all versions
+							</Button>
+						</EmptyStateActions>
+					</EmptyStateFooter>
+				</EmptyState>
+			) : (
+				<Gallery
+					component="ul"
+					hasGutter
+					minWidths={{ default: galleryMinWidth }}
+				>
+					{visible.map((ov) => (
+						<ReleaseCard
+							key={ov.release.name}
+							release={ov.release}
+							issueSummary={ov.issue_summary}
+							readinessSignal={ov.readiness}
+							latestBuild={ov.latest_build}
+							shipmentMR={ov.shipment_mr}
+							viewMode={viewMode}
+							jiraBaseUrl={config?.jira_base_url}
+						/>
+					))}
+				</Gallery>
+			)}
 		</PageSection>
 	);
 }

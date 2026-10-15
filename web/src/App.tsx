@@ -24,7 +24,13 @@ import {
 	SunIcon,
 } from "@patternfly/react-icons";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import {
+	BrowserRouter,
+	Navigate,
+	Route,
+	Routes,
+	useLocation,
+} from "react-router-dom";
 import "@patternfly/react-core/dist/styles/base.css";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SyncStatusWarning from "./components/SyncStatusWarning";
@@ -172,30 +178,38 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 	return <Page masthead={header}>{children}</Page>;
 }
 
+function AppRoutes() {
+	// Keyed on the path, so navigating away clears a caught error.
+	const { pathname } = useLocation();
+	return (
+		<ErrorBoundary key={pathname}>
+			<Suspense
+				fallback={
+					<Bullseye>
+						<Spinner aria-label="Loading page" />
+					</Bullseye>
+				}
+			>
+				<Routes>
+					<Route path="/" element={<ReleasesOverview />} />
+					<Route path="/releases/:version" element={<ReleaseDetail />} />
+					<Route path="/releases/:version/ci" element={<ReleaseCI />} />
+					<Route
+						path="/releases/:version/snapshots"
+						element={<Navigate to=".." relative="path" replace />}
+					/>
+					{Mockups && <Route path="/mockups/*" element={<Mockups />} />}
+				</Routes>
+			</Suspense>
+		</ErrorBoundary>
+	);
+}
+
 export default function App() {
 	return (
 		<BrowserRouter>
 			<AppLayout>
-				<ErrorBoundary>
-					<Suspense
-						fallback={
-							<Bullseye>
-								<Spinner />
-							</Bullseye>
-						}
-					>
-						<Routes>
-							<Route path="/" element={<ReleasesOverview />} />
-							<Route path="/releases/:version" element={<ReleaseDetail />} />
-							<Route path="/releases/:version/ci" element={<ReleaseCI />} />
-							<Route
-								path="/releases/:version/snapshots"
-								element={<Navigate to=".." relative="path" replace />}
-							/>
-							{Mockups && <Route path="/mockups/*" element={<Mockups />} />}
-						</Routes>
-					</Suspense>
-				</ErrorBoundary>
+				<AppRoutes />
 			</AppLayout>
 		</BrowserRouter>
 	);

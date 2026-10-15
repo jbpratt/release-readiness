@@ -10,7 +10,6 @@ import {
 	FormSelectOption,
 	Label,
 	PageSection,
-	Spinner,
 	Title,
 	Toolbar,
 	ToolbarContent,
@@ -21,7 +20,7 @@ import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { getReleaseCI } from "../api/client";
 import type { FBCBuild, FBCRun } from "../api/types";
-import LoadError from "../components/LoadError";
+import LoadError, { Loading, ReleaseNotFound } from "../components/LoadError";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { formatReleaseName } from "../utils/links";
 import { compareVersions, jobLabels } from "../utils/releaseDetail";
@@ -51,9 +50,8 @@ const states = {
 function useReleaseCI() {
 	const { version } = useParams<{ version: string }>();
 	const [params, setParams] = useSearchParams();
-	const { data, loading, error, refetch } = useCachedFetch(
-		`ci:${version}`,
-		() => getReleaseCI(version!),
+	const { data, error, refetch } = useCachedFetch(`ci:${version}`, () =>
+		getReleaseCI(version!),
 	);
 	const operator = params.get("operator") ?? "";
 	const ocp = params.get("ocp") ?? "";
@@ -77,11 +75,12 @@ function useReleaseCI() {
 	const matching = builds.filter(
 		(b) => (!operator || b.operator === operator) && (!ocp || b.ocp === ocp),
 	);
-	const shown = matching.filter((b) => all || b.runs.length > 0);
+	// With no run to show, every build is listed with its "No runs" marker.
+	const anyRuns = matching.some((b) => b.runs.length > 0);
+	const shown = matching.filter((b) => all || !anyRuns || b.runs.length > 0);
 	return {
 		version: version!,
 		data,
-		loading,
 		error,
 		refetch,
 		operator,
@@ -91,7 +90,6 @@ function useReleaseCI() {
 		operators,
 		ocps,
 		label: (job: string) => labels[jobs.indexOf(job)],
-		matching: matching.length,
 		shown,
 	};
 }
@@ -213,12 +211,21 @@ function BuildTitle({ build }: { build: FBCBuild }) {
  */
 export default function ReleaseCI() {
 	const ci = useReleaseCI();
-	const { version, data, loading, error, refetch, shown } = ci;
+	const { version, data, error, refetch, shown } = ci;
 	const rows = shown.flatMap((b) =>
 		b.runs.length > 0
 			? b.runs.map((r): { b: FBCBuild; r?: FBCRun } => ({ b, r }))
 			: [{ b }],
 	);
+
+	if (!data && error?.message.startsWith("404 ")) {
+		return (
+			<PageSection>
+				<CIBreadcrumb version={version} />
+				<ReleaseNotFound version={version} />
+			</PageSection>
+		);
+	}
 
 	return (
 		<PageSection>
@@ -227,9 +234,9 @@ export default function ReleaseCI() {
 				FBC CI history
 			</Title>
 			<CIFilters ci={ci} />
-			{!data && loading ? (
-				<Spinner size="lg" />
-			) : error ? (
+			{!data && !error ? (
+				<Loading variant="sm" title="Loading CI history…" />
+			) : !data ? (
 				<LoadError
 					variant="sm"
 					title="Could not load CI history"
@@ -238,20 +245,12 @@ export default function ReleaseCI() {
 					The server did not return this release's FBC builds and their CI runs.
 					Try again in a moment.
 				</LoadError>
-			) : !data ? (
-				<EmptyState
-					variant="sm"
-					icon={Spinner}
-					titleText="Loading CI history…"
-				/>
 			) : shown.length === 0 ? (
 				<EmptyState variant="sm" titleText="No FBC builds to show">
 					<EmptyStateBody>
 						{data.length === 0
 							? "This version has no FBC builds."
-							: ci.matching === 0
-								? "No build matches these filters."
-								: `None of ${ci.operator || ci.ocp ? "the matching" : "this version's"} FBC builds has a CI run yet. Include builds with no runs to list them.`}
+							: "No build matches these filters."}
 					</EmptyStateBody>
 				</EmptyState>
 			) : (
