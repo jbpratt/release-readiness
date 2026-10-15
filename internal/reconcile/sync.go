@@ -362,8 +362,10 @@ func (s *Sync) actions(ctx context.Context, stream string, f StageFBC, prev stri
 			continue
 		}
 		for _, c := range commits {
-			for _, key := range issueKey.FindAllString(c.Message, -1) {
-				if strings.HasPrefix(c.Message, "Revert ") {
+			// Cherry-pick bodies name upstream keys this branch does not fix.
+			subject, _, _ := strings.Cut(c.Message, "\n")
+			for _, key := range issueKey.FindAllString(subject, -1) {
+				if strings.HasPrefix(subject, "Revert ") {
 					reverted[key] = true
 					uncertain = append(uncertain, fmt.Sprintf("%s: reverted by %s", key, c.SHA))
 					continue

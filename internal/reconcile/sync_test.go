@@ -203,9 +203,10 @@ func TestRunOnce(t *testing.T) {
 	fx.commits.ranges[quayRepo+" redhat-3.18 "+sha(2)+" "+sha(3)] = []Commit{
 		{SHA: sha(3), Message: "PROJQUAY-1 fix\n\nSee PROJQUAY-1."},
 		{SHA: sha(30), Message: "chore: bump (PROJQUAY-2)"},
+		{SHA: sha(31), Message: "PROJQUAY-20 fix (cherry-pick)\n\nUpstream: PROJQUAY-21\n(cherry picked from commit " + sha(32) + ")"},
 	}
 	fx.run(t)
-	for _, key := range []string{"PROJQUAY-1", "PROJQUAY-2"} {
+	for _, key := range []string{"PROJQUAY-1", "PROJQUAY-2", "PROJQUAY-20"} {
 		a, ok := fx.store.actions[ActionKey{FBCDigest: "sha256:f3", IssueKey: key, Release: "r3"}]
 		if !ok || a.Status != StatusProposed || a.DesiredTargetVersion != "quay-v3.18.2" || a.FBCNVR != f3.FBCNVR {
 			t.Errorf("%s: %+v, %v; want proposed for quay-v3.18.2", key, a, ok)
@@ -215,8 +216,9 @@ func TestRunOnce(t *testing.T) {
 	if want := `[{"component":"quay-quay","repo":"https://github.com/quay/quay","sha":"` + sha(3) + `"}]`; ev != want {
 		t.Errorf("evidence = %s; want %s", ev, want)
 	}
-	if len(fx.store.actions) != 2 {
-		t.Errorf("actions = %+v; want two", fx.store.actions)
+	// A key only in a commit body is not this branch's fix.
+	if len(fx.store.actions) != 3 {
+		t.Errorf("actions = %+v; want three", fx.store.actions)
 	}
 
 	// A respin whose range lists PROJQUAY-1 again inherits it.
@@ -227,8 +229,8 @@ func TestRunOnce(t *testing.T) {
 	if want := "already included in " + f3.FBCNVR + " (r3)"; a.Status != StatusSkipped || a.SkipReason != want || a.DesiredTargetVersion != "" {
 		t.Errorf("inherited PROJQUAY-1 = %+v; want skipped %q", a, want)
 	}
-	if len(fx.store.actions) != 3 {
-		t.Errorf("actions = %+v; want three", fx.store.actions)
+	if len(fx.store.actions) != 4 {
+		t.Errorf("actions = %+v; want four", fx.store.actions)
 	}
 
 	// Done runs are not fetched or rewritten again.
@@ -241,8 +243,8 @@ func TestRunOnce(t *testing.T) {
 
 	// Each proposed action is logged once; the skipped one is not.
 	logs := fx.logs.String()
-	if n := strings.Count(logs, "msg=proposed "); n != 2 {
-		t.Errorf("logged %d proposed actions; want 2:\n%s", n, logs)
+	if n := strings.Count(logs, "msg=proposed "); n != 3 {
+		t.Errorf("logged %d proposed actions; want 3:\n%s", n, logs)
 	}
 	if want := "msg=proposed issue=PROJQUAY-1 fbc=" + f3.FBCNVR + " release=r3 target_version_add=quay-v3.18.2 target_version_remove=quay-v3.18.z"; !strings.Contains(logs, want) {
 		t.Errorf("logs lack %q:\n%s", want, logs)
