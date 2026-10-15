@@ -29,3 +29,12 @@
 	--pf-v6-c-masthead--m-display-inline--breakpoint--xl--GridTemplateColumns: max-content
 		1fr;
 }
+
+/* PF 6.6.2's light warning icon token is #dca614: 2.21:1 on white and 1.97:1
+   on #f2f2f2, under the 3:1 an icon-only status needs. The status palette's
+   warning-500 is 7.89:1 on white; dark theme keeps its own token. */
+:root:not(.pf-v6-theme-dark) {
+	--pf-t--global--icon--color--status--warning--default: var(
+		--pf-t--global--color--status--warning--500
+	);
+}
