@@ -3,6 +3,7 @@ package reconcile
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -37,6 +38,9 @@ func NewGitHubFetcher(hc *http.Client, token string) *GitHubFetcher {
 }
 
 var fullSHA = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// errTransient marks a GitHub read that may succeed when retried.
+var errTransient = errors.New("transient")
 
 type comparison struct {
 	Status          string `json:"status"`
@@ -130,14 +134,27 @@ func (f *GitHubFetcher) get(ctx context.Context, u string, v any) (string, error
 	}
 	resp, err := f.http.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: %w", errTransient, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("GET %s: %s", u, resp.Status)
+		err := fmt.Errorf("GET %s: %s", u, resp.Status)
+		// GitHub rate limits with a 429, or a 403 that has no requests left or a Retry-After.
+		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 ||
+			resp.StatusCode == http.StatusForbidden && (resp.Header.Get("X-RateLimit-Remaining") == "0" || resp.Header.Get("Retry-After") != "") {
+			err = fmt.Errorf("%w: %w", errTransient, err)
+		}
+		return "", err
 	}
 	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
-		return "", fmt.Errorf("decode %s: %w", u, err)
+		err = fmt.Errorf("decode %s: %w", u, err)
+		// Malformed JSON stays malformed; a body cut short by the network or a timeout may arrive whole next pass.
+		var syntax *json.SyntaxError
+		var typ *json.UnmarshalTypeError
+		if !errors.As(err, &syntax) && !errors.As(err, &typ) {
+			err = fmt.Errorf("%w: %w", errTransient, err)
+		}
+		return "", err
 	}
 	for link := range strings.SplitSeq(resp.Header.Get("Link"), ",") {
 		target, params, _ := strings.Cut(link, ";")

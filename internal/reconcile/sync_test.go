@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net/http"
 	"reflect"
 	"slices"
 	"strings"
@@ -560,5 +561,52 @@ func TestRunOnceUnrendered(t *testing.T) {
 	}
 	if len(fx.store.actions) != 2 {
 		t.Errorf("actions = %+v; want two", fx.store.actions)
+	}
+}
+
+// A transient GitHub error leaves the FBC to the next pass; a permanent one
+// is its uncertainty.
+func TestRunOnceGitHubError(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+		retry  bool
+	}{
+		{"unavailable", http.StatusServiceUnavailable, true},
+		{"rate limited", http.StatusTooManyRequests, true},
+		{"not found", http.StatusNotFound, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fx := newFixture(t)
+			g := newFake(t)
+			fx.sync.commits = g.start(t, "")
+			op := sha(100)
+			fx.stage("r1", "3.18.1", "sha256:f1", base, op)
+			fx.run(t)
+			fx.stage("r2", "3.18.2", "sha256:f2", head, op)
+			g.fail = func(w http.ResponseWriter) { w.WriteHeader(tc.status) }
+			fx.run(t)
+			done := fx.store.runs[[2]string{"r2", "sha256:f2"}]
+			if len(fx.store.actions) != 0 || done == tc.retry {
+				t.Fatalf("GitHub %d: actions %+v, done %v; want none, done %v", tc.status, fx.store.actions, done, !tc.retry)
+			}
+			if u := fx.uncertain("r2"); (u == "") != tc.retry {
+				t.Errorf("GitHub %d: uncertain %q", tc.status, u)
+			}
+
+			g.fail = nil
+			fx.run(t)
+			if !tc.retry {
+				if len(fx.store.actions) != 0 {
+					t.Errorf("done FBC proposed %+v", fx.store.actions)
+				}
+				return
+			}
+			for _, key := range []string{"PROJQUAY-1", "PROJQUAY-2"} {
+				if a := fx.store.actions[ActionKey{FBCDigest: "sha256:f2", IssueKey: key, Release: "r2"}]; a.Status != StatusProposed || a.DesiredTargetVersion != "quay-v3.18.2" {
+					t.Errorf("retry: %s = %+v; want proposed for quay-v3.18.2", key, a)
+				}
+			}
+		})
 	}
 }

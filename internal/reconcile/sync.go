@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -69,8 +70,8 @@ type slot struct{ stream, operator, ocp string }
 
 // RunOnce reconciles every StageFBC not yet done, then writes the pending
 // actions to Jira when a Writer is set. Only store errors fail it;
-// anything that keeps an FBC's issues from being known is logged as its
-// uncertainty.
+// anything that keeps an FBC's issues from being known for good is logged
+// as its uncertainty.
 func (s *Sync) RunOnce(ctx context.Context) error {
 	fbcs, err := s.store.ListStageFBCs(ctx)
 	if err != nil {
@@ -271,7 +272,7 @@ type evidence struct {
 // members of prev and of f. A member already in prev changed nothing, so
 // only new member digests are checked, and what keeps f's issues from being
 // known is logged. While the ART source of a changed member may still
-// arrive, it returns why f waits instead.
+// arrive, or after a transient GitHub error, it returns why f waits instead.
 func (s *Sync) actions(ctx context.Context, stream string, f StageFBC, prev string) ([]Action, string, error) {
 	var uncertain []string
 	prevSources, err := s.memberSources(ctx, prev)
@@ -353,6 +354,9 @@ func (s *Sync) actions(ctx context.Context, stream string, f StageFBC, prev stri
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil, "", ctx.Err()
+			}
+			if errors.Is(err, errTransient) {
+				return nil, "GitHub: " + err.Error(), nil
 			}
 			uncertain = append(uncertain, fmt.Sprintf("component %s: %v", components, err))
 			continue

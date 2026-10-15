@@ -3,6 +3,7 @@ package reconcile
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -132,23 +133,50 @@ func TestRangeUnauthenticated(t *testing.T) {
 }
 
 func TestRangeFailsClosed(t *testing.T) {
+	status := func(code int, header ...string) func(*fakeGitHub) {
+		return func(g *fakeGitHub) {
+			g.fail = func(w http.ResponseWriter) {
+				for i := 0; i < len(header); i += 2 {
+					w.Header().Set(header[i], header[i+1])
+				}
+				w.WriteHeader(code)
+			}
+		}
+	}
 	for _, tc := range []struct {
-		name  string
-		setup func(*fakeGitHub)
-		err   string
+		name      string
+		setup     func(*fakeGitHub)
+		err       string
+		transient bool
 	}{
-		{"total mismatch", func(g *fakeGitHub) { g.pages[1]["total_commits"] = 4 }, "total_commits is 4"},
-		{"diverged", func(g *fakeGitHub) { g.pages[0]["behind_by"] = 1 }, "diverged"},
+		{"total mismatch", func(g *fakeGitHub) { g.pages[1]["total_commits"] = 4 }, "total_commits is 4", false},
+		{"diverged", func(g *fakeGitHub) { g.pages[0]["behind_by"] = 1 }, "diverged", false},
 		{"merge base mismatch", func(g *fakeGitHub) {
 			g.pages[0]["merge_base_commit"] = map[string]any{"sha": strings.Repeat("9", 40)}
-		}, "merge base is 9999"},
+		}, "merge base is 9999", false},
 		{"last commit not head", func(g *fakeGitHub) {
 			g.pages[1]["commits"].([]any)[0].(map[string]any)["sha"] = strings.Repeat("5", 40)
-		}, "not head"},
-		{"head not on branch", func(g *fakeGitHub) { g.branchStatus = "diverged" }, "not on branch"},
-		{"rate limited", func(g *fakeGitHub) {
-			g.fail = func(w http.ResponseWriter) { w.WriteHeader(http.StatusTooManyRequests) }
-		}, "429"},
+		}, "not head", false},
+		{"head not on branch", func(g *fakeGitHub) { g.branchStatus = "diverged" }, "not on branch", false},
+		{"not found", status(http.StatusNotFound), "404", false},
+		{"forbidden", status(http.StatusForbidden), "403", false},
+		{"rate limited", status(http.StatusTooManyRequests), "429", true},
+		{"rate limit exhausted", status(http.StatusForbidden, "X-RateLimit-Remaining", "0"), "403", true},
+		{"secondary rate limit", status(http.StatusForbidden, "Retry-After", "60"), "403", true},
+		{"unavailable", status(http.StatusServiceUnavailable), "503", true},
+		{"connection dropped", func(g *fakeGitHub) {
+			g.fail = func(http.ResponseWriter) { panic(http.ErrAbortHandler) }
+		}, "EOF", true},
+		{"connection dropped mid-body", func(g *fakeGitHub) {
+			g.fail = func(w http.ResponseWriter) {
+				_, _ = w.Write([]byte(`{"status": "ahead", "commits": [`))
+				w.(http.Flusher).Flush()
+				panic(http.ErrAbortHandler)
+			}
+		}, "decode", true},
+		{"malformed body", func(g *fakeGitHub) {
+			g.fail = func(w http.ResponseWriter) { _, _ = w.Write([]byte("<html>proxy</html>")) }
+		}, "invalid character", false},
 	} {
 		g := newFake(t)
 		tc.setup(g)
@@ -156,6 +184,9 @@ func TestRangeFailsClosed(t *testing.T) {
 		got, err := f.Range(context.Background(), repo, branch, base, head)
 		if err == nil || !strings.Contains(err.Error(), tc.err) {
 			t.Errorf("%s: error %v, want %q", tc.name, err, tc.err)
+		}
+		if errors.Is(err, errTransient) != tc.transient {
+			t.Errorf("%s: transient %v, want %v", tc.name, !tc.transient, tc.transient)
 		}
 		if got != nil {
 			t.Errorf("%s: partial result %v", tc.name, got)
