@@ -19,10 +19,14 @@ import {
 	bundleBuilt,
 	compareVersions,
 	fbcGroups,
+	fbcNewerTitle,
 	fbcParams,
 	fbcPullspecs,
 	fbcsBuilt,
 	fbcTagList,
+	fbcTagsLead,
+	fbcTagsNote,
+	fbcUnstagedTitle,
 	fixableLabels,
 	freshnessLine,
 	issueLists,
@@ -1046,7 +1050,8 @@ const REPO = "quay.io/redhat-user-workloads/ocp-art-tenant/art-fbc";
 const fbcTag = (
 	operator: string,
 	ocp: string,
-	match: FBCTag["match"] = "match",
+	basis: FBCTag["basis"] = "staged",
+	newer_tag = "",
 ): FBCTag => {
 	const tag = `${operator}-fbc-3.18.2-20261015132328.ocp${ocp}`;
 	return {
@@ -1055,9 +1060,10 @@ const fbcTag = (
 		tag,
 		pullspec: `${REPO}:${tag}`,
 		digest: "sha256:a",
-		staged_digest: match === "unknown" ? "" : "sha256:b",
+		staged_digest: basis === "staged" ? "sha256:a" : "",
 		staged_nvr: "",
-		match,
+		basis,
+		newer_tag,
 	};
 };
 
@@ -1068,23 +1074,32 @@ const fbcTags = (tags: FBCTag[], over: Partial<FBCTags> = {}): FBCTags => ({
 	tags,
 	errors: [],
 	warnings: [],
+	info: [],
 	...over,
 });
 
-test("fbcTagList: the tag pullspecs, comma-separated and counted", () => {
+test("fbcTagList: the tag pullspecs, comma-separated and counted by basis", () => {
 	const list = fbcTagList(
-		fbcTags([fbcTag("quay-operator", "4.14"), fbcTag("quay-operator", "4.16")]),
+		fbcTags([
+			fbcTag("quay-operator", "4.14"),
+			fbcTag("quay-operator", "4.16", "newest"),
+		]),
 	);
 	assert.deepEqual(list, {
 		value: `${REPO}:quay-operator-fbc-3.18.2-20261015132328.ocp4.14,${REPO}:quay-operator-fbc-3.18.2-20261015132328.ocp4.16`,
 		count: 2,
+		staged: 1,
+		newest: 1,
 		errors: [],
 		warnings: [],
+		info: [],
 	});
 });
 
-test("fbcTagList: a missing OCP version is an error and offers no list", () => {
-	const errors = [`quay-operator OCP 4.16: no tag in ${REPO}`];
+test("fbcTagList: a staged digest with no ART tag is an error and offers no list", () => {
+	const errors = [
+		`quay-operator OCP 4.16: no tag in ${REPO} points at the staged digest sha256:b (searched 12 tags)`,
+	];
 	const list = fbcTagList(
 		fbcTags([fbcTag("quay-operator", "4.14")], { errors, pullspecs: [] }),
 	);
@@ -1097,15 +1112,23 @@ test("fbcTagList: a missing OCP version is an error and offers no list", () => {
 	);
 });
 
-test("fbcTagList: a digest mismatch is a warning and the list is still offered", () => {
+test("fbcTagList: a newest-build stand-in is a warning and a newer build is information; the list is still offered", () => {
 	const warnings = [
-		"quay-operator OCP 4.14: ART has a newer build than the staged candidate: tag t is sha256:a, the staged candidate is sha256:b",
+		"quay-operator OCP 4.14: newest ART build, not staged in RR (t)",
 	];
+	const info = ["quay-operator OCP 4.16: ART has a newer build: u"];
 	const list = fbcTagList(
-		fbcTags([fbcTag("quay-operator", "4.14", "mismatch")], { warnings }),
+		fbcTags(
+			[
+				fbcTag("quay-operator", "4.14", "newest"),
+				fbcTag("quay-operator", "4.16", "staged", "u"),
+			],
+			{ warnings, info },
+		),
 	);
 	assert.deepEqual(list.warnings, warnings);
-	assert.equal(list.count, 1);
+	assert.deepEqual(list.info, info);
+	assert.equal(list.count, 2);
 	assert.ok(list.value?.includes(":quay-operator-fbc-3.18.2-"));
 });
 
@@ -1120,4 +1143,54 @@ test("fbcTagList: no tags at all, and a digest pullspec, are errors", () => {
 	);
 	assert.equal(digest.value, null);
 	assert.match(digest.errors[0], /not a tag/);
+});
+
+test("fbcTagsLead and fbcTagsNote say what the list is", () => {
+	const all = fbcTagList(
+		fbcTags([fbcTag("quay-operator", "4.14"), fbcTag("quay-operator", "4.16")]),
+	);
+	assert.match(
+		fbcTagsLead(all),
+		/tag of each FBC RR staged, found by its digest/,
+	);
+	assert.equal(fbcTagsNote(all), "");
+
+	const some = fbcTagList(
+		fbcTags([
+			fbcTag("quay-operator", "4.14"),
+			fbcTag("quay-operator", "4.16", "newest"),
+			fbcTag("quay-bridge-operator", "4.16", "newest"),
+		]),
+	);
+	assert.match(fbcTagsLead(some), /tag of each FBC RR staged/);
+	assert.equal(
+		fbcTagsNote(some),
+		"2 of 3 are the newest ART build, not staged in RR.",
+	);
+
+	const none = fbcTagList(fbcTags([fbcTag("quay-operator", "4.14", "newest")]));
+	assert.match(
+		fbcTagsLead(none),
+		/^The newest ART tag of each FBC, none staged in RR/,
+	);
+	assert.equal(fbcTagsNote(none), "");
+});
+
+test("fbcUnstagedTitle and fbcNewerTitle count and agree in number", () => {
+	assert.equal(
+		fbcUnstagedTitle(1),
+		"1 FBC tag is the newest ART build, not staged in RR",
+	);
+	assert.equal(
+		fbcUnstagedTitle(3),
+		"3 FBC tags are the newest ART build, not staged in RR",
+	);
+	assert.equal(
+		fbcNewerTitle(1),
+		"ART has a newer build than the staged FBC: the list keeps the staged tag",
+	);
+	assert.equal(
+		fbcNewerTitle(2),
+		"ART has newer builds than the staged FBCs: the list keeps the staged tags",
+	);
 });

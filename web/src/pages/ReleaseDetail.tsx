@@ -116,10 +116,14 @@ import {
 	compareVersions,
 	type FbcRow,
 	fbcGroups,
+	fbcNewerTitle,
 	fbcParams,
 	fbcPullspecs,
 	fbcsBuilt,
 	fbcTagList,
+	fbcTagsLead,
+	fbcTagsNote,
+	fbcUnstagedTitle,
 	freshnessLine,
 	issueLists,
 	type LeftOut,
@@ -1140,8 +1144,9 @@ function InputField({
 
 /**
  * release-from-fbc's inputs for its one release-wide run, to copy into the
- * ART pipelines UI form: RR starts no run. The FBC pullspecs are ART's tags,
- * which the server looks up in its public repository when the dialog opens.
+ * ART pipelines UI form: RR starts no run. The FBC pullspecs are the ART tags
+ * of the FBCs RR staged, which the server finds by digest in ART's public
+ * repository when the dialog opens.
  * The dry-run tkn command, built from the same values, is folded away below.
  */
 function ReleaseInputs({
@@ -1272,8 +1277,8 @@ function ReleaseInputs({
 					help={
 						tags?.value && (
 							<>
-								The newest multi-arch tag of each FBC in ART's public{" "}
-								<code>{fetched.data?.repository}</code>.
+								{fbcTagsLead(tags)} <code>{fetched.data?.repository}</code>.
+								{fbcTagsNote(tags) && ` ${fbcTagsNote(tags)}`}
 							</>
 						)
 					}
@@ -1282,6 +1287,7 @@ function ReleaseInputs({
 				{tags && tags.warnings.length > 0 && (
 					<TagWarnings warnings={tags.warnings} />
 				)}
+				{tags && tags.info.length > 0 && <TagInfo info={tags.info} />}
 			</Form>
 			<ExpandableSection
 				style={line}
@@ -1304,13 +1310,13 @@ function ReleaseInputs({
 	);
 }
 
-/** The FBC slots ART has no tag for, which hold the pullspecs back. */
+/** The FBC slots with no ART tag, which hold the pullspecs back. */
 function TagErrors({ errors }: { errors: string[] }) {
 	return (
 		<Alert
 			isInline
 			variant="danger"
-			title="No FBC pullspecs: ART's tags are incomplete"
+			title="No FBC pullspecs: an FBC has no ART tag"
 		>
 			<List isPlain>
 				{errors.map((e) => (
@@ -1321,17 +1327,26 @@ function TagErrors({ errors }: { errors: string[] }) {
 	);
 }
 
-/** The tags that are not the FBC RR staged; the pullspecs are still shown. */
+/** The tags that are the newest build, as RR staged none; still listed. */
 function TagWarnings({ warnings }: { warnings: string[] }) {
 	return (
-		<Alert
-			isInline
-			variant="warning"
-			title={`${warnings.length} FBC tag${warnings.length === 1 ? " differs" : "s differ"} from the staged candidate`}
-		>
+		<Alert isInline variant="warning" title={fbcUnstagedTitle(warnings.length)}>
 			<List isPlain>
 				{warnings.map((w) => (
 					<ListItem key={w}>{w}</ListItem>
+				))}
+			</List>
+		</Alert>
+	);
+}
+
+/** The slots ART has built again since RR staged them: only information. */
+function TagInfo({ info }: { info: string[] }) {
+	return (
+		<Alert isInline variant="info" title={fbcNewerTitle(info.length)}>
+			<List isPlain>
+				{info.map((i) => (
+					<ListItem key={i}>{i}</ListItem>
 				))}
 			</List>
 		</Alert>

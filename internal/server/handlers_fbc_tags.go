@@ -16,8 +16,11 @@ import (
 // fbcTags is a version's operator FBCs as the tags ART publishes them under,
 // which release-from-fbc takes as fbc-pullspecs. Source is "candidate" when
 // the slots looked up are the release candidate's, else "ocp-build-data" when
-// they are every operator at each OCP version the stream targets. Pullspecs
-// is empty while Errors is not.
+// they are every operator at each OCP version the stream targets. Each tag is
+// the one pointing at the FBC RR staged for its slot (basis "staged"), and
+// the newest tag only for a slot RR staged none of (basis "newest", a
+// warning); Info names the slots ART has built again since. Pullspecs is
+// empty while Errors is not.
 type fbcTags struct {
 	Repository string            `json:"repository"`
 	Source     string            `json:"source"`
@@ -25,11 +28,13 @@ type fbcTags struct {
 	Tags       []artfbc.Resolved `json:"tags"`
 	Errors     []string          `json:"errors"`
 	Warnings   []string          `json:"warnings"`
+	Info       []string          `json:"info"`
 }
 
-// handleGetFBCTags serves the newest multi-arch tag of each of the version's
-// operator FBC slots in ART's public repository, checked against the
-// candidate's staged digest. Quay is read from here, cached for a short while.
+// handleGetFBCTags serves the multi-arch tag of each of the version's
+// operator FBC slots in ART's public repository that points at the digest RR
+// staged for the slot, else, for a slot with none staged, its newest tag.
+// Quay is read from here, cached for a short while.
 func (s *Server) handleGetFBCTags(w http.ResponseWriter, r *http.Request) {
 	version := r.PathValue("version")
 	release, err := s.db.GetReleaseVersion(r.Context(), version)
@@ -70,55 +75,51 @@ func (s *Server) handleGetFBCTags(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	newest, err := s.newestFBCTags(r.Context(), c.assembly, slots)
+	tags, err := s.fbcTagsOf(r.Context(), c.assembly, slots)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err)
 		return
 	}
-	res := artfbc.Resolve(slots, newest)
-	out.Pullspecs, out.Tags, out.Errors, out.Warnings = res.Pullspecs, res.Tags, res.Errors, res.Warnings
+	res := artfbc.Resolve(slots, c.assembly, tags)
+	out.Pullspecs, out.Tags, out.Errors, out.Warnings, out.Info = res.Pullspecs, res.Tags, res.Errors, res.Warnings, res.Info
 	writeJSON(w, http.StatusOK, out)
 }
 
-// newestFBCTags returns each operator's newest tags of assembly by OCP
-// version, for the OCP versions of slots, the operators read at once.
-func (s *Server) newestFBCTags(ctx context.Context, assembly string, slots []artfbc.Slot) (map[string]map[string]artfbc.Tag, error) {
+// fbcTagsOf returns each operator's tags of assembly that answer slots, the
+// operators read at once.
+func (s *Server) fbcTagsOf(ctx context.Context, assembly string, slots []artfbc.Slot) (map[string][]artfbc.Tag, error) {
 	var (
-		wg     sync.WaitGroup
-		mu     sync.Mutex
-		newest = map[string]map[string]artfbc.Tag{}
-		errs   []error
+		wg   sync.WaitGroup
+		mu   sync.Mutex
+		tags = map[string][]artfbc.Tag{}
+		errs []error
 	)
 	for _, o := range artbuild.Operators {
 		wg.Go(func() {
-			var ocps []string
-			for _, sl := range slots {
-				if sl.Operator == o {
-					ocps = append(ocps, sl.OCP)
-				}
-			}
-			tags, err := s.ArtFBC.Tags(ctx, o, assembly, ocps)
+			own := slices.DeleteFunc(slices.Clone(slots), func(sl artfbc.Slot) bool { return sl.Operator != o })
+			got, err := s.ArtFBC.Tags(ctx, o, assembly, own)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
 				errs = append(errs, err)
 				return
 			}
-			newest[o] = artfbc.Newest(tags, o, assembly)
+			tags[o] = got
 		})
 	}
 	wg.Wait()
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("read ART's FBC tags: %w", errs[0])
 	}
-	return newest, nil
+	return tags, nil
 }
 
 // candidateSlots returns the operator FBC slots of c, by operator, then OCP
 // version, with each slot's staged digest: the digest of the FBC the
-// candidate holds for it, and its NVR. An operator with no slot of its own
-// takes the OCP versions of the others, so that its absence is a missing tag.
-// A nil c has none.
+// candidate holds for it, and its NVR, only when c is what ART staged in the
+// FBC Snapshots, not what its stream built. An operator with no slot of its
+// own takes the OCP versions of the others, so that its absence is a missing
+// tag. A nil c has none.
 func candidateSlots(c *model.FBCCandidate) []artfbc.Slot {
 	if c == nil {
 		return nil
@@ -136,6 +137,9 @@ func candidateSlots(c *model.FBCCandidate) []artfbc.Slot {
 		}
 		for _, ocp := range ocps {
 			m := held[ocp]
+			if c.Source != "stage_snapshots" {
+				m = model.FBCMember{}
+			}
 			per[o.Operator] = append(per[o.Operator], artfbc.Slot{Operator: o.Operator, OCP: ocp, Staged: m.Digest, StagedNVR: m.NVR})
 			if !slices.Contains(all, ocp) {
 				all = append(all, ocp)

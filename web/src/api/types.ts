@@ -80,8 +80,10 @@ export interface FBCCandidate {
 
 /**
  * The tag ART published an operator's FBC for an OCP version under, the
- * newest multi-arch one. match says whether its digest is staged_digest, the
- * one RR staged for the slot: "unknown" when RR knows none.
+ * multi-arch one whose digest is staged_digest, the FBC RR staged for the
+ * slot (basis "staged"). A slot RR staged none of has the newest multi-arch
+ * tag instead (basis "newest", staged_digest ""). newer_tag names the newest
+ * tag when ART built again after the staged one, "" for none.
  */
 export interface FBCTag {
 	operator: string;
@@ -92,14 +94,16 @@ export interface FBCTag {
 	digest: string;
 	staged_digest: string;
 	staged_nvr: string;
-	match: "match" | "mismatch" | "unknown";
+	basis: "staged" | "newest";
+	newer_tag: string;
 }
 
 /**
  * A version's operator FBC tags in ART's public repository, one per slot of
  * its candidate (source "candidate"), else of the OCP versions its stream
  * targets ("ocp-build-data"). pullspecs is empty while errors, the slots with
- * no tag, is not; warnings are the tags that are not the staged candidate.
+ * no tag, is not; warnings are the slots whose tag is the newest build, not a
+ * staged one; info the slots ART built again since RR staged them.
  */
 export interface FBCTags {
 	repository: string;
@@ -108,6 +112,7 @@ export interface FBCTags {
 	tags: FBCTag[];
 	errors: string[];
 	warnings: string[];
+	info: string[];
 }
 
 /**

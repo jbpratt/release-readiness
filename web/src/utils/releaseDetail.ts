@@ -78,8 +78,12 @@ export interface TagList {
 	/** The pullspecs, comma-separated; null while there is an error. */
 	value: string | null;
 	count: number;
+	/** How many tags are the FBC RR staged, and how many the newest build. */
+	staged: number;
+	newest: number;
 	errors: string[];
 	warnings: string[];
+	info: string[];
 }
 
 /**
@@ -98,10 +102,36 @@ export function fbcTagList(t: FBCTags): TagList {
 	return {
 		value: errors.length > 0 ? null : t.pullspecs.join(","),
 		count: t.pullspecs.length,
+		staged: t.tags.filter((x) => x.basis === "staged").length,
+		newest: t.tags.filter((x) => x.basis === "newest").length,
 		errors,
 		warnings: t.warnings,
+		info: t.info,
 	};
 }
+
+/**
+ * What the FBC pullspecs are, before the repository they are in: the tags of
+ * the FBCs RR staged, else the newest builds.
+ */
+export const fbcTagsLead = (l: TagList): string =>
+	l.staged > 0
+		? "The ART tag of each FBC RR staged, found by its digest, in ART's public"
+		: "The newest ART tag of each FBC, none staged in RR, in ART's public";
+
+/** What to add when some of the tags are not staged FBCs; "" when all are. */
+export const fbcTagsNote = (l: TagList): string =>
+	l.staged > 0 && l.newest > 0
+		? `${l.newest} of ${l.count} are the newest ART build, not staged in RR.`
+		: "";
+
+/** The title of the alert on the slots that use the newest, unstaged build. */
+export const fbcUnstagedTitle = (n: number): string =>
+	`${n} FBC tag${n === 1 ? " is" : "s are"} the newest ART build, not staged in RR`;
+
+/** The title of the alert on the slots ART has built again since staging. */
+export const fbcNewerTitle = (n: number): string =>
+	`ART has ${n === 1 ? "a newer build" : "newer builds"} than the staged FBC${n === 1 ? "" : "s"}: the list keeps the staged tag${n === 1 ? "" : "s"}`;
 
 /** Compares dot-separated versions numerically: OCP 4.9 is lower than 4.12. */
 export function compareVersions(a: string, b: string): number {
