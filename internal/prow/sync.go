@@ -1,6 +1,7 @@
 package prow
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -30,9 +32,11 @@ func NewClient(baseURL string) *Client {
 	return &Client{baseURL: strings.TrimSuffix(baseURL, "/"), http: &http.Client{Timeout: 30 * time.Second}}
 }
 
-// listBuildIDs returns the run directories under prefix, following page tokens.
-func (c *Client) listBuildIDs(ctx context.Context, prefix string) ([]string, error) {
-	var ids []string
+// listDirs returns the names of the directories under dir that start with
+// prefix, following page tokens.
+func (c *Client) listDirs(ctx context.Context, dir, prefix string) ([]string, error) {
+	var names []string
+	prefix = dir + prefix
 	q := url.Values{"prefix": {prefix}, "delimiter": {"/"}, "fields": {"prefixes,nextPageToken"}}
 	for {
 		data, err := c.get(ctx, c.baseURL+"/storage/v1/b/"+bucket+"/o?"+q.Encode())
@@ -50,10 +54,10 @@ func (c *Client) listBuildIDs(ctx context.Context, prefix string) ([]string, err
 			return nil, fmt.Errorf("list %s: %w", prefix, err)
 		}
 		for _, p := range page.Prefixes {
-			ids = append(ids, strings.TrimSuffix(strings.TrimPrefix(p, prefix), "/"))
+			names = append(names, strings.TrimSuffix(strings.TrimPrefix(p, dir), "/"))
 		}
 		if page.NextPageToken == "" {
-			return ids, nil
+			return names, nil
 		}
 		q.Set("pageToken", page.NextPageToken)
 	}
@@ -101,6 +105,9 @@ type Syncer struct {
 	Status *syncstatus.Source
 	// Retention, when set, skips runs older than it that are not stored.
 	Retention time.Duration
+	// Pattern, when set, adds the jobs it matches to jobs each pass; a job
+	// in jobs keeps its application.
+	Pattern *JobPattern
 }
 
 func NewSyncer(client *Client, store Store, jobs []Job, interval time.Duration, logger *slog.Logger) *Syncer {
@@ -125,7 +132,12 @@ func (s *Syncer) Run(ctx context.Context) {
 
 func (s *Syncer) SyncOnce(ctx context.Context) {
 	var pass syncstatus.Pass
-	for _, job := range s.jobs {
+	jobs, err := s.discover(ctx)
+	if err != nil {
+		s.logger.Error("discover jobs", "error", err)
+		pass.Add(fmt.Errorf("discover jobs: %w", err))
+	}
+	for _, job := range jobs {
 		n, err := s.syncJob(ctx, job)
 		if err != nil {
 			s.logger.Error("sync job", "job", job.Name, "error", err)
@@ -137,10 +149,34 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 	s.Status.Report(pass.Err())
 }
 
+// discover returns the configured jobs and those Pattern matches in the
+// bucket. On a listing failure it returns the configured jobs.
+func (s *Syncer) discover(ctx context.Context) ([]Job, error) {
+	if s.Pattern == nil {
+		return s.jobs, nil
+	}
+	names, err := s.client.listDirs(ctx, "logs/", s.Pattern.prefix)
+	if err != nil {
+		return s.jobs, err
+	}
+	jobs := slices.Clone(s.jobs)
+	for _, name := range names {
+		if slices.ContainsFunc(s.jobs, func(j Job) bool { return j.Name == name }) {
+			continue
+		}
+		if job, ok := s.Pattern.job(name); ok {
+			jobs = append(jobs, job)
+		}
+	}
+	return jobs, nil
+}
+
 // syncJob fetches every run not yet known to be finished. A finished run is
-// never fetched again once its artifacts were read.
+// never fetched again once its artifacts were read. A job with no stored runs
+// is read newest first, up to its first run that predates the retention
+// window, so a long-idle job does not backfill its history.
 func (s *Syncer) syncJob(ctx context.Context, job Job) (int, error) {
-	ids, err := s.client.listBuildIDs(ctx, job.Prefix)
+	ids, err := s.client.listDirs(ctx, job.Prefix, "")
 	if err != nil {
 		return 0, err
 	}
@@ -152,11 +188,19 @@ func (s *Syncer) syncJob(ctx context.Context, job Job) (int, error) {
 	for _, id := range finishedIDs {
 		done[id] = true
 	}
-	expired, err := s.expired(ctx, job.Name)
+	expired, unstored, err := s.expired(ctx, job.Name)
 	if err != nil {
 		return 0, err
 	}
+	cutoff := time.Now().Add(-s.Retention)
+	if unstored {
+		// Build IDs are decimal, so a longer one is larger.
+		slices.SortFunc(ids, func(a, b string) int {
+			return cmp.Or(cmp.Compare(len(b), len(a)), strings.Compare(b, a))
+		})
+	}
 	n := 0
+	var walked []*Run
 	for _, id := range ids {
 		if done[id] || expired(id) {
 			continue
@@ -168,8 +212,24 @@ func (s *Syncer) syncJob(ctx context.Context, job Job) (int, error) {
 		if run == nil {
 			continue
 		}
+		if unstored {
+			if run.StartedAt != nil && run.StartedAt.Before(cutoff) {
+				break
+			}
+			walked = append(walked, run)
+			continue
+		}
 		if err := s.store.UpsertProwRun(ctx, run); err != nil {
 			return n, fmt.Errorf("upsert run %s: %w", id, err)
+		}
+		n++
+	}
+	// The newest stored run floors expired, so the newest-first walk is
+	// stored only once complete, and oldest first: a partial store would
+	// hide the older in-window runs from every later pass.
+	for _, run := range slices.Backward(walked) {
+		if err := s.store.UpsertProwRun(ctx, run); err != nil {
+			return n, fmt.Errorf("upsert run %s: %w", run.BuildID, err)
 		}
 		n++
 	}
@@ -179,14 +239,15 @@ func (s *Syncer) syncJob(ctx context.Context, job Job) (int, error) {
 // expired reports whether an unstored run predates the retention window: its
 // ID is numerically below those of the job's stored runs started in the
 // window and of its newest stored run. Build IDs grow with time; a
-// non-numeric one never expires, nor does any while the job has no runs.
-func (s *Syncer) expired(ctx context.Context, job string) (func(id string) bool, error) {
+// non-numeric one never expires, nor does any while the job has no runs,
+// which the second result reports.
+func (s *Syncer) expired(ctx context.Context, job string) (func(id string) bool, bool, error) {
 	if s.Retention <= 0 {
-		return func(string) bool { return false }, nil
+		return func(string) bool { return false }, false, nil
 	}
 	runs, err := s.store.ListProwRunStarts(ctx, job)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	cutoff := time.Now().Add(-s.Retention)
 	stored := make(map[string]bool, len(runs))
@@ -204,7 +265,7 @@ func (s *Syncer) expired(ctx context.Context, job string) (func(id string) bool,
 	return func(id string) bool {
 		n, err := strconv.ParseUint(id, 10, 64)
 		return err == nil && n < floor && !stored[id]
-	}, nil
+	}, len(runs) == 0, nil
 }
 
 // fetchRun returns nil when the run has no readable prowjob.json yet.

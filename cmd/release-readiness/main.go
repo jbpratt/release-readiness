@@ -61,6 +61,7 @@ func main() {
 
 	// Prow flags
 	prowJobs := flag.String("prow-jobs", os.Getenv("PROW_JOBS"), "periodic Prow jobs to ingest, as job_name=konflux_application[,...] (e.g. ...-aws-s3-nightly=quay-3-18)")
+	prowJobPattern := flag.String("prow-job-pattern", os.Getenv("PROW_JOB_PATTERN"), "^-anchored regexp of periodic Prow job names to discover; its named groups major and minor give the application quay-<major>-<minor>, and a -prow-jobs entry overrides it")
 	prowInterval := flag.Duration("prow-interval", 15*time.Minute, "Prow sync poll interval")
 
 	// GitLab shipment MR flags
@@ -93,6 +94,13 @@ func main() {
 	if err != nil {
 		logger.Error("parse -prow-jobs", "error", err)
 		os.Exit(1)
+	}
+	var prowPattern *prow.JobPattern
+	if *prowJobPattern != "" {
+		if prowPattern, err = prow.ParseJobPattern(*prowJobPattern); err != nil {
+			logger.Error("parse -prow-job-pattern", "error", err)
+			os.Exit(1)
+		}
 	}
 	var stagePlans *regexp.Regexp
 	if *stagePlanPattern != "" {
@@ -211,11 +219,12 @@ func main() {
 		wg.Go(func() { shipped.Run(ctx, time.Hour) })
 	}
 
-	if len(prowJobList) > 0 {
-		logger.Info("prow sync enabled", "jobs", len(prowJobList), "interval", *prowInterval)
+	if len(prowJobList) > 0 || prowPattern != nil {
+		logger.Info("prow sync enabled", "jobs", len(prowJobList), "pattern", *prowJobPattern, "interval", *prowInterval)
 		syncer := prow.NewSyncer(prow.NewClient(prow.DefaultBaseURL), database, prowJobList, *prowInterval, logger.With("component", "prow-sync"))
 		syncer.Status = status.Track("prow", *prowInterval)
 		syncer.Retention = *retention
+		syncer.Pattern = prowPattern
 		wg.Go(func() { syncer.Run(ctx) })
 	}
 

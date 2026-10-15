@@ -4,8 +4,10 @@ package prow
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
+	"regexp/syntax"
 	"slices"
 	"strings"
 	"time"
@@ -63,6 +65,45 @@ func ParseJobs(spec string) ([]Job, error) {
 		jobs = append(jobs, Job{Name: key, Prefix: "logs/" + key + "/", Application: app})
 	}
 	return jobs, nil
+}
+
+// JobPattern matches the names of jobs to discover. Its major and minor
+// groups name a job's application, quay-<major>-<minor>.
+type JobPattern struct {
+	re *regexp.Regexp
+	// prefix starts every name re matches, to narrow the listing.
+	prefix string
+}
+
+// ParseJobPattern compiles expr, which must have major and minor groups.
+func ParseJobPattern(expr string) (*JobPattern, error) {
+	re, err := regexp.Compile(expr)
+	if err != nil {
+		return nil, err
+	}
+	if re.SubexpIndex("major") < 0 || re.SubexpIndex("minor") < 0 {
+		return nil, errors.New("pattern needs named groups major and minor")
+	}
+	p := &JobPattern{re: re}
+	// Only a regexp anchored before every branch has a literal prefix that
+	// starts every name it matches; LiteralPrefix is empty for one.
+	if t, err := syntax.Parse(expr, syntax.Perl); err == nil {
+		if t = t.Simplify(); t.Op == syntax.OpConcat && len(t.Sub) > 1 && t.Sub[0].Op == syntax.OpBeginText &&
+			t.Sub[1].Op == syntax.OpLiteral && t.Sub[1].Flags&syntax.FoldCase == 0 {
+			p.prefix = string(t.Sub[1].Rune)
+		}
+	}
+	return p, nil
+}
+
+// job returns the Job of name, if p matches it.
+func (p *JobPattern) job(name string) (Job, bool) {
+	m := p.re.FindStringSubmatch(name)
+	if m == nil {
+		return Job{}, false
+	}
+	app := "quay-" + m[p.re.SubexpIndex("major")] + "-" + m[p.re.SubexpIndex("minor")]
+	return Job{Name: name, Prefix: "logs/" + name + "/", Application: app}, true
 }
 
 type prowJob struct {
