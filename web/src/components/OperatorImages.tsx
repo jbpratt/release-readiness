@@ -1,22 +1,23 @@
 import {
-	Card,
-	CardBody,
-	CardTitle,
-	DescriptionList,
 	DescriptionListDescription,
 	DescriptionListGroup,
 	DescriptionListTerm,
+	ExpandableSection,
 	Flex,
-	Grid,
-	GridItem,
 	Icon,
 	Label,
 	type LabelProps,
-	Title,
 } from "@patternfly/react-core";
-import { ExternalLinkAltIcon } from "@patternfly/react-icons";
-import type { ReactNode } from "react";
+import {
+	CheckCircleIcon,
+	ExclamationCircleIcon,
+	ExclamationTriangleIcon,
+	ExternalLinkAltIcon,
+	InfoCircleIcon,
+} from "@patternfly/react-icons";
+import { type ReactNode, useEffect, useState } from "react";
 import type {
+	KonfluxRelease,
 	OperatorFBC,
 	OperatorImage,
 	ReleaseCandidate,
@@ -31,9 +32,12 @@ import {
 	type Flag,
 	fixableLabels,
 	nvrLabel,
+	type ReleaseImage,
 	releaseImages,
 	SEVERITIES,
 	scanCell,
+	sharedStage,
+	stamp,
 	worst,
 } from "../utils/releaseDetail";
 import { Status } from "./Status";
@@ -135,11 +139,68 @@ export function CveCell({ image: i }: { image: OperatorImage }) {
 	);
 }
 
+// Phone width, where the matrix turns on its side.
+const narrowQuery = "(max-width: 768px)";
+
+export function useNarrow() {
+	const [narrow, setNarrow] = useState(() => matchMedia(narrowQuery).matches);
+	useEffect(() => {
+		const m = matchMedia(narrowQuery);
+		const on = () => setNarrow(m.matches);
+		m.addEventListener("change", on);
+		return () => m.removeEventListener("change", on);
+	}, []);
+	return narrow;
+}
+
+const small = { fontSize: "var(--pf-t--global--font--size--sm)" };
+
+const advisoryName = (url: string) =>
+	url.match(/[A-Z]+-\d{4}:\d+$/)?.[0] ?? "Advisory";
+
+/** The stage Release and advisory, as release facts; the Release's name in its title. */
+export function StageFacts({ ri }: { ri: KonfluxRelease }) {
+	return (
+		<>
+			<DescriptionListGroup>
+				<DescriptionListTerm>Stage release</DescriptionListTerm>
+				<DescriptionListDescription>
+					<ExtLink href={ri.job_url || null} title={ri.name} icon>
+						{stamp(ri.name)}
+					</ExtLink>
+				</DescriptionListDescription>
+			</DescriptionListGroup>
+			{ri.advisory && (
+				<DescriptionListGroup>
+					<DescriptionListTerm>Advisory</DescriptionListTerm>
+					<DescriptionListDescription>
+						<ExtLink href={ri.advisory} icon>
+							{advisoryName(ri.advisory)}
+						</ExtLink>
+					</DescriptionListDescription>
+				</DescriptionListGroup>
+			)}
+		</>
+	);
+}
+
+const icons = ["failed", "warning", undefined, "done"] as const;
+
+const tones = ["danger", "warning", "info", "success"] as const;
+
+const toneIcons = {
+	danger: <ExclamationCircleIcon />,
+	warning: <ExclamationTriangleIcon />,
+	info: <InfoCircleIcon />,
+	success: <CheckCircleIcon />,
+};
+
 /**
- * A card per operator shown, its head bundle's images, problems first, led by
- * the verdict items about the operator.
+ * Each operator's head bundle images behind a collapsed disclosure, its toggle
+ * the operator's worst issue, else its images to check, else how many ART
+ * built; the operator's own stage Release when operators do not share one.
  */
-export function OperatorImages({
+export function BundleImages({
 	d,
 	version,
 	issues,
@@ -147,159 +208,206 @@ export function OperatorImages({
 	d: ReleaseCandidate;
 	/** The version's X.Y.Z. */
 	version: string;
-	/** The verdict items each operator's card shows. */
+	/** The verdict items about each operator. */
 	issues: (operator: string) => Issue[];
 }) {
 	const operators = candidateOperators(d);
 	if (operators.length === 0) return null;
+	const own = !sharedStage(d);
 	return (
-		<>
-			<Title headingLevel="h2" size="lg" style={{ marginBottom: "0.5rem" }}>
-				Images in the candidate's bundles
-			</Title>
-			<Grid hasGutter md={6} style={{ marginBottom: "1rem" }}>
-				{operators.map((o) => (
-					<GridItem key={o.operator}>
-						<OperatorPanel
-							o={o}
-							version={version}
-							issues={issues(o.operator)}
-						/>
-					</GridItem>
-				))}
-			</Grid>
-		</>
+		<div
+			style={{
+				marginTop: "1rem",
+				paddingTop: "0.5rem",
+				borderTop: "1px solid var(--pf-t--global--border--color--default)",
+			}}
+		>
+			{operators.map((o) => (
+				<OperatorImages
+					key={o.operator}
+					o={o}
+					version={version}
+					issues={issues(o.operator)}
+					own={own}
+				/>
+			))}
+		</div>
 	);
 }
 
-const icons = ["failed", "warning", undefined, "done"] as const;
-
-const divider = "1px solid var(--pf-t--global--border--color--default)";
-
-/**
- * An operator's stage Release and advisory, the values their links; its
- * verdict items; then its head bundle images: ART's by worst issue, then the
- * others on one line.
- */
-function OperatorPanel({
+function OperatorImages({
 	o,
 	version,
 	issues,
+	own,
 }: {
 	o: OperatorFBC;
 	version: string;
 	issues: Issue[];
+	own: boolean;
 }) {
+	const [open, setOpen] = useState(false);
 	const images = releaseImages([o], version);
 	const art = images
 		.filter((r) => r.image.nvr || r.issues.length > 0)
 		.sort((a, b) => worst(a) - worst(b));
 	const others = images.filter((r) => !art.includes(r));
-	const problems = art.filter((r) => worst(r) < 2);
+	const problems = art.filter((r) => worst(r) < 2).length;
+	const sorted = [...issues].sort(
+		(a, b) => ORDER.indexOf(a.item.level) - ORDER.indexOf(b.item.level),
+	);
+	const top = sorted[0];
+	// The worse of its images' and its issues' levels: an image's 0 failed and 1
+	// warning, an issue's 0 blocker, 1 warning and 2 info.
+	const rank = Math.min(
+		...art.map(worst).filter((w) => w < 2),
+		top ? ORDER.indexOf(top.item.level) : 3,
+	);
+	const tone = tones[rank];
+	const count = `${art.length} image${art.length === 1 ? "" : "s"}`;
 	const ri = o.fbc_ri_stage.release;
 	return (
-		<Card isCompact isFullHeight>
-			<CardTitle>
-				<Flex
-					justifyContent={{ default: "justifyContentSpaceBetween" }}
-					alignItems={{ default: "alignItemsCenter" }}
+		<ExpandableSection
+			isExpanded={open}
+			onToggle={(_e, v) => setOpen(v)}
+			isIndented
+			toggleContent={
+				<span
+					style={{
+						display: "inline-flex",
+						flexWrap: "wrap",
+						alignItems: "center",
+						gap: "0.25rem 0.5rem",
+					}}
 				>
 					<span>{o.operator}</span>
-					{problems.length > 0 && (
-						<Label
-							isCompact
-							status={
-								problems.some((r) => worst(r) === 0) ? "danger" : "warning"
-							}
-						>
-							{problems.length} to check
-						</Label>
-					)}
-				</Flex>
-			</CardTitle>
-			<CardBody>
-				{ri && (
-					<DescriptionList
-						isCompact
-						isHorizontal
-						horizontalTermWidthModifier={{ default: "6rem" }}
-						style={{
-							fontSize: "var(--pf-t--global--font--size--sm)",
-							paddingBottom: "0.5rem",
-						}}
-					>
-						<DescriptionListGroup>
-							<DescriptionListTerm>Stage release</DescriptionListTerm>
-							<DescriptionListDescription style={{ overflowWrap: "anywhere" }}>
-								<ExtLink href={ri.job_url || null} title="ART job" icon>
-									{ri.name}
-								</ExtLink>
-							</DescriptionListDescription>
-						</DescriptionListGroup>
-						{ri.advisory && (
-							<DescriptionListGroup>
-								<DescriptionListTerm>Advisory</DescriptionListTerm>
-								<DescriptionListDescription>
-									<ExtLink href={ri.advisory} icon>
-										{ri.advisory.match(/[A-Z]+-\d{4}:\d+$/)?.[0] ?? "Advisory"}
-									</ExtLink>
-								</DescriptionListDescription>
-							</DescriptionListGroup>
+					<span style={{ color: "var(--pf-t--global--text--color--regular)" }}>
+						<Icon status={tone} isInline>
+							{toneIcons[tone]}
+						</Icon>{" "}
+						{top ? (
+							<>
+								<span className="pf-v6-screen-reader">
+									{LEVELS[top.item.level].word}:{" "}
+								</span>
+								{top.b.what}
+							</>
+						) : problems > 0 ? (
+							`${problems} to check`
+						) : (
+							`${count} built`
 						)}
-					</DescriptionList>
-				)}
-				{issues.length > 0 && (
-					<div style={{ paddingBottom: "0.5rem" }}>
-						<IssueNotes issues={issues} />
+					</span>
+					{(top || problems > 0) && <span style={muted}>({count})</span>}
+				</span>
+			}
+		>
+			<div
+				style={{ display: "grid", gap: "0.75rem", paddingBottom: "0.75rem" }}
+			>
+				{own && ri && (
+					<div style={{ ...small, overflowWrap: "anywhere" }}>
+						<span style={muted}>Stage release </span>
+						<ExtLink href={ri.job_url || null} title={ri.name} icon>
+							{stamp(ri.name)}
+						</ExtLink>
+						{ri.advisory && (
+							<>
+								<span style={muted}> · Advisory </span>
+								<ExtLink href={ri.advisory} icon>
+									{advisoryName(ri.advisory)}
+								</ExtLink>
+							</>
+						)}
 					</div>
 				)}
-				{art.map((r) => {
-					const icon = icons[worst(r)];
-					const label = <strong>{r.label}</strong>;
-					const href = commitUrl(r.label, r.image.commit);
-					return (
-						<div
-							key={r.image.digest}
-							style={{ padding: "0.375rem 0", borderTop: divider }}
-						>
-							{icon ? <Status status={icon}>{label}</Status> : label}
-							<Flex
-								gap={{ default: "gapSm" }}
-								alignItems={{ default: "alignItemsCenter" }}
-								style={{ fontSize: "0.85rem", marginTop: "0.125rem" }}
-							>
-								<BuiltCell image={r.image} />
-								<ExtLink href={href} title={r.image.commit}>
-									{/* muted only when unlinked, so a link takes the link colour */}
-									<code style={href ? undefined : muted}>
-										{r.image.commit.slice(0, 7)}
-									</code>
-								</ExtLink>
-								{SHOW_CVES && <CveCell image={r.image} />}
-								<Flags flags={r.issues} />
-							</Flex>
-						</div>
-					);
-				})}
+				{sorted.length === 1 ? (
+					<div style={{ display: "grid", gap: "0.125rem" }}>
+						<IssueBody issue={top} why />
+					</div>
+				) : (
+					sorted.length > 1 && <IssueNotes issues={sorted} />
+				)}
+				<ImageLines art={art} />
 				{others.length > 0 && (
-					<div
-						style={{
-							...muted,
-							fontSize: "0.85rem",
-							paddingTop: "0.375rem",
-							borderTop: divider,
-						}}
-					>
+					<div style={{ ...muted, ...small }}>
 						Not built by ART: {others.map((r) => r.label).join(", ")}
 					</div>
 				)}
 				{images.length === 0 && (
-					<div style={{ ...muted, fontSize: "0.85rem" }}>
-						No images rendered yet
-					</div>
+					<div style={{ ...muted, ...small }}>No images rendered yet</div>
 				)}
-			</CardBody>
-		</Card>
+			</div>
+		</ExpandableSection>
+	);
+}
+
+/** One line per image: status and name, when ART built it, its commit, flags. */
+function ImageLines({ art }: { art: ReleaseImage[] }) {
+	const narrow = useNarrow();
+	return (
+		<div
+			style={
+				narrow
+					? { display: "grid", gap: "0.5rem" }
+					: {
+							display: "grid",
+							gridTemplateColumns: "repeat(3, max-content) auto",
+							justifyContent: "start",
+							gap: "0.375rem 1rem",
+							alignItems: "baseline",
+						}
+			}
+		>
+			{art.map((r) => (
+				<ImageLine key={r.image.digest} r={r} narrow={narrow} />
+			))}
+		</div>
+	);
+}
+
+function ImageLine({ r, narrow }: { r: ReleaseImage; narrow: boolean }) {
+	const icon = icons[worst(r)];
+	const href = commitUrl(r.label, r.image.commit);
+	const name = icon ? (
+		<Status status={icon}>{r.label}</Status>
+	) : (
+		<span>{r.label}</span>
+	);
+	const commit = (
+		<ExtLink href={href} title={r.image.commit}>
+			{/* muted only when unlinked, so a link takes the link colour */}
+			<code style={href ? undefined : muted}>{r.image.commit.slice(0, 7)}</code>
+		</ExtLink>
+	);
+	const flags = (
+		<span>
+			{SHOW_CVES && <CveCell image={r.image} />}
+			<Flags flags={r.issues} />
+		</span>
+	);
+	return narrow ? (
+		<div style={{ overflowWrap: "anywhere" }}>
+			{name}
+			<Flex
+				gap={{ default: "gapSm" }}
+				alignItems={{ default: "alignItemsCenter" }}
+				style={{ ...small, marginInlineStart: "1.5rem" }}
+			>
+				<BuiltCell image={r.image} />
+				{commit}
+				{flags}
+			</Flex>
+		</div>
+	) : (
+		<div style={{ display: "contents" }}>
+			{name}
+			<span style={small}>
+				<BuiltCell image={r.image} />
+			</span>
+			<span style={small}>{commit}</span>
+			{flags}
+		</div>
 	);
 }
 
@@ -335,7 +443,30 @@ export function IssueNotes({ issues }: { issues: Issue[] }) {
 }
 
 /** An issue: its level, what, the detail, owner, next step and links out. */
-function IssueNote({ issue: { item, b } }: { issue: Issue }) {
+function IssueNote({ issue }: { issue: Issue }) {
+	const { item, b } = issue;
+	return (
+		<div style={{ display: "grid", gap: "0.125rem" }}>
+			<div>
+				<Label isCompact status={LEVELS[item.level].status}>
+					{LEVELS[item.level].word}
+				</Label>{" "}
+				<strong>{b.what}</strong>
+				{b.why && ` · ${b.why}`}
+			</div>
+			<IssueBody issue={issue} />
+		</div>
+	);
+}
+
+/** An issue's detail, owner, next step and links out, under its title shown elsewhere; with why, its why first. */
+function IssueBody({
+	issue: { item, b },
+	why,
+}: {
+	issue: Issue;
+	why?: boolean;
+}) {
 	const prefix =
 		item.operator &&
 		[`${item.operator}: `, `${item.operator} `].find((p) =>
@@ -347,18 +478,12 @@ function IssueNote({ issue: { item, b } }: { issue: Issue }) {
 		? text.slice(b.what.length).replace(/^[,:]?\s*/, "")
 		: text;
 	const links = b.links.filter((l) => l.external);
-	const small = { fontSize: "var(--pf-t--global--font--size--sm)" };
 	return (
-		<div style={{ display: "grid", gap: "0.125rem" }}>
-			<div>
-				<Label isCompact status={LEVELS[item.level].status}>
-					{LEVELS[item.level].word}
-				</Label>{" "}
-				<strong>{b.what}</strong>
-				{b.why && ` · ${b.why}`}
-			</div>
+		<>
 			<div style={{ ...muted, ...small, overflowWrap: "anywhere" }}>
-				{[detail, b.owner && `Owner: ${b.owner}`].filter(Boolean).join(" · ")}
+				{[why && b.why, detail, b.owner && `Owner: ${b.owner}`]
+					.filter(Boolean)
+					.join(" · ")}
 			</div>
 			{(b.action || links.length > 0) && (
 				<div style={small}>
@@ -371,6 +496,6 @@ function IssueNote({ issue: { item, b } }: { issue: Issue }) {
 					))}
 				</div>
 			)}
-		</div>
+		</>
 	);
 }

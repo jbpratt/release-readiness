@@ -730,6 +730,24 @@ export const candidateOperators = (d: ReleaseCandidate): OperatorFBC[] =>
 			)
 		: [];
 
+/** The stage Release every operator shares, else null. */
+export function sharedStage(d: ReleaseCandidate): KonfluxRelease | null {
+	const rs = candidateOperators(d).map((o) => o.fbc_ri_stage.release);
+	const first = rs[0];
+	return first && rs.every((r) => r?.name === first.name) ? first : null;
+}
+
+/** A stage Release's name by its timestamp, "Oct 7 20:02 UTC". */
+export function stamp(name: string) {
+	const t = name.match(/(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)\d\d$/);
+	if (!t) return name;
+	const month = new Date(Date.UTC(+t[1], +t[2] - 1)).toLocaleString("en-US", {
+		month: "short",
+		timeZone: "UTC",
+	});
+	return `${month} ${+t[3]} ${t[4]}:${t[5]} UTC`;
+}
+
 const repo = (image: string) => image.split("@")[0];
 
 /** The X.Y.Z an ART image was built as: ...-container-3.18.1-2026... is 3.18.1. */

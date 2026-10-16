@@ -43,9 +43,11 @@ import {
 	rowChips,
 	runResult,
 	scanCell,
+	sharedStage,
 	shownOperators,
 	slotItem,
 	slotRows,
+	stamp,
 	tknCommand,
 	verdictEntries,
 	verdictLine,
@@ -1197,4 +1199,37 @@ test("fbcUnstagedTitle and fbcNewerTitle count and agree in number", () => {
 		fbcNewerTitle(2),
 		"ART has newer builds than the staged FBCs: the list keeps the staged tags",
 	);
+});
+
+test("sharedStage: the one stage Release every operator holds, else null", () => {
+	const staged = (r1: KonfluxRelease | null, r2: KonfluxRelease | null) => {
+		const op = (operator: string, r: KonfluxRelease | null) =>
+			operatorFBC(operator, "", [], {
+				fbc_ri_stage: { state: r ? "in" : "none", release: r },
+			});
+		return {
+			shipped: false,
+			candidate: null,
+			reason: "",
+			fbc_candidate: fbcCandidate({
+				operators: [
+					op("quay-operator", r1),
+					op("container-security-operator", r2),
+				],
+			}),
+			fbc_stream: null,
+			verdict: { state: "ready", items: [] },
+			reading: { read: 0, failed: 0, pending: 0, history_days: 0 },
+		} satisfies ReleaseCandidate;
+	};
+	const a = release({ name: "quay-3-18-fbc-stage-20261007200215" });
+	assert.equal(sharedStage(staged(a, release({ name: a.name }))), a);
+	assert.equal(sharedStage(staged(a, release({ name: "other" }))), null);
+	assert.equal(sharedStage(staged(a, null)), null);
+	assert.equal(sharedStage(staged(null, a)), null);
+});
+
+test("stamp: a stage Release's name by its timestamp, else the name", () => {
+	assert.equal(stamp("quay-3-18-fbc-stage-20261007200215"), "Oct 7 20:02 UTC");
+	assert.equal(stamp("quay-3-18-fbc-stage"), "quay-3-18-fbc-stage");
 });

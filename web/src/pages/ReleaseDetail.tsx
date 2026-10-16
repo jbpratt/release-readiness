@@ -42,6 +42,7 @@ import {
 import {
 	CheckCircleIcon,
 	CopyIcon,
+	CubesIcon,
 	ExclamationTriangleIcon,
 	InfoCircleIcon,
 	TimesCircleIcon,
@@ -50,7 +51,6 @@ import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
 import {
 	type CSSProperties,
 	type ReactNode,
-	useEffect,
 	useMemo,
 	useRef,
 	useState,
@@ -67,6 +67,7 @@ import type {
 	FBCCandidate,
 	FBCMember,
 	JiraIssue,
+	KonfluxRelease,
 	ReleaseCandidate,
 	ReleaseVersion,
 	ShipmentMR,
@@ -74,14 +75,16 @@ import type {
 import LoadError, { Loading, ReleaseNotFound } from "../components/LoadError";
 import OpenIn from "../components/OpenIn";
 import {
+	BundleImages,
 	ExtLink,
 	external,
 	type Issue,
 	IssueNotes,
 	LEVELS,
 	muted,
-	OperatorImages,
 	ORDER,
+	StageFacts,
+	useNarrow,
 } from "../components/OperatorImages";
 import { ShipmentLabels } from "../components/ShipmentLabels";
 import { Status } from "../components/Status";
@@ -128,16 +131,17 @@ import {
 	readingLine,
 	releaseLine,
 	runResult,
+	sharedStage,
 	tknCommand,
 	verdictLine,
 } from "../utils/releaseDetail";
 
-/** A verdict item where it applies: a matrix cell, an operator's card, or neither. */
+/** A verdict item where it applies: a matrix cell, an operator's images, or neither. */
 type Placed = Issue & { cell?: string; card?: string };
 
 /**
  * Each verdict item at its source: the matrix cells of the OCP versions it
- * names, else its operator's image card, else the whole candidate.
+ * names, else its operator's images, else the whole candidate.
  */
 function placeIssues(d: ReleaseCandidate, bs: Blocker[]): Placed[] {
 	const cells = new Set(fbcGroups(d).flatMap((g) => g.rows.map(cellKey)));
@@ -234,6 +238,7 @@ export default function ReleaseDetail() {
 				shipped={candidate.data?.shipped ?? release.released}
 				shipmentMR={release.shipment_mr}
 				jiraBaseUrl={config?.jira_base_url}
+				stage={candidate.data && sharedStage(candidate.data)}
 			/>
 
 			<BuildsCard
@@ -275,14 +280,6 @@ export default function ReleaseDetail() {
 					)
 				}
 			/>
-
-			{candidate.data?.fbc_candidate && (
-				<OperatorImages
-					d={candidate.data}
-					version={xyz}
-					issues={(op) => (issues ?? []).filter((i) => i.card === op)}
-				/>
-			)}
 
 			<TicketsCard
 				issues={tickets}
@@ -336,19 +333,21 @@ function Freshness({ data }: { data?: ReleaseCandidate }) {
 
 /**
  * The target date, flagged while unshipped once past or within 3 days, the
- * ticket, its assignee and the shipment MR: the release's facts in the page
- * header.
+ * ticket, its assignee, the shipment MR, and the stage Release every operator
+ * shares: the release's facts in the page header.
  */
 function ReleaseFacts({
 	release,
 	shipped,
 	shipmentMR: mr,
 	jiraBaseUrl,
+	stage,
 }: {
 	release: ReleaseVersion;
 	shipped: boolean;
 	shipmentMR: ShipmentMR | null;
 	jiraBaseUrl?: string;
+	stage?: KonfluxRelease | null;
 }) {
 	const ticket = release.release_ticket_key;
 	const target = release.due_date ?? release.release_date;
@@ -357,7 +356,7 @@ function ReleaseFacts({
 		<DescriptionList
 			isCompact
 			isAutoFit
-			autoFitMinModifier={{ default: "8rem", lg: "12rem" }}
+			autoFitMinModifier={{ default: "8rem", lg: "9rem" }}
 			style={{ marginBottom: "1.5rem" }}
 		>
 			<DescriptionListGroup>
@@ -408,15 +407,17 @@ function ReleaseFacts({
 					</DescriptionListDescription>
 				</DescriptionListGroup>
 			)}
+			{stage && <StageFacts ri={stage} />}
 		</DescriptionList>
 	);
 }
 
 /**
- * The version's release candidate as its FBC matrix, or why it has none; a
- * shipped version's is labeled, with nothing to release. Its blockers are
- * shown where they apply (whole-candidate ones above the matrix, the rest at
- * their cells and image cards) and announced to screen readers.
+ * The version's release candidate as its FBC matrix and bundle images, or why
+ * it has none; a shipped version's is labeled, with nothing to release. Its
+ * blockers are shown where they apply (whole-candidate ones above the matrix,
+ * the rest at their cells and operators' images) and announced to screen
+ * readers.
  */
 function BuildsCard({
 	data,
@@ -492,29 +493,45 @@ function BuildsCard({
 						Its builds, CI, and release status are unavailable right now.
 					</LoadError>
 				) : fbc ? (
-					<FbcMatrix data={data} fbc={fbc} issues={issues} />
+					<>
+						<FbcMatrix data={data} fbc={fbc} issues={issues} />
+						<BundleImages
+							d={data}
+							version={version}
+							issues={(op) => issues.filter((i) => i.card === op)}
+						/>
+					</>
 				) : data.shipped ? (
-					`v${version} has shipped. No FBC build data is recorded for it.`
+					<EmptyState variant="xs" headingLevel="h3" titleText="No FBC data">
+						<EmptyStateBody>
+							v{version} has shipped. No FBC build data is recorded for it.
+						</EmptyStateBody>
+					</EmptyState>
+				) : data.reason === "not a concrete quay-vX.Y.Z version" ? (
+					<EmptyState
+						variant="xs"
+						headingLevel="h3"
+						titleText="No FBCs expected"
+					>
+						<EmptyStateBody>Only Quay versions have FBC builds.</EmptyStateBody>
+					</EmptyState>
 				) : (
-					noFbcText(version, data.reason)
+					<EmptyState
+						variant="xs"
+						headingLevel="h3"
+						icon={CubesIcon}
+						titleText="No FBCs yet"
+					>
+						<EmptyStateBody>
+							{data.reason && data.reason !== "no release candidate yet"
+								? noFbcText(version, data.reason)
+								: `The matrix fills in once ART builds an FBC for v${version}.`}
+						</EmptyStateBody>
+					</EmptyState>
 				)}
 			</CardBody>
 		</Card>
 	);
-}
-
-// Phone width, where the matrix turns on its side.
-const narrowQuery = "(max-width: 768px)";
-
-function useNarrow() {
-	const [narrow, setNarrow] = useState(() => matchMedia(narrowQuery).matches);
-	useEffect(() => {
-		const m = matchMedia(narrowQuery);
-		const on = () => setNarrow(m.matches);
-		m.addEventListener("change", on);
-		return () => m.removeEventListener("change", on);
-	}, []);
-	return narrow;
 }
 
 /** Operators as a phone-width column header names them. */

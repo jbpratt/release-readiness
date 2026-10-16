@@ -20,13 +20,13 @@ import {
 	TimesCircleIcon,
 } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
-import { type ReactNode, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getCandidate, listReleasesOverview } from "../api/client";
 import type { ReleaseCandidate, ReleaseOverview } from "../api/types";
 import LoadError, { Loading } from "../components/LoadError";
 import OpenIn from "../components/OpenIn";
-import { ExtLink, external } from "../components/OperatorImages";
+import { ExtLink, external, useNarrow } from "../components/OperatorImages";
 import { ShipmentLink } from "../components/ShipmentLabels";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
@@ -49,20 +49,6 @@ const muted = { color: "var(--pf-t--global--text--color--subtle)" };
 const dash = <span style={muted}>–</span>;
 
 const releasePath = (name: string) => `/releases/${encodeURIComponent(name)}`;
-
-// PatternFly's md breakpoint: narrower, six columns no longer fit.
-const narrowQuery = "(max-width: 768px)";
-
-function useNarrow() {
-	const [narrow, setNarrow] = useState(() => matchMedia(narrowQuery).matches);
-	useEffect(() => {
-		const m = matchMedia(narrowQuery);
-		const on = () => setNarrow(m.matches);
-		m.addEventListener("change", on);
-		return () => m.removeEventListener("change", on);
-	}, []);
-	return narrow;
-}
 
 export default function ReleasesOverview() {
 	const [searchParams, setSearchParams] = useSearchParams();
