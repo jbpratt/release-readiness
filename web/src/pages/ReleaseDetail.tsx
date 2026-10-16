@@ -48,13 +48,7 @@ import {
 	TimesCircleIcon,
 } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
-import {
-	type CSSProperties,
-	type ReactNode,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
+import { type CSSProperties, type ReactNode, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
 	getCandidate,
@@ -132,6 +126,7 @@ import {
 	releaseLine,
 	runResult,
 	sharedStage,
+	ticketsByStatus,
 	tknCommand,
 	verdictLine,
 } from "../utils/releaseDetail";
@@ -1343,70 +1338,89 @@ function TicketsCard({
 	);
 }
 
-const ticketLimit = 20;
+function TicketStatus({ status }: { status: string }) {
+	return status === "Closed" ? (
+		<span style={muted}>Closed</span>
+	) : (
+		<Label isCompact>{status || "No status"}</Label>
+	);
+}
 
 function IssuesTable({ issues }: { issues: JiraIssue[] }) {
-	// Type, the second column, is the only sortable one.
-	const [direction, setDirection] = useState<"asc" | "desc">();
-	const [showAll, setShowAll] = useState(false);
-
-	const sortedIssues = useMemo(() => {
-		if (!direction) return issues;
-		return [...issues].sort((a, b) => {
-			const cmp = a.issue_type.localeCompare(b.issue_type);
-			return direction === "asc" ? cmp : -cmp;
-		});
-	}, [issues, direction]);
-
-	const shown = showAll ? sortedIssues : sortedIssues.slice(0, ticketLimit);
+	const narrow = useNarrow();
+	const [showClosed, setShowClosed] = useState(false);
+	const { open, closed } = ticketsByStatus(issues);
+	const shown = showClosed ? open.concat(closed) : open;
 
 	return (
 		<>
 			<Table
 				aria-label="Tickets"
 				variant="compact"
+				gridBreakPoint=""
 				style={{ tableLayout: "auto" }}
 			>
 				<Thead>
 					<Tr>
-						<Th style={{ whiteSpace: "nowrap" }}>Key</Th>
-						<Th
-							sort={{
-								sortBy: { index: direction && 1, direction },
-								onSort: (_event, _index, d) => setDirection(d),
-								columnIndex: 1,
-							}}
-							modifier="fitContent"
-						>
-							Type
-						</Th>
-						<Th>Summary</Th>
+						<Th modifier="nowrap">{narrow ? "Ticket" : "Key"}</Th>
+						{!narrow && <Th modifier="nowrap">Status</Th>}
+						{!narrow && <Th modifier="nowrap">Type</Th>}
+						{!narrow && <Th>Summary</Th>}
 					</Tr>
 				</Thead>
 				<Tbody>
-					{shown.map((issue) => (
-						<Tr key={issue.key}>
-							<Td dataLabel="Key" style={{ whiteSpace: "nowrap" }}>
-								<a href={issue.link} {...external}>
-									{issue.key}
-								</a>
-							</Td>
-							<Td dataLabel="Type" style={{ whiteSpace: "nowrap" }}>
-								{issue.issue_type}
-							</Td>
-							<Td
-								dataLabel="Summary"
-								style={{ whiteSpace: "normal", wordBreak: "break-word" }}
-							>
-								{issue.summary}
-							</Td>
-						</Tr>
-					))}
+					{shown.map((issue) =>
+						narrow ? (
+							<Tr key={issue.key}>
+								<Td dataLabel="Ticket">
+									<Flex
+										gap={{ default: "gapSm" }}
+										alignItems={{ default: "alignItemsCenter" }}
+									>
+										<a href={issue.link} {...external}>
+											{issue.key}
+										</a>
+										<TicketStatus status={issue.status} />
+										<span style={muted}>{issue.issue_type}</span>
+									</Flex>
+									<div
+										style={{ marginTop: "0.125rem", overflowWrap: "anywhere" }}
+									>
+										{issue.summary}
+									</div>
+								</Td>
+							</Tr>
+						) : (
+							<Tr key={issue.key}>
+								<Td dataLabel="Key" modifier="nowrap">
+									<a href={issue.link} {...external}>
+										{issue.key}
+									</a>
+								</Td>
+								<Td dataLabel="Status" modifier="nowrap">
+									<TicketStatus status={issue.status} />
+								</Td>
+								<Td dataLabel="Type" modifier="nowrap" style={muted}>
+									{issue.issue_type}
+								</Td>
+								<Td dataLabel="Summary" style={{ overflowWrap: "anywhere" }}>
+									{issue.summary}
+								</Td>
+							</Tr>
+						),
+					)}
 				</Tbody>
 			</Table>
-			{issues.length > ticketLimit && (
-				<Button variant="link" onClick={() => setShowAll(!showAll)}>
-					{showAll ? "Show fewer" : `Show all ${issues.length} tickets`}
+			{closed.length > 0 && (
+				<Button
+					variant="link"
+					isInline
+					style={{ marginTop: "0.75rem" }}
+					onClick={() => setShowClosed(!showClosed)}
+				>
+					{showClosed
+						? "Hide closed tickets"
+						: `Show ${closed.length} closed ticket${closed.length === 1 ? "" : "s"}`}
 				</Button>
 			)}
 		</>

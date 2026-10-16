@@ -48,6 +48,7 @@ import {
 	slotItem,
 	slotRows,
 	stamp,
+	ticketsByStatus,
 	tknCommand,
 	verdictEntries,
 	verdictLine,
@@ -266,6 +267,26 @@ test("issueLists: left-out issues by status, the largest group first", () => {
 test("issueLists: undefined while the issues load, empty lists with none", () => {
 	assert.equal(issueLists(undefined, "PROJQUAY-2"), undefined);
 	assert.deepEqual(issueLists([]), { keys: [], leftOut: [] });
+});
+
+test("ticketsByStatus: open nearest to shipping first, Closed apart, by key number", () => {
+	const { open, closed } = ticketsByStatus([
+		issue("PROJQUAY-10", "Closed"),
+		issue("PROJQUAY-3", "MODIFIED"),
+		issue("PROJQUAY-20", "Release Pending"),
+		issue("PROJQUAY-4", "Closed"),
+		issue("PROJQUAY-7", "Triage"),
+		issue("PROJQUAY-9", "Release Pending"),
+		issue("PROJQUAY-5", "ON_QA"),
+	]);
+	assert.deepEqual(
+		open.map((i) => i.key),
+		["PROJQUAY-9", "PROJQUAY-20", "PROJQUAY-5", "PROJQUAY-3", "PROJQUAY-7"],
+	);
+	assert.deepEqual(
+		closed.map((i) => i.key),
+		["PROJQUAY-4", "PROJQUAY-10"],
+	);
 });
 
 test("tknCommand: carries the Release Pending issues only", () => {

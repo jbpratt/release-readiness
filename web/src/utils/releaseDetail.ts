@@ -656,6 +656,39 @@ export function issueLists(
 	};
 }
 
+// Open Jira statuses, nearest to shipping first; any other open status after.
+const openOrder = [
+	RELEASE_PENDING,
+	"Verified",
+	"ON_QA",
+	"MODIFIED",
+	"POST",
+	"ASSIGNED",
+	"New",
+];
+const openRank = (status: string) => {
+	const i = openOrder.indexOf(status);
+	return i < 0 ? openOrder.length : i;
+};
+
+/**
+ * Splits tickets into open ones, nearest to shipping first, and Closed ones,
+ * each by key number. Release Pending is open: the FBC writer moves staged
+ * issues there before they ship.
+ */
+export function ticketsByStatus<T extends { key: string; status: string }>(
+	issues: T[],
+): { open: T[]; closed: T[] } {
+	const sorted = [...issues].sort(
+		(a, b) =>
+			openRank(a.status) - openRank(b.status) || byKeyNumber(a.key, b.key),
+	);
+	return {
+		open: sorted.filter((i) => i.status !== "Closed"),
+		closed: sorted.filter((i) => i.status === "Closed"),
+	};
+}
+
 /** The tkn command that starts release-from-fbc with params. */
 export const tknCommand = (params: Record<string, string>) =>
 	[
