@@ -9,13 +9,12 @@ import {
 	Tooltip,
 } from "@patternfly/react-core";
 import { ExclamationTriangleIcon, SyncAltIcon } from "@patternfly/react-icons";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { getSyncStatus } from "../api/client";
 import type { SyncProblem } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { relative } from "../utils/format";
 import { freshnessLine, SOURCE_NAMES } from "../utils/releaseDetail";
-import { muted } from "./OperatorImages";
 
 const POLL_MS = 60_000;
 
@@ -93,12 +92,15 @@ const exact = (iso: string) =>
 	});
 
 /**
- * The masthead's sync state on every page: "Updated N ago" (the exact time
- * on focus) and "N sources stale", which opens the problems. Compact, at
- * phone width, it is one icon button with those words as its name.
+ * The masthead's sync state on every page: a refresh icon button beside the
+ * other masthead icons whose hover and name say "Updated N ago" (the exact
+ * time on a second line), after "N sources stale", which opens the problems.
+ * Compact, at phone width, the one icon button also names the problems and
+ * opens them on click.
  */
 export default function SyncStatusWarning({ compact }: { compact?: boolean }) {
 	const status = useSyncStatus();
+	const iconRef = useRef<HTMLButtonElement>(null);
 	if (!status) return null;
 	const line = freshnessLine(status);
 	const n = line.problems.length;
@@ -109,6 +111,27 @@ export default function SyncStatusWarning({ compact }: { compact?: boolean }) {
 		<Icon status="warning" isInline={!compact}>
 			<ExclamationTriangleIcon />
 		</Icon>
+	);
+	// The Tooltip takes the button by ref: wrapped in it, the compact Popover
+	// anchors on the Tooltip's display: contents box and opens at the corner.
+	const icon = (label: string, stateIcon: React.ReactNode) => (
+		<>
+			<Button
+				ref={iconRef}
+				variant="plain"
+				aria-label={label}
+				icon={stateIcon}
+			/>
+			<Tooltip
+				triggerRef={iconRef}
+				content={
+					<>
+						<div>{label}</div>
+						{line.oldest && <div>{exact(line.oldest)}</div>}
+					</>
+				}
+			/>
+		</>
 	);
 
 	if (compact) {
@@ -126,11 +149,7 @@ export default function SyncStatusWarning({ compact }: { compact?: boolean }) {
 					</Stack>
 				}
 			>
-				<Button
-					variant="plain"
-					aria-label={words}
-					icon={n > 0 ? warning : <SyncAltIcon />}
-				/>
+				{icon(words, n > 0 ? warning : <SyncAltIcon />)}
 			</Popover>
 		);
 	}
@@ -140,16 +159,7 @@ export default function SyncStatusWarning({ compact }: { compact?: boolean }) {
 			gap={{ default: "gapMd" }}
 			alignItems={{ default: "alignItemsCenter" }}
 			flexWrap={{ default: "nowrap" }}
-			style={{ fontSize: "var(--pf-t--global--font--size--sm)" }}
 		>
-			{line.oldest && (
-				<Tooltip content={exact(line.oldest)}>
-					{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows the exact time. */}
-					<span tabIndex={0} style={muted}>
-						{line.updated}
-					</span>
-				</Tooltip>
-			)}
 			{stale && (
 				<Popover
 					headerContent="Sync problems"
@@ -160,12 +170,13 @@ export default function SyncStatusWarning({ compact }: { compact?: boolean }) {
 						isInline
 						size="sm"
 						icon={warning}
-						style={{ fontSize: "inherit" }}
+						style={{ fontSize: "var(--pf-t--global--font--size--sm)" }}
 					>
 						{stale}
 					</Button>
 				</Popover>
 			)}
+			{line.updated && icon(line.updated, <SyncAltIcon />)}
 		</Flex>
 	);
 }
