@@ -3,10 +3,12 @@ import {
 	DescriptionListGroup,
 	DescriptionListTerm,
 	ExpandableSection,
+	ExpandableSectionToggle,
 	Flex,
 	Icon,
 	Label,
 	type LabelProps,
+	Tooltip,
 } from "@patternfly/react-core";
 import {
 	CheckCircleIcon,
@@ -20,7 +22,6 @@ import type {
 	KonfluxRelease,
 	OperatorFBC,
 	OperatorImage,
-	ReleaseCandidate,
 	VerdictItem,
 } from "../api/types";
 import type { Blocker } from "../utils/blockers";
@@ -28,7 +29,6 @@ import { SHOW_CVES } from "../utils/features";
 import { commitUrl } from "../utils/links";
 import {
 	bundleBuilt,
-	candidateOperators,
 	type Flag,
 	fixableLabels,
 	nvrLabel,
@@ -36,7 +36,6 @@ import {
 	releaseImages,
 	SEVERITIES,
 	scanCell,
-	sharedStage,
 	stamp,
 	worst,
 } from "../utils/releaseDetail";
@@ -195,64 +194,13 @@ const toneIcons = {
 	success: <CheckCircleIcon />,
 };
 
-/**
- * Each operator's head bundle images behind a collapsed disclosure, its toggle
- * the operator's worst issue, else its images to check, else how many ART
- * built; the operator's own stage Release when operators do not share one.
- */
-export function BundleImages({
-	d,
-	version,
-	issues,
-}: {
-	d: ReleaseCandidate;
-	/** The version's X.Y.Z. */
-	version: string;
-	/** The verdict items about each operator. */
-	issues: (operator: string) => Issue[];
-}) {
-	const operators = candidateOperators(d);
-	if (operators.length === 0) return null;
-	const own = !sharedStage(d);
-	return (
-		<div
-			style={{
-				marginTop: "1rem",
-				paddingTop: "0.5rem",
-				borderTop: "1px solid var(--pf-t--global--border--color--default)",
-			}}
-		>
-			{operators.map((o) => (
-				<OperatorImages
-					key={o.operator}
-					o={o}
-					version={version}
-					issues={issues(o.operator)}
-					own={own}
-				/>
-			))}
-		</div>
-	);
-}
-
-function OperatorImages({
-	o,
-	version,
-	issues,
-	own,
-}: {
-	o: OperatorFBC;
-	version: string;
-	issues: Issue[];
-	own: boolean;
-}) {
-	const [open, setOpen] = useState(false);
+/** An operator's images worst first, its issues worst first, and its one tone and words. */
+function summarize(o: OperatorFBC, version: string, issues: Issue[]) {
 	const images = releaseImages([o], version);
 	const art = images
 		.filter((r) => r.image.nvr || r.issues.length > 0)
 		.sort((a, b) => worst(a) - worst(b));
-	const others = images.filter((r) => !art.includes(r));
-	const problems = art.filter((r) => worst(r) < 2).length;
+	const bad = art.filter((r) => worst(r) < 2);
 	const sorted = [...issues].sort(
 		(a, b) => ORDER.indexOf(a.item.level) - ORDER.indexOf(b.item.level),
 	);
@@ -260,50 +208,123 @@ function OperatorImages({
 	// The worse of its images' and its issues' levels: an image's 0 failed and 1
 	// warning, an issue's 0 blocker, 1 warning and 2 info.
 	const rank = Math.min(
-		...art.map(worst).filter((w) => w < 2),
+		...bad.map(worst),
 		top ? ORDER.indexOf(top.item.level) : 3,
 	);
-	const tone = tones[rank];
-	const count = `${art.length} image${art.length === 1 ? "" : "s"}`;
-	const ri = o.fbc_ri_stage.release;
+	const n = (k: number) => `${k} image${k === 1 ? "" : "s"}`;
+	const said = top
+		? `${LEVELS[top.item.level].word}: ${top.b.what}${bad.length ? `; ${bad.length} of ${n(art.length)} to check` : ""}`
+		: bad.length
+			? `${bad.length} of ${n(art.length)} to check`
+			: `${n(art.length)} built`;
+	return {
+		images,
+		bad,
+		good: art.filter((r) => worst(r) >= 2),
+		others: images.filter((r) => !art.includes(r)),
+		sorted,
+		tone: tones[rank],
+		said,
+	};
+}
+
+const sectionId = (operator: string, what: string) => `fbc-${operator}-${what}`;
+
+/**
+ * An operator's name as the toggle of its images, with its tone's icon: its
+ * worst issue, else its images to check, else how many ART built, in the
+ * toggle's tooltip and name.
+ */
+export function OperatorToggle({
+	o,
+	version,
+	issues,
+	open,
+	onToggle,
+}: {
+	o: OperatorFBC;
+	/** The version's X.Y.Z. */
+	version: string;
+	/** The verdict items about the operator. */
+	issues: Issue[];
+	open: boolean;
+	onToggle: (open: boolean) => void;
+}) {
+	const { tone, said } = summarize(o, version, issues);
 	return (
-		<ExpandableSection
-			isExpanded={open}
-			onToggle={(_e, v) => setOpen(v)}
-			isIndented
-			toggleContent={
+		<>
+			<ExpandableSectionToggle
+				isExpanded={open}
+				onToggle={onToggle}
+				contentId={sectionId(o.operator, "images")}
+				toggleId={sectionId(o.operator, "toggle")}
+				toggleAriaLabel={`${o.operator} images: ${said}`}
+				direction="down"
+			>
 				<span
 					style={{
 						display: "inline-flex",
-						flexWrap: "wrap",
+						gap: "0.5rem",
 						alignItems: "center",
-						gap: "0.25rem 0.5rem",
+						fontWeight: "var(--pf-t--global--font--weight--body--bold)",
 					}}
 				>
-					<span>{o.operator}</span>
-					<span style={{ color: "var(--pf-t--global--text--color--regular)" }}>
-						<Icon status={tone} isInline>
-							{toneIcons[tone]}
-						</Icon>{" "}
-						{top ? (
-							<>
-								<span className="pf-v6-screen-reader">
-									{LEVELS[top.item.level].word}:{" "}
-								</span>
-								{top.b.what}
-							</>
-						) : problems > 0 ? (
-							`${problems} to check`
-						) : (
-							`${count} built`
-						)}
-					</span>
-					{(top || problems > 0) && <span style={muted}>({count})</span>}
+					{o.operator}
+					<Icon status={tone} isInline>
+						{toneIcons[tone]}
+					</Icon>
 				</span>
-			}
+			</ExpandableSectionToggle>
+			<Tooltip
+				content={said}
+				aria="none"
+				aria-live="off"
+				triggerRef={() =>
+					document.getElementById(
+						sectionId(o.operator, "toggle"),
+					) as HTMLElement
+				}
+			/>
+		</>
+	);
+}
+
+/**
+ * An operator's images under its matrix row, its toggle OperatorToggle: its
+ * own stage Release when operators do not share one, its issues, the images
+ * with a problem, then the healthy ones folded behind a count.
+ */
+export function OperatorPanel({
+	o,
+	version,
+	issues,
+	own,
+	open,
+}: {
+	o: OperatorFBC;
+	/** The version's X.Y.Z. */
+	version: string;
+	/** The verdict items about the operator. */
+	issues: Issue[];
+	own: boolean;
+	open: boolean;
+}) {
+	const s = summarize(o, version, issues);
+	const [healthy, setHealthy] = useState(false);
+	const ri = o.fbc_ri_stage.release;
+	return (
+		<ExpandableSection
+			isDetached
+			isExpanded={open}
+			contentId={sectionId(o.operator, "images")}
+			toggleId={sectionId(o.operator, "toggle")}
 		>
 			<div
-				style={{ display: "grid", gap: "0.75rem", paddingBottom: "0.75rem" }}
+				style={{
+					display: "grid",
+					gap: "0.75rem",
+					padding: "0.25rem 0 1rem 2rem",
+				}}
 			>
 				{own && ri && (
 					<div style={{ ...small, overflowWrap: "anywhere" }}>
@@ -321,20 +342,31 @@ function OperatorImages({
 						)}
 					</div>
 				)}
-				{sorted.length === 1 ? (
-					<div style={{ display: "grid", gap: "0.125rem" }}>
-						<IssueBody issue={top} why />
-					</div>
+				{s.sorted.length > 0 && <IssueNotes issues={s.sorted} />}
+				{s.bad.length === 0 ? (
+					<ImageLines art={s.good} />
 				) : (
-					sorted.length > 1 && <IssueNotes issues={sorted} />
+					<>
+						<ImageLines art={s.bad} />
+						{s.good.length > 0 && (
+							<ExpandableSection
+								isExpanded={healthy}
+								onToggle={(_e, v) => setHealthy(v)}
+								toggleContent={
+									<Status status="done">{`${s.good.length} more built`}</Status>
+								}
+							>
+								<ImageLines art={s.good} />
+							</ExpandableSection>
+						)}
+					</>
 				)}
-				<ImageLines art={art} />
-				{others.length > 0 && (
+				{s.others.length > 0 && (
 					<div style={{ ...muted, ...small }}>
-						Not built by ART: {others.map((r) => r.label).join(", ")}
+						Not built by ART: {s.others.map((r) => r.label).join(", ")}
 					</div>
 				)}
-				{images.length === 0 && (
+				{s.images.length === 0 && (
 					<div style={{ ...muted, ...small }}>No images rendered yet</div>
 				)}
 			</div>
@@ -459,14 +491,8 @@ function IssueNote({ issue }: { issue: Issue }) {
 	);
 }
 
-/** An issue's detail, owner, next step and links out, under its title shown elsewhere; with why, its why first. */
-function IssueBody({
-	issue: { item, b },
-	why,
-}: {
-	issue: Issue;
-	why?: boolean;
-}) {
+/** An issue's detail, owner, next step and links out, under its title. */
+function IssueBody({ issue: { item, b } }: { issue: Issue }) {
 	const prefix =
 		item.operator &&
 		[`${item.operator}: `, `${item.operator} `].find((p) =>
@@ -481,9 +507,7 @@ function IssueBody({
 	return (
 		<>
 			<div style={{ ...muted, ...small, overflowWrap: "anywhere" }}>
-				{[why && b.why, detail, b.owner && `Owner: ${b.owner}`]
-					.filter(Boolean)
-					.join(" · ")}
+				{[detail, b.owner && `Owner: ${b.owner}`].filter(Boolean).join(" · ")}
 			</div>
 			{(b.action || links.length > 0) && (
 				<div style={small}>

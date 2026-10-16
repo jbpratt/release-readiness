@@ -73,6 +73,7 @@ import type {
 	FBCMember,
 	JiraIssue,
 	KonfluxRelease,
+	OperatorFBC,
 	ReleaseCandidate,
 	ReleaseVersion,
 	ShipmentMR,
@@ -80,13 +81,14 @@ import type {
 import LoadError, { Loading, ReleaseNotFound } from "../components/LoadError";
 import OpenIn from "../components/OpenIn";
 import {
-	BundleImages,
 	ExtLink,
 	external,
 	type Issue,
 	IssueNotes,
 	LEVELS,
 	muted,
+	OperatorPanel,
+	OperatorToggle,
 	ORDER,
 	StageFacts,
 	useNarrow,
@@ -541,14 +543,13 @@ function BuildsCard({
 						Its builds, CI, and release status are unavailable right now.
 					</LoadError>
 				) : fbc ? (
-					<>
-						<FbcMatrix data={data} fbc={fbc} issues={issues} ci={ci} />
-						<BundleImages
-							d={data}
-							version={version}
-							issues={(op) => issues.filter((i) => i.card === op)}
-						/>
-					</>
+					<FbcMatrix
+						data={data}
+						fbc={fbc}
+						issues={issues}
+						ci={ci}
+						version={version}
+					/>
 				) : data.shipped ? (
 					<EmptyState variant="xs" headingLevel="h3" titleText="No FBC data">
 						<EmptyStateBody>
@@ -582,36 +583,33 @@ function BuildsCard({
 	);
 }
 
-/** Operators as a phone-width column header names them. */
-const shortNames: Record<string, string> = {
-	"quay-operator": "Quay",
-	"container-security-operator": "CSO",
-	"quay-bridge-operator": "QBO",
-};
-
 const cellKey = (r: FbcRow) => `${r.operator}@${r.ocp}`;
 
 /**
- * The candidate's FBCs, operators down and OCP versions across (swapped at
- * phone width so nothing scrolls sideways), under the items about the whole
- * candidate. ?cell=<operator>@<ocp> opens that FBC's detail.
+ * The candidate's FBCs, operators down and OCP versions across (each operator
+ * stacked over its cells at phone width, so nothing scrolls sideways), under
+ * the items about the whole candidate. Each operator's name opens its images
+ * under its row. ?cell=<operator>@<ocp> opens that FBC's detail; ?open opens
+ * every operator's images.
  */
 function FbcMatrix({
 	data,
 	fbc,
 	issues,
 	ci,
+	version,
 }: {
 	data: ReleaseCandidate;
 	fbc: FBCCandidate;
 	issues: Placed[];
 	ci?: FBCBuild[];
+	/** The version's X.Y.Z. */
+	version: string;
 }) {
 	const narrow = useNarrow();
 	const [params, setParams] = useSearchParams();
 	const staged = fbc.source !== "stream";
-	const groups = fbcGroups(data);
-	const rows = groups.flatMap((g) => g.rows);
+	const rows = fbcGroups(data).flatMap((g) => g.rows);
 	const cells = new Map<string, Cell>(
 		rows.map((r) => {
 			const stream = r.fbc ? null : streamFbc(data.fbc_stream, r);
@@ -623,13 +621,20 @@ function FbcMatrix({
 	);
 	const whole = issues.filter((i) => !i.cell && !i.card);
 	const unstaged = !staged && !whole.some((i) => i.item.code === "not_staged");
-	const operators = groups.map((g) => g.operator);
+	const operators = candidateOperators(data);
+	const own = !sharedStage(data);
 	const ocps = [...new Set(rows.map((r) => r.ocp))].sort(compareVersions);
-	const across = narrow ? operators : ocps;
-	const down = narrow ? ocps : operators;
-	const at = (d: string, a: string) =>
-		cells.get(narrow ? `${a}@${d}` : `${d}@${a}`);
 	const picked = params.get("cell");
+	const [open, setOpen] = useState(
+		() => new Set(params.has("open") ? operators.map((o) => o.operator) : []),
+	);
+	const toggle = (op: string, v: boolean) =>
+		setOpen((prev) => {
+			const next = new Set(prev);
+			if (v) next.add(op);
+			else next.delete(op);
+			return next;
+		});
 	// CI runs on a cell's builds other than its FBC, for its detail's link.
 	const others = (r: FbcRow) =>
 		(ci ?? [])
@@ -650,6 +655,54 @@ function FbcMatrix({
 			},
 			{ replace: true },
 		);
+	const cell = (
+		op: string,
+		ocp: string,
+		position: PopoverProps["position"],
+	) => {
+		const c = cells.get(`${op}@${ocp}`);
+		const key = c && cellKey(c.row);
+		return c && key ? (
+			<MatrixCell
+				cell={c}
+				issues={issues.filter((x) => x.cell === key)}
+				others={others(c.row)}
+				green={staged ? "built and staged" : "built"}
+				open={picked === key}
+				position={position}
+				onOpen={() => select(key)}
+				onClose={() => select(null)}
+			/>
+		) : (
+			<Tooltip content="This operator has no FBC for this OCP version">
+				{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows its tooltip to keyboard users. */}
+				<span style={muted} tabIndex={0}>
+					<span aria-hidden="true">–</span>
+					<span className="pf-v6-screen-reader">Not expected</span>
+				</span>
+			</Tooltip>
+		);
+	};
+	const edge = (i: number, n: number) =>
+		i === 0 ? "bottom-start" : i === n - 1 ? "bottom-end" : "bottom";
+	const name = (o: OperatorFBC) => (
+		<OperatorToggle
+			o={o}
+			version={version}
+			issues={issues.filter((i) => i.card === o.operator)}
+			open={open.has(o.operator)}
+			onToggle={(v) => toggle(o.operator, v)}
+		/>
+	);
+	const panel = (o: OperatorFBC) => (
+		<OperatorPanel
+			o={o}
+			version={version}
+			issues={issues.filter((i) => i.card === o.operator)}
+			own={own}
+			open={open.has(o.operator)}
+		/>
+	);
 	return (
 		<>
 			{(unstaged || whole.length > 0) && (
@@ -660,80 +713,84 @@ function FbcMatrix({
 					{whole.length > 0 && <IssueNotes issues={whole} />}
 				</div>
 			)}
-			<table
-				aria-label="FBCs by operator and OCP version"
-				style={{
-					borderCollapse: "collapse",
-					width: "100%",
-					tableLayout: "fixed",
-				}}
-			>
-				<colgroup>
-					<col style={{ width: narrow ? "3rem" : "15rem" }} />
-				</colgroup>
-				<thead>
-					<tr>
-						<td style={{ ...axisLabel, ...muted, textAlign: "start" }}>
-							{narrow ? "OCP" : "OCP version"}
-						</td>
-						{across.map((a) => (
-							<th
-								key={a}
-								scope="col"
-								style={axisLabel}
-								title={narrow ? a : undefined}
-							>
-								{narrow ? (shortNames[a] ?? a) : a}
-							</th>
-						))}
-					</tr>
-				</thead>
-				<tbody>
-					{down.map((d) => (
-						<tr key={d} style={{ borderTop: rule }}>
-							<th scope="row" style={{ ...axisLabel, textAlign: "start" }}>
-								{d}
-							</th>
-							{across.map((a, i) => {
-								const c = at(d, a);
-								const key = c && cellKey(c.row);
-								return (
-									<td key={a} style={{ textAlign: "center", padding: "4px" }}>
-										{c && key ? (
-											<MatrixCell
-												cell={c}
-												issues={issues.filter((x) => x.cell === key)}
-												others={others(c.row)}
-												green={staged ? "built and staged" : "built"}
-												open={picked === key}
-												position={
-													i === 0
-														? "bottom-start"
-														: i === across.length - 1
-															? "bottom-end"
-															: "bottom"
-												}
-												onOpen={() => select(key)}
-												onClose={() => select(null)}
-											/>
-										) : (
-											<Tooltip content="This operator has no FBC for this OCP version">
-												{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows its tooltip to keyboard users. */}
-												<span style={muted} tabIndex={0}>
-													<span aria-hidden="true">–</span>
-													<span className="pf-v6-screen-reader">
-														Not expected
-													</span>
-												</span>
-											</Tooltip>
-										)}
-									</td>
-								);
-							})}
+			{narrow ? (
+				operators.map((o) => (
+					<section
+						key={o.operator}
+						aria-label={o.operator}
+						style={{ borderTop: rule, padding: "0.5rem 0" }}
+					>
+						{name(o)}
+						<div
+							style={{
+								display: "grid",
+								gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+								gap: "0.25rem",
+								marginTop: "0.25rem",
+							}}
+						>
+							{ocps.map((ocp, i) => (
+								<div key={ocp} style={{ textAlign: "center" }}>
+									<div
+										style={{
+											...muted,
+											fontSize: "var(--pf-t--global--font--size--sm)",
+										}}
+									>
+										{ocp}
+									</div>
+									{cell(o.operator, ocp, edge(i % 4, 4))}
+								</div>
+							))}
+						</div>
+						{panel(o)}
+					</section>
+				))
+			) : (
+				<table
+					aria-label="FBCs by operator and OCP version"
+					style={{
+						borderCollapse: "collapse",
+						width: "100%",
+						tableLayout: "fixed",
+					}}
+				>
+					<colgroup>
+						<col style={{ width: "17rem" }} />
+					</colgroup>
+					<thead>
+						<tr>
+							<td style={{ ...axisLabel, ...muted, textAlign: "start" }}>
+								OCP version
+							</td>
+							{ocps.map((a) => (
+								<th key={a} scope="col" style={axisLabel}>
+									{a}
+								</th>
+							))}
 						</tr>
+					</thead>
+					{operators.map((o) => (
+						<tbody key={o.operator} style={{ borderTop: rule }}>
+							<tr>
+								<th scope="row" style={{ ...axisLabel, textAlign: "start" }}>
+									{name(o)}
+								</th>
+								{ocps.map((a, i) => (
+									<td key={a} style={{ textAlign: "center", padding: "4px" }}>
+										{cell(o.operator, a, edge(i, ocps.length))}
+									</td>
+								))}
+							</tr>
+							<tr>
+								<td colSpan={ocps.length + 1} style={{ padding: 0 }}>
+									{panel(o)}
+								</td>
+							</tr>
+						</tbody>
 					))}
-				</tbody>
-			</table>
+				</table>
+			)}
 		</>
 	);
 }
