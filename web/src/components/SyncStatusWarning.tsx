@@ -1,19 +1,21 @@
 import {
 	Button,
 	Content,
+	Flex,
 	Icon,
 	Popover,
 	Stack,
 	StackItem,
+	Tooltip,
 } from "@patternfly/react-core";
-import { ExclamationTriangleIcon } from "@patternfly/react-icons";
+import { ExclamationTriangleIcon, SyncAltIcon } from "@patternfly/react-icons";
 import { useEffect } from "react";
 import { getSyncStatus } from "../api/client";
 import type { SyncProblem } from "../api/types";
 import { useCachedFetch } from "../hooks/useCachedFetch";
-import { SHOW_CVES } from "../utils/features";
 import { relative } from "../utils/format";
-import { SOURCE_NAMES } from "../utils/releaseDetail";
+import { freshnessLine, SOURCE_NAMES } from "../utils/releaseDetail";
+import { muted } from "./OperatorImages";
 
 const POLL_MS = 60_000;
 
@@ -80,29 +82,90 @@ export function SyncProblems({ problems }: { problems: SyncProblem[] }) {
 	);
 }
 
-export default function SyncStatusWarning() {
-	// A CVE scan problem would point at displays that are hidden.
-	const problems = (useSyncStatus()?.problems ?? []).filter(
-		(p) => SHOW_CVES || p.source !== "image-scans",
-	);
-	if (problems.length === 0) return null;
+const exact = (iso: string) =>
+	new Date(iso).toLocaleString("en-US", {
+		month: "short",
+		day: "numeric",
+		year: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+		timeZoneName: "short",
+	});
 
-	const label = `${problems.length} sync problem${problems.length === 1 ? "" : "s"}`;
-	return (
-		<Popover
-			headerContent={label}
-			bodyContent={<SyncProblems problems={problems} />}
-		>
-			<Button
-				variant="plain"
-				icon={
-					<Icon status="warning">
-						<ExclamationTriangleIcon />
-					</Icon>
+/**
+ * The masthead's sync state on every page: "Updated N ago" (the exact time
+ * on focus) and "N sources stale", which opens the problems. Compact, at
+ * phone width, it is one icon button with those words as its name.
+ */
+export default function SyncStatusWarning({ compact }: { compact?: boolean }) {
+	const status = useSyncStatus();
+	if (!status) return null;
+	const line = freshnessLine(status);
+	const n = line.problems.length;
+	const stale = n > 0 ? `${n} source${n === 1 ? "" : "s"} stale` : null;
+	const words = [line.updated, stale].filter(Boolean).join(" · ");
+	if (!words) return null;
+	const warning = (
+		<Icon status="warning" isInline={!compact}>
+			<ExclamationTriangleIcon />
+		</Icon>
+	);
+
+	if (compact) {
+		return (
+			<Popover
+				headerContent={words}
+				bodyContent={
+					<Stack hasGutter>
+						{line.oldest && <StackItem>{exact(line.oldest)}</StackItem>}
+						{n > 0 && (
+							<StackItem>
+								<SyncProblems problems={line.problems} />
+							</StackItem>
+						)}
+					</Stack>
 				}
 			>
-				{label}
-			</Button>
-		</Popover>
+				<Button
+					variant="plain"
+					aria-label={words}
+					icon={n > 0 ? warning : <SyncAltIcon />}
+				/>
+			</Popover>
+		);
+	}
+
+	return (
+		<Flex
+			gap={{ default: "gapMd" }}
+			alignItems={{ default: "alignItemsCenter" }}
+			flexWrap={{ default: "nowrap" }}
+			style={{ fontSize: "var(--pf-t--global--font--size--sm)" }}
+		>
+			{line.oldest && (
+				<Tooltip content={exact(line.oldest)}>
+					{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows the exact time. */}
+					<span tabIndex={0} style={muted}>
+						{line.updated}
+					</span>
+				</Tooltip>
+			)}
+			{stale && (
+				<Popover
+					headerContent="Sync problems"
+					bodyContent={<SyncProblems problems={line.problems} />}
+				>
+					<Button
+						variant="link"
+						isInline
+						size="sm"
+						icon={warning}
+						style={{ fontSize: "inherit" }}
+					>
+						{stale}
+					</Button>
+				</Popover>
+			)}
+		</Flex>
 	);
 }

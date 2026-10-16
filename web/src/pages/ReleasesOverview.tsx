@@ -7,7 +7,6 @@ import {
 	Flex,
 	Icon,
 	PageSection,
-	Popover,
 	Spinner,
 	Switch,
 	Title,
@@ -26,9 +25,9 @@ import { Link, useSearchParams } from "react-router-dom";
 import { getCandidate, listReleasesOverview } from "../api/client";
 import type { ReleaseCandidate, ReleaseOverview } from "../api/types";
 import LoadError, { Loading } from "../components/LoadError";
+import OpenIn from "../components/OpenIn";
 import { ExtLink, external } from "../components/OperatorImages";
 import { ShipmentLink } from "../components/ShipmentLabels";
-import { SyncProblems, useSyncStatus } from "../components/SyncStatusWarning";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
 import { blockers } from "../utils/blockers";
@@ -39,12 +38,12 @@ import {
 	type Tone,
 } from "../utils/fbcMatrix";
 import { days, due } from "../utils/format";
-import { formatReleaseName, jiraIssueUrl } from "../utils/links";
 import {
-	fbcGroups,
-	freshnessLine,
-	verdictEntries,
-} from "../utils/releaseDetail";
+	ART_PIPELINES_HEALTH_URL,
+	formatReleaseName,
+	jiraIssueUrl,
+} from "../utils/links";
+import { fbcGroups, verdictEntries } from "../utils/releaseDetail";
 
 const muted = { color: "var(--pf-t--global--text--color--subtle)" };
 const dash = <span style={muted}>–</span>;
@@ -94,7 +93,6 @@ export default function ReleasesOverview() {
 	if (!overviews) {
 		return (
 			<PageSection>
-				<Freshness />
 				<LoadError title="Could not load releases" onRetry={refetch}>
 					The server did not return the release list. Try again in a moment.
 				</LoadError>
@@ -113,7 +111,6 @@ export default function ReleasesOverview() {
 	if (overviewList.length === 0) {
 		return (
 			<PageSection>
-				<Freshness />
 				<EmptyState
 					icon={CubesIcon}
 					titleText="No releases yet"
@@ -141,18 +138,23 @@ export default function ReleasesOverview() {
 				alignItems={{ default: "alignItemsFlexEnd" }}
 				style={{ marginBottom: "1rem" }}
 			>
-				<div>
-					<Title headingLevel="h1" size="2xl">
-						Releases
-					</Title>
-					<Freshness />
-				</div>
-				<Switch
-					id="show-all-versions"
-					label="Show all versions"
-					isChecked={showAll}
-					onChange={(_e, on) => setShowAll(on)}
-				/>
+				<Title headingLevel="h1" size="2xl">
+					Releases
+				</Title>
+				<Flex
+					gap={{ default: "gapLg" }}
+					alignItems={{ default: "alignItemsCenter" }}
+				>
+					<Switch
+						id="show-all-versions"
+						label="Show all versions"
+						isChecked={showAll}
+						onChange={(_e, on) => setShowAll(on)}
+					/>
+					<OpenIn
+						items={[{ text: "ART pipelines", href: ART_PIPELINES_HEALTH_URL }]}
+					/>
+				</Flex>
 			</Flex>
 
 			{visible.length === 0 ? (
@@ -195,45 +197,6 @@ export default function ReleasesOverview() {
 				</Table>
 			)}
 		</PageSection>
-	);
-}
-
-/** The list's one place for freshness, as the release page has it. */
-function Freshness() {
-	const status = useSyncStatus();
-	const line = status && freshnessLine(status);
-	return (
-		<Flex
-			gap={{ default: "gapSm", md: "gapMd" }}
-			alignItems={{ default: "alignItemsCenter" }}
-			style={{
-				...muted,
-				fontSize: "var(--pf-t--global--font--size--sm)",
-				marginTop: "0.25rem",
-			}}
-		>
-			{line?.updated && <span>{line.updated}</span>}
-			{line?.stale && (
-				<Popover
-					headerContent="Sync problems"
-					bodyContent={<SyncProblems problems={line.problems} />}
-				>
-					<Button
-						variant="link"
-						isInline
-						size="sm"
-						icon={
-							<Icon status="warning" isInline>
-								<ExclamationTriangleIcon />
-							</Icon>
-						}
-						style={{ fontSize: "inherit" }}
-					>
-						{line.stale}
-					</Button>
-				</Popover>
-			)}
-		</Flex>
 	);
 }
 

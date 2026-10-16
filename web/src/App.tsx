@@ -18,7 +18,6 @@ import {
 	ToolbarItem,
 } from "@patternfly/react-core";
 import {
-	ExternalLinkAltIcon,
 	MoonIcon,
 	OutlinedQuestionCircleIcon,
 	SunIcon,
@@ -30,13 +29,11 @@ import {
 	Route,
 	Routes,
 	useLocation,
-	useMatch,
 } from "react-router-dom";
 import "@patternfly/react-core/dist/styles/base.css";
 import ErrorBoundary from "./components/ErrorBoundary";
 import SyncStatusWarning from "./components/SyncStatusWarning";
 import "./theme.css";
-import { ART_PIPELINES_HEALTH_URL } from "./utils/links";
 
 const ReleasesOverview = lazy(() => import("./pages/ReleasesOverview"));
 const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
@@ -79,10 +76,6 @@ function getInitialTheme(): Theme {
 
 function AppLayout({ children }: { children: React.ReactNode }) {
 	const [theme, setTheme] = useState<Theme>(getInitialTheme);
-	// The release list's and release page's freshness lines are their one
-	// place for sync state.
-	const releasePage = useMatch("/releases/:version");
-	const home = useMatch("/");
 
 	useEffect(() => {
 		const root = document.documentElement;
@@ -97,7 +90,8 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 	const toggleTheme = () => setTheme((t) => (t === "light" ? "dark" : "light"));
 
 	const header = (
-		<Masthead>
+		// Inline at every width, so phone width keeps the masthead on one row.
+		<Masthead display={{ default: "inline" }}>
 			<MastheadMain>
 				<MastheadBrand>
 					<a
@@ -119,22 +113,17 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 			<MastheadContent>
 				<Toolbar>
 					<ToolbarContent>
-						<ToolbarItem align={{ default: "alignEnd" }}>
-							{!releasePage && !home && <SyncStatusWarning />}
+						<ToolbarItem
+							align={{ default: "alignEnd" }}
+							visibility={{ default: "hidden", md: "visible" }}
+						>
+							<SyncStatusWarning />
 						</ToolbarItem>
-						<ToolbarItem>
-							<Button
-								component="a"
-								variant="plain"
-								href={ART_PIPELINES_HEALTH_URL}
-								target="_blank"
-								rel="noopener noreferrer"
-								aria-label="ART pipelines health (opens in a new tab)"
-								icon={<ExternalLinkAltIcon />}
-								iconPosition="end"
-							>
-								ART pipelines
-							</Button>
+						<ToolbarItem
+							align={{ default: "alignEnd" }}
+							visibility={{ default: "visible", md: "hidden" }}
+						>
+							<SyncStatusWarning compact />
 						</ToolbarItem>
 						<ToolbarItem>
 							<Popover

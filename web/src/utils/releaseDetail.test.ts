@@ -983,7 +983,7 @@ test("freshnessLine", () => {
 	// A source on its first pass has no age yet.
 	assert.deepEqual(freshnessLine({ problems: [], sources }), {
 		updated: "Updated 7 minutes ago",
-		stale: null,
+		oldest: sources[1].last_success,
 		problems: [],
 	});
 
@@ -1006,7 +1006,7 @@ test("freshnessLine", () => {
 		freshnessLine({ problems: [failing, stale, scans], sources }),
 		{
 			updated: "Updated 2 minutes ago",
-			stale: "Stale: ART build history, Shipment MRs",
+			oldest: sources[0].last_success,
 			problems: [failing, stale],
 		},
 	);
@@ -1021,12 +1021,16 @@ test("freshnessLine", () => {
 				{ source: "reconcile", last_success: ago(30) },
 			],
 		}),
-		{ updated: "Updated 7 minutes ago", stale: null, problems: [] },
+		{
+			updated: "Updated 7 minutes ago",
+			oldest: sources[1].last_success,
+			problems: [],
+		},
 	);
 
 	assert.deepEqual(freshnessLine({ problems: [], sources: [] }), {
 		updated: null,
-		stale: null,
+		oldest: null,
 		problems: [],
 	});
 });

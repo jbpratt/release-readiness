@@ -821,12 +821,12 @@ const NON_DATA = new Set(["retention", "reconcile"]);
 
 /**
  * How current the page's data is: when the least recent data source not
- * stale last succeeded, and the stale ones by name. CVE scans count only
- * while shown.
+ * stale last succeeded, that time, and the stale sources. CVE scans count
+ * only while shown.
  */
 export function freshnessLine(s: SyncStatus): {
 	updated: string | null;
-	stale: string | null;
+	oldest: string | null;
 	problems: SyncProblem[];
 } {
 	const shown = (x: { source: string }) =>
@@ -836,15 +836,11 @@ export function freshnessLine(s: SyncStatus): {
 	const last = s.sources
 		.filter((f) => shown(f) && !bad.has(f.source) && !NON_DATA.has(f.source))
 		.flatMap((f) => (f.last_success ? [Date.parse(f.last_success)] : []));
+	const oldest =
+		last.length > 0 ? new Date(Math.min(...last)).toISOString() : null;
 	return {
-		updated:
-			last.length > 0
-				? `Updated ${relative(new Date(Math.min(...last)).toISOString())}`
-				: null,
-		stale:
-			problems.length > 0
-				? `Stale: ${problems.map((p) => SOURCE_NAMES[p.source] ?? p.source).join(", ")}`
-				: null,
+		updated: oldest && `Updated ${relative(oldest)}`,
+		oldest,
 		problems,
 	};
 }

@@ -13,14 +13,10 @@ import {
 	DescriptionListDescription,
 	DescriptionListGroup,
 	DescriptionListTerm,
-	Dropdown,
-	DropdownItem,
-	DropdownList,
 	EmptyState,
 	EmptyStateBody,
 	ExpandableSection,
 	Flex,
-	FlexItem,
 	Form,
 	FormGroup,
 	FormHelperText,
@@ -32,7 +28,6 @@ import {
 	Label,
 	List,
 	ListItem,
-	MenuToggle,
 	Modal,
 	ModalBody,
 	ModalHeader,
@@ -48,7 +43,6 @@ import {
 	CheckCircleIcon,
 	CopyIcon,
 	ExclamationTriangleIcon,
-	ExternalLinkAltIcon,
 	InfoCircleIcon,
 	TimesCircleIcon,
 } from "@patternfly/react-icons";
@@ -61,7 +55,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { Link, type To, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
 	getCandidate,
 	getFBCTags,
@@ -78,6 +72,7 @@ import type {
 	ShipmentMR,
 } from "../api/types";
 import LoadError, { Loading, ReleaseNotFound } from "../components/LoadError";
+import OpenIn from "../components/OpenIn";
 import {
 	ExtLink,
 	external,
@@ -90,7 +85,7 @@ import {
 } from "../components/OperatorImages";
 import { ShipmentLabels } from "../components/ShipmentLabels";
 import { Status } from "../components/Status";
-import { SyncProblems, useSyncStatus } from "../components/SyncStatusWarning";
+import { useSyncStatus } from "../components/SyncStatusWarning";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
 import { type Blocker, blockers } from "../utils/blockers";
@@ -102,6 +97,7 @@ import {
 } from "../utils/fbcMatrix";
 import { days, due, relative } from "../utils/format";
 import {
+	ART_PIPELINES_HEALTH_URL,
 	artPipelineUrl,
 	formatReleaseName,
 	jiraIssueUrl,
@@ -124,7 +120,6 @@ import {
 	fbcTagsLead,
 	fbcTagsNote,
 	fbcUnstagedTitle,
-	freshnessLine,
 	issueLists,
 	type LeftOut,
 	noFbcText,
@@ -252,6 +247,14 @@ export default function ReleaseDetail() {
 					config?.konflux_namespace ?? "",
 					app,
 				)}
+				jira={
+					config?.jira_project
+						? jiraSearchUrl(
+								ticketsJql(config.jira_project, release.name),
+								config.jira_base_url,
+							)
+						: null
+				}
 				inputs={
 					pullspecs &&
 					!candidate.data?.shipped && (
@@ -285,7 +288,6 @@ export default function ReleaseDetail() {
 				issues={tickets}
 				error={ticketsError}
 				onRetry={refetchTickets}
-				version={version!}
 				config={config}
 				ticketKey={release.release_ticket_key}
 			/>
@@ -305,13 +307,10 @@ function DetailBreadcrumb({ name }: { name: string }) {
 }
 
 /**
- * How current the page's data is: when its sources last synced, the stale
- * ones (a popover with their problems), FBC reads and a prod Release still
- * in flight.
+ * The release's own status under its title: FBC reads and a prod Release
+ * still in flight. Sync state is the masthead's.
  */
 function Freshness({ data }: { data?: ReleaseCandidate }) {
-	const status = useSyncStatus();
-	const line = status && freshnessLine(status);
 	const read = data && readingLine(data.reading);
 	const prod = data?.candidate?.prod;
 	const prodLine = prod && releaseLine(prod);
@@ -325,27 +324,6 @@ function Freshness({ data }: { data?: ReleaseCandidate }) {
 				marginTop: "0.25rem",
 			}}
 		>
-			{line?.updated && <span>{line.updated}</span>}
-			{line?.stale && (
-				<Popover
-					headerContent="Sync problems"
-					bodyContent={<SyncProblems problems={line.problems} />}
-				>
-					<Button
-						variant="link"
-						isInline
-						size="sm"
-						icon={
-							<Icon status="warning" isInline>
-								<ExclamationTriangleIcon />
-							</Icon>
-						}
-						style={{ fontSize: "inherit" }}
-					>
-						{line.stale}
-					</Button>
-				</Popover>
-			)}
 			{read && <Status status={read.status}>{read.text}</Status>}
 			{prodLine && prodLine.status !== "done" && (
 				<span title={prod.name}>
@@ -434,45 +412,6 @@ function ReleaseFacts({
 	);
 }
 
-/** A card title with a link out on the right, hidden without an href. */
-function LinkedCardTitle({
-	href,
-	link,
-	children,
-}: {
-	href?: string | null;
-	link?: string;
-	children: ReactNode;
-}) {
-	return (
-		<CardTitle>
-			<Flex
-				justifyContent={{ default: "justifyContentSpaceBetween" }}
-				alignItems={{ default: "alignItemsCenter" }}
-			>
-				<FlexItem>{children}</FlexItem>
-				<Flex spaceItems={{ default: "spaceItemsSm" }}>
-					{href && (
-						<FlexItem>
-							<Button
-								component="a"
-								variant="secondary"
-								size="sm"
-								href={href}
-								{...external}
-								icon={<ExternalLinkAltIcon />}
-								iconPosition="end"
-							>
-								{link}
-							</Button>
-						</FlexItem>
-					)}
-				</Flex>
-			</Flex>
-		</CardTitle>
-	);
-}
-
 /**
  * The version's release candidate as its FBC matrix, or why it has none; a
  * shipped version's is labeled, with nothing to release. Its blockers are
@@ -486,6 +425,7 @@ function BuildsCard({
 	version,
 	issues,
 	konflux,
+	jira,
 	inputs,
 }: {
 	data?: ReleaseCandidate;
@@ -496,6 +436,8 @@ function BuildsCard({
 	issues: Placed[];
 	/** The version's application in the Konflux UI. */
 	konflux: string | null;
+	/** The version's tickets in Jira. */
+	jira: string | null;
 	/** The release command button. */
 	inputs?: ReactNode;
 }) {
@@ -519,6 +461,8 @@ function BuildsCard({
 										href: fbc ? sippyRunsUrl(version, fbcsBuilt(fbc)) : null,
 									},
 									{ text: "Konflux", href: konflux },
+									{ text: "Jira", href: jira },
+									{ text: "ART pipelines", href: ART_PIPELINES_HEALTH_URL },
 								]}
 							/>
 						</Flex>
@@ -556,63 +500,6 @@ function BuildsCard({
 				)}
 			</CardBody>
 		</Card>
-	);
-}
-
-/**
- * The places to open the candidate in, behind one toggle. An item with an
- * href opens it in a new tab, one with a to is a router link, and one with
- * neither is left out.
- */
-function OpenIn({
-	items,
-}: {
-	items: { text: string; href?: string | null; to?: To }[];
-}) {
-	const [open, setOpen] = useState(false);
-	return (
-		<Dropdown
-			isOpen={open}
-			onSelect={() => setOpen(false)}
-			onOpenChange={setOpen}
-			popperProps={{ position: "right" }}
-			toggle={(ref) => (
-				<MenuToggle
-					ref={ref}
-					variant="secondary"
-					size="sm"
-					isExpanded={open}
-					onClick={() => setOpen(!open)}
-				>
-					Open in
-				</MenuToggle>
-			)}
-		>
-			<DropdownList>
-				{items
-					.filter((i) => i.href || i.to)
-					.map(({ text, href, to }) =>
-						href ? (
-							<DropdownItem key={text} to={href} {...external}>
-								{text} {/* PF's own external icon shows only on hover. */}
-								<ExternalLinkAltIcon
-									style={{
-										marginInlineStart: "0.25rem",
-										color: "var(--pf-t--global--icon--color--subtle)",
-									}}
-								/>
-							</DropdownItem>
-						) : (
-							<DropdownItem
-								key={text}
-								component={(p) => <Link {...p} to={to ?? ""} />}
-							>
-								{text}
-							</DropdownItem>
-						),
-					)}
-			</DropdownList>
-		</Dropdown>
 	);
 }
 
@@ -1386,32 +1273,24 @@ function TicketsCard({
 	issues,
 	error,
 	onRetry,
-	version,
 	config,
 	ticketKey,
 }: {
 	issues?: JiraIssue[];
 	error?: Error;
 	onRetry: () => void;
-	version: string;
 	config?: DashboardConfig;
 	ticketKey?: string;
 }) {
 	const work = (issues ?? []).filter((i) => i.key !== ticketKey);
 	const hasIssues = work.length > 0;
-	const jira = config?.jira_project
-		? jiraSearchUrl(
-				ticketsJql(config.jira_project, version),
-				config.jira_base_url,
-			)
-		: null;
 
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
-			<LinkedCardTitle href={jira} link="Jira">
+			<CardTitle>
 				Tickets
 				{hasIssues && ` (${work.length})`}
-			</LinkedCardTitle>
+			</CardTitle>
 			<CardBody>
 				{hasIssues ? (
 					<IssuesTable issues={work} />
