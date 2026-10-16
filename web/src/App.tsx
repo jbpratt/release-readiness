@@ -18,6 +18,7 @@ import {
 	ToolbarItem,
 } from "@patternfly/react-core";
 import {
+	GithubIcon,
 	MoonIcon,
 	OutlinedQuestionCircleIcon,
 	SunIcon,
@@ -161,6 +162,18 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 								onClick={toggleTheme}
 							>
 								{theme === "light" ? <MoonIcon /> : <SunIcon />}
+							</Button>
+						</ToolbarItem>
+						<ToolbarItem>
+							<Button
+								variant="plain"
+								component="a"
+								href="https://github.com/quay/release-readiness"
+								target="_blank"
+								rel="noopener noreferrer"
+								aria-label="GitHub repository"
+							>
+								<GithubIcon />
 							</Button>
 						</ToolbarItem>
 					</ToolbarContent>
