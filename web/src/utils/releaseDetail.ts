@@ -1,5 +1,6 @@
 import type {
 	CIRun,
+	FBCBuild,
 	FBCCandidate,
 	FBCMember,
 	FBCTags,
@@ -17,6 +18,29 @@ import type {
 } from "../api/types";
 import { SHOW_CVES } from "./features.ts";
 import { relative } from "./format.ts";
+
+/** The candidate's build; a shipped version's candidate is labeled shipped. */
+const isCandidate = (b: FBCBuild) =>
+	b.state === "candidate" || b.state === "shipped";
+
+/**
+ * The CI drawer's builds: cell "<operator>@<ocp>"'s with a run, and its
+ * candidate's without one, the candidate's first; for "all", every build with
+ * a run.
+ */
+export function ciBuilds(builds: FBCBuild[], cell: string): FBCBuild[] {
+	const [operator, ocp] = cell.split("@");
+	// The API lists builds newest first; the sort is stable.
+	return builds
+		.filter((b) =>
+			cell === "all"
+				? b.runs.length > 0
+				: b.operator === operator &&
+					b.ocp === ocp &&
+					(b.runs.length > 0 || isCandidate(b)),
+		)
+		.sort((a, b) => Number(isCandidate(b)) - Number(isCandidate(a)));
+}
 
 // A "-nightly" segment, at the end or before a suffix like "-fips".
 const NIGHTLY = /-nightly(?=-|$)/;

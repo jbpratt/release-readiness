@@ -29,6 +29,7 @@ import {
 	Route,
 	Routes,
 	useLocation,
+	useSearchParams,
 } from "react-router-dom";
 import "@patternfly/react-core/dist/styles/base.css";
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -37,7 +38,6 @@ import "./theme.css";
 
 const ReleasesOverview = lazy(() => import("./pages/ReleasesOverview"));
 const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
-const ReleaseCI = lazy(() => import("./pages/ReleaseCI"));
 // Dev builds only: the condition is false in a production build, so the
 // mockups chunk is never emitted.
 const Mockups = import.meta.env.DEV ? lazy(() => import("./mockups")) : null;
@@ -172,6 +172,21 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 	return <Page masthead={header}>{children}</Page>;
 }
 
+/** The old CI page's links open the release page's CI drawer on their cell. */
+function CIRedirect() {
+	const [params] = useSearchParams();
+	const operator = params.get("operator");
+	const ocp = params.get("ocp");
+	const ci = operator && ocp ? `${operator}@${ocp}` : "all";
+	return (
+		<Navigate
+			to={{ pathname: "..", search: `ci=${ci}` }}
+			relative="path"
+			replace
+		/>
+	);
+}
+
 function AppRoutes() {
 	// Keyed on the path, so navigating away clears a caught error.
 	const { pathname } = useLocation();
@@ -187,7 +202,7 @@ function AppRoutes() {
 				<Routes>
 					<Route path="/" element={<ReleasesOverview />} />
 					<Route path="/releases/:version" element={<ReleaseDetail />} />
-					<Route path="/releases/:version/ci" element={<ReleaseCI />} />
+					<Route path="/releases/:version/ci" element={<CIRedirect />} />
 					<Route
 						path="/releases/:version/snapshots"
 						element={<Navigate to=".." relative="path" replace />}

@@ -13,6 +13,9 @@ import {
 	DescriptionListDescription,
 	DescriptionListGroup,
 	DescriptionListTerm,
+	Drawer,
+	DrawerContent,
+	DrawerContentBody,
 	EmptyState,
 	EmptyStateBody,
 	ExpandableSection,
@@ -48,16 +51,24 @@ import {
 	TimesCircleIcon,
 } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
-import { type CSSProperties, type ReactNode, useRef, useState } from "react";
+import {
+	type CSSProperties,
+	type ReactNode,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
 	getCandidate,
 	getFBCTags,
 	getRelease,
+	getReleaseCI,
 	listReleaseIssues,
 } from "../api/client";
 import type {
 	DashboardConfig,
+	FBCBuild,
 	FBCCandidate,
 	FBCMember,
 	JiraIssue,
@@ -130,6 +141,7 @@ import {
 	tknCommand,
 	verdictLine,
 } from "../utils/releaseDetail";
+import CIDrawer from "./ReleaseCI";
 
 /** A verdict item where it applies: a matrix cell, an operator's images, or neither. */
 type Placed = Issue & { cell?: string; card?: string };
@@ -152,6 +164,15 @@ function placeIssues(d: ReleaseCandidate, bs: Blocker[]): Placed[] {
 	});
 }
 
+/** Below PatternFly's lg breakpoint the CI drawer is the page's full width. */
+const fullWidthQuery = "(max-width: 991px)";
+const fullWidthDrawer = () => matchMedia(fullWidthQuery).matches;
+const onFullWidthDrawer = (on: () => void) => {
+	const m = matchMedia(fullWidthQuery);
+	m.addEventListener("change", on);
+	return () => m.removeEventListener("change", on);
+};
+
 export default function ReleaseDetail() {
 	const { version } = useParams<{ version: string }>();
 	const config = useConfig();
@@ -169,6 +190,10 @@ export default function ReleaseDetail() {
 	const candidate = useCachedFetch(`candidate:${version}`, () =>
 		getCandidate(version!),
 	);
+	const ci = useCachedFetch(`ci:${version}`, () => getReleaseCI(version!));
+	const [params, setParams] = useSearchParams();
+	const ciCell = params.get("ci");
+	const covered = useSyncExternalStore(onFullWidthDrawer, fullWidthDrawer);
 
 	if (!release && !releaseError) {
 		return (
@@ -219,70 +244,99 @@ export default function ReleaseDetail() {
 
 	return (
 		<PageSection>
-			<DetailBreadcrumb name={release.name} />
+			<Drawer isExpanded={!!ciCell} isInline position="end">
+				<DrawerContent
+					panelContent={
+						<CIDrawer
+							cell={ciCell}
+							builds={ci.data}
+							error={ci.error}
+							onRetry={ci.refetch}
+							onClose={() =>
+								setParams(
+									(prev) => {
+										const next = new URLSearchParams(prev);
+										next.delete("ci");
+										return next;
+									},
+									{ replace: true },
+								)
+							}
+						/>
+					}
+				>
+					{/* The open drawer covers the page below lg; hidden, it is out of the tab order too. */}
+					<DrawerContentBody
+						style={covered && ciCell ? { display: "none" } : undefined}
+					>
+						<DetailBreadcrumb name={release.name} />
 
-			<div style={{ marginBottom: "1rem" }}>
-				<Title headingLevel="h1" size="2xl">
-					{formatReleaseName(release.name)}
-				</Title>
-				<Freshness data={candidate.data} />
-			</div>
+						<div style={{ marginBottom: "1rem" }}>
+							<Title headingLevel="h1" size="2xl">
+								{formatReleaseName(release.name)}
+							</Title>
+							<Freshness data={candidate.data} />
+						</div>
 
-			<ReleaseFacts
-				release={release}
-				shipped={candidate.data?.shipped ?? release.released}
-				shipmentMR={release.shipment_mr}
-				jiraBaseUrl={config?.jira_base_url}
-				stage={candidate.data && sharedStage(candidate.data)}
-			/>
+						<ReleaseFacts
+							release={release}
+							shipped={candidate.data?.shipped ?? release.released}
+							shipmentMR={release.shipment_mr}
+							jiraBaseUrl={config?.jira_base_url}
+							stage={candidate.data && sharedStage(candidate.data)}
+						/>
 
-			<BuildsCard
-				data={candidate.data}
-				error={candidate.error}
-				onRetry={candidate.refetch}
-				version={xyz}
-				issues={issues ?? []}
-				konflux={konfluxUrl(
-					config?.konflux_ui_url ?? "",
-					config?.konflux_namespace ?? "",
-					app,
-				)}
-				jira={
-					config?.jira_project
-						? jiraSearchUrl(
-								ticketsJql(config.jira_project, release.name),
-								config.jira_base_url,
-							)
-						: null
-				}
-				inputs={
-					pullspecs &&
-					!candidate.data?.shipped && (
-						<ReleaseInputsButton>
-							<ReleaseInputs
-								app={app}
-								release={release.name}
-								version={xyz}
-								issues={tickets}
-								issuesError={ticketsError}
-								onRetry={refetchTickets}
-								jiraEnabled={config?.jira_enabled !== false}
-								ticketKey={release.release_ticket_key}
-								namespace={config?.konflux_namespace || "art-quay-tenant"}
-								dueDate={release.due_date}
-							/>
-						</ReleaseInputsButton>
-					)
-				}
-			/>
+						<BuildsCard
+							data={candidate.data}
+							error={candidate.error}
+							onRetry={candidate.refetch}
+							version={xyz}
+							issues={issues ?? []}
+							ci={ci.data}
+							konflux={konfluxUrl(
+								config?.konflux_ui_url ?? "",
+								config?.konflux_namespace ?? "",
+								app,
+							)}
+							jira={
+								config?.jira_project
+									? jiraSearchUrl(
+											ticketsJql(config.jira_project, release.name),
+											config.jira_base_url,
+										)
+									: null
+							}
+							inputs={
+								pullspecs &&
+								!candidate.data?.shipped && (
+									<ReleaseInputsButton>
+										<ReleaseInputs
+											app={app}
+											release={release.name}
+											version={xyz}
+											issues={tickets}
+											issuesError={ticketsError}
+											onRetry={refetchTickets}
+											jiraEnabled={config?.jira_enabled !== false}
+											ticketKey={release.release_ticket_key}
+											namespace={config?.konflux_namespace || "art-quay-tenant"}
+											dueDate={release.due_date}
+										/>
+									</ReleaseInputsButton>
+								)
+							}
+						/>
 
-			<TicketsCard
-				issues={tickets}
-				error={ticketsError}
-				onRetry={refetchTickets}
-				config={config}
-				ticketKey={release.release_ticket_key}
-			/>
+						<TicketsCard
+							issues={tickets}
+							error={ticketsError}
+							onRetry={refetchTickets}
+							config={config}
+							ticketKey={release.release_ticket_key}
+						/>
+					</DrawerContentBody>
+				</DrawerContent>
+			</Drawer>
 		</PageSection>
 	);
 }
@@ -420,6 +474,7 @@ function BuildsCard({
 	onRetry,
 	version,
 	issues,
+	ci,
 	konflux,
 	jira,
 	inputs,
@@ -430,6 +485,8 @@ function BuildsCard({
 	/** The version's X.Y.Z. */
 	version: string;
 	issues: Placed[];
+	/** The version's FBC builds and their CI runs. */
+	ci?: FBCBuild[];
 	/** The version's application in the Konflux UI. */
 	konflux: string | null;
 	/** The version's tickets in Jira. */
@@ -437,7 +494,6 @@ function BuildsCard({
 	/** The release command button. */
 	inputs?: ReactNode;
 }) {
-	const [params] = useSearchParams();
 	const fbc = data?.fbc_candidate;
 	return (
 		<Card style={{ marginBottom: "1.5rem" }}>
@@ -448,10 +504,7 @@ function BuildsCard({
 							{inputs}
 							<OpenIn
 								items={[
-									{
-										text: "CI history",
-										to: { pathname: "ci", search: params.toString() },
-									},
+									{ text: "CI history", to: { search: "ci=all" } },
 									{
 										text: "Sippy",
 										href: fbc ? sippyRunsUrl(version, fbcsBuilt(fbc)) : null,
@@ -489,7 +542,7 @@ function BuildsCard({
 					</LoadError>
 				) : fbc ? (
 					<>
-						<FbcMatrix data={data} fbc={fbc} issues={issues} />
+						<FbcMatrix data={data} fbc={fbc} issues={issues} ci={ci} />
 						<BundleImages
 							d={data}
 							version={version}
@@ -547,10 +600,12 @@ function FbcMatrix({
 	data,
 	fbc,
 	issues,
+	ci,
 }: {
 	data: ReleaseCandidate;
 	fbc: FBCCandidate;
 	issues: Placed[];
+	ci?: FBCBuild[];
 }) {
 	const narrow = useNarrow();
 	const [params, setParams] = useSearchParams();
@@ -575,6 +630,16 @@ function FbcMatrix({
 	const at = (d: string, a: string) =>
 		cells.get(narrow ? `${a}@${d}` : `${d}@${a}`);
 	const picked = params.get("cell");
+	// CI runs on a cell's builds other than its FBC, for its detail's link.
+	const others = (r: FbcRow) =>
+		(ci ?? [])
+			.filter(
+				(b) =>
+					b.operator === r.operator &&
+					b.ocp === r.ocp &&
+					b.digest !== r.fbc?.digest,
+			)
+			.reduce((n, b) => n + b.runs.length, 0);
 	const select = (key: string | null) =>
 		setParams(
 			(prev) => {
@@ -638,6 +703,7 @@ function FbcMatrix({
 											<MatrixCell
 												cell={c}
 												issues={issues.filter((x) => x.cell === key)}
+												others={others(c.row)}
 												green={staged ? "built and staged" : "built"}
 												open={picked === key}
 												position={
@@ -716,6 +782,7 @@ const cellIcons = {
 function MatrixCell({
 	cell: { row, stream, problem },
 	issues,
+	others,
 	green,
 	open,
 	position,
@@ -724,6 +791,7 @@ function MatrixCell({
 }: {
 	cell: Cell;
 	issues: Issue[];
+	others: number;
 	green: string;
 	open: boolean;
 	position: PopoverProps["position"];
@@ -765,7 +833,7 @@ function MatrixCell({
 				bodyContent={
 					<div style={{ display: "grid", gap: "0.75rem" }}>
 						{issues.length > 0 && <IssueNotes issues={issues} />}
-						<FbcDetail row={row} stream={stream} />
+						<FbcDetail row={row} stream={stream} others={others} />
 					</div>
 				}
 			>
@@ -800,7 +868,15 @@ function Failed({ children }: { children: ReactNode }) {
  * One FBC, check by check; each row says what is absent when it is. Without
  * one, only the check it fails: Built, or Staged under the stream's build.
  */
-function FbcDetail({ row, stream }: { row: FbcRow; stream: FBCMember | null }) {
+function FbcDetail({
+	row,
+	stream,
+	others,
+}: {
+	row: FbcRow;
+	stream: FBCMember | null;
+	others: number;
+}) {
 	const f = row.fbc;
 	const built = f ?? stream;
 	return (
@@ -835,14 +911,25 @@ function FbcDetail({ row, stream }: { row: FbcRow; stream: FBCMember | null }) {
 					</DetailLine>
 				)
 			) : (
-				<FbcChecks row={row} f={f} />
+				<FbcChecks row={row} f={f} others={others} />
 			)}
 		</dl>
 	);
 }
 
-/** A built FBC's checks after Built. */
-function FbcChecks({ row, f }: { row: FbcRow; f: FBCMember }) {
+/**
+ * A built FBC's checks after Built; with CI runs on the cell's other builds,
+ * a link opening them in the CI drawer.
+ */
+function FbcChecks({
+	row,
+	f,
+	others,
+}: {
+	row: FbcRow;
+	f: FBCMember;
+	others: number;
+}) {
 	const unread = row.flags.find((x) => x.text === "can't read");
 	const older = row.flags.find((x) => x.text.startsWith("holds an older"));
 	const bundle = row.images.find((i) => i.nvr === f.head_bundle_nvr);
@@ -898,7 +985,7 @@ function FbcChecks({ row, f }: { row: FbcRow; f: FBCMember }) {
 			</DetailLine>
 			<DetailLine label="CI">
 				{row.runs.length === 0
-					? none("No runs")
+					? none(others > 0 ? "No runs on this build" : "No runs")
 					: row.runs.map((p) => {
 							const r = runResult(p.state);
 							const link = (
@@ -921,6 +1008,16 @@ function FbcChecks({ row, f }: { row: FbcRow; f: FBCMember }) {
 								</div>
 							);
 						})}
+				{others > 0 && (
+					<div>
+						<Link
+							to={`?ci=${row.operator}@${row.ocp}`}
+							style={{ display: "inline-block", padding: "4px 0" }}
+						>
+							{others} run{others === 1 ? "" : "s"} on other builds
+						</Link>
+					</div>
+				)}
 			</DetailLine>
 		</>
 	);

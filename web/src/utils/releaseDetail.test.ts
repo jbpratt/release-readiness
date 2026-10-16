@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type {
 	CIJob,
+	FBCBuild,
 	FBCCandidate,
 	FBCMember,
 	FBCTag,
@@ -17,6 +18,7 @@ import type {
 import {
 	artGroup,
 	bundleBuilt,
+	ciBuilds,
 	compareVersions,
 	fbcGroups,
 	fbcNewerTitle,
@@ -1253,4 +1255,40 @@ test("sharedStage: the one stage Release every operator holds, else null", () =>
 test("stamp: a stage Release's name by its timestamp, else the name", () => {
 	assert.equal(stamp("quay-3-18-fbc-stage-20261007200215"), "Oct 7 20:02 UTC");
 	assert.equal(stamp("quay-3-18-fbc-stage"), "quay-3-18-fbc-stage");
+});
+
+test("ciBuilds: a cell's builds with runs and its candidate, the candidate first; all, every build with a run", () => {
+	const build = (
+		nvr: string,
+		ocp: string,
+		state: FBCBuild["state"],
+		runs: number,
+	): FBCBuild => ({
+		operator: "quay-operator",
+		ocp,
+		nvr,
+		digest: "",
+		built_at: null,
+		state,
+		runs: Array.from({ length: runs }, () => ({
+			job: "j",
+			state: "success",
+			started_at: "",
+			prow_url: "",
+		})),
+	});
+	// Newest first, as the API lists them.
+	const builds = [
+		build("newer", "4.22", "", 1),
+		build("bare", "4.22", "", 0),
+		build("candidate", "4.22", "candidate", 0),
+		build("older", "4.22", "staged", 2),
+		build("other", "4.21", "", 1),
+		build("shipped", "4.21", "shipped", 0),
+	];
+	const nvrs = (cell: string) => ciBuilds(builds, cell).map((b) => b.nvr);
+	assert.deepEqual(nvrs("quay-operator@4.22"), ["candidate", "newer", "older"]);
+	assert.deepEqual(nvrs("all"), ["newer", "older", "other"]);
+	assert.deepEqual(nvrs("quay-operator@4.21"), ["shipped", "other"]);
+	assert.deepEqual(nvrs("container-security-operator@4.22"), []);
 });
