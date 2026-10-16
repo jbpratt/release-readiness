@@ -6,7 +6,6 @@ import {
 	EmptyStateFooter,
 	Flex,
 	Icon,
-	Label,
 	PageSection,
 	Popover,
 	Spinner,
@@ -22,13 +21,13 @@ import {
 	TimesCircleIcon,
 } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getCandidate, listReleasesOverview } from "../api/client";
 import type { ReleaseCandidate, ReleaseOverview } from "../api/types";
 import LoadError, { Loading } from "../components/LoadError";
 import { ExtLink, external } from "../components/OperatorImages";
-import { ShipmentLabels } from "../components/ShipmentLabels";
+import { ShipmentLink } from "../components/ShipmentLabels";
 import { SyncProblems, useSyncStatus } from "../components/SyncStatusWarning";
 import { useCachedFetch } from "../hooks/useCachedFetch";
 import { useConfig } from "../hooks/useConfig";
@@ -52,6 +51,20 @@ const dash = <span style={muted}>–</span>;
 
 const releasePath = (name: string) => `/releases/${encodeURIComponent(name)}`;
 
+// PatternFly's md breakpoint: narrower, six columns no longer fit.
+const narrowQuery = "(max-width: 768px)";
+
+function useNarrow() {
+	const [narrow, setNarrow] = useState(() => matchMedia(narrowQuery).matches);
+	useEffect(() => {
+		const m = matchMedia(narrowQuery);
+		const on = () => setNarrow(m.matches);
+		m.addEventListener("change", on);
+		return () => m.removeEventListener("change", on);
+	}, []);
+	return narrow;
+}
+
 export default function ReleasesOverview() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const showAll = searchParams.get("all") === "1";
@@ -68,6 +81,7 @@ export default function ReleasesOverview() {
 		error,
 		refetch,
 	} = useCachedFetch("releasesOverview", listReleasesOverview);
+	const narrow = useNarrow();
 
 	if (!overviews && !error) {
 		return (
@@ -156,20 +170,26 @@ export default function ReleasesOverview() {
 					</EmptyStateFooter>
 				</EmptyState>
 			) : (
-				<Table aria-label="Releases" variant="compact" gridBreakPoint="grid-md">
+				<Table aria-label="Releases" variant="compact" gridBreakPoint="">
 					<Thead>
-						<Tr>
-							<Th>Release</Th>
-							<Th>Target</Th>
-							<Th>Release candidate</Th>
-							<Th>Shipment</Th>
-							<Th>Ticket</Th>
-							<Th>Assignee</Th>
-						</Tr>
+						{narrow ? (
+							<Tr>
+								<Th>Release</Th>
+							</Tr>
+						) : (
+							<Tr>
+								<Th>Release</Th>
+								<Th>Target</Th>
+								<Th>Release candidate</Th>
+								<Th>Shipment</Th>
+								<Th>Ticket</Th>
+								<Th>Assignee</Th>
+							</Tr>
+						)}
 					</Thead>
 					<Tbody>
 						{visible.map((ov) => (
-							<ReleaseRow key={ov.release.name} ov={ov} />
+							<ReleaseRow key={ov.release.name} ov={ov} narrow={narrow} />
 						))}
 					</Tbody>
 				</Table>
@@ -217,8 +237,11 @@ function Freshness() {
 	);
 }
 
-/** One release's facts in a row, its candidate read from the release page's API. */
-function ReleaseRow({ ov }: { ov: ReleaseOverview }) {
+/**
+ * One release's facts in a row, its candidate read from the release page's
+ * API. Narrow, the row is two lines: version and candidate, then the rest.
+ */
+function ReleaseRow({ ov, narrow }: { ov: ReleaseOverview; narrow: boolean }) {
 	const config = useConfig();
 	const r = ov.release;
 	const candidate = useCachedFetch(`candidate:${r.name}`, () =>
@@ -243,57 +266,103 @@ function ReleaseRow({ ov }: { ov: ReleaseOverview }) {
 					? "Due today"
 					: `Due in ${days(dueDate.days)}`
 				: null;
+	const name = (
+		<>
+			<Link to={releasePath(r.name)} style={{ fontWeight: 600 }}>
+				{formatReleaseName(r.name)}
+			</Link>
+			{/* What blocks it, for screen readers only: no visible verdict. */}
+			<span role="status" className="pf-v6-screen-reader">
+				{blockerCount > 0 &&
+					`${formatReleaseName(r.name)}: ${blockerCount} blocker${blockerCount === 1 ? "" : "s"}`}
+			</span>
+		</>
+	);
+	const targetDate = (
+		<span style={{ whiteSpace: "nowrap" }}>
+			{dueDate?.date ?? <span style={muted}>TBD</span>}
+			{flag && <Flag text={flag} />}
+		</span>
+	);
+	const candidateCell = (
+		<CandidateCell ov={ov} data={candidate.data} error={candidate.error} />
+	);
+	const shipment = ov.shipment_mr && (
+		<ShipmentLink mr={ov.shipment_mr} shipped={shipped} />
+	);
+	const ticketLink = ticket && (
+		<ExtLink
+			href={jiraIssueUrl(
+				ticket,
+				config?.jira_base_url || "https://redhat.atlassian.net",
+			)}
+			icon
+		>
+			{ticket}
+		</ExtLink>
+	);
+	const assignee = r.release_ticket_assignee || (
+		<span style={muted}>Unassigned</span>
+	);
+	if (narrow)
+		return (
+			<Tr>
+				<Td dataLabel="Release">
+					<Flex
+						columnGap={{ default: "columnGapMd" }}
+						flexWrap={{ default: "nowrap" }}
+						alignItems={{ default: "alignItemsBaseline" }}
+					>
+						<span style={{ whiteSpace: "nowrap" }}>{name}</span>
+						<span style={{ minWidth: 0 }}>{candidateCell}</span>
+					</Flex>
+					<Flex
+						columnGap={{ default: "columnGapMd" }}
+						rowGap={{ default: "rowGapXs" }}
+						alignItems={{ default: "alignItemsCenter" }}
+						style={{
+							fontSize: "var(--pf-t--global--font--size--sm)",
+							marginTop: "0.25rem",
+						}}
+					>
+						{targetDate}
+						<span style={{ whiteSpace: "nowrap" }}>
+							{ticketLink || <span style={muted}>No ticket</span>}
+						</span>
+						<span style={{ whiteSpace: "nowrap" }}>{assignee}</span>
+						{shipment}
+					</Flex>
+				</Td>
+			</Tr>
+		);
 	return (
 		<Tr>
-			<Td dataLabel="Release">
-				<Link to={releasePath(r.name)} style={{ fontWeight: 600 }}>
-					{formatReleaseName(r.name)}
-				</Link>
-				{/* What blocks it, for screen readers only: no visible verdict. */}
-				<span role="status" className="pf-v6-screen-reader">
-					{blockerCount > 0 &&
-						`${formatReleaseName(r.name)}: ${blockerCount} blocker${blockerCount === 1 ? "" : "s"}`}
-				</span>
-			</Td>
-			<Td dataLabel="Target">
-				<span style={{ whiteSpace: "nowrap" }}>
-					{dueDate?.date ?? <span style={muted}>TBD</span>}
-					{flag && (
-						<Label status="warning" isCompact style={{ marginLeft: "0.5rem" }}>
-							{flag}
-						</Label>
-					)}
-				</span>
-			</Td>
-			<Td dataLabel="Release candidate">
-				<CandidateCell ov={ov} data={candidate.data} error={candidate.error} />
-			</Td>
-			<Td dataLabel="Shipment">
-				{ov.shipment_mr ? (
-					<ShipmentLabels mr={ov.shipment_mr} shipped={shipped} />
-				) : (
-					dash
-				)}
-			</Td>
-			<Td dataLabel="Ticket">
-				{ticket ? (
-					<ExtLink
-						href={jiraIssueUrl(
-							ticket,
-							config?.jira_base_url || "https://redhat.atlassian.net",
-						)}
-						icon
-					>
-						{ticket}
-					</ExtLink>
-				) : (
-					dash
-				)}
-			</Td>
-			<Td dataLabel="Assignee">
-				{r.release_ticket_assignee || <span style={muted}>Unassigned</span>}
-			</Td>
+			<Td dataLabel="Release">{name}</Td>
+			<Td dataLabel="Target">{targetDate}</Td>
+			<Td dataLabel="Release candidate">{candidateCell}</Td>
+			<Td dataLabel="Shipment">{shipment || dash}</Td>
+			<Td dataLabel="Ticket">{ticketLink || dash}</Td>
+			<Td dataLabel="Assignee">{assignee}</Td>
 		</Tr>
+	);
+}
+
+/** A due flag as a warning icon and its words, no filled label. */
+function Flag({ text }: { text: string }) {
+	return (
+		<span
+			style={{
+				marginLeft: "0.5rem",
+				display: "inline-flex",
+				gap: "0.25rem",
+				alignItems: "center",
+			}}
+		>
+			<Icon status="warning" isInline>
+				<ExclamationTriangleIcon />
+			</Icon>
+			{text}
+		</span>
 	);
 }
 
@@ -329,7 +398,7 @@ const severityWords: Partial<Record<Tone, string>> = {
 
 /**
  * The candidate as one icon and a few words linking the release page: its
- * first blocker or warning, else how many of its FBCs are green.
+ * first blocker or warning and who owns it, else how many of its FBCs are green.
  */
 function CandidateCell({
 	ov,
@@ -348,18 +417,23 @@ function CandidateCell({
 			<Spinner size="sm" aria-label="Loading the release candidate" />
 		);
 	const fbc = data.fbc_candidate;
-	if (!fbc)
-		return data.reason === "not a concrete quay-vX.Y.Z version" ? (
-			<Tooltip content="Only Quay versions have FBC builds">
+	if (!fbc) {
+		const [label, tip] =
+			data.reason === "not a concrete quay-vX.Y.Z version"
+				? ["Not expected", "Only Quay versions have FBC builds"]
+				: data.shipped
+					? ["No FBC data", "No FBC data: this version has shipped"]
+					: ["No FBCs yet", "No FBCs yet: ART has not built one"];
+		return (
+			<Tooltip content={tip}>
 				{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows its tooltip. */}
 				<span tabIndex={0} style={muted}>
 					<span aria-hidden="true">–</span>
-					<span className="pf-v6-screen-reader">Not expected</span>
+					<span className="pf-v6-screen-reader">{label}</span>
 				</span>
 			</Tooltip>
-		) : (
-			<span style={muted}>No FBCs yet</span>
 		);
+	}
 	const staged = fbc.source !== "stream";
 	const cells = fbcGroups(data).flatMap((g) =>
 		g.rows.map((row) => {
@@ -367,18 +441,26 @@ function CandidateCell({
 			return { row, stream, problem: cellProblem(row, staged, stream) };
 		}),
 	);
-	const s = candidateSummary(
-		cells,
-		blockers(
-			data,
-			ov.release.name,
-			ov.release.konflux_application ?? "",
-			config,
-		),
+	const bs = blockers(
+		data,
+		ov.release.name,
+		ov.release.konflux_application ?? "",
+		config,
 	);
+	const s = candidateSummary(cells, bs);
+	// Who acts on the gap the words name: the first blocker's, else warning's, owner.
+	const owner = (
+		bs.find((b) => b.level === "blocker") ??
+		bs.find((b) => b.level === "warning")
+	)?.owner;
 	return (
 		<span
-			style={{ display: "inline-flex", gap: "0.5rem", alignItems: "center" }}
+			style={{
+				display: "inline-flex",
+				flexWrap: "wrap",
+				columnGap: "0.5rem",
+				alignItems: "center",
+			}}
 		>
 			{toneIcons[s.tone]}
 			<Tooltip content={s.all}>
@@ -392,6 +474,13 @@ function CandidateCell({
 					)}
 				</Link>
 			</Tooltip>
+			{owner && (
+				<span style={muted}>
+					<span aria-hidden="true">· </span>
+					<span className="pf-v6-screen-reader">Owner: </span>
+					{owner}
+				</span>
+			)}
 		</span>
 	);
 }
