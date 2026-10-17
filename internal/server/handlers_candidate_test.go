@@ -19,6 +19,7 @@ import (
 	"github.com/quay/release-readiness/internal/fbc"
 	"github.com/quay/release-readiness/internal/model"
 	"github.com/quay/release-readiness/internal/prow"
+	"github.com/quay/release-readiness/internal/release"
 	"github.com/quay/release-readiness/internal/scan"
 )
 
@@ -499,8 +500,9 @@ func TestGetCandidateNone(t *testing.T) {
 		_, _ = w.Write([]byte(`{"total":1,"data":[{"repositories":[{"published":true,"tags":[{"name":"v3.18.3"}]}]}]}`))
 	}))
 	defer cat.Close()
-	srv.shipped = catalog.NewShipped(catalog.NewClient(cat.URL, cat.Client()), slog.Default())
-	srv.shipped.Refresh(t.Context())
+	shipped := catalog.NewShipped(catalog.NewClient(cat.URL, cat.Client()), slog.Default())
+	shipped.Refresh(t.Context())
+	srv.selector = release.NewSelector(srv.db, shipped)
 	for _, v := range []model.ReleaseVersion{
 		{Name: "quay-v3.18.0", KonfluxApplication: "quay-3-18", Released: true},
 		{Name: "quay-v3.18.3", KonfluxApplication: "quay-3-18"},
@@ -600,8 +602,9 @@ func TestGetCandidateShipped(t *testing.T) {
 					_, _ = w.Write([]byte(`{"total":1,"data":[{"repositories":[{"published":true,"tags":[{"name":"v3.18.1"}]}]}]}`))
 				}))
 				defer cat.Close()
-				srv.shipped = catalog.NewShipped(catalog.NewClient(cat.URL, cat.Client()), slog.Default())
-				srv.shipped.Refresh(t.Context())
+				shipped := catalog.NewShipped(catalog.NewClient(cat.URL, cat.Client()), slog.Default())
+				shipped.Refresh(t.Context())
+				srv.selector = release.NewSelector(srv.db, shipped)
 			}
 			// Reading counts the shipped FBCs, not a newer one only the stream
 			// built, which RR has yet to read.

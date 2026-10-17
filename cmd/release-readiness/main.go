@@ -27,6 +27,7 @@ import (
 	"github.com/quay/release-readiness/internal/kube"
 	"github.com/quay/release-readiness/internal/prow"
 	"github.com/quay/release-readiness/internal/reconcile"
+	"github.com/quay/release-readiness/internal/release"
 	"github.com/quay/release-readiness/internal/scan"
 	"github.com/quay/release-readiness/internal/server"
 	"github.com/quay/release-readiness/internal/shipment"
@@ -255,7 +256,8 @@ func main() {
 		})
 	}
 
-	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, shipped, status, logger)
+	selector := release.NewSelector(database, shipped)
+	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, selector, status, logger)
 	srv.StageReleasePlanPattern = stagePlans
 	srv.KonfluxUIURL = *konfluxUIURL
 	srv.KonfluxNamespace = *namespace
@@ -268,7 +270,7 @@ func main() {
 	if *gitlabURL != "" {
 		logger.Info("shipment MR sync enabled", "url", *gitlabURL, "project", *shipmentProject, "token", *gitlabToken != "", "interval", *gitlabPollInterval)
 		client := shipment.NewClient(*gitlabURL, *buildDataURL, *shipmentProject, *gitlabToken, &http.Client{Timeout: time.Minute})
-		syncer := shipment.NewSyncer(client, database, srv.ShipmentVersions, logger.With("component", "shipment-mrs"))
+		syncer := shipment.NewSyncer(client, database, selector.ShipmentVersions, logger.With("component", "shipment-mrs"))
 		syncer.Status = status.Track("shipment-mrs", *gitlabPollInterval)
 		wg.Go(func() { syncer.Run(ctx, *gitlabPollInterval) })
 	}

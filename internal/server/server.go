@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/quay/release-readiness/internal/artfbc"
-	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
+	"github.com/quay/release-readiness/internal/release"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
@@ -21,7 +21,7 @@ type Server struct {
 	jiraBaseURL string
 	jiraProject string
 	artBaseURL  string
-	shipped     *catalog.Shipped
+	selector    *release.Selector
 	syncStatus  *syncstatus.Registry
 	// StageReleasePlanPattern matches the ReleasePlan names whose Releases
 	// are image STAGE; nil selects no staged build.
@@ -34,10 +34,9 @@ type Server struct {
 	ArtFBC *artfbc.Client
 }
 
-// New builds the server. A nil shipped leaves JIRA's released flag as the only
-// shipped signal.
-func New(database *db.DB, addr, jiraBaseURL, jiraProject, artBaseURL string, shipped *catalog.Shipped, syncStatus *syncstatus.Registry, logger *slog.Logger) *Server {
-	s := &Server{db: database, logger: logger, jiraBaseURL: jiraBaseURL, jiraProject: jiraProject, artBaseURL: artBaseURL, shipped: shipped, syncStatus: syncStatus}
+// New builds the server.
+func New(database *db.DB, addr, jiraBaseURL, jiraProject, artBaseURL string, selector *release.Selector, syncStatus *syncstatus.Registry, logger *slog.Logger) *Server {
+	s := &Server{db: database, logger: logger, jiraBaseURL: jiraBaseURL, jiraProject: jiraProject, artBaseURL: artBaseURL, selector: selector, syncStatus: syncStatus}
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)
 

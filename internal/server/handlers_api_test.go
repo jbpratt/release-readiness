@@ -15,6 +15,7 @@ import (
 	"github.com/quay/release-readiness/internal/catalog"
 	"github.com/quay/release-readiness/internal/db"
 	"github.com/quay/release-readiness/internal/model"
+	"github.com/quay/release-readiness/internal/release"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
@@ -29,7 +30,7 @@ func setupTestServer(t *testing.T) *Server {
 		_ = database.Close()
 		_ = os.Remove(dbPath)
 	})
-	return New(database, ":0", "https://redhat.atlassian.net", "PROJQUAY", "https://art.example", nil, syncstatus.New(), slog.Default())
+	return New(database, ":0", "https://redhat.atlassian.net", "PROJQUAY", "https://art.example", release.NewSelector(database, nil), syncstatus.New(), slog.Default())
 }
 
 func TestHealthEndpoint(t *testing.T) {
@@ -488,8 +489,9 @@ func TestReleasesOverviewShipped(t *testing.T) {
 		_, _ = w.Write([]byte(`{"total":1,"data":[{"repositories":[{"published":true,"tags":[{"name":"v3.17.5"}]}]}]}`))
 	}))
 	defer cat.Close()
-	srv.shipped = catalog.NewShipped(catalog.NewClient(cat.URL, cat.Client()), slog.Default())
-	srv.shipped.Refresh(ctx)
+	shipped := catalog.NewShipped(catalog.NewClient(cat.URL, cat.Client()), slog.Default())
+	shipped.Refresh(ctx)
+	srv.selector = release.NewSelector(srv.db, shipped)
 
 	for _, rv := range []model.ReleaseVersion{
 		{Name: "quay-v3.17.5", KonfluxApplication: "quay-3-17"},
@@ -519,8 +521,6 @@ func TestReleasesOverviewShipped(t *testing.T) {
 		t.Errorf("overviews: got %d, want %d", len(overviews), len(want))
 	}
 
-	// Released before ART merged its MR: still polled until the MR leaves
-	// opened. Shipped with a merged MR: not polled.
 	for _, mr := range []model.ShipmentMR{
 		{Version: "quay-v3.18.0", IID: 1, State: "opened", Source: "pointer"},
 		{Version: "quay-v3.17.5", IID: 2, State: "merged", Source: "pointer"},
@@ -528,13 +528,6 @@ func TestReleasesOverviewShipped(t *testing.T) {
 		if err := srv.db.UpsertShipmentMR(ctx, &mr); err != nil {
 			t.Fatalf("upsert shipment MR: %v", err)
 		}
-	}
-	polled, err := srv.ShipmentVersions(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := []string{"quay-v3.17.6", "quay-v3.18.0", "quay-v3.18.1"}; !slices.Equal(polled, want) {
-		t.Errorf("polled %v, want %v", polled, want)
 	}
 
 	getJSON(t, srv, "/api/v1/releases/overview", http.StatusOK, &overviews)
