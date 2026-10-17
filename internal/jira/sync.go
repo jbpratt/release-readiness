@@ -67,10 +67,25 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 
 	s.logger.Info("discovered active releases", "count", len(releases))
 
-	// A failed fetch leaves versions nil: each lookup misses as a missing version would.
-	versions, err := s.client.ListVersions(ctx)
-	if err != nil {
-		s.logger.Warn("list versions", "error", err)
+	versions, versionsErr := s.client.ListVersions(ctx)
+	if versionsErr != nil {
+		s.logger.Error("list versions", "error", versionsErr)
+		pass.Add(fmt.Errorf("list versions: %w", versionsErr))
+		// Stand in the stored flags so this pass does not zero them.
+		stored, err := s.store.ListAllReleaseVersions(ctx)
+		if err != nil {
+			s.logger.Error("list db versions", "error", err)
+			pass.Add(fmt.Errorf("list db versions: %w", err))
+			return
+		}
+		versions = make(map[string]VersionField, len(stored))
+		for _, v := range stored {
+			vf := VersionField{Name: v.Name, Released: v.Released, Archived: v.Archived}
+			if v.ReleaseDate != nil {
+				vf.ReleaseDate = v.ReleaseDate.Format(time.DateOnly)
+			}
+			versions[v.Name] = vf
+		}
 	}
 
 	activeSet := make(map[string]bool, len(releases))
@@ -89,7 +104,9 @@ func (s *Syncer) SyncOnce(ctx context.Context) {
 		versionInfo, ok := versions[rel.FixVersion]
 		if !ok {
 			// A fixVersion missing from JIRA is a data problem on one ticket, not sync health.
-			s.logger.Warn("version not found in project", "version", rel.FixVersion)
+			if versionsErr == nil {
+				s.logger.Warn("version not found in project", "version", rel.FixVersion)
+			}
 		} else {
 			rv.Released = versionInfo.Released
 			rv.Archived = versionInfo.Archived
