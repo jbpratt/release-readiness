@@ -57,14 +57,18 @@ func New(database *db.DB, addr, jiraBaseURL, jiraProject, artBaseURL string, shi
 }
 
 func (s *Server) Run(ctx context.Context) error {
+	// Buffered so the goroutine never blocks once Run has stopped receiving.
+	errc := make(chan error, 1)
 	go func() {
 		s.logger.Info("listening", "addr", s.http.Addr)
-		if err := s.http.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			s.logger.Error("server error", "error", err)
-		}
+		errc <- s.http.ListenAndServe()
 	}()
 
-	<-ctx.Done()
+	select {
+	case err := <-errc:
+		return fmt.Errorf("listen: %w", err)
+	case <-ctx.Done():
+	}
 	s.logger.Info("shutting down")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
