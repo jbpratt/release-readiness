@@ -1,5 +1,6 @@
 // Package release decides which release versions are shipped and which are
-// still in play, for the server and the sync loops alike.
+// still in play, and assembles each version's release candidate and verdict,
+// for the server and the sync loops alike.
 package release
 
 import (
@@ -18,6 +19,11 @@ var quayVersion = regexp.MustCompile(`^quay-v(\d+\.\d+\.\d+)$`)
 type Selector struct {
 	db      *db.DB
 	shipped *catalog.Shipped
+	// ArtBaseURL is the ART build history the build pages link to.
+	ArtBaseURL string
+	// StageReleasePlanPattern matches the ReleasePlan names whose Releases
+	// are image STAGE; nil selects no staged build.
+	StageReleasePlanPattern *regexp.Regexp
 }
 
 // NewSelector builds the selector. A nil shipped leaves JIRA's released flag

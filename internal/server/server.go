@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"regexp"
 	"time"
 
 	"github.com/quay/release-readiness/internal/artfbc"
@@ -20,12 +19,8 @@ type Server struct {
 	logger      *slog.Logger
 	jiraBaseURL string
 	jiraProject string
-	artBaseURL  string
 	selector    *release.Selector
 	syncStatus  *syncstatus.Registry
-	// StageReleasePlanPattern matches the ReleasePlan names whose Releases
-	// are image STAGE; nil selects no staged build.
-	StageReleasePlanPattern *regexp.Regexp
 	// KonfluxUIURL and KonfluxNamespace locate the Konflux UI pages the web
 	// links to; an empty URL links none.
 	KonfluxUIURL, KonfluxNamespace string
@@ -35,8 +30,8 @@ type Server struct {
 }
 
 // New builds the server.
-func New(database *db.DB, addr, jiraBaseURL, jiraProject, artBaseURL string, selector *release.Selector, syncStatus *syncstatus.Registry, logger *slog.Logger) *Server {
-	s := &Server{db: database, logger: logger, jiraBaseURL: jiraBaseURL, jiraProject: jiraProject, artBaseURL: artBaseURL, selector: selector, syncStatus: syncStatus}
+func New(database *db.DB, addr, jiraBaseURL, jiraProject string, selector *release.Selector, syncStatus *syncstatus.Registry, logger *slog.Logger) *Server {
+	s := &Server{db: database, logger: logger, jiraBaseURL: jiraBaseURL, jiraProject: jiraProject, selector: selector, syncStatus: syncStatus}
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)
 

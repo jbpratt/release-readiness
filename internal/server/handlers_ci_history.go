@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/quay/release-readiness/internal/model"
+	"github.com/quay/release-readiness/internal/release"
 )
 
 // handleGetReleaseCI serves the version's ART FBC builds, newest first, each
@@ -29,9 +30,9 @@ func (s *Server) handleGetReleaseCI(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, builds)
 }
 
-func (s *Server) releaseCI(ctx context.Context, release *model.ReleaseVersion) ([]model.FBCBuild, error) {
-	app := release.KonfluxApplication
-	m := quayVersion.FindStringSubmatch(release.Name)
+func (s *Server) releaseCI(ctx context.Context, rel *model.ReleaseVersion) ([]model.FBCBuild, error) {
+	app := rel.KonfluxApplication
+	m := quayVersion.FindStringSubmatch(rel.Name)
 	if app == "" || m == nil {
 		return []model.FBCBuild{}, nil
 	}
@@ -41,15 +42,15 @@ func (s *Server) releaseCI(ctx context.Context, release *model.ReleaseVersion) (
 	if err != nil {
 		return nil, err
 	}
-	c, runs, err := s.releaseCandidate(ctx, release)
+	c, runs, err := s.selector.ReleaseCandidate(ctx, rel)
 	if err != nil {
 		return nil, err
 	}
-	candidate := fbcDigests(c.FBCCandidate)
+	candidate := release.FBCDigests(c.FBCCandidate)
 	// runs is newest first.
 	byDigest := map[string][]model.FBCRun{}
 	for _, run := range runs {
-		if d := imageDigest(run.CatalogRef); d != "" && run.StartedAt != nil {
+		if d := release.ImageDigest(run.CatalogRef); d != "" && run.StartedAt != nil {
 			byDigest[d] = append(byDigest[d], model.FBCRun{
 				Job: run.JobName, State: run.State, StartedAt: *run.StartedAt, ProwURL: run.ProwURL, SippyURL: sippyJobURL(xy, run.JobName),
 			})

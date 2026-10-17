@@ -257,8 +257,9 @@ func main() {
 	}
 
 	selector := release.NewSelector(database, shipped)
-	srv := server.New(database, *addr, *jiraURL, *jiraProject, *artURL, selector, status, logger)
-	srv.StageReleasePlanPattern = stagePlans
+	selector.ArtBaseURL = *artURL
+	selector.StageReleasePlanPattern = stagePlans
+	srv := server.New(database, *addr, *jiraURL, *jiraProject, selector, status, logger)
 	srv.KonfluxUIURL = *konfluxUIURL
 	srv.KonfluxNamespace = *namespace
 
@@ -293,7 +294,7 @@ func main() {
 		} else {
 			logger.Info("image scan sync enabled", "url", *resultsURL)
 			results := scan.NewClient(*resultsURL, &http.Client{Timeout: time.Minute, Transport: rt})
-			syncer := scan.NewSyncer(results, art, database, srv.CandidateDigests, logger.With("component", "image-scans"))
+			syncer := scan.NewSyncer(results, art, database, selector.CandidateDigests, logger.With("component", "image-scans"))
 			syncer.Status = status.Track("image-scans", 5*time.Minute)
 			wg.Go(func() {
 				// Until the catalog is read, the versions it shipped look

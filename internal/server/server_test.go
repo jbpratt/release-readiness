@@ -12,7 +12,7 @@ import (
 )
 
 func newTestRunServer(addr string) *Server {
-	return New(nil, addr, "", "", "", nil, syncstatus.New(), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return New(nil, addr, "", "", nil, syncstatus.New(), slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
 func TestRunReturnsListenError(t *testing.T) {

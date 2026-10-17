@@ -11,6 +11,7 @@ import (
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/artfbc"
 	"github.com/quay/release-readiness/internal/model"
+	"github.com/quay/release-readiness/internal/release"
 )
 
 // fbcTags is a version's operator FBCs as the tags ART publishes them under,
@@ -46,16 +47,16 @@ func (s *Server) handleGetFBCTags(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, fmt.Errorf("the ART FBC tag lookup is off"))
 		return
 	}
-	c, err := s.selectCandidate(r.Context(), release)
+	c, err := s.selector.SelectCandidate(r.Context(), release)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	if c.assembly == "" {
-		writeError(w, http.StatusNotFound, fmt.Errorf("release %q is not a version ART builds an FBC of: %s", version, c.reason))
+	if c.Assembly == "" {
+		writeError(w, http.StatusNotFound, fmt.Errorf("release %q is not a version ART builds an FBC of: %s", version, c.Reason))
 		return
 	}
-	resp, _, err := s.candidateResponse(r.Context(), release, c)
+	resp, _, err := s.selector.CandidateResponse(r.Context(), release, c)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err)
 		return
@@ -64,7 +65,7 @@ func (s *Server) handleGetFBCTags(w http.ResponseWriter, r *http.Request) {
 	slots := candidateSlots(resp.FBCCandidate)
 	if len(slots) == 0 {
 		out.Source = "ocp-build-data"
-		ocps, err := s.ArtFBC.TargetVersions(r.Context(), c.assembly[:strings.LastIndex(c.assembly, ".")])
+		ocps, err := s.ArtFBC.TargetVersions(r.Context(), c.Assembly[:strings.LastIndex(c.Assembly, ".")])
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err)
 			return
@@ -75,12 +76,12 @@ func (s *Server) handleGetFBCTags(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	tags, err := s.fbcTagsOf(r.Context(), c.assembly, slots)
+	tags, err := s.fbcTagsOf(r.Context(), c.Assembly, slots)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err)
 		return
 	}
-	res := artfbc.Resolve(slots, c.assembly, tags)
+	res := artfbc.Resolve(slots, c.Assembly, tags)
 	out.Pullspecs, out.Tags, out.Errors, out.Warnings, out.Info = res.Pullspecs, res.Tags, res.Errors, res.Warnings, res.Info
 	writeJSON(w, http.StatusOK, out)
 }
@@ -146,7 +147,7 @@ func candidateSlots(c *model.FBCCandidate) []artfbc.Slot {
 			}
 		}
 	}
-	slices.SortFunc(all, compareVersions)
+	slices.SortFunc(all, release.CompareVersions)
 	var slots []artfbc.Slot
 	for _, o := range c.Operators {
 		ss := per[o.Operator]
@@ -155,7 +156,7 @@ func candidateSlots(c *model.FBCCandidate) []artfbc.Slot {
 				ss = append(ss, artfbc.Slot{Operator: o.Operator, OCP: ocp})
 			}
 		}
-		slices.SortFunc(ss, func(a, b artfbc.Slot) int { return compareVersions(a.OCP, b.OCP) })
+		slices.SortFunc(ss, func(a, b artfbc.Slot) int { return release.CompareVersions(a.OCP, b.OCP) })
 		slots = append(slots, ss...)
 	}
 	return slots

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/quay/release-readiness/internal/model"
+	"github.com/quay/release-readiness/internal/release"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
@@ -82,9 +83,9 @@ type streamBuilds struct {
 // latestBuild returns when the version's newest build was created: the newer
 // of its newest build and its selected STAGE build, or nil when it has
 // neither. streams keeps each application's stream builds once read.
-func (s *Server) latestBuild(ctx context.Context, release *model.ReleaseVersion, streams map[string]streamBuilds) (*time.Time, error) {
-	app := release.KonfluxApplication
-	m := quayVersion.FindStringSubmatch(release.Name)
+func (s *Server) latestBuild(ctx context.Context, rel *model.ReleaseVersion, streams map[string]streamBuilds) (*time.Time, error) {
+	app := rel.KonfluxApplication
+	m := quayVersion.FindStringSubmatch(rel.Name)
 	if app == "" || m == nil {
 		return nil, nil
 	}
@@ -98,10 +99,10 @@ func (s *Server) latestBuild(ctx context.Context, release *model.ReleaseVersion,
 		streams[app] = st
 	}
 	var latest *time.Time
-	if builds := versionBuilds(app, st.builds, st.nvrs, m[1]); len(builds) > 0 {
+	if builds := release.VersionBuilds(app, st.builds, st.nvrs, m[1]); len(builds) > 0 {
 		latest = &builds[0].CreatedAt
 	}
-	staged, err := s.db.SelectedStageBuild(ctx, release, s.StageReleasePlanPattern)
+	staged, err := s.db.SelectedStageBuild(ctx, rel, s.selector.StageReleasePlanPattern)
 	if err != nil || staged == nil {
 		return latest, err
 	}

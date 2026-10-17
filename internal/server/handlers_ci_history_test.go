@@ -8,6 +8,7 @@ import (
 
 	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/model"
+	"github.com/quay/release-readiness/internal/release"
 )
 
 // The CI history lists the version's FBC builds newest built first, by
@@ -19,7 +20,7 @@ func TestGetReleaseCI(t *testing.T) {
 	built := func(nvr, start string) string {
 		pullspec := seedHistoryFBC(t, srv, nvr, bundle)
 		if err := srv.db.UpsertArtHistoryBuild(t.Context(), artbuild.HistoryBuild{
-			RecordID: "rec-" + nvr, Group: "quay-3.18", Type: "fbc", NVR: nvr, Digest: imageDigest(pullspec), Pullspec: pullspec, StartTime: start,
+			RecordID: "rec-" + nvr, Group: "quay-3.18", Type: "fbc", NVR: nvr, Digest: release.ImageDigest(pullspec), Pullspec: pullspec, StartTime: start,
 		}); err != nil {
 			t.Fatal(err)
 		}

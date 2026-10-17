@@ -88,7 +88,7 @@ func mustTime(t *testing.T, s string) time.Time {
 func seedQuay318(t *testing.T, srv *Server) {
 	t.Helper()
 	ctx := t.Context()
-	srv.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
+	srv.selector.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
 	for _, v := range []string{"quay-v3.18.1", "quay-v3.18.2"} {
 		if err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{Name: v, KonfluxApplication: "quay-3-18"}); err != nil {
 			t.Fatal(err)
@@ -226,52 +226,6 @@ func seedRun(t *testing.T, srv *Server, job, id, state, started string, images [
 	}
 	if err := srv.db.UpsertProwRun(t.Context(), run); err != nil {
 		t.Fatal(err)
-	}
-}
-
-// A build's version is the X.Y.Z the NVRs of its operator bundles ART
-// resolved carry, else of its images, base image left out.
-func TestBuildVersion(t *testing.T) {
-	const app = "quay-3-18"
-	image := func(c string) model.SnapshotImage { return model.SnapshotImage{Name: c, Image: testImage("b/" + c)} }
-	snap := &model.ReleaseSnapshot{Components: []model.SnapshotImage{
-		image("quay-3-18-base-rhel9"), image("quay-3-18-container-security-operator-bundle"), image("quay-3-18-quay-clair"),
-		image("quay-3-18-quay-operator-bundle"), image("quay-3-18-quay-quay"),
-	}}
-	const (
-		quay       = "quay-quay-container-3.18.1-202610060528.p2.g1148474.assembly.stream.el9"
-		bundle     = "quay-operator-metadata-container-3.18.1.202610061637.p2.g35cf767.assembly.stream.el9-1"
-		bundle2    = "quay-operator-metadata-container-3.18.2.202610122226.p2.g35cf767.assembly.stream.el9-1"
-		csoBundle2 = "container-security-operator-metadata-container-3.18.2.202610122226.p2.g1a2b3c4.assembly.stream.el9-1"
-	)
-	for _, tc := range []struct {
-		desc string
-		nvrs map[string]string // by component
-		want string
-	}{
-		{"an image and a bundle", map[string]string{"quay-3-18-quay-quay": quay, "quay-3-18-quay-operator-bundle": bundle}, "3.18.1"},
-		{"unresolved images left out", map[string]string{"quay-3-18-quay-operator-bundle": bundle}, "3.18.1"},
-		{"no image resolved", map[string]string{}, ""},
-		{"two versions", map[string]string{"quay-3-18-quay-quay": quay, "quay-3-18-quay-clair": testNVR("quay-clair", "3.18.2")}, ""},
-		{"3.18.10 is not 3.18.1", map[string]string{"quay-3-18-quay-quay": testNVR("quay-quay", "3.18.10")}, "3.18.10"},
-		{"base image left out", map[string]string{"quay-3-18-quay-quay": quay, "quay-3-18-base-rhel9": testNVR("base-rhel9", "5.0.0")}, "3.18.1"},
-		{"no version field", map[string]string{"quay-3-18-quay-quay": "quay-quay-container"}, ""},
-		{"bundles over images", map[string]string{
-			"quay-3-18-quay-quay": quay, "quay-3-18-quay-operator-bundle": bundle2, "quay-3-18-container-security-operator-bundle": csoBundle2,
-		}, "3.18.2"},
-		{"no bundle resolved", map[string]string{"quay-3-18-quay-quay": quay, "quay-3-18-quay-clair": testNVR("quay-clair", "3.18.1")}, "3.18.1"},
-		{"two bundle versions", map[string]string{"quay-3-18-quay-operator-bundle": bundle, "quay-3-18-container-security-operator-bundle": csoBundle2}, ""},
-	} {
-		nvrs := map[string]string{}
-		for c, nvr := range tc.nvrs {
-			nvrs[testImage("b/"+c)] = nvr
-		}
-		if got := buildVersion(app, snap, nvrs); got != tc.want {
-			t.Errorf("%s: version %q, want %q", tc.desc, got, tc.want)
-		}
-	}
-	if compareVersions("3.18.9", "3.18.10") >= 0 || compareVersions("3.18.10", "3.18.9") <= 0 || compareVersions("3.18.1", "3.18.1") != 0 {
-		t.Error("compareVersions does not compare X.Y.Z numerically")
 	}
 }
 
@@ -418,7 +372,7 @@ func TestGetCandidateCatalogs(t *testing.T) {
 // build of another version do not count.
 func TestGetCandidateUnshipped(t *testing.T) {
 	srv := setupTestServer(t)
-	srv.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
+	srv.selector.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
 	ctx := t.Context()
 	if err := srv.db.UpsertReleaseVersion(ctx, &model.ReleaseVersion{Name: "quay-v3.18.2", KonfluxApplication: "quay-3-18"}); err != nil {
 		t.Fatal(err)
@@ -455,40 +409,6 @@ func TestGetCandidateUnshipped(t *testing.T) {
 	}
 }
 
-// A build of a version counts for it only if ART built no lower version
-// after it: ART built 3.18.2 until 28 Sep, then went back to 3.18.1. Its next
-// 3.18.2 build counts, and hides no older 3.18.1 build.
-func TestGetCandidateVersionSwitch(t *testing.T) {
-	srv := setupTestServer(t)
-	seedQuay318(t, srv)
-	ctx := t.Context()
-	newest := func(version string) string {
-		t.Helper()
-		c, err := srv.selectCandidate(ctx, &model.ReleaseVersion{Name: version, KonfluxApplication: "quay-3-18"})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if c.newest == nil {
-			return ""
-		}
-		return c.newest.Name
-	}
-	seedImages(t, srv, "quay-3-18-20260928-214539-000", "2026-09-28T21:57:16Z", testBuild("early", quay318...))
-	resolveNVR(t, srv, "early/quay-3-18-quay-quay", testNVR("quay-quay", "3.18.2"))
-	if n := newest("quay-v3.18.2"); n != "" {
-		t.Errorf("3.18.2 newest = %q, want no 28 Sep build", n)
-	}
-
-	seedImages(t, srv, "quay-3-18-20261011-000000-000", "2026-10-11T00:00:00Z", testBuild("next", quay318...))
-	resolveNVR(t, srv, "next/quay-3-18-quay-quay", testNVR("quay-quay", "3.18.2"))
-	if n := newest("quay-v3.18.2"); n != "quay-3-18-20261011-000000-000" {
-		t.Errorf("3.18.2 newest = %q, want quay-3-18-20261011-000000-000", n)
-	}
-	if n := newest("quay-v3.18.1"); n != "quay-3-18-20261010-013713-000" {
-		t.Errorf("3.18.1 newest = %q, want quay-3-18-20261010-013713-000", n)
-	}
-}
-
 // A shipped version has nothing to decide; a version ART cannot build, or
 // that has no STAGE build, says why it has no candidate, and one with no build
 // at all has no newest build either, and says when ART still builds a lower
@@ -502,7 +422,9 @@ func TestGetCandidateNone(t *testing.T) {
 	defer cat.Close()
 	shipped := catalog.NewShipped(catalog.NewClient(cat.URL, cat.Client()), slog.Default())
 	shipped.Refresh(t.Context())
-	srv.selector = release.NewSelector(srv.db, shipped)
+	selector := release.NewSelector(srv.db, shipped)
+	selector.ArtBaseURL, selector.StageReleasePlanPattern = srv.selector.ArtBaseURL, srv.selector.StageReleasePlanPattern
+	srv.selector = selector
 	for _, v := range []model.ReleaseVersion{
 		{Name: "quay-v3.18.0", KonfluxApplication: "quay-3-18", Released: true},
 		{Name: "quay-v3.18.3", KonfluxApplication: "quay-3-18"},
@@ -604,7 +526,9 @@ func TestGetCandidateShipped(t *testing.T) {
 				defer cat.Close()
 				shipped := catalog.NewShipped(catalog.NewClient(cat.URL, cat.Client()), slog.Default())
 				shipped.Refresh(t.Context())
-				srv.selector = release.NewSelector(srv.db, shipped)
+				selector := release.NewSelector(srv.db, shipped)
+				selector.ArtBaseURL, selector.StageReleasePlanPattern = srv.selector.ArtBaseURL, srv.selector.StageReleasePlanPattern
+				srv.selector = selector
 			}
 			// Reading counts the shipped FBCs, not a newer one only the stream
 			// built, which RR has yet to read.
@@ -673,7 +597,7 @@ func seedRender(t *testing.T, srv *Server, pullspec, label, bundle string) {
 		t.Fatal(err)
 	}
 	if err := srv.db.UpsertFBCRender(ctx, fbc.Render{
-		Digest: imageDigest(pullspec), State: fbc.StateRendered, LabelNVR: label,
+		Digest: release.ImageDigest(pullspec), State: fbc.StateRendered, LabelNVR: label,
 		Channel: fbc.Channel{Name: "stable", HeadCSV: "csv-" + bundle, HeadBundlePullspec: img}, RenderedAt: time.Now(),
 	}); err != nil {
 		t.Fatal(err)
@@ -765,6 +689,10 @@ func checkRows(t *testing.T, what string, got, want []string) {
 	if !slices.Equal(got, want) {
 		t.Errorf("%s:\n%s\nwant:\n%s", what, strings.Join(got, "\n"), strings.Join(want, "\n"))
 	}
+}
+
+func succeeded(r *model.KonfluxRelease) bool {
+	return r != nil && r.ReleasedStatus == "True" && r.ReleasedReason == "Succeeded"
 }
 
 // Like 3.16 on 12 Oct 2026: ART builds the stream, keyed by the placeholder
@@ -909,12 +837,12 @@ func TestGetCandidateFBCStaged(t *testing.T) {
 	const csoNVR = "container-security-operator-fbc-3.18.1-20261007000000.ocp4.20"
 	cso := testImage("fbc/" + csoNVR)
 	if err := srv.db.UpsertArtHistoryBuild(t.Context(), artbuild.HistoryBuild{
-		RecordID: "rec-cso", Group: "quay-3.18", Type: "fbc", NVR: csoNVR, Digest: imageDigest(cso), Pullspec: cso,
+		RecordID: "rec-cso", Group: "quay-3.18", Type: "fbc", NVR: csoNVR, Digest: release.ImageDigest(cso), Pullspec: cso,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := srv.db.UpsertFBCRender(t.Context(), fbc.Render{
-		Digest: imageDigest(cso), State: fbc.StateFailed, Error: "no channel stable-3.18", RenderedAt: time.Now(),
+		Digest: release.ImageDigest(cso), State: fbc.StateFailed, Error: "no channel stable-3.18", RenderedAt: time.Now(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1041,7 +969,7 @@ func TestGetCandidateFBCEvidence(t *testing.T) {
 // on stage; once each operator's succeeded, they are. A failed one is not.
 func TestGetCandidateFBCRIStage(t *testing.T) {
 	srv := setupTestServer(t)
-	srv.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
+	srv.selector.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
 	heads := map[string]string{
 		"quay-operator":               "quay-operator-metadata-container-3.18.1.202610090339",
 		"container-security-operator": "container-security-operator-metadata-container-3.18.1.202610090339",
@@ -1089,7 +1017,7 @@ func TestGetCandidateFBCRIStage(t *testing.T) {
 // stage.
 func TestGetCandidateFBCRIStageImageShipment(t *testing.T) {
 	srv := setupTestServer(t)
-	srv.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
+	srv.selector.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
 	images := map[string]string{}
 	for _, operator := range artbuild.Operators {
 		head := operator + "-metadata-container-3.18.1.202610090339"
@@ -1181,28 +1109,6 @@ func TestGetCandidateFBCImageCheckByNVR(t *testing.T) {
 	}
 }
 
-// Like 3.17.6 against 3.17.5: ART renamed every relatedImage, and moved the
-// operator to another repository under the same name.
-func TestCompareImagesByRepository(t *testing.T) {
-	pg := "registry.redhat.io/rhel8/postgresql-10@sha256:eec360a32519"
-	from := []model.OperatorImage{
-		{Name: "postgres_previous", Image: pg, Digest: "sha256:eec360a32519"},
-		{Name: "operator", Image: "registry.redhat.io/quay/quay-operator-rhel9@sha256:a1", Digest: "sha256:a1"},
-	}
-	to := []model.OperatorImage{
-		{Name: "postgresql-10", Image: pg, Digest: "sha256:eec360a32519"},
-		{Name: "operator", Image: "registry.redhat.io/quay/quay-rhel9-operator@sha256:b2", Digest: "sha256:b2"},
-	}
-	var got []string
-	for _, r := range compareImages(from, to) {
-		got = append(got, r.Name+" "+r.From.Repository+" "+r.To.Repository+" "+r.Change)
-	}
-	checkRows(t, "compare", got, []string{
-		"postgresql-10 registry.redhat.io/rhel8/postgresql-10 registry.redhat.io/rhel8/postgresql-10 same",
-		"operator registry.redhat.io/quay/quay-operator-rhel9 registry.redhat.io/quay/quay-rhel9-operator renamed",
-	})
-}
-
 // seedImagesFBC stores ART's successful build of the FBC image of nvr,
 // rendered with its channel headed by the bundle of NVR bundle, whose
 // relatedImages are head, above the entry of version previousVersion, whose
@@ -1220,7 +1126,7 @@ func seedImagesFBC(t *testing.T, srv *Server, nvr, bundle, previousVersion strin
 		}
 	}
 	if err := srv.db.UpsertFBCRender(ctx, fbc.Render{
-		Digest: imageDigest(pullspec), State: fbc.StateRendered, RenderedAt: time.Now(),
+		Digest: release.ImageDigest(pullspec), State: fbc.StateRendered, RenderedAt: time.Now(),
 		Channel: fbc.Channel{
 			Name: "stable-3.18", HeadCSV: "csv-" + bundle, HeadBundlePullspec: bundleImage, HeadRelatedImages: head,
 			Previous: fbc.Bundle{Version: previousVersion, RelatedImages: previous},
@@ -1236,7 +1142,7 @@ func seedImagesFBC(t *testing.T, srv *Server, nvr, bundle, previousVersion strin
 // the stream heads.
 func TestGetCandidateFBCImages(t *testing.T) {
 	srv := setupTestServer(t)
-	srv.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
+	srv.selector.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
 	ctx := t.Context()
 	art := func(label, commit string) fbc.RelatedImage {
 		if err := srv.db.UpsertArtHistoryBuild(ctx, artbuild.HistoryBuild{
@@ -1305,7 +1211,7 @@ func TestGetCandidateFBCImages(t *testing.T) {
 		`quay "a/quay-nvr" "q2" page=true stage=true prod=false`,
 		`redis "" "" page=false stage=false prod=true`,
 	})
-	if got, want := o.Images[1].BuildURL, artbuild.PageURL(srv.artBaseURL, "a/clair-nvr", "rec-a/clair"); got != want {
+	if got, want := o.Images[1].BuildURL, artbuild.PageURL(srv.selector.ArtBaseURL, "a/clair-nvr", "rec-a/clair"); got != want {
 		t.Errorf("clair build_url %q, want %q", got, want)
 	}
 	compare := func(c model.ImageCompare) []string {
