@@ -126,15 +126,20 @@ success is older.
 
 ## Schema and sqlc
 
-Edit `internal/db/schema.sql` and `internal/db/queries/*.sql`, then run
-`sqlc generate` (config `sqlc.yaml`) with sqlc v1.30.0, the version in the
-generated headers and in `.github/workflows/sqlc.yaml`, and commit
-`internal/db/sqlc/` in the same change.
+After a schema or `internal/db/queries/*.sql` change, run `sqlc generate`
+(config `sqlc.yaml`) with sqlc v1.30.0, the version in the generated headers
+and in `.github/workflows/sqlc.yaml`, and commit `internal/db/sqlc/` in the
+same change.
 
-`db.Open` executes `schema.sql` on every open. Every statement is
-`CREATE ... IF NOT EXISTS`, with no `ALTER` path: changing an existing table
-needs a fresh DB file. The one exception: `db.Open` adds `jira_issues.status`
-to a DB from before it.
+`db.Open` applies the `migrations` list in `internal/db/db.go` in order, each
+in its own transaction, and records the count in `PRAGMA user_version`; a DB
+newer than the binary fails to open. Migration 1 is the baseline:
+`schema.sql` plus the `jira_issues.status` column. `schema.sql` is never
+edited, since only migration 1 runs it: every schema change, new tables
+included, is a new migration appended to the list. Put its SQL in a new `.sql`
+file under `internal/db/` that the migration embeds, and add that file to the
+`schema:` inputs in `sqlc.yaml` so generated code matches. Existing DB files
+upgrade in place.
 
 ## Gotchas
 

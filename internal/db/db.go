@@ -28,28 +28,74 @@ func Open(path string) (*DB, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	if _, err := sqlDB.Exec(schemaSQL); err != nil {
+	if err := migrate(sqlDB); err != nil {
 		_ = sqlDB.Close()
-		return nil, fmt.Errorf("migrate: exec schema: %w", err)
-	}
-	if err := addJiraIssueStatus(sqlDB); err != nil {
-		_ = sqlDB.Close()
-		return nil, fmt.Errorf("migrate: add jira_issues.status: %w", err)
+		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	return &DB{conn: sqlDB, dbtx: sqlDB}, nil
 }
 
+// migrations run in order, each once; PRAGMA user_version counts those
+// applied. A schema change is a new entry at the end: an applied entry never
+// changes.
+var migrations = []func(*sql.Tx) error{
+	baseline,
+}
+
+// baseline is idempotent so it also upgrades DBs from before user_version
+// was tracked, which hold the tables at version 0.
+func baseline(tx *sql.Tx) error {
+	if _, err := tx.Exec(schemaSQL); err != nil {
+		return fmt.Errorf("exec schema: %w", err)
+	}
+	if err := addJiraIssueStatus(tx); err != nil {
+		return fmt.Errorf("add jira_issues.status: %w", err)
+	}
+	return nil
+}
+
+func migrate(sqlDB *sql.DB) error {
+	var version int
+	if err := sqlDB.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		return fmt.Errorf("read user_version: %w", err)
+	}
+	if version > len(migrations) {
+		return fmt.Errorf("database version %d is newer than this binary's %d", version, len(migrations))
+	}
+	for n := version + 1; n <= len(migrations); n++ {
+		if err := applyMigration(sqlDB, n); err != nil {
+			return fmt.Errorf("migration %d: %w", n, err)
+		}
+	}
+	return nil
+}
+
+func applyMigration(sqlDB *sql.DB, n int) error {
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := migrations[n-1](tx); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", n)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // addJiraIssueStatus adds the status column to a jira_issues table created
 // before it existed, which CREATE TABLE IF NOT EXISTS leaves unchanged.
-func addJiraIssueStatus(sqlDB *sql.DB) error {
+func addJiraIssueStatus(tx *sql.Tx) error {
 	var n int
-	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('jira_issues') WHERE name = 'status'`).Scan(&n); err != nil {
+	if err := tx.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('jira_issues') WHERE name = 'status'`).Scan(&n); err != nil {
 		return err
 	}
 	if n > 0 {
 		return nil
 	}
-	_, err := sqlDB.Exec(`ALTER TABLE jira_issues ADD COLUMN status TEXT NOT NULL DEFAULT ''`)
+	_, err := tx.Exec(`ALTER TABLE jira_issues ADD COLUMN status TEXT NOT NULL DEFAULT ''`)
 	return err
 }
 
