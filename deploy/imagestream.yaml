@@ -1,0 +1,16 @@
+# Konflux's production Release publishes :latest here; the scheduled import
+# picks up each new digest.
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: release-readiness
+  labels:
+    app: release-readiness
+spec:
+  tags:
+    - name: latest
+      from:
+        kind: DockerImage
+        name: quay.io/redhat-services-prod/quay-eng/release-readiness:latest
+      importPolicy:
+        scheduled: true

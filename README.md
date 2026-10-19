@@ -126,6 +126,8 @@ cd web && npm run dev
 
 `deploy/rbac.yaml` creates the `release-readiness` ServiceAccount and a Role granting read-only access to Snapshots and Releases, and get/list on `results.tekton.dev` results and records for the CVE scan counts. The Role and RoleBinding must live in the Konflux namespace the app reads.
 
+`deploy/imagestream.yaml` is applied with the rest of `deploy/`: it imports the released `:latest` on a schedule, and the Deployment's `image.openshift.io/triggers` annotation rolls out each new digest after the next scheduled import.
+
 ### Upgrading
 
 The schema changed when the Konflux source moved to Kubernetes. Delete the old SQLite database file before upgrading; it is recreated on startup.

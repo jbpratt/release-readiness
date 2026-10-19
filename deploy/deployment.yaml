@@ -4,6 +4,8 @@ metadata:
   name: release-readiness
   labels:
     app: release-readiness
+  annotations:
+    image.openshift.io/triggers: '[{"from":{"kind":"ImageStreamTag","name":"release-readiness:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"dashboard\")].image"}]'
 spec:
   replicas: 1
   strategy:
@@ -19,7 +21,7 @@ spec:
       serviceAccountName: release-readiness
       containers:
         - name: dashboard
-          image: quay.io/quay/release-readiness:latest
+          image: quay.io/redhat-services-prod/quay-eng/release-readiness:latest
           env:
             # The FBC JIRA writer runs when JIRA_WRITE is "true" and the
             # jira-write secret holds its credential.
