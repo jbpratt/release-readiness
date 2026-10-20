@@ -1,31 +1,41 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-export default defineConfig({
+// Page mode (vite build --mode page) builds one JS chunk, one CSS file and
+// inline assets, for dev/page.py to inline into one self-contained HTML file.
+export default defineConfig(({ mode }) => ({
 	plugins: [react()],
 	build: {
 		outDir: "dist",
 		emptyOutDir: true,
+		...(mode === "page" && {
+			cssCodeSplit: false,
+			assetsInlineLimit: Number.MAX_SAFE_INTEGER,
+			chunkSizeWarningLimit: Number.MAX_SAFE_INTEGER,
+		}),
 		rollupOptions: {
-			output: {
-				manualChunks(id) {
-					if (
-						id.includes("node_modules/react/") ||
-						id.includes("node_modules/react-dom/") ||
-						id.includes("node_modules/react-router-dom/") ||
-						id.includes("node_modules/react-router/")
-					) {
-						return "react";
-					}
-					if (
-						id.includes("node_modules/@patternfly/react-core/") ||
-						id.includes("node_modules/@patternfly/react-table/") ||
-						id.includes("node_modules/@patternfly/react-icons/")
-					) {
-						return "patternfly";
-					}
-				},
-			},
+			output:
+				mode === "page"
+					? { codeSplitting: false }
+					: {
+							manualChunks(id) {
+								if (
+									id.includes("node_modules/react/") ||
+									id.includes("node_modules/react-dom/") ||
+									id.includes("node_modules/react-router-dom/") ||
+									id.includes("node_modules/react-router/")
+								) {
+									return "react";
+								}
+								if (
+									id.includes("node_modules/@patternfly/react-core/") ||
+									id.includes("node_modules/@patternfly/react-table/") ||
+									id.includes("node_modules/@patternfly/react-icons/")
+								) {
+									return "patternfly";
+								}
+							},
+						},
 		},
 	},
 	server: {
@@ -37,4 +47,4 @@ export default defineConfig({
 			},
 		},
 	},
-});
+}));

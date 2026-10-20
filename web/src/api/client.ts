@@ -11,7 +11,20 @@ import type {
 
 const BASE = "/api/v1";
 
+declare global {
+	interface Window {
+		__RR_FIXTURES__?: Record<string, unknown>;
+	}
+}
+
 async function fetchJSON<T>(url: string): Promise<T> {
+	// A page build answers from fixtures dev/page.py injects: the page runs
+	// with no origin and no network.
+	if (import.meta.env.MODE === "page") {
+		const fixtures = window.__RR_FIXTURES__ ?? {};
+		if (!(url in fixtures)) throw new Error("404 Not Found");
+		return fixtures[url] as T;
+	}
 	const res = await fetch(url);
 	if (!res.ok) {
 		throw new Error(`${res.status} ${res.statusText}`);

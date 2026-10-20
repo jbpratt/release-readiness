@@ -26,6 +26,7 @@ import {
 import { lazy, Suspense, useEffect, useState } from "react";
 import {
 	BrowserRouter,
+	MemoryRouter,
 	Navigate,
 	Route,
 	Routes,
@@ -37,11 +38,22 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import SyncStatusWarning from "./components/SyncStatusWarning";
 import "./theme.css";
 
+declare global {
+	interface Window {
+		__RR_PAGE_PATH__?: string;
+	}
+}
+
+// A page build (vite build --mode page) runs as one HTML file with no origin,
+// where localStorage throws; dev/page.py sets the path it shows.
+const PAGE = import.meta.env.MODE === "page";
+
 const ReleasesOverview = lazy(() => import("./pages/ReleasesOverview"));
 const ReleaseDetail = lazy(() => import("./pages/ReleaseDetail"));
-// Dev builds only: the condition is false in a production build, so the
-// mockups chunk is never emitted.
-const Mockups = import.meta.env.DEV ? lazy(() => import("./mockups")) : null;
+// Dev and page builds only: the condition is false in a production build, so
+// the mockups chunk is never emitted.
+const Mockups =
+	import.meta.env.DEV || PAGE ? lazy(() => import("./mockups")) : null;
 
 const glossary: [string, string][] = [
 	[
@@ -68,11 +80,16 @@ const glossary: [string, string][] = [
 
 type Theme = "light" | "dark";
 
+const darkScheme = window.matchMedia("(prefers-color-scheme: dark)");
+
 function getInitialTheme(): Theme {
-	const stored = localStorage.getItem("theme-preference");
-	if (stored === "light" || stored === "dark") return stored;
-	if (window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
-	return "light";
+	if (!PAGE) {
+		try {
+			const stored = localStorage.getItem("theme-preference");
+			if (stored === "light" || stored === "dark") return stored;
+		} catch {}
+	}
+	return darkScheme.matches ? "dark" : "light";
 }
 
 function AppLayout({ children }: { children: React.ReactNode }) {
@@ -85,8 +102,19 @@ function AppLayout({ children }: { children: React.ReactNode }) {
 		} else {
 			root.classList.remove("pf-v6-theme-dark");
 		}
-		localStorage.setItem("theme-preference", theme);
+		if (PAGE) return;
+		try {
+			localStorage.setItem("theme-preference", theme);
+		} catch {}
 	}, [theme]);
+
+	useEffect(() => {
+		if (!PAGE) return;
+		const follow = (e: MediaQueryListEvent) =>
+			setTheme(e.matches ? "dark" : "light");
+		darkScheme.addEventListener("change", follow);
+		return () => darkScheme.removeEventListener("change", follow);
+	}, []);
 
 	const toggleTheme = () => setTheme((t) => (t === "light" ? "dark" : "light"));
 
@@ -228,11 +256,16 @@ function AppRoutes() {
 }
 
 export default function App() {
-	return (
-		<BrowserRouter>
-			<AppLayout>
-				<AppRoutes />
-			</AppLayout>
-		</BrowserRouter>
+	const app = (
+		<AppLayout>
+			<AppRoutes />
+		</AppLayout>
+	);
+	return PAGE ? (
+		<MemoryRouter initialEntries={[window.__RR_PAGE_PATH__ ?? "/"]}>
+			{app}
+		</MemoryRouter>
+	) : (
+		<BrowserRouter>{app}</BrowserRouter>
 	);
 }

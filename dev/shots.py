@@ -1,6 +1,6 @@
 r"""Full-page screenshots and card text of release-readiness pages.
 
-usage: python3 dev/shots.py [--route GLOB=FILE]... [--width PX]... [--dark] <base-url> <out-dir> <path>...
+usage: python3 dev/shots.py [--route GLOB=FILE]... [--width PX]... [--dark] [--record FILE] <base-url> <out-dir> <path>...
 
 Prerequisite: pip install --user playwright && python3 -m playwright install chromium
 
@@ -12,9 +12,11 @@ Example, a local backend on :8088 with quay-v3.17.6's candidate edited to need a
       http://localhost:8088 /tmp/shots / /releases/quay-v3.17.6
 """
 import argparse
+import json
 import os
 import re
 import sys
+from urllib.parse import urlsplit
 
 from playwright.sync_api import Error, sync_playwright
 
@@ -41,8 +43,10 @@ def route(spec):
     return glob, lambda r: r.fulfill(status=200, content_type="application/json", body=body)
 
 
-def shoot(browser, url, png, routes, width, dark):
-    """Save url's whole page to png and print its console errors and cards; return why it did not load, or None."""
+def shoot(browser, url, png, routes, width, dark, record):
+    """Save url's whole page to png and print its console errors and cards; return why it did not load, or None.
+
+    Every successful /api/v1/ JSON response is added to record, keyed by path and query."""
     with browser.new_context(viewport={"width": width, "height": 1000}, locale="en-US",
                              timezone_id="America/New_York", color_scheme="dark" if dark else "light") as ctx:
         for glob, handler in routes:
@@ -50,6 +54,8 @@ def shoot(browser, url, png, routes, width, dark):
         page = ctx.new_page()
         errors = []
         page.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
+        api = []
+        page.on("response", lambda r: api.append(r) if urlsplit(r.url).path.startswith("/api/v1/") else None)
         try:
             resp = page.goto(url, wait_until="networkidle")
         except Error as e:
@@ -66,6 +72,13 @@ def shoot(browser, url, png, routes, width, dark):
             page.set_viewport_size({"width": width, "height": page.viewport_size["height"] + grow})
             page.wait_for_timeout(500)
         page.screenshot(path=png)
+        for r in api:
+            if r.ok:
+                u = urlsplit(r.url)
+                try:
+                    record[u.path + ("?" + u.query if u.query else "")] = r.json()
+                except (Error, ValueError):
+                    pass
         x_overflow = page.evaluate("() => document.documentElement.scrollWidth - document.documentElement.clientWidth")
         print(f"== {png} height={page.viewport_size['height']} console_errors={errors} page_x_overflow={x_overflow}")
         for i, card in enumerate(page.evaluate(CARDS)):
@@ -84,22 +97,29 @@ def main():
                          "each file name ends in -PX")
     ap.add_argument("--dark", action="store_true",
                     help="emulate prefers-color-scheme: dark, which the app maps to PatternFly's dark theme")
+    ap.add_argument("--record", metavar="FILE",
+                    help="write a JSON object mapping each /api/v1/ path and query the shots requested "
+                         "to its JSON response, --route answers included: fixtures for dev/page.py")
     ap.add_argument("base", metavar="base-url")
     ap.add_argument("out", metavar="out-dir")
     ap.add_argument("paths", metavar="path", nargs="+")
     args = ap.parse_args()
     widths = args.width or [1440]
     failed = False
+    record = {}
     with sync_playwright() as p, p.chromium.launch() as browser:
         for path in args.paths:
             name = re.sub(r"[/?=&]", "_", path).strip("_") or "overview"
             for width in widths:
                 suffix = f"-{width}" if len(widths) > 1 else ""
                 png = os.path.join(args.out, name + suffix + ".png")
-                err = shoot(browser, args.base.rstrip("/") + path, png, args.route, width, args.dark)
+                err = shoot(browser, args.base.rstrip("/") + path, png, args.route, width, args.dark, record)
                 if err:
                     print(f"{path} at {width}px: {err}", file=sys.stderr)
                     failed = True
+    if args.record:
+        with open(args.record, "w") as f:
+            json.dump(record, f, indent=1, sort_keys=True)
     return 1 if failed else 0
 
 
