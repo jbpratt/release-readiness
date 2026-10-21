@@ -1,20 +1,29 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "automerge": false,
+  "automergeType": "pr",
+  "platformAutomerge": false,
+  "lockFileMaintenance": {"automerge": false},
   "packageRules": [
     {
-      "description": "Automerge non-major updates",
-      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest", "lockFileMaintenance"],
+      "description": "Manual merge by default",
+      "matchManagers": ["*"],
+      "automerge": false
+    },
+    {
+      "description": "Pilot: frontend devDependency patches",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["web/package.json"],
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["patch"],
+      "minimumReleaseAge": "3 days",
+      "minimumReleaseAgeBehaviour": "timestamp-required",
       "automerge": true
     },
     {
       "description": "Disable indirect Go dependency updates",
       "matchDepTypes": ["indirect"],
       "enabled": false
-    },
-    {
-      "description": "Group vite and @vitejs/plugin-react updates",
-      "groupName": "vite",
-      "matchPackageNames": ["vite", "@vitejs/plugin-react"]
     }
   ]
 }
