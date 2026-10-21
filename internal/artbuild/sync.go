@@ -330,7 +330,7 @@ func (h *HistorySync) CloseBundle(ctx context.Context, group, digest string) err
 		"image_sha_tag": {strings.TrimPrefix(digest, "sha256:")},
 		"dateRange":     {today.AddDate(0, 0, -historyDays).Format(time.DateOnly) + " to " + today.Format(time.DateOnly)},
 	}
-	return h.closeBundle(ctx, group, q, func(sb searchBuild) bool { return strings.HasSuffix(sb.ImagePullspec, "@"+digest) })
+	return h.closeBundle(ctx, q, func(sb searchBuild) bool { return strings.HasSuffix(sb.ImagePullspec, "@"+digest) })
 }
 
 // closeBundleNVR stores the successful bundle build nvr of group, with the
@@ -344,16 +344,12 @@ func (h *HistorySync) closeBundleNVR(ctx context.Context, group, nvr string) err
 		return err
 	}
 	q.Set("buildtype", TypeBundle)
-	return h.closeBundle(ctx, group, q, func(sb searchBuild) bool { return sb.NVR == nvr })
+	return h.closeBundle(ctx, q, func(sb searchBuild) bool { return sb.NVR == nvr })
 }
 
-func (h *HistorySync) closeBundle(ctx context.Context, group string, q url.Values, match func(searchBuild) bool) error {
-	sb, err := h.findSuccess(ctx, q, match)
-	if err != nil {
-		return err
-	}
-	rec, err := h.read(ctx, *sb)
-	if err != nil {
+func (h *HistorySync) closeBundle(ctx context.Context, q url.Values, match func(searchBuild) bool) error {
+	rec, group, err := h.readSuccess(ctx, q, match)
+	if err != nil || rec == nil {
 		return err
 	}
 	// The operator comes first; the rest are operands.
@@ -380,15 +376,45 @@ func (h *HistorySync) storeImage(ctx context.Context, group, nvr string) error {
 	if err != nil {
 		return err
 	}
-	sb, err := h.findSuccess(ctx, q, func(sb searchBuild) bool { return sb.NVR == nvr })
-	if err != nil {
-		return err
-	}
-	rec, err := h.read(ctx, *sb)
-	if err != nil {
+	rec, group, err := h.readSuccess(ctx, q, func(sb searchBuild) bool { return sb.NVR == nvr })
+	if err != nil || rec == nil {
 		return err
 	}
 	return h.upsert(ctx, group, TypeImage, rec)
+}
+
+// readSuccess returns the record of the successful row of q that match
+// accepts and the group to store it under, q's own. A merged FBC names
+// bundles other groups built, so when q's group has no such row the search
+// is repeated without it, and a record found that way is stored under the
+// group ART gives it; rec is nil when that record is already stored.
+func (h *HistorySync) readSuccess(ctx context.Context, q url.Values, match func(searchBuild) bool) (rec *record, group string, err error) {
+	group = q.Get("group")
+	sb, err := h.findSuccess(ctx, q, match)
+	if errors.Is(err, errNoSuccess) && group != "" {
+		q = maps.Clone(q)
+		q.Del("group")
+		group = ""
+		sb, err = h.findSuccess(ctx, q, match)
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	if group == "" {
+		if ok, err := h.store.HasArtHistoryRecord(ctx, sb.RecordID); err != nil || ok {
+			return nil, "", err
+		}
+	}
+	if rec, err = h.read(ctx, *sb); err != nil {
+		return nil, "", err
+	}
+	if group == "" {
+		if rec.Group == "" {
+			return nil, "", fmt.Errorf("record %s %s names no group", rec.NVR, rec.RecordID)
+		}
+		group = rec.Group
+	}
+	return rec, group, nil
 }
 
 // findSuccess returns the successful row of q that match accepts; pending

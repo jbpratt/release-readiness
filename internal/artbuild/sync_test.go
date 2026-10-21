@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -26,11 +27,13 @@ const (
 	csoImage   = "container-security-operator-container-3.17.6-202610120936.p2.g8239e43.assembly.stream.el9"
 	qoFBC      = "quay-operator-fbc-3.17.6-20261012100000.ocp4.21"
 	csoFBC     = "container-security-operator-fbc-3.17.6-20261012100000.ocp4.21"
+	mergedFBC  = "quay-merged-fbc-4.22-20261012100000.ocp4.22"
 )
 
-// fakeART serves /search and /build from its successful records. Every
-// record also lists as a pending row of the same NVR without an image, as
-// the service lists a build that finished.
+// fakeART serves /search and /build from its successful records, a search
+// naming a group listing only that group's. Every record also lists as a
+// pending row of the same NVR without an image, as the service lists a build
+// that finished.
 type fakeART struct {
 	records []record
 	// days lists, by name filter, the rows of the testDay FBC listing.
@@ -48,7 +51,7 @@ func pullspec(nvr string) string {
 }
 
 func successRecord(nvr string) record {
-	return record{NVR: nvr, RecordID: "ok-" + nvr, ImagePullspec: pullspec(nvr), Outcome: "success", StartTime: "2026-10-12T10:00:00"}
+	return record{NVR: nvr, RecordID: "ok-" + nvr, ImagePullspec: pullspec(nvr), Group: "quay-3.17", Outcome: "success", StartTime: "2026-10-12T10:00:00"}
 }
 
 func (f *fakeART) rows(match func(record) bool) []searchBuild {
@@ -73,11 +76,14 @@ func (f *fakeART) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		var rows []searchBuild
+		inGroup := func(rec record) bool { return !q.Has("group") || rec.Group == q.Get("group") }
 		switch {
 		case q.Has("nvr"):
-			rows = f.rows(func(rec record) bool { return rec.NVR == q.Get("nvr") })
+			rows = f.rows(func(rec record) bool { return inGroup(rec) && rec.NVR == q.Get("nvr") })
 		case q.Has("image_sha_tag"):
-			rows = f.rows(func(rec record) bool { return strings.HasSuffix(rec.ImagePullspec, q.Get("image_sha_tag")) })
+			rows = f.rows(func(rec record) bool {
+				return inGroup(rec) && strings.HasSuffix(rec.ImagePullspec, q.Get("image_sha_tag"))
+			})
 		case q.Get("dateRange") == testDay+" to "+testDay:
 			rows = f.days[q.Get("name")]
 		}
@@ -330,6 +336,9 @@ func TestHistorySyncUnlistedOperand(t *testing.T) {
 	if slices.Contains(store.scanned, "quay-3.17 fbc "+testDay) || slices.Contains(store.stored(), "fbc "+qoFBC) {
 		t.Errorf("after a failed search: scanned %q, stored %q", store.scanned, store.stored())
 	}
+	if got := f.ungrouped(); len(got) != 0 {
+		t.Errorf("after a failed search: searched %q without a group, want none", got)
+	}
 
 	// An unlisted operator is not skipped.
 	f = quayART()
@@ -371,6 +380,94 @@ func TestCloseBundleByDigest(t *testing.T) {
 	}
 }
 
+// ungrouped lists the NVR or digest of each search made without a group.
+func (f *fakeART) ungrouped() []string {
+	var out []string
+	for _, q := range f.searches {
+		if !q.Has("group") {
+			out = append(out, q.Get("nvr")+q.Get("image_sha_tag"))
+		}
+	}
+	return out
+}
+
+// groups maps each stored NVR to its group.
+func (s *fakeHistoryStore) groups() map[string]string {
+	out := map[string]string{}
+	for _, b := range s.builds {
+		out[b.NVR] = b.Group
+	}
+	return out
+}
+
+// A quay-3.16 merged FBC names a bundle quay-3.17 built: the bundle is found
+// without the group and kept under quay-3.17, whether already stored or not,
+// while the FBC is stored under quay-3.16.
+func TestHistorySyncCrossGroupBundle(t *testing.T) {
+	for _, stored := range []bool{true, false} {
+		f := quayART()
+		fbc := successRecord(mergedFBC)
+		fbc.Group, fbc.BundleNVRs = "quay-3.16", []string{csoBundle}
+		f.records = append(f.records, fbc)
+		f.days["fbc$"] = f.rows(func(r record) bool { return r.NVR == mergedFBC })
+		h, store := syncWith(t, f)
+		if stored {
+			for _, rec := range f.records {
+				switch rec.NVR {
+				case csoBundle:
+					store.builds = append(store.builds, historyBuild("quay-3.17", TypeBundle, &rec))
+				case csoImage:
+					store.builds = append(store.builds, historyBuild("quay-3.17", TypeImage, &rec))
+				}
+			}
+		}
+		if err := h.scanDay(t.Context(), "quay-3.16", testDay); err != nil {
+			t.Fatalf("stored %v: scan: %v", stored, err)
+		}
+		if got, want := store.stored(), sorted("bundle "+csoBundle, "fbc "+mergedFBC, "image "+csoImage); !slices.Equal(got, want) {
+			t.Errorf("stored %v:\n got %q\nwant %q", stored, got, want)
+		}
+		if got, want := store.groups(), map[string]string{csoBundle: "quay-3.17", csoImage: "quay-3.17", mergedFBC: "quay-3.16"}; !maps.Equal(got, want) {
+			t.Errorf("stored %v: groups %v, want %v", stored, got, want)
+		}
+		// The operator image is found in the bundle's group, so only the
+		// bundle is searched without one.
+		if got := f.ungrouped(); !slices.Equal(got, []string{csoBundle}) {
+			t.Errorf("stored %v: searched %q without a group, want only the bundle", stored, got)
+		}
+	}
+}
+
+func TestCloseBundleCrossGroup(t *testing.T) {
+	f := quayART()
+	h, store := syncWith(t, f)
+	digest := strings.TrimPrefix(pullspec(csoBundle), "quay.io/redhat-user-workloads/ocp-art-tenant/art-images@")
+	if err := h.CloseBundle(t.Context(), "quay-3.16", digest); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := store.groups(), map[string]string{csoBundle: "quay-3.17", csoImage: "quay-3.17"}; !maps.Equal(got, want) {
+		t.Errorf("groups %v, want %v", got, want)
+	}
+	if got := f.ungrouped(); !slices.Equal(got, []string{strings.TrimPrefix(digest, "sha256:")}) {
+		t.Errorf("searched %q without a group, want only the bundle digest", got)
+	}
+
+	// A record found without a group that names none is not stored.
+	f = quayART()
+	for i := range f.records {
+		if f.records[i].NVR == csoBundle {
+			f.records[i].Group = ""
+		}
+	}
+	h, store = syncWith(t, f)
+	if err := h.CloseBundle(t.Context(), "quay-3.16", digest); err == nil || !strings.Contains(err.Error(), "names no group") {
+		t.Errorf("close error %v, want the record to name no group", err)
+	}
+	if len(store.builds) != 0 {
+		t.Errorf("stored %q, want none", store.stored())
+	}
+}
+
 func TestRecordSourceRepo(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "testdata/record.json")
@@ -379,6 +476,9 @@ func TestRecordSourceRepo(t *testing.T) {
 	rec, err := NewClient(srv.URL, srv.Client()).record(t.Context(), "nvr", "id")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if rec.Group != "quay-3.18" {
+		t.Errorf("group %q, want quay-3.18", rec.Group)
 	}
 	if rec.Name != "quay-operator" || rec.SourceRepo != "https://github.com/quay/quay-operator" {
 		t.Errorf("name %q, source repo %q; want quay-operator from the public repo, not the rebase repo", rec.Name, rec.SourceRepo)

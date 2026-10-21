@@ -36,6 +36,8 @@ type record struct {
 	RecordID      string `json:"record_id"`
 	ImagePullspec string `json:"image_pullspec"`
 	Name          string `json:"name"`
+	// Group is the ART group that built the record, as quay-3.17.
+	Group string `json:"group"`
 	// Commitish is the source commit ART built from, in SourceRepo, its
 	// public repository ("" when the record names none).
 	Commitish  string `json:"commitish"`
