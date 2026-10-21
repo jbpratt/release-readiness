@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
 const (
@@ -37,6 +39,8 @@ type fakeART struct {
 	searches []url.Values
 	// reads counts /build requests.
 	reads int
+	// failNVR is an NVR whose /search fails.
+	failNVR string
 }
 
 func pullspec(nvr string) string {
@@ -64,6 +68,10 @@ func (f *fakeART) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/search":
 		f.searches = append(f.searches, q)
+		if f.failNVR != "" && q.Get("nvr") == f.failNVR {
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
+			return
+		}
 		var rows []searchBuild
 		switch {
 		case q.Has("nvr"):
@@ -284,6 +292,58 @@ func TestHistorySyncSkipsPending(t *testing.T) {
 		if !strings.HasPrefix(b.RecordID, "ok-") {
 			t.Errorf("stored %s record %s, want only successful records", b.NVR, b.RecordID)
 		}
+	}
+}
+
+// A bundle operand build history does not list leaves its bundle unstored
+// without failing the pass: the FBC and the other stream's builds are stored
+// and the day marked. A failed search for the operand still fails the pass.
+func TestHistorySyncUnlistedOperand(t *testing.T) {
+	f := quayART()
+	f.records = slices.DeleteFunc(f.records, func(r record) bool { return r.NVR == clairImage })
+	f.days["fbc$"] = append(f.days["^quay-operator-fbc$"], f.days["^container-security-operator-fbc$"]...)
+	h, store := syncWith(t, f)
+	status := syncstatus.New()
+	h.Status = status.Track("art-history", 0)
+	h.SyncOnce(t.Context())
+
+	if p := status.Problems(h.now()); len(p) != 0 {
+		t.Errorf("sync status: %+v, want none", p)
+	}
+	if got, want := store.stored(), sorted("bundle "+csoBundle, "fbc "+csoFBC, "fbc "+qoFBC, "image "+csoImage, "image "+qoImage); !slices.Equal(got, want) {
+		t.Errorf("stored:\n got %q\nwant %q", got, want)
+	}
+	if !slices.Contains(store.scanned, "quay-3.17 fbc "+testDay) {
+		t.Errorf("scanned %q, want %s marked", store.scanned, testDay)
+	}
+
+	f = quayART()
+	f.failNVR = clairImage
+	f.days["fbc$"] = f.days["^quay-operator-fbc$"]
+	h, store = syncWith(t, f)
+	status = syncstatus.New()
+	h.Status = status.Track("art-history", 0)
+	h.SyncOnce(t.Context())
+	if p := status.Problems(h.now()); len(p) != 1 || !strings.Contains(p[0].Message, "503") {
+		t.Errorf("sync status after a failed search: %+v", p)
+	}
+	if slices.Contains(store.scanned, "quay-3.17 fbc "+testDay) || slices.Contains(store.stored(), "fbc "+qoFBC) {
+		t.Errorf("after a failed search: scanned %q, stored %q", store.scanned, store.stored())
+	}
+
+	// An unlisted operator is not skipped.
+	f = quayART()
+	f.records = slices.DeleteFunc(f.records, func(r record) bool { return r.NVR == qoImage })
+	f.days["fbc$"] = f.days["^quay-operator-fbc$"]
+	h, store = syncWith(t, f)
+	status = syncstatus.New()
+	h.Status = status.Track("art-history", 0)
+	h.SyncOnce(t.Context())
+	if p := status.Problems(h.now()); len(p) != 1 || !strings.Contains(p[0].Message, qoImage) {
+		t.Errorf("sync status after an unlisted operator: %+v", p)
+	}
+	if slices.Contains(store.scanned, "quay-3.17 fbc "+testDay) || slices.Contains(store.stored(), "fbc "+qoFBC) {
+		t.Errorf("after an unlisted operator: scanned %q, stored %q", store.scanned, store.stored())
 	}
 }
 

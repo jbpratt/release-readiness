@@ -2,6 +2,7 @@ package artbuild
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -42,6 +43,14 @@ const (
 // infers a search date range only from image NVRs.
 var nvrDate = regexp.MustCompile(`[.-](\d{8})\d{4}`)
 
+// ErrOperandUnavailable is returned, with the operand's NVR, for a bundle
+// that deploys an operand image with no successful build in build history.
+// The bundle is not stored.
+var ErrOperandUnavailable = errors.New("operand not listed by ART build history")
+
+// errNoSuccess is a search that succeeded without a successful matching row.
+var errNoSuccess = errors.New("no successful build")
+
 // HistoryBuild is a successful ART build record, with the source commit ART
 // built from. StartTime is as ART gives it.
 type HistoryBuild struct {
@@ -70,8 +79,9 @@ type HistoryStore interface {
 
 // HistorySync stores the successful FBC builds of each Quay stream from ART
 // build history, day by day, with the bundle each FBC holds and the operator
-// and operand images that bundle deploys. A build is stored only once
-// everything it names is, so a stored FBC or bundle is closed.
+// and operand images that bundle deploys. A bundle is stored only once
+// everything it names is, so a stored bundle is closed. An FBC is stored
+// even when a bundle it names is skipped for ErrOperandUnavailable.
 type HistorySync struct {
 	client *Client
 	store  HistoryStore
@@ -222,7 +232,9 @@ func (h *HistorySync) scanDay(ctx context.Context, group, day string) error {
 			return err
 		}
 		for _, n := range rec.BundleNVRs {
-			if err := h.closeBundleNVR(ctx, group, n); err != nil {
+			if err := h.closeBundleNVR(ctx, group, n); errors.Is(err, ErrOperandUnavailable) {
+				h.logger.Warn("skip bundle", "fbc", rec.NVR, "bundle", n, "error", err)
+			} else if err != nil {
 				return fmt.Errorf("%s: %w", rec.NVR, err)
 			}
 		}
@@ -344,12 +356,15 @@ func (h *HistorySync) closeBundle(ctx context.Context, group string, q url.Value
 	if err != nil {
 		return err
 	}
-	for _, n := range append([]string{rec.OperatorNVR}, rec.OperandNVRs...) {
+	// The operator comes first; the rest are operands.
+	for i, n := range append([]string{rec.OperatorNVR}, rec.OperandNVRs...) {
 		// "external" stands for operands ART does not build.
 		if n == "" || n == "external" {
 			continue
 		}
-		if err := h.storeImage(ctx, group, n); err != nil {
+		if err := h.storeImage(ctx, group, n); i > 0 && errors.Is(err, errNoSuccess) {
+			return fmt.Errorf("%s: %w: %s", rec.NVR, ErrOperandUnavailable, n)
+		} else if err != nil {
 			return fmt.Errorf("%s: %w", rec.NVR, err)
 		}
 	}
@@ -388,7 +403,7 @@ func (h *HistorySync) findSuccess(ctx context.Context, q url.Values, match func(
 			return &rows[i], nil
 		}
 	}
-	return nil, fmt.Errorf("no successful build for %s", q.Encode())
+	return nil, fmt.Errorf("%w for %s", errNoSuccess, q.Encode())
 }
 
 // nvrQuery searches group for nvr over the days around its embedded build

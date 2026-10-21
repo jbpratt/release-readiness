@@ -2,11 +2,13 @@ package fbc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"time"
 
+	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
@@ -125,6 +127,12 @@ func (s *Sync) SyncOnce(ctx context.Context) {
 		if err := s.closer.CloseBundle(ctx, group, digest); err != nil {
 			if ctx.Err() != nil {
 				return
+			}
+			// The render stays unjoined, so a later pass retries once ART
+			// lists the operand.
+			if errors.Is(err, artbuild.ErrOperandUnavailable) {
+				s.logger.Warn("join head bundle", "digest", digest, "fbc", r.LabelNVR, "error", err)
+				continue
 			}
 			pass.Add(fmt.Errorf("join head bundle %s of %s: %w", digest, r.LabelNVR, err))
 		}

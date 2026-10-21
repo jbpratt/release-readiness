@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/quay/release-readiness/internal/artbuild"
 	"github.com/quay/release-readiness/internal/syncstatus"
 )
 
@@ -262,11 +263,13 @@ func (f *fakeRegistry) count(digest string) int {
 }
 
 // memStore keeps renders as the database does. Its ART bundle builds are
-// the groups CloseBundle was asked for, by bundle digest.
+// the groups CloseBundle was asked for, by bundle digest, unless closeErr
+// is set.
 type memStore struct {
 	pullspecs []string
 	renders   map[string]Render
 	closed    map[string]string
+	closeErr  error
 }
 
 func (m *memStore) FBCsToRender(_ context.Context, now time.Time, limit int) ([]string, error) {
@@ -298,6 +301,9 @@ func (m *memStore) UnjoinedFBCRenders(context.Context) ([]Render, error) {
 }
 
 func (m *memStore) CloseBundle(_ context.Context, group, digest string) error {
+	if m.closeErr != nil {
+		return m.closeErr
+	}
 	m.closed[digest] = group
 	return nil
 }
@@ -365,5 +371,27 @@ func TestSyncSizeBound(t *testing.T) {
 	digest := f.pullspec[strings.Index(f.pullspec, "@")+1:]
 	if r := store.renders[digest]; r.State != StateFailed || !strings.Contains(r.Error, "exceeds its size bound") {
 		t.Errorf("render: %+v", r)
+	}
+}
+
+// A head bundle with an operand ART does not list stays unjoined without
+// failing the pass, and joins once the operand is listed.
+func TestSyncOnceUnlistedOperand(t *testing.T) {
+	s, _, store, now := newTestSync(t)
+	status := syncstatus.New()
+	s.Status = status.Track("fbc-render", 0)
+	store.closeErr = fmt.Errorf("bundle: %w: operand", artbuild.ErrOperandUnavailable)
+	s.SyncOnce(t.Context())
+	if p := status.Problems(*now); len(p) != 0 {
+		t.Errorf("sync status: %+v, want none", p)
+	}
+	if u, _ := store.UnjoinedFBCRenders(t.Context()); len(u) != 1 {
+		t.Errorf("unjoined renders %+v, want the one render", u)
+	}
+
+	store.closeErr = nil
+	s.SyncOnce(t.Context())
+	if want := map[string]string{"sha256:1699": "quay-3.16"}; !maps.Equal(store.closed, want) {
+		t.Errorf("closed bundles %v, want %v", store.closed, want)
 	}
 }
