@@ -121,4 +121,31 @@ func TestFBCRenderCache(t *testing.T) {
 	if unjoined, err := d.UnjoinedFBCRenders(ctx); err != nil || len(unjoined) != 0 {
 		t.Errorf("unjoined after the bundle is stored: %+v, %v", unjoined, err)
 	}
+
+	// A failed render with no retry time is never rendered again, but stays
+	// failed for its staged candidate.
+	const terminal = repo + "sha256:0005"
+	const snap50 = "quay-stage-5-0-0-fbc-20261013120000"
+	if err := d.UpsertStagedSnapshot(ctx, snap50, "5.0.0", "fbc", "stage"); err != nil {
+		t.Fatal(err)
+	}
+	id, err = d.CreateSnapshot(ctx, "fbc-quay-5-0", snap50, time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.CreateSnapshotComponent(ctx, id, "fbc-quay-5-0-quay-operator", terminal); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.UpsertFBCRender(ctx, fbc.Render{Digest: "sha256:0005", State: fbc.StateFailed, Error: "no channel stable-5.0", RenderedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := toRender(now.Add(24*time.Hour)), []string{newer, ocp420}; !slices.Equal(got, want) {
+		t.Errorf("to render with a terminal failure: got %v, want %v", got, want)
+	}
+	if read, failed, pending, err := d.FBCReadProgress(ctx, []string{"sha256:0005"}); err != nil || read != 0 || failed != 1 || pending != 0 {
+		t.Errorf("read progress of 0005: %d read, %d failed, %d pending, %v; want 0, 1, 0", read, failed, pending, err)
+	}
+	if members, err := d.StagedFBCMembers(ctx, "5.0.0", "fbc-quay-5-0"); err != nil || len(members) != 1 || members[0].ReadError != "no channel stable-5.0" {
+		t.Errorf("staged 5.0.0 members: %+v, %v", members, err)
+	}
 }

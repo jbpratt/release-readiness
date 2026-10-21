@@ -23,7 +23,8 @@ const (
 )
 
 // Render is the render of an FBC image, by digest. A rendered one is final;
-// a failed one, with its Error, is retried after RetryAfter.
+// a failed one, with its Error, is retried after RetryAfter, or never when
+// RetryAfter is zero.
 type Render struct {
 	Digest, LabelNVR       string
 	Channel                Channel
@@ -34,7 +35,7 @@ type Render struct {
 // Store is the subset of the database layer the render sync needs.
 type Store interface {
 	// FBCsToRender returns up to limit pullspecs of FBC images to render:
-	// none rendered, none failed with a retry after now.
+	// none rendered, none failed with no retry or a retry after now.
 	FBCsToRender(ctx context.Context, now time.Time, limit int) ([]string, error)
 	// UpsertFBCRender stores r unless its image is already rendered.
 	UpsertFBCRender(ctx context.Context, r Render) error
@@ -99,7 +100,12 @@ func (s *Sync) SyncOnce(ctx context.Context) {
 		now := s.now()
 		r := Render{Digest: ps[strings.Index(ps, "@")+1:], LabelNVR: img.LabelNVR, Channel: img.Channel, State: StateRendered, RenderedAt: now}
 		if err != nil {
-			r.State, r.Error, r.RetryAfter = StateFailed, err.Error(), now.Add(retryAfter)
+			r.State, r.Error = StateFailed, err.Error()
+			// An image's digest pins its catalog, so a missing channel stays
+			// missing.
+			if !errors.Is(err, ErrNoChannel) {
+				r.RetryAfter = now.Add(retryAfter)
+			}
 			s.logger.Warn("render", "pullspec", ps, "error", err)
 			pass.Add(fmt.Errorf("render %s: %w", ps, err))
 		} else {

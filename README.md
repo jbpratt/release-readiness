@@ -36,7 +36,7 @@ For each Quay stream with a stored Snapshot (ART group `quay-X.Y`), lists ART's 
 
 ### FBC render (every 10m, with `-art-build-history-url`)
 
-Reads up to 20 FBC images a pass anonymously from their registry (Registry v2 API): the catalogs of staged FBC Snapshots, then the newest ART FBC build of each operator, version and OCP version. It keeps, by digest, the image's `com.redhat.art.nvr` label and the head bundle of its `stable-X.Y` channel; a failed read is retried after an hour. Each head bundle is joined to its ART bundle build, read from ART build history when not yet stored.
+Reads up to 20 FBC images a pass anonymously from their registry (Registry v2 API): the catalogs of staged FBC Snapshots, then the newest ART FBC build of each operator, version and OCP version. It keeps, by digest, the image's `com.redhat.art.nvr` label and the head bundle of its `stable-X.Y` channel; a failed read is retried after an hour, except one whose catalog has no `stable-X.Y` channel: the digest pins the catalog, so that read is never retried. Each head bundle is joined to its ART bundle build, read from ART build history when not yet stored.
 
 ### FBC JIRA reconciler (every 10m, with `-art-build-history-url`)
 

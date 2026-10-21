@@ -196,9 +196,9 @@ func mustJSON(t *testing.T, v any) []byte {
 	return b
 }
 
-// fakeRegistry serves one FBC image, a multi-arch index whose linux/amd64
-// image has a base layer and a catalog layer. It counts GETs by digest and
-// fails the next fail GETs of the catalog layer.
+// fakeRegistry serves one FBC image labelled nvr, a multi-arch index whose
+// linux/amd64 image has a base layer and a catalog layer. It counts GETs by
+// digest and fails the next fail GETs of the catalog layer.
 type fakeRegistry struct {
 	mu       sync.Mutex
 	docs     map[string][]byte
@@ -209,7 +209,7 @@ type fakeRegistry struct {
 	layer    string
 }
 
-func newFakeRegistry(t *testing.T) (*fakeRegistry, *httptest.Server) {
+func newFakeRegistry(t *testing.T, nvr string) (*fakeRegistry, *httptest.Server) {
 	f := &fakeRegistry{docs: map[string][]byte{}, gets: map[string]int{}}
 	add := func(b []byte) string {
 		d := digestOf(b)
@@ -219,7 +219,7 @@ func newFakeRegistry(t *testing.T) (*fakeRegistry, *httptest.Server) {
 	base := targz(t, map[string]string{"etc/os-release": "ID=rhel\n"})
 	layer := targz(t, map[string]string{"configs/quay-operator/catalog.yaml": catalog, "root/buildinfo/labels.json": "{}"})
 	f.base, f.layer = add(base), add(layer)
-	config := add(mustJSON(t, map[string]any{"config": map[string]any{"Labels": map[string]string{nvrLabel: "quay-operator-fbc-3.16.7-20261012191500.ocp4.21"}}}))
+	config := add(mustJSON(t, map[string]any{"config": map[string]any{"Labels": map[string]string{nvrLabel: nvr}}}))
 	amd64 := add(mustJSON(t, map[string]any{
 		"mediaType": "application/vnd.oci.image.manifest.v1+json",
 		"config":    map[string]any{"digest": config},
@@ -276,7 +276,7 @@ func (m *memStore) FBCsToRender(_ context.Context, now time.Time, limit int) ([]
 	var out []string
 	for _, ps := range m.pullspecs {
 		r, ok := m.renders[ps[strings.Index(ps, "@")+1:]]
-		if !ok || r.State == StateFailed && !r.RetryAfter.After(now) {
+		if !ok || r.State == StateFailed && !r.RetryAfter.IsZero() && !r.RetryAfter.After(now) {
 			out = append(out, ps)
 		}
 	}
@@ -308,8 +308,8 @@ func (m *memStore) CloseBundle(_ context.Context, group, digest string) error {
 	return nil
 }
 
-func newTestSync(t *testing.T) (*Sync, *fakeRegistry, *memStore, *time.Time) {
-	f, srv := newFakeRegistry(t)
+func newTestSync(t *testing.T, nvr string) (*Sync, *fakeRegistry, *memStore, *time.Time) {
+	f, srv := newFakeRegistry(t, nvr)
 	store := &memStore{pullspecs: []string{f.pullspec}, renders: map[string]Render{}, closed: map[string]string{}}
 	s := NewSync(NewRegistry(srv.Client()), store, store, slog.New(slog.DiscardHandler))
 	now := time.Date(2026, 10, 12, 20, 0, 0, 0, time.UTC)
@@ -317,14 +317,16 @@ func newTestSync(t *testing.T) (*Sync, *fakeRegistry, *memStore, *time.Time) {
 	return s, f, store, &now
 }
 
+const testNVR = "quay-operator-fbc-3.16.7-20261012191500.ocp4.21"
+
 func TestSyncCachesByDigest(t *testing.T) {
-	s, f, store, _ := newTestSync(t)
+	s, f, store, _ := newTestSync(t, testNVR)
 	s.SyncOnce(t.Context())
 	s.SyncOnce(t.Context())
 
 	digest := f.pullspec[strings.Index(f.pullspec, "@")+1:]
 	r := store.renders[digest]
-	if r.State != StateRendered || !reflect.DeepEqual(r.Channel, wantHead) || r.LabelNVR != "quay-operator-fbc-3.16.7-20261012191500.ocp4.21" {
+	if r.State != StateRendered || !reflect.DeepEqual(r.Channel, wantHead) || r.LabelNVR != testNVR {
 		t.Errorf("render: %+v", r)
 	}
 	if n := f.count(f.layer); n != 1 {
@@ -339,7 +341,7 @@ func TestSyncCachesByDigest(t *testing.T) {
 }
 
 func TestSyncRetriesFailedRender(t *testing.T) {
-	s, f, store, now := newTestSync(t)
+	s, f, store, now := newTestSync(t, testNVR)
 	status := syncstatus.New()
 	s.Status = status.Track("fbc-render", 0)
 	f.fail = 1
@@ -364,8 +366,33 @@ func TestSyncRetriesFailedRender(t *testing.T) {
 	}
 }
 
+// The catalog has no stable-5.0 channel, so the render fails once and is
+// never retried.
+func TestSyncStopsRetryingMissingChannel(t *testing.T) {
+	s, f, store, now := newTestSync(t, "quay-operator-fbc-5.0.0-20261012191500.ocp4.21")
+	status := syncstatus.New()
+	s.Status = status.Track("fbc-render", 0)
+	s.SyncOnce(t.Context())
+	digest := f.pullspec[strings.Index(f.pullspec, "@")+1:]
+	if r := store.renders[digest]; r.State != StateFailed || !strings.Contains(r.Error, "no channel stable-5.0") || !r.RetryAfter.IsZero() {
+		t.Fatalf("after the first pass: %+v", r)
+	}
+	if p := status.Problems(*now); len(p) != 1 || !strings.Contains(p[0].Message, "no channel stable-5.0") {
+		t.Errorf("sync status after the first pass: %+v", p)
+	}
+
+	*now = now.Add(retryAfter)
+	s.SyncOnce(t.Context())
+	if p := status.Problems(*now); len(p) != 0 {
+		t.Errorf("sync status after the second pass: %+v, want none", p)
+	}
+	if n := f.count(f.layer); n != 1 {
+		t.Errorf("catalog layer requested %d times, want 1", n)
+	}
+}
+
 func TestSyncSizeBound(t *testing.T) {
-	s, f, store, _ := newTestSync(t)
+	s, f, store, _ := newTestSync(t, testNVR)
 	s.registry.maxExpanded = 1 << 10
 	s.SyncOnce(t.Context())
 	digest := f.pullspec[strings.Index(f.pullspec, "@")+1:]
@@ -377,7 +404,7 @@ func TestSyncSizeBound(t *testing.T) {
 // A head bundle with an operand ART does not list stays unjoined without
 // failing the pass, and joins once the operand is listed.
 func TestSyncOnceUnlistedOperand(t *testing.T) {
-	s, _, store, now := newTestSync(t)
+	s, _, store, now := newTestSync(t, testNVR)
 	status := syncstatus.New()
 	s.Status = status.Track("fbc-render", 0)
 	store.closeErr = fmt.Errorf("bundle: %w: operand", artbuild.ErrOperandUnavailable)

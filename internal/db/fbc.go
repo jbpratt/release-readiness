@@ -53,8 +53,8 @@ func (d *DB) fbcRenderSources(ctx context.Context) ([]dbsqlc.ListFBCRenderSource
 }
 
 // FBCsToRender returns up to limit pullspecs of FBC images to render, in the
-// order of fbcRenderSources. It skips rendered images and failed ones to
-// retry after now.
+// order of fbcRenderSources. It skips rendered images and failed ones with
+// no retry or a retry after now.
 func (d *DB) FBCsToRender(ctx context.Context, now time.Time, limit int) ([]string, error) {
 	sources, err := d.fbcRenderSources(ctx)
 	if err != nil {
@@ -65,7 +65,7 @@ func (d *DB) FBCsToRender(ctx context.Context, now time.Time, limit int) ([]stri
 		if len(pullspecs) == limit {
 			break
 		}
-		if r.State == fbc.StateRendered || r.State == fbc.StateFailed && parseTime(r.RetryAfter).After(now) {
+		if r.State == fbc.StateRendered || r.State == fbc.StateFailed && (r.RetryAfter == "" || parseTime(r.RetryAfter).After(now)) {
 			continue
 		}
 		pullspecs = append(pullspecs, r.Pullspec)

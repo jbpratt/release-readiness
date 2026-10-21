@@ -56,6 +56,9 @@ type doc struct {
 	RelatedImages []RelatedImage `json:"relatedImages"`
 }
 
+// ErrNoChannel is the error of a catalog without the requested channel.
+var ErrNoChannel = errors.New("no channel")
+
 // ParseChannel reads catalog YAML one document at a time and returns the
 // head of channel: its one entry no other entry replaces or skips. The
 // package's defaultChannel plays no part, as an older stream's catalog
@@ -94,7 +97,7 @@ func ParseChannel(r io.Reader, channel string) (Channel, error) {
 		}
 	}
 	if !found {
-		return Channel{}, fmt.Errorf("no channel %s", channel)
+		return Channel{}, fmt.Errorf("%w %s", ErrNoChannel, channel)
 	}
 	var superseded []string
 	for _, e := range entries {
