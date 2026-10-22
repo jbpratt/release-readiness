@@ -125,7 +125,7 @@ import {
 	fbcGroups,
 	fbcNewerTitle,
 	fbcParams,
-	fbcPullspecs,
+	fbcPullspecsReason,
 	fbcsBuilt,
 	fbcTagList,
 	fbcTagsLead,
@@ -237,7 +237,13 @@ export default function ReleaseDetail() {
 	const app = release.konflux_application ?? "";
 	const xyz = release.name.replace(/^[a-z]+-v/, "");
 	const fbc = candidate.data?.fbc_candidate;
-	const pullspecs = fbc && fbcPullspecs(fbc);
+	const inputsUnavailable = !candidate.data
+		? candidate.error
+			? "The release candidate could not be loaded."
+			: "The release candidate is still loading."
+		: candidate.data.shipped
+			? "This release has shipped."
+			: fbcPullspecsReason(fbc);
 	const issues =
 		candidate.data &&
 		placeIssues(
@@ -310,23 +316,20 @@ export default function ReleaseDetail() {
 									: null
 							}
 							inputs={
-								pullspecs &&
-								!candidate.data?.shipped && (
-									<ReleaseInputsButton>
-										<ReleaseInputs
-											app={app}
-											release={release.name}
-											version={xyz}
-											issues={tickets}
-											issuesError={ticketsError}
-											onRetry={refetchTickets}
-											jiraEnabled={config?.jira_enabled !== false}
-											ticketKey={release.release_ticket_key}
-											namespace={config?.konflux_namespace || "art-quay-tenant"}
-											dueDate={release.due_date}
-										/>
-									</ReleaseInputsButton>
-								)
+								<ReleaseInputsButton unavailable={inputsUnavailable}>
+									<ReleaseInputs
+										app={app}
+										release={release.name}
+										version={xyz}
+										issues={tickets}
+										issuesError={ticketsError}
+										onRetry={refetchTickets}
+										jiraEnabled={config?.jira_enabled !== false}
+										ticketKey={release.release_ticket_key}
+										namespace={config?.konflux_namespace || "art-quay-tenant"}
+										dueDate={release.due_date}
+									/>
+								</ReleaseInputsButton>
 							}
 						/>
 
@@ -1114,22 +1117,46 @@ function DetailLine({
 const line = { marginTop: "0.5rem" };
 
 /** A button opening children, the release's inputs, in a modal. */
-function ReleaseInputsButton({ children }: { children: ReactNode }) {
+function ReleaseInputsButton({
+	unavailable,
+	children,
+}: {
+	/** Why no complete FBC pullspec list can be offered yet. */
+	unavailable: string | null;
+	children: ReactNode;
+}) {
 	const [open, setOpen] = useState(false);
+	const button = (
+		<Button
+			variant="secondary"
+			size="sm"
+			isDisabled={!!unavailable}
+			onClick={() => setOpen(true)}
+		>
+			Release inputs
+		</Button>
+	);
 	return (
 		<>
-			<Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
-				Release inputs
-			</Button>
-			<Modal
-				isOpen={open}
-				onClose={() => setOpen(false)}
-				aria-labelledby="release-inputs-title"
-				variant="large"
-			>
-				<ModalHeader title="Release inputs" labelId="release-inputs-title" />
-				<ModalBody tabIndex={0}>{children}</ModalBody>
-			</Modal>
+			{unavailable ? (
+				<Tooltip content={unavailable}>
+					{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus exposes the disabled button's explanation. */}
+					<span tabIndex={0}>{button}</span>
+				</Tooltip>
+			) : (
+				button
+			)}
+			{open && (
+				<Modal
+					isOpen
+					onClose={() => setOpen(false)}
+					aria-labelledby="release-inputs-title"
+					variant="large"
+				>
+					<ModalHeader title="Release inputs" labelId="release-inputs-title" />
+					<ModalBody tabIndex={0}>{children}</ModalBody>
+				</Modal>
+			)}
 		</>
 	);
 }

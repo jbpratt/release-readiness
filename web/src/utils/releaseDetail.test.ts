@@ -24,6 +24,7 @@ import {
 	fbcNewerTitle,
 	fbcParams,
 	fbcPullspecs,
+	fbcPullspecsReason,
 	fbcsBuilt,
 	fbcTagList,
 	fbcTagsLead,
@@ -374,6 +375,31 @@ test("stream only, no stage (3.16): pullspecs from the stream", () => {
 			",quay.io/art-fbc@sha256:4.14-" +
 			head,
 	);
+});
+
+test("fbcPullspecsReason names each unavailable candidate state", () => {
+	assert.equal(
+		fbcPullspecsReason(null),
+		"No FBC candidate has been found for this release.",
+	);
+	for (const [state, reason] of [
+		[
+			"incomplete",
+			"The FBC candidate is incomplete: an operator or OCP version has no FBC.",
+		],
+		[
+			"inconsistent",
+			"The FBC candidate is inconsistent: an operator has FBCs on different bundles.",
+		],
+		["unknown", "The FBC candidate has unresolved FBC or bundle details."],
+	] as const) {
+		assert.equal(fbcPullspecsReason(fbcCandidate({ state })), reason);
+	}
+	assert.equal(
+		fbcPullspecsReason(fbcCandidate({ state: "complete" })),
+		"The FBC candidate has no pullspecs yet.",
+	);
+	assert.equal(fbcPullspecsReason(fbcCandidate({ pullspecs: ["x"] })), null);
 });
 
 test("missing operator (3.17.6): CSO and QBO not in stage show the stream's FBCs", () => {

@@ -97,6 +97,22 @@ export const fbcPullspecs = (c: FBCCandidate): string | null =>
 		? c.pullspecs.join(",")
 		: null;
 
+/** Why a release candidate cannot yet offer FBC pullspecs. */
+export const fbcPullspecsReason = (
+	c: FBCCandidate | null | undefined,
+): string | null => {
+	if (!c) return "No FBC candidate has been found for this release.";
+	if (c.state === "incomplete")
+		return "The FBC candidate is incomplete: an operator or OCP version has no FBC.";
+	if (c.state === "inconsistent")
+		return "The FBC candidate is inconsistent: an operator has FBCs on different bundles.";
+	if (c.state === "unknown")
+		return "The FBC candidate has unresolved FBC or bundle details.";
+	if (c.pullspecs.length === 0)
+		return "The FBC candidate has no pullspecs yet.";
+	return null;
+};
+
 /** release-from-fbc's fbc-pullspecs from ART's tags, with what to tell. */
 export interface TagList {
 	/** The pullspecs, comma-separated; null while there is an error. */
