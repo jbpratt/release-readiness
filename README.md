@@ -126,7 +126,11 @@ cd web && npm run dev
 
 `deploy/rbac.yaml` creates the `release-readiness` ServiceAccount and a Role granting read-only access to Snapshots and Releases, and get/list on `results.tekton.dev` results and records for the CVE scan counts. The Role and RoleBinding must live in the Konflux namespace the app reads.
 
-`deploy/imagestream.yaml` is applied with the rest of `deploy/`: it imports the released `:latest` on a schedule, and the Deployment's `image.openshift.io/triggers` annotation rolls out each new digest after the next scheduled import.
+Apply `deploy/imagestream.yaml` in the Deployment's namespace, which imports the Konflux-released `quay.io/redhat-services-prod/quay-eng/release-readiness:latest` on a schedule, then add the trigger annotation to the running Deployment so each newly imported digest rolls out:
+
+```bash
+oc annotate deploy release-readiness image.openshift.io/triggers='[{"from":{"kind":"ImageStreamTag","name":"release-readiness:latest"},"fieldPath":"spec.template.spec.containers[?(@.name==\"dashboard\")].image"}]'
+```
 
 ### Upgrading
 
