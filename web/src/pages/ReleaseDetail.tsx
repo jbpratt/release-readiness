@@ -471,7 +471,9 @@ function ReleaseFacts({
 			{stage && <StageFacts ri={stage} />}
 			{advisory && (
 				<DescriptionListGroup>
-					<DescriptionListTerm>Advisory</DescriptionListTerm>
+					<DescriptionListTerm>
+						{shipped ? "Advisory" : "Stage advisory"}
+					</DescriptionListTerm>
 					<DescriptionListDescription>
 						<ExtLink href={advisory} icon>
 							{advisoryName(advisory)}
@@ -1579,68 +1581,73 @@ function IssuesTable({ issues }: { issues: JiraIssue[] }) {
 
 	return (
 		<>
-			<Table
-				aria-label="Tickets"
-				variant="compact"
-				gridBreakPoint=""
-				style={{ tableLayout: "auto" }}
-			>
-				<Thead>
-					<Tr>
-						<Th modifier="nowrap">{narrow ? "Ticket" : "Key"}</Th>
-						{!narrow && <Th modifier="nowrap">Status</Th>}
-						{!narrow && <Th modifier="nowrap">Type</Th>}
-						{!narrow && <Th>Summary</Th>}
-					</Tr>
-				</Thead>
-				<Tbody>
-					{shown.map((issue) =>
-						narrow ? (
-							<Tr key={issue.key}>
-								<Td dataLabel="Ticket">
-									<Flex
-										gap={{ default: "gapSm" }}
-										alignItems={{ default: "alignItemsCenter" }}
-									>
+			{shown.length > 0 && (
+				<Table
+					aria-label="Tickets"
+					variant="compact"
+					gridBreakPoint=""
+					style={{ tableLayout: "auto" }}
+				>
+					<Thead>
+						<Tr>
+							<Th modifier="nowrap">{narrow ? "Ticket" : "Key"}</Th>
+							{!narrow && <Th modifier="nowrap">Status</Th>}
+							{!narrow && <Th modifier="nowrap">Type</Th>}
+							{!narrow && <Th>Summary</Th>}
+						</Tr>
+					</Thead>
+					<Tbody>
+						{shown.map((issue) =>
+							narrow ? (
+								<Tr key={issue.key}>
+									<Td dataLabel="Ticket">
+										<Flex
+											gap={{ default: "gapSm" }}
+											alignItems={{ default: "alignItemsCenter" }}
+										>
+											<a href={issue.link} {...external}>
+												{issue.key}
+											</a>
+											<TicketStatus status={issue.status} />
+											<span style={muted}>{issue.issue_type}</span>
+										</Flex>
+										<div
+											style={{
+												marginTop: "0.125rem",
+												overflowWrap: "anywhere",
+											}}
+										>
+											{issue.summary}
+										</div>
+									</Td>
+								</Tr>
+							) : (
+								<Tr key={issue.key}>
+									<Td dataLabel="Key" modifier="nowrap">
 										<a href={issue.link} {...external}>
 											{issue.key}
 										</a>
+									</Td>
+									<Td dataLabel="Status" modifier="nowrap">
 										<TicketStatus status={issue.status} />
-										<span style={muted}>{issue.issue_type}</span>
-									</Flex>
-									<div
-										style={{ marginTop: "0.125rem", overflowWrap: "anywhere" }}
-									>
+									</Td>
+									<Td dataLabel="Type" modifier="nowrap" style={muted}>
+										{issue.issue_type}
+									</Td>
+									<Td dataLabel="Summary" style={{ overflowWrap: "anywhere" }}>
 										{issue.summary}
-									</div>
-								</Td>
-							</Tr>
-						) : (
-							<Tr key={issue.key}>
-								<Td dataLabel="Key" modifier="nowrap">
-									<a href={issue.link} {...external}>
-										{issue.key}
-									</a>
-								</Td>
-								<Td dataLabel="Status" modifier="nowrap">
-									<TicketStatus status={issue.status} />
-								</Td>
-								<Td dataLabel="Type" modifier="nowrap" style={muted}>
-									{issue.issue_type}
-								</Td>
-								<Td dataLabel="Summary" style={{ overflowWrap: "anywhere" }}>
-									{issue.summary}
-								</Td>
-							</Tr>
-						),
-					)}
-				</Tbody>
-			</Table>
+									</Td>
+								</Tr>
+							),
+						)}
+					</Tbody>
+				</Table>
+			)}
 			{closed.length > 0 && (
 				<Button
 					variant="link"
 					isInline
-					style={{ marginTop: "0.75rem" }}
+					style={shown.length > 0 ? { marginTop: "0.75rem" } : undefined}
 					onClick={() => setShowClosed(!showClosed)}
 				>
 					{showClosed
