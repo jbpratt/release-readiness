@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/ubi10/nodejs-24:10.2-1792512952 AS frontend
+FROM registry.access.redhat.com/ubi10/nodejs-24:10.2-1792840089 AS frontend
 
 WORKDIR /opt/app-root/src
 COPY --chown=1001:0 web/package.json web/package-lock.json ./
