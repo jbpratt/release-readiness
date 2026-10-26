@@ -105,7 +105,7 @@ import {
 	PROBLEMS,
 	streamFbc,
 } from "../utils/fbcMatrix";
-import { days, due, relative } from "../utils/format";
+import { day, days, due, exact, relative } from "../utils/format";
 import {
 	ART_PIPELINES_HEALTH_URL,
 	artPipelineUrl,
@@ -239,19 +239,31 @@ export default function ReleaseDetail() {
 	const app = release.konflux_application ?? "";
 	const xyz = release.name.replace(/^[a-z]+-v/, "");
 	const fbc = candidate.data?.fbc_candidate;
+	// The catalog's ship date answers before the candidate loads.
+	const shipped =
+		(candidate.data?.shipped ?? release.released) || !!release.shipped_at;
+	const fbcProd = candidate.data?.candidate?.fbc_prod;
 	const inputsUnavailable = !candidate.data
 		? candidate.error
 			? "The release candidate could not be loaded."
 			: "The release candidate is still loading."
-		: candidate.data.shipped
-			? "This release has shipped."
-			: fbcPullspecsReason(fbc);
+		: fbcPullspecsReason(fbc);
 	const issues =
 		candidate.data &&
 		placeIssues(
 			candidate.data,
 			blockers(candidate.data, release.name, app, config),
 		);
+	const ticketsCard = (
+		<TicketsCard
+			issues={tickets}
+			error={ticketsError}
+			onRetry={refetchTickets}
+			config={config}
+			ticketKey={release.release_ticket_key}
+			shipped={shipped}
+		/>
+	);
 
 	return (
 		<PageSection>
@@ -291,14 +303,21 @@ export default function ReleaseDetail() {
 
 						<ReleaseFacts
 							release={release}
-							shipped={candidate.data?.shipped ?? release.released}
+							shipped={shipped}
+							shippedAt={release.shipped_at}
+							prodAt={fbcProd?.last}
 							shipmentMR={release.shipment_mr}
 							jiraBaseUrl={config?.jira_base_url}
 							stage={candidate.data && sharedStage(candidate.data)}
 							prod={candidate.data?.candidate?.prod}
 						/>
 
+						{shipped && ticketsCard}
+
 						<BuildsCard
+							shipped={shipped}
+							toProd={fbcProd?.released}
+							shipmentMR={release.shipment_mr}
 							data={candidate.data}
 							error={candidate.error}
 							onRetry={candidate.refetch}
@@ -319,30 +338,26 @@ export default function ReleaseDetail() {
 									: null
 							}
 							inputs={
-								<ReleaseInputsButton unavailable={inputsUnavailable}>
-									<ReleaseInputs
-										app={app}
-										release={release.name}
-										version={xyz}
-										issues={tickets}
-										issuesError={ticketsError}
-										onRetry={refetchTickets}
-										jiraEnabled={config?.jira_enabled !== false}
-										ticketKey={release.release_ticket_key}
-										namespace={config?.konflux_namespace || "art-quay-tenant"}
-										dueDate={release.due_date}
-									/>
-								</ReleaseInputsButton>
+								!shipped && (
+									<ReleaseInputsButton unavailable={inputsUnavailable}>
+										<ReleaseInputs
+											app={app}
+											release={release.name}
+											version={xyz}
+											issues={tickets}
+											issuesError={ticketsError}
+											onRetry={refetchTickets}
+											jiraEnabled={config?.jira_enabled !== false}
+											ticketKey={release.release_ticket_key}
+											namespace={config?.konflux_namespace || "art-quay-tenant"}
+											dueDate={release.due_date}
+										/>
+									</ReleaseInputsButton>
+								)
 							}
 						/>
 
-						<TicketsCard
-							issues={tickets}
-							error={ticketsError}
-							onRetry={refetchTickets}
-							config={config}
-							ticketKey={release.release_ticket_key}
-						/>
+						{!shipped && ticketsCard}
 					</DrawerContentBody>
 				</DrawerContent>
 			</Drawer>
@@ -390,13 +405,17 @@ function Freshness({ data }: { data?: ReleaseCandidate }) {
 }
 
 /**
- * The target date, flagged while unshipped once past or within 3 days, the
- * ticket, its assignee, the shipment MR, the stage Release every operator
- * shares, and the advisory: the release's facts in the page header.
+ * The release's facts in the page header. Unshipped: the target date, flagged
+ * once past or within 3 days, the ticket, its assignee, the shipment MR, the
+ * stage Release every operator shares, and the stage advisory. Shipped: the
+ * day the catalog first published it, the prod advisory, the ticket and its
+ * assignee.
  */
 function ReleaseFacts({
 	release,
 	shipped,
+	shippedAt,
+	prodAt,
 	shipmentMR: mr,
 	jiraBaseUrl,
 	stage,
@@ -404,6 +423,10 @@ function ReleaseFacts({
 }: {
 	release: ReleaseVersion;
 	shipped: boolean;
+	/** When the Red Hat catalog first published the version. */
+	shippedAt?: string;
+	/** When the version's last FBC prod Release finished. */
+	prodAt?: string;
 	shipmentMR: ShipmentMR | null;
 	jiraBaseUrl?: string;
 	stage?: KonfluxRelease | null;
@@ -414,6 +437,18 @@ function ReleaseFacts({
 	const advisory = releaseAdvisory(shipped, prod, stage);
 	const target = release.due_date ?? release.release_date;
 	const dueDate = target ? due(target, shipped) : undefined;
+	const advisoryFact = advisory && (
+		<DescriptionListGroup>
+			<DescriptionListTerm>
+				{shipped ? "Advisory" : "Stage advisory"}
+			</DescriptionListTerm>
+			<DescriptionListDescription>
+				<ExtLink href={advisory} icon>
+					{advisoryName(advisory)}
+				</ExtLink>
+			</DescriptionListDescription>
+		</DescriptionListGroup>
+	);
 	return (
 		<DescriptionList
 			isCompact
@@ -421,31 +456,60 @@ function ReleaseFacts({
 			autoFitMinModifier={{ default: "8rem", lg: "9rem" }}
 			style={{ marginBottom: "1.5rem" }}
 		>
-			<DescriptionListGroup>
-				<DescriptionListTerm>Due date</DescriptionListTerm>
-				<DescriptionListDescription>
-					{dueDate ? (
-						<Tooltip content={dueSource(release)}>
-							{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows its tooltip. */}
-							<span tabIndex={0}>{dueDate.date}</span>
-						</Tooltip>
-					) : (
-						"TBD"
-					)}
-					{dueDate?.kind === "past" && (
-						<Label status="warning" isCompact style={{ marginLeft: "0.5rem" }}>
-							Past due
-						</Label>
-					)}
-					{dueDate?.kind === "soon" && (
-						<Label status="warning" isCompact style={{ marginLeft: "0.5rem" }}>
-							{dueDate.days === 0
-								? "Due today"
-								: `Due in ${days(dueDate.days)}`}
-						</Label>
-					)}
-				</DescriptionListDescription>
-			</DescriptionListGroup>
+			{shipped ? (
+				<>
+					<DescriptionListGroup>
+						<DescriptionListTerm>Shipped</DescriptionListTerm>
+						<DescriptionListDescription>
+							{shippedAt && prodAt && day(prodAt) !== day(shippedAt) ? (
+								<Tooltip content={`Released to prod ${exact(prodAt)}`}>
+									{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows its tooltip. */}
+									<span tabIndex={0}>{day(shippedAt)}</span>
+								</Tooltip>
+							) : shippedAt ? (
+								day(shippedAt)
+							) : (
+								"Yes"
+							)}
+						</DescriptionListDescription>
+					</DescriptionListGroup>
+					{advisoryFact}
+				</>
+			) : (
+				<DescriptionListGroup>
+					<DescriptionListTerm>Due date</DescriptionListTerm>
+					<DescriptionListDescription>
+						{dueDate ? (
+							<Tooltip content={dueSource(release)}>
+								{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows its tooltip. */}
+								<span tabIndex={0}>{dueDate.date}</span>
+							</Tooltip>
+						) : (
+							"TBD"
+						)}
+						{dueDate?.kind === "past" && (
+							<Label
+								status="warning"
+								isCompact
+								style={{ marginLeft: "0.5rem" }}
+							>
+								Past due
+							</Label>
+						)}
+						{dueDate?.kind === "soon" && (
+							<Label
+								status="warning"
+								isCompact
+								style={{ marginLeft: "0.5rem" }}
+							>
+								{dueDate.days === 0
+									? "Due today"
+									: `Due in ${days(dueDate.days)}`}
+							</Label>
+						)}
+					</DescriptionListDescription>
+				</DescriptionListGroup>
+			)}
 			{ticket && (
 				<DescriptionListGroup>
 					<DescriptionListTerm>Ticket</DescriptionListTerm>
@@ -468,7 +532,7 @@ function ReleaseFacts({
 					{release.release_ticket_assignee || "Unassigned"}
 				</DescriptionListDescription>
 			</DescriptionListGroup>
-			{mr && (
+			{!shipped && mr && (
 				<DescriptionListGroup>
 					<DescriptionListTerm>Shipment</DescriptionListTerm>
 					<DescriptionListDescription>
@@ -476,31 +540,23 @@ function ReleaseFacts({
 					</DescriptionListDescription>
 				</DescriptionListGroup>
 			)}
-			{stage && <StageFacts ri={stage} />}
-			{advisory && (
-				<DescriptionListGroup>
-					<DescriptionListTerm>
-						{shipped ? "Advisory" : "Stage advisory"}
-					</DescriptionListTerm>
-					<DescriptionListDescription>
-						<ExtLink href={advisory} icon>
-							{advisoryName(advisory)}
-						</ExtLink>
-					</DescriptionListDescription>
-				</DescriptionListGroup>
-			)}
+			{!shipped && stage && <StageFacts ri={stage} />}
+			{!shipped && advisoryFact}
 		</DescriptionList>
 	);
 }
 
 /**
  * The version's release candidate as its FBC matrix and bundle images, or why
- * it has none; a shipped version's is labeled, with nothing to release. Its
- * blockers are shown where they apply (whole-candidate ones above the matrix,
- * the rest at their cells and operators' images) and announced to screen
- * readers.
+ * it has none; a shipped version's is folded under its FBCs released to prod,
+ * with nothing to release. Its blockers are shown where they apply
+ * (whole-candidate ones above the matrix, the rest at their cells and
+ * operators' images) and announced to screen readers.
  */
 function BuildsCard({
+	shipped,
+	toProd,
+	shipmentMR: mr,
 	data,
 	error,
 	onRetry,
@@ -511,6 +567,10 @@ function BuildsCard({
 	jira,
 	inputs,
 }: {
+	shipped: boolean;
+	/** How many FBCs a prod Release shipped. */
+	toProd?: number;
+	shipmentMR: ShipmentMR | null;
 	data?: ReleaseCandidate;
 	error?: Error;
 	onRetry: () => void;
@@ -527,9 +587,19 @@ function BuildsCard({
 	inputs?: ReactNode;
 }) {
 	const fbc = data?.fbc_candidate;
+	const [open, setOpen] = useState(false);
 	return (
-		<Card style={{ marginBottom: "1.5rem" }}>
+		<Card
+			style={{ marginBottom: "1.5rem" }}
+			isExpanded={shipped ? open : undefined}
+		>
 			<CardHeader
+				onExpand={shipped ? () => setOpen(!open) : undefined}
+				toggleButtonProps={
+					shipped
+						? { "aria-label": "Shipped FBCs", "aria-expanded": open }
+						: undefined
+				}
 				actions={{
 					actions: (
 						<Flex gap={{ default: "gapSm" }}>
@@ -544,6 +614,9 @@ function BuildsCard({
 									{ text: "Konflux", href: konflux },
 									{ text: "Jira", href: jira },
 									{ text: "ART pipelines", href: ART_PIPELINES_HEALTH_URL },
+									...(shipped && mr
+										? [{ text: "Shipment MR", href: mr.web_url }]
+										: []),
 								]}
 							/>
 						</Flex>
@@ -552,63 +625,77 @@ function BuildsCard({
 				}}
 			>
 				<CardTitle>
-					<Title headingLevel="h2" size="xl">
-						Release candidate
-					</Title>
+					<Flex
+						gap={{ default: "gapMd" }}
+						alignItems={{ default: "alignItemsCenter" }}
+					>
+						<Title headingLevel="h2" size="xl">
+							{shipped ? "Shipped FBCs" : "Release candidate"}
+						</Title>
+						{shipped && toProd !== undefined && (
+							<span style={{ fontSize: "var(--pf-t--global--font--size--sm)" }}>
+								<Status status="done">{`${toProd} released to prod`}</Status>
+							</span>
+						)}
+					</Flex>
 				</CardTitle>
 			</CardHeader>
-			<CardBody>
-				<div role="status" className="pf-v6-screen-reader">
-					{data?.verdict.state === "not_ready" &&
-						verdictLine(data.verdict).text}
-				</div>
-				{!data && !error ? (
-					<Spinner size="md" aria-label="Loading the release candidate" />
-				) : !data ? (
-					<LoadError
-						variant="xs"
-						title="Could not load the release candidate"
-						onRetry={onRetry}
-					>
-						Its builds, CI, and release status are unavailable right now.
-					</LoadError>
-				) : fbc ? (
-					<FbcMatrix
-						data={data}
-						fbc={fbc}
-						issues={issues}
-						ci={ci}
-						version={version}
-					/>
-				) : data.shipped ? (
-					<EmptyState variant="xs" headingLevel="h3" titleText="No FBC data">
-						<EmptyStateBody>
-							v{version} has shipped. No FBC build data is recorded for it.
-						</EmptyStateBody>
-					</EmptyState>
-				) : data.reason === "not a concrete quay-vX.Y.Z version" ? (
-					<EmptyState
-						variant="xs"
-						headingLevel="h3"
-						titleText="No FBCs expected"
-					>
-						<EmptyStateBody>Only Quay versions have FBC builds.</EmptyStateBody>
-					</EmptyState>
-				) : (
-					<EmptyState
-						variant="xs"
-						headingLevel="h3"
-						icon={CubesIcon}
-						titleText="No FBCs yet"
-					>
-						<EmptyStateBody>
-							{data.reason && data.reason !== "no release candidate yet"
-								? noFbcText(version, data.reason)
-								: `The matrix fills in once ART builds an FBC for v${version}.`}
-						</EmptyStateBody>
-					</EmptyState>
-				)}
-			</CardBody>
+			{shipped && !open ? null : (
+				<CardBody>
+					<div role="status" className="pf-v6-screen-reader">
+						{data?.verdict.state === "not_ready" &&
+							verdictLine(data.verdict).text}
+					</div>
+					{!data && !error ? (
+						<Spinner size="md" aria-label="Loading the release candidate" />
+					) : !data ? (
+						<LoadError
+							variant="xs"
+							title="Could not load the release candidate"
+							onRetry={onRetry}
+						>
+							Its builds, CI, and release status are unavailable right now.
+						</LoadError>
+					) : fbc ? (
+						<FbcMatrix
+							data={data}
+							fbc={fbc}
+							issues={issues}
+							ci={ci}
+							version={version}
+						/>
+					) : data.shipped ? (
+						<EmptyState variant="xs" headingLevel="h3" titleText="No FBC data">
+							<EmptyStateBody>
+								v{version} has shipped. No FBC build data is recorded for it.
+							</EmptyStateBody>
+						</EmptyState>
+					) : data.reason === "not a concrete quay-vX.Y.Z version" ? (
+						<EmptyState
+							variant="xs"
+							headingLevel="h3"
+							titleText="No FBCs expected"
+						>
+							<EmptyStateBody>
+								Only Quay versions have FBC builds.
+							</EmptyStateBody>
+						</EmptyState>
+					) : (
+						<EmptyState
+							variant="xs"
+							headingLevel="h3"
+							icon={CubesIcon}
+							titleText="No FBCs yet"
+						>
+							<EmptyStateBody>
+								{data.reason && data.reason !== "no release candidate yet"
+									? noFbcText(version, data.reason)
+									: `The matrix fills in once ART builds an FBC for v${version}.`}
+							</EmptyStateBody>
+						</EmptyState>
+					)}
+				</CardBody>
+			)}
 		</Card>
 	);
 }
@@ -1522,21 +1609,52 @@ function TicketsCard({
 	onRetry,
 	config,
 	ticketKey,
+	shipped,
 }: {
 	issues?: JiraIssue[];
 	error?: Error;
 	onRetry: () => void;
 	config?: DashboardConfig;
 	ticketKey?: string;
+	/** Shipped, the title says what is left open, or that all closed. */
+	shipped: boolean;
 }) {
 	const work = (issues ?? []).filter((i) => i.key !== ticketKey);
 	const hasIssues = work.length > 0;
+	const left = ticketsByStatus(work).open.length;
 
 	return (
 		<Card isCompact style={{ marginBottom: "1rem" }}>
 			<CardTitle>
-				Tickets
-				{hasIssues && ` (${work.length})`}
+				{shipped && hasIssues ? (
+					<Flex
+						gap={{ default: "gapMd" }}
+						alignItems={{ default: "alignItemsCenter" }}
+					>
+						<span>Tickets</span>
+						{left ? (
+							<Label status="warning" isCompact>
+								{left} open
+							</Label>
+						) : (
+							<span
+								style={{
+									fontSize: "var(--pf-t--global--font--size--sm)",
+									fontWeight: "normal",
+								}}
+							>
+								<Status status="done">
+									{`${work.length} of ${work.length} closed`}
+								</Status>
+							</span>
+						)}
+					</Flex>
+				) : (
+					<>
+						Tickets
+						{hasIssues && ` (${work.length})`}
+					</>
+				)}
 			</CardTitle>
 			<CardBody>
 				{hasIssues ? (

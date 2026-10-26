@@ -24,6 +24,18 @@ export const day = (iso: string) =>
 		year: "numeric",
 	});
 
+/** A time to the minute, "Oct 12, 2026, 13:16 UTC". */
+export const exact = (iso: string) =>
+	`${new Date(iso).toLocaleString("en-US", {
+		timeZone: "UTC",
+		month: "short",
+		day: "numeric",
+		year: "numeric",
+		hour: "2-digit",
+		minute: "2-digit",
+		hourCycle: "h23",
+	})} UTC`;
+
 const DAY = 86_400_000;
 
 export const days = (n: number) => `${n} day${n === 1 ? "" : "s"}`;

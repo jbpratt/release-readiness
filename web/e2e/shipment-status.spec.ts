@@ -58,32 +58,31 @@ async function mockRelease(
 	);
 }
 
-test("shows an open shipment MR as unshipped even after the version releases", async ({
+test("links an open shipment MR from Open in on a shipped page", async ({
 	page,
 }, testInfo) => {
 	await mockRelease(page, { state: "opened", stage: "prod_released" });
 
 	await page.goto(`/releases/${version}`);
 
-	const shipment = page.locator(`a[href="${mrURL}"]`);
-	await expect(shipment).toHaveText("Shipment MR open");
+	await page.getByRole("button", { name: "Open in" }).click();
+	await expect(page.locator(`a[href="${mrURL}"]`)).toHaveText("Shipment MR");
 	await expect(page.getByText("Production release succeeded")).toHaveCount(0);
-	await expect(shipment).not.toHaveText("Shipment MR: shipped");
-	await expect(page.getByText("Shipment MR: shipped", { exact: true })).toHaveCount(
-		0,
-	);
 	await page.screenshot({
 		path: testInfo.outputPath("open-shipment-mr.png"),
 		fullPage: true,
 	});
 });
 
-test("shows a shipment MR as shipped after it merges", async ({ page }, testInfo) => {
+test("links a merged shipment MR from Open in on a shipped page", async ({
+	page,
+}, testInfo) => {
 	await mockRelease(page, { state: "merged", stage: "shipped" });
 
 	await page.goto(`/releases/${version}`);
 
-	await expect(page.locator(`a[href="${mrURL}"]`)).toHaveText("Shipment MR: shipped");
+	await page.getByRole("button", { name: "Open in" }).click();
+	await expect(page.locator(`a[href="${mrURL}"]`)).toHaveText("Shipment MR");
 	await page.screenshot({
 		path: testInfo.outputPath("merged-shipment-mr.png"),
 		fullPage: true,
