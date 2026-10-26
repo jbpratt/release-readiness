@@ -134,7 +134,6 @@ func (r *Resolver) resolve(ctx context.Context, c Candidate, now time.Time, pace
 	b := Build{Digest: c.Image[strings.Index(c.Image, "@")+1:], State: StateUnresolved, CheckedAt: now}
 	q := url.Values{
 		"image_sha_tag": {strings.TrimPrefix(b.Digest, "sha256:")},
-		"assembly":      {"stream"},
 		"dateRange":     {c.FirstSeen.Add(-searchWindow).Format(time.DateOnly) + " to " + c.FirstSeen.Add(24*time.Hour).Format(time.DateOnly)},
 	}
 	// Without a group the service searches only its default group. Stage

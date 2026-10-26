@@ -97,12 +97,14 @@ func TestResolveMatch(t *testing.T) {
 	for k, v := range map[string]string{
 		"image_sha_tag": "bfd08ada78f2c19d7dc773f42fc53f5ceb649ff1c34da95e62fb73f0a15a6563",
 		"group":         "quay-3.18",
-		"assembly":      "stream",
 		"dateRange":     "2026-06-03 to 2026-10-02",
 	} {
 		if got := searches[0].Get(k); got != v {
 			t.Errorf("search %s: got %q, want %q", k, got, v)
 		}
+	}
+	if searches[0].Has("assembly") {
+		t.Errorf("search assembly: got %q, want unset", searches[0].Get("assembly"))
 	}
 }
 
