@@ -118,6 +118,7 @@ import {
 	ticketsJql,
 } from "../utils/links";
 import {
+	advisoryName,
 	bundleBuilt,
 	candidateOperators,
 	compareVersions,
@@ -137,6 +138,7 @@ import {
 	nvrLabel,
 	RELEASE_PENDING,
 	readingLine,
+	releaseAdvisory,
 	releaseLine,
 	runResult,
 	sharedStage,
@@ -293,6 +295,7 @@ export default function ReleaseDetail() {
 							shipmentMR={release.shipment_mr}
 							jiraBaseUrl={config?.jira_base_url}
 							stage={candidate.data && sharedStage(candidate.data)}
+							prod={candidate.data?.candidate?.prod}
 						/>
 
 						<BuildsCard
@@ -388,8 +391,8 @@ function Freshness({ data }: { data?: ReleaseCandidate }) {
 
 /**
  * The target date, flagged while unshipped once past or within 3 days, the
- * ticket, its assignee, the shipment MR, and the stage Release every operator
- * shares: the release's facts in the page header.
+ * ticket, its assignee, the shipment MR, the stage Release every operator
+ * shares, and the advisory: the release's facts in the page header.
  */
 function ReleaseFacts({
 	release,
@@ -397,14 +400,18 @@ function ReleaseFacts({
 	shipmentMR: mr,
 	jiraBaseUrl,
 	stage,
+	prod,
 }: {
 	release: ReleaseVersion;
 	shipped: boolean;
 	shipmentMR: ShipmentMR | null;
 	jiraBaseUrl?: string;
 	stage?: KonfluxRelease | null;
+	/** The version's prod Release. */
+	prod?: KonfluxRelease | null;
 }) {
 	const ticket = release.release_ticket_key;
+	const advisory = releaseAdvisory(shipped, prod, stage);
 	const target = release.due_date ?? release.release_date;
 	const dueDate = target ? due(target, shipped) : undefined;
 	return (
@@ -463,6 +470,16 @@ function ReleaseFacts({
 				</DescriptionListGroup>
 			)}
 			{stage && <StageFacts ri={stage} />}
+			{advisory && (
+				<DescriptionListGroup>
+					<DescriptionListTerm>Advisory</DescriptionListTerm>
+					<DescriptionListDescription>
+						<ExtLink href={advisory} icon>
+							{advisoryName(advisory)}
+						</ExtLink>
+					</DescriptionListDescription>
+				</DescriptionListGroup>
+			)}
 		</DescriptionList>
 	);
 }
@@ -704,6 +721,7 @@ function FbcMatrix({
 			version={version}
 			issues={issues.filter((i) => i.card === o.operator)}
 			own={own}
+			shipped={data.shipped}
 			open={open.has(o.operator)}
 		/>
 	);

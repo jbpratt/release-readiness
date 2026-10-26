@@ -28,6 +28,7 @@ import type { Blocker } from "../utils/blockers";
 import { SHOW_CVES } from "../utils/features";
 import { commitUrl } from "../utils/links";
 import {
+	advisoryName,
 	bundleBuilt,
 	type Flag,
 	fixableLabels,
@@ -154,32 +155,17 @@ export function useNarrow() {
 
 const small = { fontSize: "var(--pf-t--global--font--size--sm)" };
 
-const advisoryName = (url: string) =>
-	url.match(/[A-Z]+-\d{4}:\d+$/)?.[0] ?? "Advisory";
-
-/** The stage Release and advisory, as release facts; the Release's name in its title. */
+/** The stage Release as a release fact; the Release's name in its title. */
 export function StageFacts({ ri }: { ri: KonfluxRelease }) {
 	return (
-		<>
-			<DescriptionListGroup>
-				<DescriptionListTerm>Stage release</DescriptionListTerm>
-				<DescriptionListDescription>
-					<ExtLink href={ri.job_url || null} title={ri.name} icon>
-						{stamp(ri.name)}
-					</ExtLink>
-				</DescriptionListDescription>
-			</DescriptionListGroup>
-			{ri.advisory && (
-				<DescriptionListGroup>
-					<DescriptionListTerm>Advisory</DescriptionListTerm>
-					<DescriptionListDescription>
-						<ExtLink href={ri.advisory} icon>
-							{advisoryName(ri.advisory)}
-						</ExtLink>
-					</DescriptionListDescription>
-				</DescriptionListGroup>
-			)}
-		</>
+		<DescriptionListGroup>
+			<DescriptionListTerm>Stage release</DescriptionListTerm>
+			<DescriptionListDescription>
+				<ExtLink href={ri.job_url || null} title={ri.name} icon>
+					{stamp(ri.name)}
+				</ExtLink>
+			</DescriptionListDescription>
+		</DescriptionListGroup>
 	);
 }
 
@@ -299,6 +285,7 @@ export function OperatorPanel({
 	version,
 	issues,
 	own,
+	shipped,
 	open,
 }: {
 	o: OperatorFBC;
@@ -307,6 +294,8 @@ export function OperatorPanel({
 	/** The verdict items about the operator. */
 	issues: Issue[];
 	own: boolean;
+	/** Whether the version shipped, which retires the stage advisory. */
+	shipped: boolean;
 	open: boolean;
 }) {
 	const s = summarize(o, version, issues);
@@ -332,7 +321,7 @@ export function OperatorPanel({
 						<ExtLink href={ri.job_url || null} title={ri.name} icon>
 							{stamp(ri.name)}
 						</ExtLink>
-						{ri.advisory && (
+						{!shipped && ri.advisory && (
 							<>
 								<span style={muted}> · Advisory </span>
 								<ExtLink href={ri.advisory} icon>

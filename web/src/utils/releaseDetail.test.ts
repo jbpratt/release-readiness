@@ -16,6 +16,7 @@ import type {
 	VerdictItem,
 } from "../api/types.ts";
 import {
+	advisoryName,
 	artGroup,
 	bundleBuilt,
 	ciBuilds,
@@ -41,6 +42,7 @@ import {
 	nvrLabel,
 	otherBundle,
 	readingLine,
+	releaseAdvisory,
 	releaseImages,
 	releaseLine,
 	rowChips,
@@ -138,6 +140,33 @@ const release = (r: Partial<KonfluxRelease>): KonfluxRelease => ({
 	released_status: "",
 	released_reason: "",
 	...r,
+});
+
+test("releaseAdvisory", () => {
+	const stage = release({
+		advisory: "https://access.stage.redhat.com/errata/RHSA-2026:158865",
+	});
+	const prodURL = "https://access.redhat.com/errata/RHSA-2026:85980";
+	const prod = (r: Partial<KonfluxRelease>) =>
+		release({
+			released_status: "True",
+			released_reason: "Succeeded",
+			advisory: prodURL,
+			...r,
+		});
+	assert.equal(releaseAdvisory(true, prod({}), stage), prodURL);
+	assert.equal(advisoryName(prodURL), "RHSA-2026:85980");
+	assert.equal(releaseAdvisory(false, prod({}), stage), stage.advisory);
+	assert.equal(releaseAdvisory(true, null, stage), undefined);
+	assert.equal(
+		releaseAdvisory(
+			true,
+			prod({ released_status: "False", released_reason: "Failed" }),
+			stage,
+		),
+		undefined,
+	);
+	assert.equal(releaseAdvisory(true, prod({ advisory: "" }), stage), undefined);
 });
 
 test("releaseLine", () => {
