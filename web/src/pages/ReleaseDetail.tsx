@@ -121,6 +121,7 @@ import {
 	bundleBuilt,
 	candidateOperators,
 	compareVersions,
+	dueSource,
 	type FbcRow,
 	fbcGroups,
 	fbcNewerTitle,
@@ -421,9 +422,16 @@ function ReleaseFacts({
 			style={{ marginBottom: "1.5rem" }}
 		>
 			<DescriptionListGroup>
-				<DescriptionListTerm>Target</DescriptionListTerm>
+				<DescriptionListTerm>Due date</DescriptionListTerm>
 				<DescriptionListDescription>
-					{dueDate?.date ?? "TBD"}
+					{dueDate ? (
+						<Tooltip content={dueSource(release)}>
+							{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows its tooltip. */}
+							<span tabIndex={0}>{dueDate.date}</span>
+						</Tooltip>
+					) : (
+						"TBD"
+					)}
 					{dueDate?.kind === "past" && (
 						<Label status="warning" isCompact style={{ marginLeft: "0.5rem" }}>
 							Past due

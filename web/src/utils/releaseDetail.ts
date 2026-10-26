@@ -17,11 +17,19 @@ import type {
 	VerdictItem,
 } from "../api/types";
 import { SHOW_CVES } from "./features.ts";
-import { relative } from "./format.ts";
+import { day as fullDay, relative } from "./format.ts";
 
 /** The candidate's build; a shipped version's candidate is labeled shipped. */
-const isCandidate = (b: FBCBuild) =>
+export const isCandidate = (b: FBCBuild) =>
 	b.state === "candidate" || b.state === "shipped";
+
+/** Which Jira date a release's due date is, and that date, for its hover. */
+export const dueSource = (r: { due_date?: string; release_date?: string }) =>
+	r.due_date
+		? `Jira release ticket due date ${fullDay(r.due_date)}`
+		: r.release_date
+			? `Jira fixVersion release date ${fullDay(r.release_date)}`
+			: undefined;
 
 /**
  * The CI drawer's builds: cell "<operator>@<ocp>"'s with a run, and its
