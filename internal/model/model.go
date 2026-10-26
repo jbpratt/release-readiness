@@ -382,6 +382,14 @@ type CandidateBuild struct {
 	Snapshot   string               `json:"-"`
 	Components []CandidateComponent `json:"-"`
 	Prod       *KonfluxRelease      `json:"prod"`
+	FBCProd    *FBCProd             `json:"fbc_prod"`
+}
+
+// FBCProd counts the FBC Snapshots ART staged for prod for a version that a
+// Release shipped, with when the last of those Releases completed.
+type FBCProd struct {
+	Released int        `json:"released"`
+	Last     *time.Time `json:"last,omitempty"`
 }
 
 // CIState tells whether an operator bundle reached the catalog CI installs

@@ -27,6 +27,14 @@ WHERE kr.snapshot IN (SELECT name FROM staged_snapshots WHERE assembly = ? AND k
 ORDER BY kr.created_at DESC, kr.id DESC
 LIMIT 1;
 
+-- name: ProdFBCReleases :one
+-- How many FBC Snapshots ART staged for prod for assembly a Release shipped,
+-- and when the last of those Releases completed.
+SELECT COUNT(DISTINCT kr.snapshot) AS released, CAST(COALESCE(MAX(NULLIF(kr.completion_time, '')), '') AS TEXT) AS last_completion
+FROM konflux_releases kr
+WHERE kr.snapshot IN (SELECT name FROM staged_snapshots WHERE assembly = ? AND kind = 'fbc' AND env = 'prod')
+  AND kr.released_status = 'True';
+
 -- name: ListStagedFBCCatalogs :many
 -- The catalog images of the application's FBC Snapshots ART staged for stage
 -- for assembly, each with the NVR of its digest's resolved ART build, or ''.

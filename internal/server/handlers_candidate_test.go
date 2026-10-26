@@ -247,8 +247,23 @@ func TestGetCandidate(t *testing.T) {
 	}
 	var raw map[string]any
 	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &raw)
-	if keys := slices.Sorted(maps.Keys(raw["candidate"].(map[string]any))); !slices.Equal(keys, []string{"prod"}) {
-		t.Errorf("3.18.1 candidate keys = %v, want prod only", keys)
+	if keys := slices.Sorted(maps.Keys(raw["candidate"].(map[string]any))); !slices.Equal(keys, []string{"fbc_prod", "prod"}) {
+		t.Errorf("3.18.1 candidate keys = %v, want fbc_prod and prod only", keys)
+	}
+	if c.FBCProd != nil {
+		t.Errorf("3.18.1 fbc_prod = %+v, want null before an FBC prod Release", c.FBCProd)
+	}
+	// fbc_prod counts the FBC Snapshots staged for prod a Release shipped.
+	for _, s := range []string{"quay-fbc-prod-3-18-1-a", "quay-fbc-prod-3-18-1-b"} {
+		if err := srv.db.UpsertStagedSnapshot(t.Context(), s, "3.18.1", "fbc", "prod"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seedKonfluxRelease(t, srv, "fbc-prod-a", "quay-fbc-prod-3-18-1-a", "quay-fbc-prod", "Succeeded", "2026-10-12T19:00:00Z", "2026-10-12T19:12:28Z")
+	seedKonfluxRelease(t, srv, "fbc-prod-b", "quay-fbc-prod-3-18-1-b", "quay-fbc-prod", "Failed", "2026-10-12T20:00:00Z", "2026-10-12T20:05:00Z")
+	getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
+	if p := got.Candidate.FBCProd; p == nil || p.Released != 1 || p.Last == nil || !p.Last.Equal(mustTime(t, "2026-10-12T19:12:28Z")) {
+		t.Errorf("3.18.1 fbc_prod = %+v, want 1 released, last 2026-10-12T19:12:28Z", p)
 	}
 
 	// 3.14.10 has no STAGE build, so no release candidate, though it has a

@@ -570,4 +570,13 @@ func TestReleasesOverviewShipped(t *testing.T) {
 			t.Errorf("%s: shipment_mr %+v, want iid %d", version, rel.ShipmentMR, iid)
 		}
 	}
+	// The version page dates a shipped version as the overview does.
+	for version, want := range map[string]string{"quay-v3.17.5": "2026-10-01T00:00:00Z", "quay-v3.17.6": "", "quay-v3.18.0": ""} {
+		var raw map[string]any
+		getJSON(t, srv, "/api/v1/releases/"+version, http.StatusOK, &raw)
+		got, ok := raw["shipped_at"]
+		if want == "" && ok || want != "" && got != want {
+			t.Errorf("%s: shipped_at %v (present %t), want %q", version, got, ok, want)
+		}
+	}
 }

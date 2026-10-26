@@ -157,6 +157,16 @@ func (d *DB) LatestProdRelease(ctx context.Context, assembly string) (*model.Kon
 	return &r, nil
 }
 
+// ProdFBCReleases returns how many FBC Snapshots ART staged for prod for
+// assembly a Release shipped, or nil for none.
+func (d *DB) ProdFBCReleases(ctx context.Context, assembly string) (*model.FBCProd, error) {
+	row, err := d.queries().ProdFBCReleases(ctx, assembly)
+	if err != nil || row.Released == 0 {
+		return nil, err
+	}
+	return &model.FBCProd{Released: int(row.Released), Last: parseOptionalTime(row.LastCompletion)}, nil
+}
+
 // StagedFBCMembers returns the catalogs of application's FBC Snapshots ART
 // staged for stage for assembly, newest Snapshot first, each with the newest
 // Release of its Snapshot, whatever its status.

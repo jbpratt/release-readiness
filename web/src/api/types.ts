@@ -185,6 +185,11 @@ export interface FBCMember {
 export interface CandidateBuild {
 	/** The version's prod Release. */
 	prod: KonfluxRelease | null;
+	/**
+	 * How many FBC Snapshots ART staged for prod for the version a Release
+	 * shipped, and when the last of those Releases completed.
+	 */
+	fbc_prod?: { released: number; last?: string } | null;
 }
 
 /**
@@ -313,6 +318,8 @@ export interface ReleaseOverview {
 /** GET /releases/{version}. */
 export interface ReleaseDetail extends ReleaseVersion {
 	shipment_mr: ShipmentMR | null;
+	/** When the Red Hat catalog first published the version. */
+	shipped_at?: string;
 }
 
 export interface DashboardConfig {

@@ -362,6 +362,27 @@ func (q *Queries) ListSuccessfulStageReleases(ctx context.Context, arg ListSucce
 	return items, nil
 }
 
+const prodFBCReleases = `-- name: ProdFBCReleases :one
+SELECT COUNT(DISTINCT kr.snapshot) AS released, CAST(COALESCE(MAX(NULLIF(kr.completion_time, '')), '') AS TEXT) AS last_completion
+FROM konflux_releases kr
+WHERE kr.snapshot IN (SELECT name FROM staged_snapshots WHERE assembly = ? AND kind = 'fbc' AND env = 'prod')
+  AND kr.released_status = 'True'
+`
+
+type ProdFBCReleasesRow struct {
+	Released       int64
+	LastCompletion string
+}
+
+// How many FBC Snapshots ART staged for prod for assembly a Release shipped,
+// and when the last of those Releases completed.
+func (q *Queries) ProdFBCReleases(ctx context.Context, assembly string) (ProdFBCReleasesRow, error) {
+	row := q.db.QueryRowContext(ctx, prodFBCReleases, assembly)
+	var i ProdFBCReleasesRow
+	err := row.Scan(&i.Released, &i.LastCompletion)
+	return i, err
+}
+
 const upsertStagedSnapshot = `-- name: UpsertStagedSnapshot :exec
 INSERT INTO staged_snapshots (name, assembly, kind, env)
 VALUES (?, ?, ?, ?)

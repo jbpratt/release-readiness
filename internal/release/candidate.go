@@ -117,6 +117,9 @@ func (s *Selector) CandidateResponse(ctx context.Context, release *model.Release
 	if cand.Prod, err = s.db.LatestProdRelease(ctx, c.Assembly); err != nil {
 		return nil, nil, err
 	}
+	if cand.FBCProd, err = s.db.ProdFBCReleases(ctx, c.Assembly); err != nil {
+		return nil, nil, err
+	}
 	return resp, runs, nil
 }
 
