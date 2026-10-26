@@ -36,7 +36,7 @@ import {
 	streamFbc,
 	type Tone,
 } from "../utils/fbcMatrix";
-import { day, days, due } from "../utils/format";
+import { day, days, due, exact } from "../utils/format";
 import {
 	ART_PIPELINES_HEALTH_URL,
 	formatReleaseName,
@@ -286,17 +286,6 @@ function ReleaseRow({ ov, narrow }: { ov: ReleaseOverview; narrow: boolean }) {
 		</Tr>
 	);
 }
-
-const exact = (iso: string) =>
-	`${new Date(iso).toLocaleString("en-US", {
-		timeZone: "UTC",
-		month: "short",
-		day: "numeric",
-		year: "numeric",
-		hour: "2-digit",
-		minute: "2-digit",
-		hourCycle: "h23",
-	})} UTC`;
 
 /**
  * Unshipped, the target date with its due flag, its Jira source in its
