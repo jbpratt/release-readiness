@@ -48,7 +48,6 @@ import {
 	CubesIcon,
 	ExclamationTriangleIcon,
 	InfoCircleIcon,
-	MinusCircleIcon,
 	TimesCircleIcon,
 } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
@@ -686,6 +685,10 @@ function FbcMatrix({
 		return c && key ? (
 			<MatrixCell
 				cell={c}
+				shipment={
+					operators.find((o) => o.operator === op)?.image_check.bundle_digest ??
+					""
+				}
 				issues={issues.filter((x) => x.cell === key)}
 				others={others(c.row)}
 				green={staged ? "built and staged" : "built"}
@@ -711,6 +714,7 @@ function FbcMatrix({
 			o={o}
 			version={version}
 			issues={issues.filter((i) => i.card === o.operator)}
+			cellIssues={issues.filter((i) => i.cell?.startsWith(`${o.operator}@`))}
 			open={open.has(o.operator)}
 			onToggle={(v) => toggle(o.operator, v)}
 		/>
@@ -845,13 +849,6 @@ const cellIcons = {
 		</Icon>
 	),
 	running: <Icon size="xl" isInProgress />,
-	neutral: (
-		<Icon size="xl">
-			<span style={muted}>
-				<MinusCircleIcon />
-			</span>
-		</Icon>
-	),
 	success: (
 		<Icon status="success" size="xl">
 			<CheckCircleIcon />
@@ -860,14 +857,15 @@ const cellIcons = {
 };
 
 /**
- * One FBC as one icon: a check when green, a neutral minus when it has no CI
- * run, a red X when it is missing or fails or a blocker is about it, else its
- * problem's or item's icon; the words are in its tooltip and name. A click
- * opens its detail, led by the items about it. An edge column's detail opens
- * inward to stay on screen.
+ * One FBC as one icon: a check when green, with or without a CI run, a red X
+ * when it is missing or fails or a blocker is about it, else its problem's or
+ * item's icon; the words are in its tooltip and name. A click opens its
+ * detail, led by the items about it. An edge column's detail opens inward to
+ * stay on screen.
  */
 function MatrixCell({
 	cell: { row, stream, problem },
+	shipment,
 	issues,
 	others,
 	green,
@@ -877,6 +875,8 @@ function MatrixCell({
 	onClose,
 }: {
 	cell: Cell;
+	/** The digest of its operator's bundle the image shipment holds, unknown to ART; "" for none. */
+	shipment: string;
 	issues: Issue[];
 	others: number;
 	green: string;
@@ -891,7 +891,6 @@ function MatrixCell({
 	)[0];
 	const top = first?.item.level;
 	const status = problem && PROBLEMS[problem].status;
-	const noCIRun = row.runs.length === 0;
 	const tone: keyof typeof cellIcons =
 		!row.fbc || status === "failed" || top === "blocker"
 			? "danger"
@@ -901,16 +900,12 @@ function MatrixCell({
 					? "warning"
 					: top === "info"
 						? "info"
-						: noCIRun
-							? "neutral"
-							: "success";
+						: "success";
 	const said = problem
 		? problem[0].toUpperCase() + problem.slice(1)
 		: first
 			? `${LEVELS[first.item.level].word}: ${first.b.what}`
-			: noCIRun
-				? "No CI run"
-				: green;
+			: green;
 	return (
 		<>
 			{tone !== "success" && <Tooltip content={said} triggerRef={ref} />}
@@ -925,7 +920,12 @@ function MatrixCell({
 				bodyContent={
 					<div style={{ display: "grid", gap: "0.75rem" }}>
 						{issues.length > 0 && <IssueNotes issues={issues} />}
-						<FbcDetail row={row} stream={stream} others={others} />
+						<FbcDetail
+							row={row}
+							stream={stream}
+							others={others}
+							shipment={shipment}
+						/>
 					</div>
 				}
 			>
@@ -964,10 +964,12 @@ function FbcDetail({
 	row,
 	stream,
 	others,
+	shipment,
 }: {
 	row: FbcRow;
 	stream: FBCMember | null;
 	others: number;
+	shipment: string;
 }) {
 	const f = row.fbc;
 	const built = f ?? stream;
@@ -1003,7 +1005,7 @@ function FbcDetail({
 					</DetailLine>
 				)
 			) : (
-				<FbcChecks row={row} f={f} others={others} />
+				<FbcChecks row={row} f={f} others={others} shipment={shipment} />
 			)}
 		</dl>
 	);
@@ -1017,10 +1019,12 @@ function FbcChecks({
 	row,
 	f,
 	others,
+	shipment,
 }: {
 	row: FbcRow;
 	f: FBCMember;
 	others: number;
+	shipment: string;
 }) {
 	const unread = row.flags.find((x) => x.text === "can't read");
 	const older = row.flags.find((x) => x.text.startsWith("holds an older"));
@@ -1061,6 +1065,14 @@ function FbcChecks({
 							nvrLabel(f.head_bundle_nvr)
 						)}
 					</>
+				) : f.head_bundle_digest && f.head_bundle_digest === shipment ? (
+					<Status status="warning">
+						Not in ART's build history. The image shipment carries the same
+						digest,{" "}
+						<code title={shipment}>
+							{shipment.replace(/^sha256:/, "").slice(0, 8)}
+						</code>
+					</Status>
 				) : (
 					none("Not resolved yet")
 				)}

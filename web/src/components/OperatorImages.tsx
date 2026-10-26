@@ -180,29 +180,42 @@ const toneIcons = {
 	success: <CheckCircleIcon />,
 };
 
-/** An operator's images worst first, its issues worst first, and its one tone and words. */
-function summarize(o: OperatorFBC, version: string, issues: Issue[]) {
+/**
+ * An operator's images worst first, its issues worst first, and its one tone
+ * and words. Without images, its cells' issues, cellIssues, give the tone, so
+ * it never reads as built while its FBCs' bundle is unknown.
+ */
+function summarize(
+	o: OperatorFBC,
+	version: string,
+	issues: Issue[],
+	cellIssues: Issue[] = [],
+) {
 	const images = releaseImages([o], version);
 	const art = images
 		.filter((r) => r.image.nvr || r.issues.length > 0)
 		.sort((a, b) => worst(a) - worst(b));
 	const bad = art.filter((r) => worst(r) < 2);
-	const sorted = [...issues].sort(
-		(a, b) => ORDER.indexOf(a.item.level) - ORDER.indexOf(b.item.level),
-	);
-	const top = sorted[0];
+	const byLevel = (a: Issue, b: Issue) =>
+		ORDER.indexOf(a.item.level) - ORDER.indexOf(b.item.level);
+	const sorted = [...issues].sort(byLevel);
+	const top =
+		sorted[0] ??
+		(images.length === 0 ? [...cellIssues].sort(byLevel)[0] : undefined);
 	// The worse of its images' and its issues' levels: an image's 0 failed and 1
-	// warning, an issue's 0 blocker, 1 warning and 2 info.
+	// warning, an issue's 0 blocker, 1 warning and 2 info; no images is info.
 	const rank = Math.min(
 		...bad.map(worst),
-		top ? ORDER.indexOf(top.item.level) : 3,
+		top ? ORDER.indexOf(top.item.level) : images.length === 0 ? 2 : 3,
 	);
 	const n = (k: number) => `${k} image${k === 1 ? "" : "s"}`;
 	const said = top
 		? `${LEVELS[top.item.level].word}: ${top.b.what}${bad.length ? `; ${bad.length} of ${n(art.length)} to check` : ""}`
-		: bad.length
-			? `${bad.length} of ${n(art.length)} to check`
-			: `${n(art.length)} built`;
+		: images.length === 0
+			? "No images rendered yet"
+			: bad.length
+				? `${bad.length} of ${n(art.length)} to check`
+				: `${n(art.length)} built`;
 	return {
 		images,
 		bad,
@@ -225,6 +238,7 @@ export function OperatorToggle({
 	o,
 	version,
 	issues,
+	cellIssues,
 	open,
 	onToggle,
 }: {
@@ -233,10 +247,12 @@ export function OperatorToggle({
 	version: string;
 	/** The verdict items about the operator. */
 	issues: Issue[];
+	/** The verdict items about the operator's matrix cells. */
+	cellIssues: Issue[];
 	open: boolean;
 	onToggle: (open: boolean) => void;
 }) {
-	const { tone, said } = summarize(o, version, issues);
+	const { tone, said } = summarize(o, version, issues, cellIssues);
 	return (
 		<>
 			<ExpandableSectionToggle

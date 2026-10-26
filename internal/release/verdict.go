@@ -65,19 +65,31 @@ func setVerdict(resp *model.ReleaseCandidate, assembly string, pending int) {
 				add("blocker", op, "ART", "image_mismatch", fmt.Sprintf("Image shipment has bundle %s, the FBCs ship %s", o.ImageCheck.BundleNVR, o.HeadBundleNVR))
 			}
 		}
+		d := strings.TrimPrefix(o.ImageCheck.BundleDigest, "sha256:")
+		d = d[:min(8, len(d))]
 		if o.FBCRIStage.State == "failed" {
-			text := fmt.Sprintf("%s bundle %s: image push to stage failed", op, o.HeadBundleNVR)
+			bundle := o.HeadBundleNVR
+			if bundle == "" {
+				bundle = d
+			}
+			text := fmt.Sprintf("%s bundle %s: image push to stage failed", op, bundle)
 			if r := o.FBCRIStage.Release; r != nil && r.FailedTask != "" {
 				text += " (" + r.FailedTask + ")"
 			}
 			add("blocker", op, "ART/Konflux", "stage_push_failed", text)
 		}
+		// FBCs heading the bundle the image shipment holds by digest, which
+		// ART's history lacks, make one RR warning, not a blocker each.
+		notInArt := false
 		for _, m := range slices.Concat(o.Members, o.Conflicts) {
 			switch {
 			case !staged:
 			case m.ReadError != "":
 				add("blocker", op, "Quay/ART", "read_failed", fmt.Sprintf("%s OCP %s: can't read FBC: %s", op, m.OCP, m.ReadError))
-			case m.HeadBundleNVR == "" && !checking:
+			case m.HeadBundleNVR != "" || checking:
+			case m.HeadBundleDigest != "" && m.HeadBundleDigest == o.ImageCheck.BundleDigest:
+				notInArt = true
+			default:
 				add("blocker", op, "", "no_head_bundle", fmt.Sprintf("%s OCP %s: FBC heads no known bundle", op, m.OCP))
 			}
 			if m.StageFailed != nil {
@@ -87,6 +99,9 @@ func setVerdict(resp *model.ReleaseCandidate, assembly string, pending int) {
 				}
 				add("blocker", op, "ART/Konflux", "stage_release_failed", text)
 			}
+		}
+		if notInArt {
+			add("warning", op, "RR", "bundle_not_in_art", fmt.Sprintf("%s bundle %s is not in ART's build history; the image shipment carries the same digest", op, d))
 		}
 		// Pending is the stream's reads once the candidate's are done.
 		for _, c := range o.Compare {

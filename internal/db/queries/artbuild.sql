@@ -80,12 +80,13 @@ SELECT DISTINCT application FROM snapshots ORDER BY application;
 
 -- name: ListArtHistoryFBCs :many
 -- group's successful FBC builds, newest NVR first, each with the channel,
--- head CSV and previous entry's version its render found and the NVR of its
--- head bundle's ART build, '' for none.
+-- head CSV, previous entry's version and head bundle pullspec its render
+-- found and the NVR of its head bundle's ART build, '' for none.
 SELECT f.record_id, f.nvr, f.pullspec,
        CAST(COALESCE(r.channel, '') AS TEXT) AS channel,
        CAST(COALESCE(r.head_csv, '') AS TEXT) AS head_csv,
        CAST(COALESCE(r.previous_version, '') AS TEXT) AS previous_version,
+       CAST(COALESCE(r.head_bundle_pullspec, '') AS TEXT) AS head_bundle_pullspec,
        CAST(COALESCE(b.nvr, '') AS TEXT) AS head_bundle_nvr
 FROM art_history_records f
 LEFT JOIN fbc_renders r ON r.state = 'rendered' AND r.digest = f.digest

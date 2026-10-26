@@ -609,6 +609,7 @@ const actionWords: Record<string, string> = {
 	image_mismatch: "Image mismatch",
 	read_failed: "Can't read",
 	no_head_bundle: "No bundle",
+	bundle_not_in_art: "Not in ART",
 	stage_release_failed: "Release failed",
 	stage_push_failed: "Stage push failed",
 	stream_ahead: "Newer build",
