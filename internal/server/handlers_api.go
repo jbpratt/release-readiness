@@ -55,10 +55,15 @@ func (s *Server) handleGetRelease(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, struct {
+	resp := struct {
 		*model.ReleaseVersion
 		ShipmentMR *model.ShipmentMR `json:"shipment_mr"`
-	}{release, mr})
+		ShippedAt  *time.Time        `json:"shipped_at,omitempty"`
+	}{ReleaseVersion: release, ShipmentMR: mr}
+	if shippedAt, _ := s.selector.CatalogShippedAt(release.Name); !shippedAt.IsZero() {
+		resp.ShippedAt = &shippedAt
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleListReleaseIssues(w http.ResponseWriter, r *http.Request) {
