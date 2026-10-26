@@ -810,6 +810,27 @@ export function sharedStage(d: ReleaseCandidate): KonfluxRelease | null {
 	return first && rs.every((r) => r?.name === first.name) ? first : null;
 }
 
+/**
+ * The advisory to show: the stage Release's until the version ships, then the
+ * succeeded prod Release's. Prod advisories have their own ids, so none is
+ * derived from the stage one.
+ */
+export function releaseAdvisory(
+	shipped: boolean,
+	prod: KonfluxRelease | null | undefined,
+	stage: KonfluxRelease | null | undefined,
+): string | undefined {
+	if (!shipped) return stage?.advisory || undefined;
+	return prod?.released_status === "True" &&
+		prod.released_reason === "Succeeded"
+		? prod.advisory || undefined
+		: undefined;
+}
+
+/** An advisory's id from its URL, "RHSA-2026:85980". */
+export const advisoryName = (url: string) =>
+	url.match(/[A-Z]+-\d{4}:\d+$/)?.[0] ?? "Advisory";
+
 /** A stage Release's name by its timestamp, "Oct 7 20:02 UTC". */
 export function stamp(name: string) {
 	const t = name.match(/(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)\d\d$/);
