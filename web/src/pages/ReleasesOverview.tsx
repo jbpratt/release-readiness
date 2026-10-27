@@ -42,7 +42,7 @@ import {
 	formatReleaseName,
 	jiraIssueUrl,
 } from "../utils/links";
-import { fbcGroups, verdictEntries } from "../utils/releaseDetail";
+import { dueSource, fbcGroups, verdictEntries } from "../utils/releaseDetail";
 
 const muted = { color: "var(--pf-t--global--text--color--subtle)" };
 const dash = <span style={muted}>–</span>;
@@ -167,7 +167,7 @@ export default function ReleasesOverview() {
 						) : (
 							<Tr>
 								<Th width={20}>Release</Th>
-								<Th width={25}>Ship date</Th>
+								<Th width={25}>Due date</Th>
 								<Th width={25}>Ticket</Th>
 								<Th width={30}>Assignee</Th>
 							</Tr>
@@ -229,6 +229,7 @@ function ReleaseRow({ ov, narrow }: { ov: ReleaseOverview; narrow: boolean }) {
 	const date = (
 		<ShipDate
 			target={r.due_date ?? r.release_date}
+			source={dueSource(r)}
 			shipped={shipped}
 			shippedAt={ov.shipped_at}
 		/>
@@ -279,7 +280,7 @@ function ReleaseRow({ ov, narrow }: { ov: ReleaseOverview; narrow: boolean }) {
 	return (
 		<Tr>
 			<Td dataLabel="Release">{release}</Td>
-			<Td dataLabel="Ship date">{date}</Td>
+			<Td dataLabel="Due date">{date}</Td>
 			<Td dataLabel="Ticket">{ticketLink || dash}</Td>
 			<Td dataLabel="Assignee">{assignee}</Td>
 		</Tr>
@@ -298,15 +299,18 @@ const exact = (iso: string) =>
 	})} UTC`;
 
 /**
- * Unshipped, the target date with its due flag; shipped, a check and the
- * day the catalog first published it, the exact time in its tooltip.
+ * Unshipped, the target date with its due flag, its Jira source in its
+ * tooltip; shipped, a check and the day the catalog first published it, the
+ * exact time in its tooltip.
  */
 function ShipDate({
 	target,
+	source,
 	shipped,
 	shippedAt,
 }: {
 	target?: string;
+	source?: string;
 	shipped: boolean;
 	shippedAt?: string;
 }) {
@@ -347,7 +351,14 @@ function ShipDate({
 				: null;
 	return (
 		<span style={nowrap}>
-			{d?.date ?? <span style={muted}>TBD</span>}
+			{d ? (
+				<Tooltip content={source}>
+					{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows its tooltip. */}
+					<span tabIndex={0}>{d.date}</span>
+				</Tooltip>
+			) : (
+				<span style={muted}>TBD</span>
+			)}
 			{flag && <Flag text={flag} />}
 		</span>
 	);

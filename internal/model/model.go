@@ -200,10 +200,12 @@ type FBCCandidate struct {
 
 // OperatorFBC is one operator's FBCs, keyed by HeadBundleNVR, the NVR of the
 // bundle heading the release channel of its newest FBC that has one joined,
-// "" for none, with that FBC's channel and head CSV. Members are its slots'
-// FBCs on that bundle and Conflicts the others, both by OCP version;
-// MissingOCP the OCP versions it was ever built or staged for without an FBC
-// here, and Coverage how many of those slots Members fill. FBCRIStage tells
+// "" for none, with that FBC's channel and head CSV; with none, it is keyed
+// by the digest of the bundle its newest FBC heads that the image Snapshot
+// holds. Members are its slots' FBCs on that bundle and Conflicts the
+// others, both by OCP version; MissingOCP the OCP versions it was ever built
+// or staged for without an FBC here, and Coverage how many of those slots
+// Members fill. FBCRIStage tells
 // whether its head bundle reached stage through a stage Release, "unknown"
 // without a head bundle; ImageCheck compares that bundle with the image
 // Snapshot's. Images is the head bundle's relatedImages, by name, as its
@@ -282,11 +284,14 @@ type ImageRef struct {
 // version's image Snapshot, its STAGE build, else its newest build, found by
 // NVR in any component, else as component <app>-<operator>-bundle: State
 // "matches" or "differs" by NVR, or "absent" when either NVR is unknown or
-// there is no image Snapshot.
+// there is no image Snapshot. Without a head bundle NVR, State is "matches"
+// when an image Snapshot component has the digest of a bundle the operator's
+// FBCs head, BundleDigest.
 type ImageCheck struct {
-	State     string `json:"state"`
-	Snapshot  string `json:"snapshot"`
-	BundleNVR string `json:"bundle_nvr"`
+	State        string `json:"state"`
+	Snapshot     string `json:"snapshot"`
+	BundleNVR    string `json:"bundle_nvr"`
+	BundleDigest string `json:"bundle_digest"`
 }
 
 // FBCCI is the periodic runs that installed from an FBC, by job: Exact from
@@ -315,7 +320,8 @@ type FBCCoverage struct {
 
 // FBCMember is an FBC catalog image: its NVR, from ART or its label, "" when
 // neither names it, with its ART build page; the NVR of the bundle heading its
-// release channel, "" until joined to an ART bundle build; and, when staged,
+// release channel, "" until joined to an ART bundle build, and that bundle's
+// digest, "" until rendered; and, when staged,
 // the FBC Snapshot holding it and that Snapshot's newest Release, whatever its
 // status, nil before one, in a candidate's slot the newest Snapshot whose
 // Release succeeded, else failed; and, in a slot, its CI. Staged counts, in a
@@ -323,21 +329,22 @@ type FBCCoverage struct {
 // whose newest Release succeeded; StageFailed, when no Snapshot holding its
 // digest has, the newest failed one; ReadError is why reading it failed.
 type FBCMember struct {
-	OCP           string          `json:"ocp"`
-	Digest        string          `json:"digest"`
-	Pullspec      string          `json:"pullspec"`
-	NVR           string          `json:"nvr"`
-	BuildURL      string          `json:"build_url"`
-	HeadBundleNVR string          `json:"head_bundle_nvr"`
-	Snapshot      string          `json:"snapshot"`
-	Release       *KonfluxRelease `json:"release"`
-	CI            *FBCCI          `json:"ci"`
-	Staged        int             `json:"staged"`
-	StageFailed   *KonfluxRelease `json:"-"`
-	RecordID      string          `json:"-"`
-	ReadError     string          `json:"-"`
-	Channel       string          `json:"-"`
-	HeadCSV       string          `json:"-"`
+	OCP              string          `json:"ocp"`
+	Digest           string          `json:"digest"`
+	Pullspec         string          `json:"pullspec"`
+	NVR              string          `json:"nvr"`
+	BuildURL         string          `json:"build_url"`
+	HeadBundleNVR    string          `json:"head_bundle_nvr"`
+	HeadBundleDigest string          `json:"head_bundle_digest"`
+	Snapshot         string          `json:"snapshot"`
+	Release          *KonfluxRelease `json:"release"`
+	CI               *FBCCI          `json:"ci"`
+	Staged           int             `json:"staged"`
+	StageFailed      *KonfluxRelease `json:"-"`
+	RecordID         string          `json:"-"`
+	ReadError        string          `json:"-"`
+	Channel          string          `json:"-"`
+	HeadCSV          string          `json:"-"`
 	// PreviousVersion is the version of the entry below the head in its
 	// release channel.
 	PreviousVersion string `json:"-"`

@@ -21,6 +21,7 @@ import {
 	bundleBuilt,
 	ciBuilds,
 	compareVersions,
+	dueSource,
 	fbcGroups,
 	fbcNewerTitle,
 	fbcParams,
@@ -1346,4 +1347,19 @@ test("ciBuilds: a cell's builds with runs and its candidate, the candidate first
 	assert.deepEqual(nvrs("all"), ["newer", "older", "other"]);
 	assert.deepEqual(nvrs("quay-operator@4.21"), ["shipped", "other"]);
 	assert.deepEqual(nvrs("container-security-operator@4.22"), []);
+});
+
+test("dueSource: the ticket's due date, else the fixVersion's release date", () => {
+	assert.equal(
+		dueSource({
+			due_date: "2026-09-01T00:00:00Z",
+			release_date: "2026-10-01T00:00:00Z",
+		}),
+		"Jira release ticket due date Sep 1, 2026",
+	);
+	assert.equal(
+		dueSource({ release_date: "2026-10-01T00:00:00Z" }),
+		"Jira fixVersion release date Oct 1, 2026",
+	);
+	assert.equal(dueSource({}), undefined);
 });

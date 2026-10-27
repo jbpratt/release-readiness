@@ -172,8 +172,9 @@ func (d *DB) StagedFBCMembers(ctx context.Context, assembly, application string)
 	members := make([]model.FBCMember, len(rows))
 	for i, r := range rows {
 		_, digest, _ := strings.Cut(r.ImageUrl, "@")
+		_, head, _ := strings.Cut(r.HeadBundlePullspec, "@")
 		members[i] = model.FBCMember{
-			Digest: digest, Pullspec: r.ImageUrl, NVR: r.Nvr, HeadBundleNVR: r.HeadBundleNvr, Snapshot: r.SnapshotName,
+			Digest: digest, Pullspec: r.ImageUrl, NVR: r.Nvr, HeadBundleNVR: r.HeadBundleNvr, HeadBundleDigest: head, Snapshot: r.SnapshotName,
 			RecordID: r.RecordID, Channel: r.Channel, HeadCSV: r.HeadCsv, PreviousVersion: r.PreviousVersion,
 			ReadError: r.ReadError,
 		}
@@ -197,8 +198,9 @@ func (d *DB) ArtHistoryFBCs(ctx context.Context, group string) ([]model.FBCMembe
 	members := make([]model.FBCMember, len(rows))
 	for i, r := range rows {
 		_, digest, _ := strings.Cut(r.Pullspec, "@")
+		_, head, _ := strings.Cut(r.HeadBundlePullspec, "@")
 		members[i] = model.FBCMember{
-			Digest: digest, Pullspec: r.Pullspec, NVR: r.Nvr, HeadBundleNVR: r.HeadBundleNvr,
+			Digest: digest, Pullspec: r.Pullspec, NVR: r.Nvr, HeadBundleNVR: r.HeadBundleNvr, HeadBundleDigest: head,
 			RecordID: r.RecordID, Channel: r.Channel, HeadCSV: r.HeadCsv, PreviousVersion: r.PreviousVersion,
 		}
 	}

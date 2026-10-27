@@ -26,6 +26,7 @@ import { Status } from "../components/Status";
 import {
 	bundleBuilt,
 	ciBuilds,
+	isCandidate,
 	jobShortName,
 	runResult,
 } from "../utils/releaseDetail";
@@ -102,7 +103,10 @@ function Tally({ runs }: { runs: FBCRun[] }) {
 	);
 }
 
-/** The build's operator and OCP (with every build), state, and build time, the NVR on hover. */
+/**
+ * The build's operator and OCP (with every build) or whether it is this
+ * release's build (with one cell's), state, and build time, the NVR on hover.
+ */
 function BuildHead({ b, all }: { b: FBCBuild; all: boolean }) {
 	const nvrTime = bundleBuilt(b.nvr);
 	const built = b.built_at
@@ -115,10 +119,12 @@ function BuildHead({ b, all }: { b: FBCBuild; all: boolean }) {
 			gap={{ default: "gapSm" }}
 			alignItems={{ default: "alignItemsCenter" }}
 		>
-			{all && (
+			{all ? (
 				<span>
 					{b.operator} · OCP {b.ocp}
 				</span>
+			) : (
+				<span>{isCandidate(b) ? "This release's build" : "Other build"}</span>
 			)}
 			{b.state && (
 				<Label isCompact color={states[b.state][1]}>
@@ -175,6 +181,13 @@ export default function CIDrawer({
 				</DrawerActions>
 			</DrawerHead>
 			<DrawerPanelBody>
+				{!all &&
+					shown.some((b) => b.runs.length > 0) &&
+					!shown.some(isCandidate) && (
+						<p style={{ marginBottom: "0.5rem" }}>
+							None of these runs tested this release's candidate build.
+						</p>
+					)}
 				{!builds && !error ? (
 					<Spinner size="md" aria-label="Loading CI runs" />
 				) : !builds ? (

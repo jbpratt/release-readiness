@@ -259,10 +259,26 @@ func (s *Selector) fbcCandidates(ctx context.Context, app string, c *Candidate, 
 	for _, ocps := range slots {
 		slices.SortFunc(ocps, CompareVersions)
 	}
-	stream = projectFBC("stream", built, slots)
+	// The image Snapshot's NVRs by component, and its digests.
+	image, bundles, held := "", map[string]string{}, map[string]bool{}
+	switch {
+	case c.build != nil:
+		image = c.build.Snapshot
+		for _, cc := range c.build.Components {
+			bundles[cc.Name] = cc.NVR
+			held[ImageDigest(cc.Image)] = true
+		}
+	case c.newest != nil:
+		image = c.newest.Name
+		for _, img := range c.newest.Components {
+			bundles[img.Name] = c.nvrs[img.Image]
+			held[ImageDigest(img.Image)] = true
+		}
+	}
+	stream = projectFBC("stream", built, slots, held)
 	cand = stream
 	if len(staged) > 0 {
-		cand = projectFBC("stage_snapshots", staged, slots)
+		cand = projectFBC("stage_snapshots", staged, slots, held)
 		// staged is one row per Snapshot and catalog, so a slot restaged in
 		// several Snapshots counts each, and a superseded failure none.
 		times := map[[2]string]int{}
@@ -315,19 +331,6 @@ func (s *Selector) fbcCandidates(ctx context.Context, app string, c *Candidate, 
 	for d, b := range resolved {
 		staging[b.NVR] = d
 	}
-	image, bundles := "", map[string]string{}
-	switch {
-	case c.build != nil:
-		image = c.build.Snapshot
-		for _, cc := range c.build.Components {
-			bundles[cc.Name] = cc.NVR
-		}
-	case c.newest != nil:
-		image = c.newest.Name
-		for _, img := range c.newest.Components {
-			bundles[img.Name] = c.nvrs[img.Image]
-		}
-	}
 	// ci returns the runs that installed from m, of operator, or from another
 	// FBC of its slot and head bundle.
 	ci := func(operator string, m model.FBCMember) *model.FBCCI {
@@ -353,11 +356,14 @@ func (s *Selector) fbcCandidates(ctx context.Context, app string, c *Candidate, 
 				}
 			}
 			o.FBCRIStage = model.CIState{State: "unknown"}
-			if o.HeadBundleNVR != "" {
+			switch {
+			case o.HeadBundleNVR != "":
 				o.FBCRIStage = model.CIState{State: "none"}
 				if d, ok := staging[o.HeadBundleNVR]; ok {
 					o.FBCRIStage = ciState(d, releases)
 				}
+			case len(o.Members) > 0:
+				o.FBCRIStage = ciState(o.Members[0].HeadBundleDigest, releases)
 			}
 			o.Stage = model.StageSummary{Total: len(o.Members)}
 			for _, m := range o.Members {
@@ -381,6 +387,11 @@ func (s *Selector) fbcCandidates(ctx context.Context, app string, c *Candidate, 
 				if o.ImageCheck.BundleNVR == o.HeadBundleNVR {
 					o.ImageCheck.State = "matches"
 				}
+			}
+			// Members without a head bundle NVR head one by digest the image
+			// Snapshot holds.
+			if o.HeadBundleNVR == "" && len(o.Members) > 0 {
+				o.ImageCheck.State, o.ImageCheck.BundleDigest = "matches", o.Members[0].HeadBundleDigest
 			}
 		}
 	}
@@ -565,8 +576,11 @@ func repository(image string) string {
 
 // projectFBC returns the operator FBCs that rows, newest first, give each of
 // slots, the OCP versions of each operator: the newest row of each slot, never
-// several. Rows no NVR names fill no slot.
-func projectFBC(source string, rows []model.FBCMember, slots map[string][]string) *model.FBCCandidate {
+// several. Rows no NVR names fill no slot. Without a head bundle ART built,
+// an operator's members are the FBCs heading the same bundle digest as its
+// newest FBC whose head bundle digest is in held, the image Snapshot's
+// digests.
+func projectFBC(source string, rows []model.FBCMember, slots map[string][]string, held map[string]bool) *model.FBCCandidate {
 	c := &model.FBCCandidate{Source: source, Errors: []string{}, Operators: []model.OperatorFBC{}, Unknown: []model.FBCMember{}}
 	type slot struct{ operator, ocp string }
 	filled := map[slot]bool{}
@@ -589,12 +603,23 @@ func projectFBC(source string, rows []model.FBCMember, slots map[string][]string
 	for _, operator := range artbuild.Operators {
 		o := model.OperatorFBC{Operator: operator, Members: []model.FBCMember{}, MissingOCP: []string{}, Conflicts: []model.FBCMember{}}
 		p := picks[operator]
-		if i := slices.IndexFunc(p, func(m model.FBCMember) bool { return m.HeadBundleNVR != "" }); i >= 0 {
+		head := func(m model.FBCMember) string { return m.HeadBundleNVR }
+		i := slices.IndexFunc(p, func(m model.FBCMember) bool { return head(m) != "" })
+		if i < 0 {
+			head = func(m model.FBCMember) string {
+				if m.HeadBundleDigest != "" && held[m.HeadBundleDigest] {
+					return m.HeadBundleDigest
+				}
+				return ""
+			}
+			i = slices.IndexFunc(p, func(m model.FBCMember) bool { return head(m) != "" })
+		}
+		if i >= 0 {
 			o.HeadBundleNVR, o.Channel, o.HeadCSV = p[i].HeadBundleNVR, p[i].Channel, p[i].HeadCSV
 		}
 		other := false
 		for _, m := range p {
-			if o.HeadBundleNVR != "" && m.HeadBundleNVR == o.HeadBundleNVR {
+			if i >= 0 && head(m) == head(p[i]) {
 				o.Members = append(o.Members, m)
 				continue
 			}

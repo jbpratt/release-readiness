@@ -116,6 +116,20 @@ func TestSetVerdict(t *testing.T) {
 			"blocker container-security-operator  no_head_bundle: container-security-operator OCP 4.21: FBC heads no known bundle",
 			"blocker   unknown_fbc: Staged FBCs with no ART build name: 1",
 		}},
+		// Like 3.18.3's quay-operator: ART's history lacks the bundle its FBCs
+		// head, which the image shipment holds by digest.
+		{name: "bundle_not_in_art", state: "ready", edit: func(r *model.ReleaseCandidate) {
+			o := &r.FBCCandidate.Operators[0]
+			o.HeadBundleNVR = ""
+			o.Members = []model.FBCMember{{OCP: "4.20", HeadBundleDigest: "sha256:d9ae064417267f17"}, {OCP: "4.21", HeadBundleDigest: "sha256:d9ae064417267f17"}}
+			o.ImageCheck = model.ImageCheck{State: "matches", BundleDigest: "sha256:d9ae064417267f17"}
+		}, items: []string{"warning quay-operator RR bundle_not_in_art: quay-operator bundle d9ae0644 is not in ART's build history; the image shipment carries the same digest"}},
+		{name: "no_head_bundle, not in the image shipment", state: "not_ready", edit: func(r *model.ReleaseCandidate) {
+			o := &r.FBCCandidate.Operators[0]
+			o.HeadBundleNVR, o.HeadCSV, o.Members = "", "", nil
+			o.Conflicts = []model.FBCMember{{OCP: "4.20", HeadBundleDigest: "sha256:d9ae064417267f17"}}
+			o.ImageCheck = model.ImageCheck{State: "absent"}
+		}, items: []string{"blocker quay-operator  no_head_bundle: quay-operator OCP 4.20: FBC heads no known bundle"}},
 		{name: "stream ahead, rebuild only", state: "ready", edit: func(r *model.ReleaseCandidate) {
 			r.FBCCandidate.Operators[0].Compare = newer("same", "rebuild", "rebuild")
 		}, items: []string{"info quay-operator  stream_ahead: quay-operator: newer build not on stage, 2 images changed"}},

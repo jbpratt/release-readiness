@@ -205,6 +205,7 @@ SELECT s.name AS snapshot_name, sc.image_url,
        CAST(COALESCE(r.channel, '') AS TEXT) AS channel,
        CAST(COALESCE(r.head_csv, '') AS TEXT) AS head_csv,
        CAST(COALESCE(r.previous_version, '') AS TEXT) AS previous_version,
+       CAST(COALESCE(r.head_bundle_pullspec, '') AS TEXT) AS head_bundle_pullspec,
        CAST(COALESCE(b.nvr, '') AS TEXT) AS head_bundle_nvr,
        CAST(COALESCE(f.error, '') AS TEXT) AS read_error
 FROM staged_snapshots ss
@@ -231,23 +232,25 @@ type ListStagedFBCMembersParams struct {
 }
 
 type ListStagedFBCMembersRow struct {
-	SnapshotName    string
-	ImageUrl        string
-	Nvr             string
-	RecordID        string
-	Channel         string
-	HeadCsv         string
-	PreviousVersion string
-	HeadBundleNvr   string
-	ReadError       string
+	SnapshotName       string
+	ImageUrl           string
+	Nvr                string
+	RecordID           string
+	Channel            string
+	HeadCsv            string
+	PreviousVersion    string
+	HeadBundlePullspec string
+	HeadBundleNvr      string
+	ReadError          string
 }
 
 // The catalog images of the application's FBC Snapshots ART staged for stage
 // for assembly, newest Snapshot first, each with its NVR: that of its ART
 // build in build history, else of its resolved ART build, else its rendered
-// label, ” for none, and that build's record ID; the channel, head CSV and
-// previous entry's version its render found; the NVR of its head bundle's
-// ART build, ” for none; and the error of a failed read, ” for none.
+// label, ” for none, and that build's record ID; the channel, head CSV,
+// previous entry's version and head bundle pullspec its render found; the
+// NVR of its head bundle's ART build, ” for none; and the error of a failed
+// read, ” for none.
 func (q *Queries) ListStagedFBCMembers(ctx context.Context, arg ListStagedFBCMembersParams) ([]ListStagedFBCMembersRow, error) {
 	rows, err := q.db.QueryContext(ctx, listStagedFBCMembers, arg.Assembly, arg.Application)
 	if err != nil {
@@ -265,6 +268,7 @@ func (q *Queries) ListStagedFBCMembers(ctx context.Context, arg ListStagedFBCMem
 			&i.Channel,
 			&i.HeadCsv,
 			&i.PreviousVersion,
+			&i.HeadBundlePullspec,
 			&i.HeadBundleNvr,
 			&i.ReadError,
 		); err != nil {

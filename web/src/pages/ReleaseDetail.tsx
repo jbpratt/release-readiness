@@ -48,7 +48,6 @@ import {
 	CubesIcon,
 	ExclamationTriangleIcon,
 	InfoCircleIcon,
-	MinusCircleIcon,
 	TimesCircleIcon,
 } from "@patternfly/react-icons";
 import { Table, Tbody, Td, Th, Thead, Tr } from "@patternfly/react-table";
@@ -122,6 +121,7 @@ import {
 	bundleBuilt,
 	candidateOperators,
 	compareVersions,
+	dueSource,
 	type FbcRow,
 	fbcGroups,
 	fbcNewerTitle,
@@ -422,9 +422,16 @@ function ReleaseFacts({
 			style={{ marginBottom: "1.5rem" }}
 		>
 			<DescriptionListGroup>
-				<DescriptionListTerm>Target</DescriptionListTerm>
+				<DescriptionListTerm>Due date</DescriptionListTerm>
 				<DescriptionListDescription>
-					{dueDate?.date ?? "TBD"}
+					{dueDate ? (
+						<Tooltip content={dueSource(release)}>
+							{/* biome-ignore lint/a11y/noNoninteractiveTabindex: focus shows its tooltip. */}
+							<span tabIndex={0}>{dueDate.date}</span>
+						</Tooltip>
+					) : (
+						"TBD"
+					)}
 					{dueDate?.kind === "past" && (
 						<Label status="warning" isCompact style={{ marginLeft: "0.5rem" }}>
 							Past due
@@ -472,7 +479,9 @@ function ReleaseFacts({
 			{stage && <StageFacts ri={stage} />}
 			{advisory && (
 				<DescriptionListGroup>
-					<DescriptionListTerm>Advisory</DescriptionListTerm>
+					<DescriptionListTerm>
+						{shipped ? "Advisory" : "Stage advisory"}
+					</DescriptionListTerm>
 					<DescriptionListDescription>
 						<ExtLink href={advisory} icon>
 							{advisoryName(advisory)}
@@ -686,6 +695,10 @@ function FbcMatrix({
 		return c && key ? (
 			<MatrixCell
 				cell={c}
+				shipment={
+					operators.find((o) => o.operator === op)?.image_check.bundle_digest ??
+					""
+				}
 				issues={issues.filter((x) => x.cell === key)}
 				others={others(c.row)}
 				green={staged ? "built and staged" : "built"}
@@ -711,6 +724,7 @@ function FbcMatrix({
 			o={o}
 			version={version}
 			issues={issues.filter((i) => i.card === o.operator)}
+			cellIssues={issues.filter((i) => i.cell?.startsWith(`${o.operator}@`))}
 			open={open.has(o.operator)}
 			onToggle={(v) => toggle(o.operator, v)}
 		/>
@@ -845,13 +859,6 @@ const cellIcons = {
 		</Icon>
 	),
 	running: <Icon size="xl" isInProgress />,
-	neutral: (
-		<Icon size="xl">
-			<span style={muted}>
-				<MinusCircleIcon />
-			</span>
-		</Icon>
-	),
 	success: (
 		<Icon status="success" size="xl">
 			<CheckCircleIcon />
@@ -860,14 +867,15 @@ const cellIcons = {
 };
 
 /**
- * One FBC as one icon: a check when green, a neutral minus when it has no CI
- * run, a red X when it is missing or fails or a blocker is about it, else its
- * problem's or item's icon; the words are in its tooltip and name. A click
- * opens its detail, led by the items about it. An edge column's detail opens
- * inward to stay on screen.
+ * One FBC as one icon: a check when green, with or without a CI run, a red X
+ * when it is missing or fails or a blocker is about it, else its problem's or
+ * item's icon; the words are in its tooltip and name. A click opens its
+ * detail, led by the items about it. An edge column's detail opens inward to
+ * stay on screen.
  */
 function MatrixCell({
 	cell: { row, stream, problem },
+	shipment,
 	issues,
 	others,
 	green,
@@ -877,6 +885,8 @@ function MatrixCell({
 	onClose,
 }: {
 	cell: Cell;
+	/** The digest of its operator's bundle the image shipment holds, unknown to ART; "" for none. */
+	shipment: string;
 	issues: Issue[];
 	others: number;
 	green: string;
@@ -891,7 +901,6 @@ function MatrixCell({
 	)[0];
 	const top = first?.item.level;
 	const status = problem && PROBLEMS[problem].status;
-	const noCIRun = row.runs.length === 0;
 	const tone: keyof typeof cellIcons =
 		!row.fbc || status === "failed" || top === "blocker"
 			? "danger"
@@ -901,16 +910,12 @@ function MatrixCell({
 					? "warning"
 					: top === "info"
 						? "info"
-						: noCIRun
-							? "neutral"
-							: "success";
+						: "success";
 	const said = problem
 		? problem[0].toUpperCase() + problem.slice(1)
 		: first
 			? `${LEVELS[first.item.level].word}: ${first.b.what}`
-			: noCIRun
-				? "No CI run"
-				: green;
+			: green;
 	return (
 		<>
 			{tone !== "success" && <Tooltip content={said} triggerRef={ref} />}
@@ -925,7 +930,12 @@ function MatrixCell({
 				bodyContent={
 					<div style={{ display: "grid", gap: "0.75rem" }}>
 						{issues.length > 0 && <IssueNotes issues={issues} />}
-						<FbcDetail row={row} stream={stream} others={others} />
+						<FbcDetail
+							row={row}
+							stream={stream}
+							others={others}
+							shipment={shipment}
+						/>
 					</div>
 				}
 			>
@@ -964,10 +974,12 @@ function FbcDetail({
 	row,
 	stream,
 	others,
+	shipment,
 }: {
 	row: FbcRow;
 	stream: FBCMember | null;
 	others: number;
+	shipment: string;
 }) {
 	const f = row.fbc;
 	const built = f ?? stream;
@@ -1003,7 +1015,7 @@ function FbcDetail({
 					</DetailLine>
 				)
 			) : (
-				<FbcChecks row={row} f={f} others={others} />
+				<FbcChecks row={row} f={f} others={others} shipment={shipment} />
 			)}
 		</dl>
 	);
@@ -1017,10 +1029,12 @@ function FbcChecks({
 	row,
 	f,
 	others,
+	shipment,
 }: {
 	row: FbcRow;
 	f: FBCMember;
 	others: number;
+	shipment: string;
 }) {
 	const unread = row.flags.find((x) => x.text === "can't read");
 	const older = row.flags.find((x) => x.text.startsWith("holds an older"));
@@ -1061,6 +1075,14 @@ function FbcChecks({
 							nvrLabel(f.head_bundle_nvr)
 						)}
 					</>
+				) : f.head_bundle_digest && f.head_bundle_digest === shipment ? (
+					<Status status="warning">
+						Not in ART's build history. The image shipment carries the same
+						digest,{" "}
+						<code title={shipment}>
+							{shipment.replace(/^sha256:/, "").slice(0, 8)}
+						</code>
+					</Status>
 				) : (
 					none("Not resolved yet")
 				)}
@@ -1567,68 +1589,73 @@ function IssuesTable({ issues }: { issues: JiraIssue[] }) {
 
 	return (
 		<>
-			<Table
-				aria-label="Tickets"
-				variant="compact"
-				gridBreakPoint=""
-				style={{ tableLayout: "auto" }}
-			>
-				<Thead>
-					<Tr>
-						<Th modifier="nowrap">{narrow ? "Ticket" : "Key"}</Th>
-						{!narrow && <Th modifier="nowrap">Status</Th>}
-						{!narrow && <Th modifier="nowrap">Type</Th>}
-						{!narrow && <Th>Summary</Th>}
-					</Tr>
-				</Thead>
-				<Tbody>
-					{shown.map((issue) =>
-						narrow ? (
-							<Tr key={issue.key}>
-								<Td dataLabel="Ticket">
-									<Flex
-										gap={{ default: "gapSm" }}
-										alignItems={{ default: "alignItemsCenter" }}
-									>
+			{shown.length > 0 && (
+				<Table
+					aria-label="Tickets"
+					variant="compact"
+					gridBreakPoint=""
+					style={{ tableLayout: "auto" }}
+				>
+					<Thead>
+						<Tr>
+							<Th modifier="nowrap">{narrow ? "Ticket" : "Key"}</Th>
+							{!narrow && <Th modifier="nowrap">Status</Th>}
+							{!narrow && <Th modifier="nowrap">Type</Th>}
+							{!narrow && <Th>Summary</Th>}
+						</Tr>
+					</Thead>
+					<Tbody>
+						{shown.map((issue) =>
+							narrow ? (
+								<Tr key={issue.key}>
+									<Td dataLabel="Ticket">
+										<Flex
+											gap={{ default: "gapSm" }}
+											alignItems={{ default: "alignItemsCenter" }}
+										>
+											<a href={issue.link} {...external}>
+												{issue.key}
+											</a>
+											<TicketStatus status={issue.status} />
+											<span style={muted}>{issue.issue_type}</span>
+										</Flex>
+										<div
+											style={{
+												marginTop: "0.125rem",
+												overflowWrap: "anywhere",
+											}}
+										>
+											{issue.summary}
+										</div>
+									</Td>
+								</Tr>
+							) : (
+								<Tr key={issue.key}>
+									<Td dataLabel="Key" modifier="nowrap">
 										<a href={issue.link} {...external}>
 											{issue.key}
 										</a>
+									</Td>
+									<Td dataLabel="Status" modifier="nowrap">
 										<TicketStatus status={issue.status} />
-										<span style={muted}>{issue.issue_type}</span>
-									</Flex>
-									<div
-										style={{ marginTop: "0.125rem", overflowWrap: "anywhere" }}
-									>
+									</Td>
+									<Td dataLabel="Type" modifier="nowrap" style={muted}>
+										{issue.issue_type}
+									</Td>
+									<Td dataLabel="Summary" style={{ overflowWrap: "anywhere" }}>
 										{issue.summary}
-									</div>
-								</Td>
-							</Tr>
-						) : (
-							<Tr key={issue.key}>
-								<Td dataLabel="Key" modifier="nowrap">
-									<a href={issue.link} {...external}>
-										{issue.key}
-									</a>
-								</Td>
-								<Td dataLabel="Status" modifier="nowrap">
-									<TicketStatus status={issue.status} />
-								</Td>
-								<Td dataLabel="Type" modifier="nowrap" style={muted}>
-									{issue.issue_type}
-								</Td>
-								<Td dataLabel="Summary" style={{ overflowWrap: "anywhere" }}>
-									{issue.summary}
-								</Td>
-							</Tr>
-						),
-					)}
-				</Tbody>
-			</Table>
+									</Td>
+								</Tr>
+							),
+						)}
+					</Tbody>
+				</Table>
+			)}
 			{closed.length > 0 && (
 				<Button
 					variant="link"
 					isInline
-					style={{ marginTop: "0.75rem" }}
+					style={shown.length > 0 ? { marginTop: "0.75rem" } : undefined}
 					onClick={() => setShowClosed(!showClosed)}
 				>
 					{showClosed

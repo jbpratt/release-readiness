@@ -117,7 +117,8 @@ export interface FBCTags {
 
 /**
  * One operator's FBCs, keyed by the bundle heading its newest FBC's release
- * channel ("" for none): members are on that bundle, conflicts are not.
+ * channel ("" for none, then the image shipment's bundle of the same digest,
+ * if any): members are on that bundle, conflicts are not.
  */
 export interface OperatorFBC {
 	operator: string;
@@ -127,6 +128,11 @@ export interface OperatorFBC {
 	conflicts: FBCMember[];
 	/** Whether the head bundle reached stage through a stage Release. */
 	fbc_ri_stage: CIState;
+	/**
+	 * Without a head bundle NVR, bundle_digest is the digest of the bundle its
+	 * FBCs head that the image shipment holds; "" for none.
+	 */
+	image_check: { bundle_digest: string };
 	/** The head bundle's relatedImages, by name. */
 	images: OperatorImage[];
 }
@@ -158,8 +164,9 @@ export interface FBCCI {
 }
 
 /**
- * An FBC catalog image; nvr and head_bundle_nvr are "" until resolved. A
- * staged one has its FBC Snapshot's newest Release.
+ * An FBC catalog image; nvr and head_bundle_nvr are "" until resolved,
+ * head_bundle_digest until rendered. A staged one has its FBC Snapshot's
+ * newest Release.
  */
 export interface FBCMember {
 	ocp: string;
@@ -168,6 +175,7 @@ export interface FBCMember {
 	nvr: string;
 	build_url: string;
 	head_bundle_nvr: string;
+	head_bundle_digest: string;
 	release: KonfluxRelease | null;
 	/** Set on a slot's FBC. */
 	ci: FBCCI | null;

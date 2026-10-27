@@ -1076,6 +1076,119 @@ func TestGetCandidateFBCImageCheck(t *testing.T) {
 	}
 }
 
+// Like 3.18.3 on 26 Oct 2026: ART's history has no record of the
+// quay-operator bundle the staged FBCs head, which the image Snapshot holds by
+// digest. Those FBCs are the operator's members and make one RR warning; one
+// heading a bundle the image Snapshot lacks still blocks.
+func TestGetCandidateFBCBundleNotInArt(t *testing.T) {
+	bundle, other := testImage("img/quay-3-18-quay-operator-bundle"), testImage("other/quay-operator-bundle")
+	const knownNVR = "quay-operator-bundle-container-3.18.1-1"
+	known := testImage("bundle/" + knownNVR)
+	d := release.ImageDigest(bundle)
+	warning := model.VerdictItem{
+		Level: "warning", Operator: "quay-operator", Owner: "RR", Code: "bundle_not_in_art",
+		Text: "quay-operator bundle " + d[len("sha256:"):][:8] + " is not in ART's build history; the image shipment carries the same digest",
+	}
+	for _, tc := range []struct {
+		name  string
+		heads []string // the head bundle of the 4.20, 4.21 and 4.22 FBCs
+		csv   string
+		// push is the outcome of the image Snapshot's stage Release, if any;
+		// Succeeded makes it the STAGE build.
+		push      string
+		members   int
+		pullspecs int
+		verdict   model.Verdict
+	}{
+		{"one on another bundle", []string{bundle, bundle, other}, "quay-operator.v3.18.1", "", 2, 0, model.Verdict{State: "not_ready", Items: []model.VerdictItem{{
+			Level: "blocker", Operator: "quay-operator", Code: "no_head_bundle",
+			Text: "quay-operator OCP 4.22: FBC heads no known bundle",
+		}, warning}}},
+		{"all on it", []string{bundle, bundle}, "quay-operator.v3.18.1", "", 2, 4, model.Verdict{State: "ready", Items: []model.VerdictItem{warning}}},
+		{"all on it, STAGE build", []string{bundle, bundle}, "quay-operator.v3.18.1", "Succeeded", 2, 4, model.Verdict{State: "ready", Items: []model.VerdictItem{warning}}},
+		{"all on it, stage push failed", []string{bundle, bundle}, "quay-operator.v3.18.1", "Failed", 2, 4, model.Verdict{State: "not_ready", Items: []model.VerdictItem{{
+			Level: "blocker", Operator: "quay-operator", Owner: "ART/Konflux", Code: "stage_push_failed",
+			Text: "quay-operator bundle " + d[len("sha256:"):][:8] + ": image push to stage failed (verify-conforma)",
+		}, warning}}},
+		{"another version's CSV", []string{bundle, bundle}, "quay-operator.v3.17.0", "", 2, 4, model.Verdict{State: "not_ready", Items: []model.VerdictItem{{
+			Level: "blocker", Operator: "quay-operator", Owner: "Quay/ART", Code: "csv_mismatch",
+			Text: "quay-operator FBCs ship v3.17.0, not v3.18.1",
+		}, warning}}},
+		// A bundle ART built heads the operator, so the others still block.
+		{"one on a bundle ART built", []string{bundle, bundle, known}, "quay-operator.v3.18.1", "", 1, 0, model.Verdict{State: "not_ready", Items: []model.VerdictItem{{
+			Level: "blocker", Operator: "quay-operator", Code: "no_head_bundle",
+			Text: "quay-operator OCP 4.20: FBC heads no known bundle",
+		}, {
+			Level: "blocker", Operator: "quay-operator", Code: "no_head_bundle",
+			Text: "quay-operator OCP 4.21: FBC heads no known bundle",
+		}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := setupTestServer(t)
+			fbcs := []string{
+				seedHistoryFBC(t, srv, "container-security-operator-fbc-3.18.1-20261009044841.ocp4.20", "cso-bundle"),
+				seedHistoryFBC(t, srv, "quay-bridge-operator-fbc-3.18.1-20261009044841.ocp4.20", "qbo-bundle"),
+			}
+			for i, head := range tc.heads {
+				nvr := fmt.Sprintf("quay-operator-fbc-3.18.1-20261009044841.ocp4.%d", 20+i)
+				pullspec := testImage("fbc/" + nvr)
+				if err := srv.db.UpsertFBCRender(t.Context(), fbc.Render{
+					Digest: release.ImageDigest(pullspec), State: fbc.StateRendered, LabelNVR: nvr, RenderedAt: time.Now(),
+					Channel: fbc.Channel{Name: "stable", HeadCSV: tc.csv, HeadBundlePullspec: head},
+				}); err != nil {
+					t.Fatal(err)
+				}
+				fbcs = append(fbcs, pullspec)
+			}
+			if err := srv.db.UpsertArtHistoryBuild(t.Context(), artbuild.HistoryBuild{
+				RecordID: "rec-" + knownNVR, Group: "quay-3.18", Type: "bundle", NVR: knownNVR, Digest: release.ImageDigest(known), Pullspec: known,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			seedStagedFBC(t, srv, "fbc-quay-3-18", "3.18.1", "quay-stage-3-18-1-fbc-20261009000000", "2026-10-09T00:00:00Z", fbcs, "Succeeded")
+			const snap = "quay-3-18-20261009-042610-000"
+			seedImages(t, srv, snap, "2026-10-09T04:29:06Z", testBuild("img", "quay-3-18-quay-operator-bundle", "quay-3-18-quay-quay"))
+			resolveNVR(t, srv, "img/quay-3-18-quay-quay", testNVR("quay-quay", "3.18.1"))
+			if tc.push != "" {
+				srv.selector.StageReleasePlanPattern = regexp.MustCompile(`^quay-advisory-stage-\d+-\d+$`)
+				if tc.push == "Succeeded" {
+					if err := srv.db.UpsertStagedSnapshot(t.Context(), snap, "3.18.1", "image", "stage"); err != nil {
+						t.Fatal(err)
+					}
+				}
+				seedKonfluxRelease(t, srv, snap, snap, "quay-advisory-stage-3-18", tc.push, "2026-10-09T04:30:00Z", "2026-10-09T04:40:00Z")
+			}
+			scanHistory(t, srv, "quay-3.18")
+			if err := srv.db.UpsertReleaseVersion(t.Context(), &model.ReleaseVersion{Name: "quay-v3.18.1", KonfluxApplication: "quay-3-18"}); err != nil {
+				t.Fatal(err)
+			}
+
+			var got model.ReleaseCandidate
+			getJSON(t, srv, "/api/v1/releases/quay-v3.18.1/candidate", http.StatusOK, &got)
+			if stage := tc.push == "Succeeded"; (got.Candidate != nil) != stage {
+				t.Errorf("STAGE build %+v, want one: %t", got.Candidate, stage)
+			}
+			o := got.FBCCandidate.Operators[0]
+			check, head := model.ImageCheck{State: "matches", Snapshot: snap, BundleDigest: d}, d
+			if slices.Contains(tc.heads, known) {
+				check, head = model.ImageCheck{State: "absent", Snapshot: snap}, release.ImageDigest(known)
+			}
+			if o.ImageCheck != check {
+				t.Errorf("quay-operator image check %+v, want %+v", o.ImageCheck, check)
+			}
+			if len(o.Members) != tc.members || o.Members[0].HeadBundleDigest != head || len(o.Conflicts) != len(tc.heads)-tc.members {
+				t.Errorf("quay-operator members %+v, conflicts %+v, want %d members on %s", o.Members, o.Conflicts, tc.members, head)
+			}
+			if n := len(got.FBCCandidate.Pullspecs); n != tc.pullspecs {
+				t.Errorf("%d pullspecs, want %d", n, tc.pullspecs)
+			}
+			if !reflect.DeepEqual(got.Verdict, tc.verdict) {
+				t.Errorf("verdict %+v, want %+v", got.Verdict, tc.verdict)
+			}
+		})
+	}
+}
+
 // Like 5.0.0's image shipment: it holds the CSO bundle as component
 // container-security-operator-bundle, without the application prefix, so an
 // older bundle there differs.

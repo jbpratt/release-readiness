@@ -44,15 +44,17 @@ ORDER BY s.name, sc.component;
 -- The catalog images of the application's FBC Snapshots ART staged for stage
 -- for assembly, newest Snapshot first, each with its NVR: that of its ART
 -- build in build history, else of its resolved ART build, else its rendered
--- label, '' for none, and that build's record ID; the channel, head CSV and
--- previous entry's version its render found; the NVR of its head bundle's
--- ART build, '' for none; and the error of a failed read, '' for none.
+-- label, '' for none, and that build's record ID; the channel, head CSV,
+-- previous entry's version and head bundle pullspec its render found; the
+-- NVR of its head bundle's ART build, '' for none; and the error of a failed
+-- read, '' for none.
 SELECT s.name AS snapshot_name, sc.image_url,
        CAST(COALESCE(h.nvr, a.nvr, NULLIF(r.label_nvr, ''), '') AS TEXT) AS nvr,
        CAST(COALESCE(h.record_id, a.record_id, '') AS TEXT) AS record_id,
        CAST(COALESCE(r.channel, '') AS TEXT) AS channel,
        CAST(COALESCE(r.head_csv, '') AS TEXT) AS head_csv,
        CAST(COALESCE(r.previous_version, '') AS TEXT) AS previous_version,
+       CAST(COALESCE(r.head_bundle_pullspec, '') AS TEXT) AS head_bundle_pullspec,
        CAST(COALESCE(b.nvr, '') AS TEXT) AS head_bundle_nvr,
        CAST(COALESCE(f.error, '') AS TEXT) AS read_error
 FROM staged_snapshots ss
